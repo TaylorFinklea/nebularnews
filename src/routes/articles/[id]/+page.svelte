@@ -1,5 +1,6 @@
 <script>
   import { invalidate } from '$app/navigation';
+  import { IconThumbDown, IconThumbUp } from '$lib/icons';
   export let data;
 
   let rating = 3;
@@ -132,8 +133,14 @@
         Use thumbs to tune source reputation. This does not edit the AI relevance score.
       </p>
       <div class="reaction-row">
-        <button class:active={data.reaction?.value === 1} on:click={() => setReaction(1)}>Thumbs up</button>
-        <button class:active={data.reaction?.value === -1} on:click={() => setReaction(-1)}>Thumbs down</button>
+        <button class:active={data.reaction?.value === 1} on:click={() => setReaction(1)}>
+          <IconThumbUp size={16} stroke={1.9} />
+          <span>Thumbs up</span>
+        </button>
+        <button class:active={data.reaction?.value === -1} on:click={() => setReaction(-1)}>
+          <IconThumbDown size={16} stroke={1.9} />
+          <span>Thumbs down</span>
+        </button>
       </div>
     </div>
 
@@ -249,6 +256,9 @@
     background: transparent;
     color: #1f1f1f;
     border: 1px solid rgba(0, 0, 0, 0.2);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
   }
 
   .reaction-row button.active {

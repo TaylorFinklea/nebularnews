@@ -1,5 +1,6 @@
 <script>
   import { invalidateAll } from '$app/navigation';
+  import { IconThumbDown, IconThumbUp } from '$lib/icons';
   export let data;
 
   const scoreLabel = (score) => {
@@ -74,13 +75,15 @@
             class:active={article.reaction_value === 1}
             on:click={() => reactToArticle(article.id, 1, article.source_feed_id)}
           >
-            Thumbs up
+            <IconThumbUp size={16} stroke={1.9} />
+            <span>Thumbs up</span>
           </button>
           <button
             class:active={article.reaction_value === -1}
             on:click={() => reactToArticle(article.id, -1, article.source_feed_id)}
           >
-            Thumbs down
+            <IconThumbDown size={16} stroke={1.9} />
+            <span>Thumbs down</span>
           </button>
         </div>
         <a class="button" href={`/articles/${article.id}`}>Open</a>
@@ -158,6 +161,9 @@
     border-radius: 999px;
     padding: 0.35rem 0.65rem;
     cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
   }
 
   .reactions button.active {

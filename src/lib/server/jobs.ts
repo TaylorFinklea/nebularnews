@@ -1,10 +1,11 @@
 import { nanoid } from 'nanoid';
 import { dbAll, dbGet, dbRun, now, type Db } from './db';
 import { refreshPreferenceProfile, scoreArticle, summarizeArticle } from './llm';
-import { getProviderKey, getProviderModel } from './settings';
+import { getChatProviderModel, getIngestProviderModel, getProviderKey } from './settings';
 import { ensurePreferenceProfile } from './profile';
 
 const MAX_JOB_ATTEMPTS = 3;
+type JobRunMetadata = { provider: string; model: string } | null;
 
 export async function processJobs(env: App.Platform['env']) {
   const db = env.DB;
@@ -22,29 +23,42 @@ export async function processJobs(env: App.Platform['env']) {
   for (const job of jobs) {
     await dbRun(db, 'UPDATE jobs SET status = ? WHERE id = ?', ['running', job.id]);
     try {
+      let runMetadata: JobRunMetadata = null;
       if (job.type === 'summarize' && job.article_id) {
-        await runSummarizeJob(db, env, job.article_id);
+        runMetadata = await runSummarizeJob(db, env, job.article_id, 'pipeline');
+      } else if (job.type === 'summarize_chat' && job.article_id) {
+        runMetadata = await runSummarizeJob(db, env, job.article_id, 'chat');
       } else if (job.type === 'score' && job.article_id) {
-        await runScoreJob(db, env, job.article_id);
+        runMetadata = await runScoreJob(db, env, job.article_id);
       } else if (job.type === 'refresh_profile') {
-        await runRefreshProfile(db, env);
+        runMetadata = await runRefreshProfile(db, env);
       }
 
-      await dbRun(db, 'UPDATE jobs SET status = ? WHERE id = ?', ['done', job.id]);
+      await dbRun(db, 'UPDATE jobs SET status = ?, last_error = NULL, provider = ?, model = ? WHERE id = ?', [
+        'done',
+        runMetadata?.provider ?? null,
+        runMetadata?.model ?? null,
+        job.id
+      ]);
     } catch (err) {
       const attempts = job.attempts + 1;
       const status = attempts >= MAX_JOB_ATTEMPTS ? 'failed' : 'pending';
       const runAfter = now() + 1000 * 60 * 10;
       await dbRun(
         db,
-        'UPDATE jobs SET status = ?, attempts = ?, last_error = ?, run_after = ? WHERE id = ?',
+        'UPDATE jobs SET status = ?, attempts = ?, last_error = ?, run_after = ?, provider = NULL, model = NULL WHERE id = ?',
         [status, attempts, String(err), runAfter, job.id]
       );
     }
   }
 }
 
-async function runSummarizeJob(db: Db, env: App.Platform['env'], articleId: string) {
+async function runSummarizeJob(
+  db: Db,
+  env: App.Platform['env'],
+  articleId: string,
+  mode: 'pipeline' | 'chat'
+): Promise<{ provider: string; model: string }> {
   const article = await dbGet<{
     title: string | null;
     canonical_url: string | null;
@@ -52,7 +66,9 @@ async function runSummarizeJob(db: Db, env: App.Platform['env'], articleId: stri
   }>(db, 'SELECT title, canonical_url, content_text FROM articles WHERE id = ?', [articleId]);
   if (!article?.content_text) throw new Error('Missing article content');
 
-  const { provider, model, reasoningEffort } = await getProviderModel(db, env);
+  const modelSettings =
+    mode === 'chat' ? await getChatProviderModel(db, env) : await getIngestProviderModel(db, env);
+  const { provider, model, reasoningEffort } = modelSettings;
   const apiKey = await getProviderKey(db, env, provider);
   if (!apiKey) throw new Error('No provider key');
 
@@ -75,15 +91,16 @@ async function runSummarizeJob(db: Db, env: App.Platform['env'], articleId: stri
       JSON.stringify(summary.keyPoints),
       now(),
       JSON.stringify(summary.usage ?? {}),
-      'v1'
+      mode === 'chat' ? 'v1-chat' : 'v1-pipeline'
     ]
   );
 
   await dbRun(db, 'UPDATE article_search SET summary_text = ? WHERE article_id = ?', [summary.summary, articleId]);
+  return { provider, model };
 }
 
 
-async function runScoreJob(db: Db, env: App.Platform['env'], articleId: string) {
+async function runScoreJob(db: Db, env: App.Platform['env'], articleId: string): Promise<{ provider: string; model: string }> {
   const article = await dbGet<{
     title: string | null;
     canonical_url: string | null;
@@ -92,7 +109,7 @@ async function runScoreJob(db: Db, env: App.Platform['env'], articleId: string) 
   if (!article?.content_text) throw new Error('Missing article content');
 
   const profile = await ensurePreferenceProfile(db);
-  const { provider, model, reasoningEffort } = await getProviderModel(db, env);
+  const { provider, model, reasoningEffort } = await getIngestProviderModel(db, env);
   const apiKey = await getProviderKey(db, env, provider);
   if (!apiKey) throw new Error('No provider key');
 
@@ -118,9 +135,10 @@ async function runScoreJob(db: Db, env: App.Platform['env'], articleId: string) 
       profile.version
     ]
   );
+  return { provider, model };
 }
 
-async function runRefreshProfile(db: Db, env: App.Platform['env']) {
+async function runRefreshProfile(db: Db, env: App.Platform['env']): Promise<{ provider: string; model: string } | null> {
   const profile = await ensurePreferenceProfile(db);
   const feedback = await dbAll<{ rating: number; comment: string | null; title: string | null }>(
     db,
@@ -131,9 +149,9 @@ async function runRefreshProfile(db: Db, env: App.Platform['env']) {
      LIMIT 30`
   );
 
-  if (feedback.length === 0) return;
+  if (feedback.length === 0) return null;
 
-  const { provider, model, reasoningEffort } = await getProviderModel(db, env);
+  const { provider, model, reasoningEffort } = await getIngestProviderModel(db, env);
   const apiKey = await getProviderKey(db, env, provider);
   if (!apiKey) throw new Error('No provider key');
 
@@ -147,4 +165,5 @@ async function runRefreshProfile(db: Db, env: App.Platform['env']) {
     'UPDATE preference_profile SET profile_text = ?, updated_at = ?, version = version + 1 WHERE id = ?',
     [updated, now(), profile.id]
   );
+  return { provider, model };
 }

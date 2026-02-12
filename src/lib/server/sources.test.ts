@@ -7,11 +7,11 @@ describe('computeFeedReputation', () => {
   });
 
   it('raises score above zero when ratings trend positive', () => {
-    expect(computeFeedReputation(20, 5)).toBeGreaterThan(0);
+    expect(computeFeedReputation(5, 5)).toBeGreaterThan(0);
   });
 
   it('drops score below zero when ratings trend negative', () => {
-    expect(computeFeedReputation(5, 5)).toBeLessThan(0);
+    expect(computeFeedReputation(-5, 5)).toBeLessThan(0);
   });
 });
 
@@ -37,8 +37,8 @@ describe('pickPreferredSource', () => {
         }
       ],
       new Map([
-        ['feed-a', { feedbackCount: 8, ratingSum: 40, score: 1.2 }],
-        ['feed-b', { feedbackCount: 8, ratingSum: 16, score: -0.4 }]
+        ['feed-a', { feedbackCount: 8, ratingSum: 8, score: 0.6 }],
+        ['feed-b', { feedbackCount: 8, ratingSum: -4, score: -0.3 }]
       ])
     );
 

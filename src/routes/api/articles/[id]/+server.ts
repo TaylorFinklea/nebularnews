@@ -28,9 +28,14 @@ export const GET = async ({ params, platform }) => {
     'SELECT rating, comment, created_at FROM article_feedback WHERE article_id = ? ORDER BY created_at DESC',
     [id]
   );
+  const reaction = await dbGet(
+    platform.env.DB,
+    'SELECT value, feed_id, created_at FROM article_reactions WHERE article_id = ? LIMIT 1',
+    [id]
+  );
 
   const preferredSource = await getPreferredSourceForArticle(platform.env.DB, id);
   const sources = await listSourcesForArticle(platform.env.DB, id);
 
-  return json({ article, summary, score, feedback, preferredSource, sources });
+  return json({ article, summary, score, feedback, reaction, preferredSource, sources });
 };

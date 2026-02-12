@@ -1,4 +1,5 @@
 <script>
+  import { invalidateAll } from '$app/navigation';
   export let data;
 
   const scoreLabel = (score) => {
@@ -15,6 +16,15 @@
 
   $: query = data.q ?? '';
   $: scoreFilter = data.scoreFilter ?? 'all';
+
+  const reactToArticle = async (articleId, value, feedId) => {
+    await fetch(`/api/articles/${articleId}/reaction`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ value, feedId })
+    });
+    await invalidateAll();
+  };
 </script>
 
 <section class="page-header">
@@ -51,7 +61,7 @@
           <span>
             {article.source_name ?? 'Unknown source'}
             {#if article.source_feedback_count}
-              · rep {article.source_reputation.toFixed(2)} ({article.source_feedback_count} ratings)
+              · rep {article.source_reputation.toFixed(2)} ({article.source_feedback_count} votes)
             {/if}
           </span>
           <span>{article.published_at ? new Date(article.published_at).toLocaleString() : ''}</span>
@@ -59,6 +69,20 @@
         {#if article.author}
           <div class="byline">By {article.author}</div>
         {/if}
+        <div class="reactions">
+          <button
+            class:active={article.reaction_value === 1}
+            on:click={() => reactToArticle(article.id, 1, article.source_feed_id)}
+          >
+            Thumbs up
+          </button>
+          <button
+            class:active={article.reaction_value === -1}
+            on:click={() => reactToArticle(article.id, -1, article.source_feed_id)}
+          >
+            Thumbs down
+          </button>
+        </div>
         <a class="button" href={`/articles/${article.id}`}>Open</a>
       </article>
     {/each}
@@ -120,6 +144,26 @@
     color: white;
     padding: 0.5rem 1rem;
     border-radius: 999px;
+  }
+
+  .reactions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.7rem;
+  }
+
+  .reactions button {
+    border: 1px solid rgba(0, 0, 0, 0.18);
+    background: transparent;
+    border-radius: 999px;
+    padding: 0.35rem 0.65rem;
+    cursor: pointer;
+  }
+
+  .reactions button.active {
+    border-color: rgba(197, 91, 42, 0.5);
+    background: rgba(197, 91, 42, 0.15);
+    color: #7f3b1f;
   }
 
   .filters {

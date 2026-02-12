@@ -67,9 +67,9 @@
               <div class="meta">
                 Reputation: {Number(feed.reputation ?? 0).toFixed(2)}
                 {#if feed.feedback_count}
-                  ({feed.feedback_count} ratings)
+                  ({feed.feedback_count} votes)
                 {:else}
-                  (no ratings yet)
+                  (no votes yet)
                 {/if}
               </div>
             </div>

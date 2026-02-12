@@ -16,6 +16,7 @@
       <a href="/">Dashboard</a>
       <a href="/feeds">Feeds</a>
       <a href="/articles">Articles</a>
+      <a href="/jobs">Jobs</a>
       <a href="/chat">Chat</a>
       <a href="/settings">Settings</a>
     </nav>

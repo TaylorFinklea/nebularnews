@@ -7,12 +7,33 @@ import { now } from './db';
 export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
 
 const DEFAULT_REASONING_EFFORT: ReasoningEffort = 'medium';
+const DEFAULT_PROVIDER: Provider = 'openai';
+const DEFAULT_MODEL = 'gpt-4o-mini';
 
 const toReasoningEffort = (value: string | null): ReasoningEffort => {
   if (value === 'minimal' || value === 'low' || value === 'medium' || value === 'high') {
     return value;
   }
   return DEFAULT_REASONING_EFFORT;
+};
+
+const toProvider = (value: string | null): Provider => {
+  if (value === 'openai' || value === 'anthropic') return value;
+  return DEFAULT_PROVIDER;
+};
+
+export type ProviderModelConfig = {
+  provider: Provider;
+  model: string;
+  reasoningEffort: ReasoningEffort;
+};
+
+const getFirstSetting = async (db: Db, keys: string[]) => {
+  for (const key of keys) {
+    const value = await getSetting(db, key);
+    if (value) return value;
+  }
+  return null;
 };
 
 export async function getSetting(db: Db, key: string) {
@@ -34,12 +55,51 @@ export async function setSetting(db: Db, key: string, value: string) {
 }
 
 export async function getProviderModel(db: Db, env: App.Platform['env']) {
-  const provider = (await getSetting(db, 'default_provider')) ?? env.DEFAULT_PROVIDER ?? 'openai';
-  const model = (await getSetting(db, 'default_model')) ?? env.DEFAULT_MODEL ?? 'gpt-4o-mini';
-  const reasoningEffort = toReasoningEffort(
-    (await getSetting(db, 'reasoning_effort')) ?? env.DEFAULT_REASONING_EFFORT ?? null
+  return getIngestProviderModel(db, env);
+}
+
+export async function getIngestProviderModel(db: Db, env: App.Platform['env']): Promise<ProviderModelConfig> {
+  const provider = toProvider(
+    (await getFirstSetting(db, ['ingest_provider', 'default_provider'])) ??
+      env.DEFAULT_INGEST_PROVIDER ??
+      env.DEFAULT_PROVIDER ??
+      null
   );
-  return { provider: provider as Provider, model, reasoningEffort };
+  const model =
+    (await getFirstSetting(db, ['ingest_model', 'default_model'])) ??
+    env.DEFAULT_INGEST_MODEL ??
+    env.DEFAULT_MODEL ??
+    DEFAULT_MODEL;
+  const reasoningEffort = toReasoningEffort(
+    (await getFirstSetting(db, ['ingest_reasoning_effort', 'reasoning_effort'])) ??
+      env.DEFAULT_INGEST_REASONING_EFFORT ??
+      env.DEFAULT_REASONING_EFFORT ??
+      null
+  );
+
+  return { provider, model, reasoningEffort };
+}
+
+export async function getChatProviderModel(db: Db, env: App.Platform['env']): Promise<ProviderModelConfig> {
+  const provider = toProvider(
+    (await getFirstSetting(db, ['chat_provider', 'default_provider'])) ??
+      env.DEFAULT_CHAT_PROVIDER ??
+      env.DEFAULT_PROVIDER ??
+      null
+  );
+  const model =
+    (await getFirstSetting(db, ['chat_model', 'default_model'])) ??
+    env.DEFAULT_CHAT_MODEL ??
+    env.DEFAULT_MODEL ??
+    DEFAULT_MODEL;
+  const reasoningEffort = toReasoningEffort(
+    (await getFirstSetting(db, ['chat_reasoning_effort', 'reasoning_effort'])) ??
+      env.DEFAULT_CHAT_REASONING_EFFORT ??
+      env.DEFAULT_REASONING_EFFORT ??
+      null
+  );
+
+  return { provider, model, reasoningEffort };
 }
 
 export async function getProviderKey(db: Db, env: App.Platform['env'], provider: Provider) {

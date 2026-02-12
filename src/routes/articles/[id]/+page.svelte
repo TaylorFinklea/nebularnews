@@ -20,6 +20,15 @@
     await invalidate();
   };
 
+  const setReaction = async (value) => {
+    await fetch(`/api/articles/${data.article.id}/reaction`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ value, feedId: data.preferredSource?.feedId ?? null })
+    });
+    await invalidate();
+  };
+
   const sendMessage = async () => {
     if (!message) return;
     sending = true;
@@ -68,7 +77,7 @@
       <p class="meta">
         Source: {data.preferredSource?.sourceName ?? 'Unknown source'}
         {#if data.preferredSource?.feedbackCount}
-          · rep {data.preferredSource.reputation.toFixed(2)} ({data.preferredSource.feedbackCount} ratings)
+          · rep {data.preferredSource.reputation.toFixed(2)} ({data.preferredSource.feedbackCount} votes)
         {/if}
       </p>
       <p class="meta">Author: {data.article.author ?? 'Unknown author'} · {data.article.canonical_url}</p>
@@ -79,6 +88,9 @@
     <div class="card">
       <h2>Summary</h2>
       <p>{data.summary?.summary_text ?? 'Summary pending.'}</p>
+      {#if data.summary?.provider && data.summary?.model}
+        <p class="muted">Latest summary model: {data.summary.provider}/{data.summary.model}</p>
+      {/if}
       {#if data.summary?.key_points_json}
         <ul>
           {#each JSON.parse(data.summary.key_points_json) as point}
@@ -87,7 +99,10 @@
         </ul>
       {/if}
       <button class="ghost" on:click={() => rerunJobs(['summarize'])} disabled={rerunBusy}>
-        Re-run summary
+        Re-run summary (pipeline model)
+      </button>
+      <button class="ghost" on:click={() => rerunJobs(['summarize_chat'])} disabled={rerunBusy}>
+        Regenerate with chat model
       </button>
     </div>
 
@@ -112,6 +127,17 @@
     </div>
 
     <div class="card">
+      <h2>Feed Vote</h2>
+      <p class="muted">
+        Use thumbs to tune source reputation. This does not edit the AI relevance score.
+      </p>
+      <div class="reaction-row">
+        <button class:active={data.reaction?.value === 1} on:click={() => setReaction(1)}>Thumbs up</button>
+        <button class:active={data.reaction?.value === -1} on:click={() => setReaction(-1)}>Thumbs down</button>
+      </div>
+    </div>
+
+    <div class="card">
       <h2>Feedback</h2>
       <label>
         Rating (1-5)
@@ -128,7 +154,7 @@
           {#each data.sources as source}
             <li>
               <strong>{source.sourceName}</strong>
-              <span>rep {source.reputation.toFixed(2)} ({source.feedbackCount} ratings)</span>
+              <span>rep {source.reputation.toFixed(2)} ({source.feedbackCount} votes)</span>
             </li>
           {/each}
         </ul>
@@ -211,6 +237,24 @@
     padding: 0.6rem 1rem;
     border-radius: 999px;
     cursor: pointer;
+  }
+
+  .reaction-row {
+    display: flex;
+    gap: 0.6rem;
+  }
+
+  .reaction-row button {
+    margin-top: 0;
+    background: transparent;
+    color: #1f1f1f;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+  }
+
+  .reaction-row button.active {
+    border-color: rgba(197, 91, 42, 0.5);
+    background: rgba(197, 91, 42, 0.14);
+    color: #7f3b1f;
   }
 
   .ghost {

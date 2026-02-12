@@ -49,6 +49,7 @@ export const GET = async ({ url, platform }) => {
       a.published_at,
       a.excerpt,
       a.word_count,
+      (SELECT value FROM article_reactions WHERE article_id = a.id LIMIT 1) as reaction_value,
       (SELECT summary_text FROM article_summaries WHERE article_id = a.id ORDER BY created_at DESC LIMIT 1) as summary_text,
       (SELECT score FROM article_scores WHERE article_id = a.id ORDER BY created_at DESC LIMIT 1) as score,
       (SELECT label FROM article_scores WHERE article_id = a.id ORDER BY created_at DESC LIMIT 1) as score_label

@@ -59,7 +59,7 @@
     </div>
     <div class="stat">
       <h2>{data.stats.pendingJobs}</h2>
-      <span>Pending jobs</span>
+      <span><a href="/jobs?status=pending">Pending jobs</a></span>
     </div>
   </div>
 </section>

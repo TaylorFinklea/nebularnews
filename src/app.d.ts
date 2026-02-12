@@ -14,6 +14,12 @@ declare namespace App {
       DEFAULT_PROVIDER?: string;
       DEFAULT_MODEL?: string;
       DEFAULT_REASONING_EFFORT?: string;
+      DEFAULT_INGEST_PROVIDER?: string;
+      DEFAULT_INGEST_MODEL?: string;
+      DEFAULT_INGEST_REASONING_EFFORT?: string;
+      DEFAULT_CHAT_PROVIDER?: string;
+      DEFAULT_CHAT_MODEL?: string;
+      DEFAULT_CHAT_REASONING_EFFORT?: string;
     };
     context: ExecutionContext;
   }

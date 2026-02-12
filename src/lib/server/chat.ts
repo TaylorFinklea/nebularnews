@@ -1,7 +1,7 @@
 import { nanoid } from 'nanoid';
 import { dbAll, dbGet, dbRun, now, type Db } from './db';
 import { runChat } from './llm';
-import { getProviderKey, getProviderModel } from './settings';
+import { getChatProviderModel, getProviderKey } from './settings';
 
 export type ChatScope = 'global' | 'article';
 
@@ -90,7 +90,7 @@ export async function runThreadMessage(
   if (!thread) throw new Error('Thread not found');
 
   const { context, sources } = await buildContext(db, thread.scope, thread.article_id, userMessage);
-  const { provider, model, reasoningEffort } = await getProviderModel(db, env);
+  const { provider, model, reasoningEffort } = await getChatProviderModel(db, env);
   const apiKey = await getProviderKey(db, env, provider);
   if (!apiKey) throw new Error('No provider key');
 

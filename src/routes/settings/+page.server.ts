@@ -1,17 +1,18 @@
 import { dbAll } from '$lib/server/db';
-import { getSetting } from '$lib/server/settings';
+import { getChatProviderModel, getIngestProviderModel, getSetting } from '$lib/server/settings';
 import { ensurePreferenceProfile } from '$lib/server/profile';
 
 export const load = async ({ platform }) => {
   const db = platform.env.DB;
-  const reasoningEffort = await getSetting(db, 'reasoning_effort');
+  const ingestModel = await getIngestProviderModel(db, platform.env);
+  const chatModel = await getChatProviderModel(db, platform.env);
   const settings = {
-    defaultProvider: (await getSetting(db, 'default_provider')) ?? platform.env.DEFAULT_PROVIDER ?? 'openai',
-    defaultModel: (await getSetting(db, 'default_model')) ?? platform.env.DEFAULT_MODEL ?? 'gpt-4o-mini',
-    reasoningEffort:
-      (reasoningEffort === 'minimal' || reasoningEffort === 'low' || reasoningEffort === 'medium' || reasoningEffort === 'high'
-        ? reasoningEffort
-        : platform.env.DEFAULT_REASONING_EFFORT) ?? 'medium',
+    ingestProvider: ingestModel.provider,
+    ingestModel: ingestModel.model,
+    ingestReasoningEffort: ingestModel.reasoningEffort,
+    chatProvider: chatModel.provider,
+    chatModel: chatModel.model,
+    chatReasoningEffort: chatModel.reasoningEffort,
     summaryStyle: (await getSetting(db, 'summary_style')) ?? 'concise',
     summaryLength: (await getSetting(db, 'summary_length')) ?? 'short'
   };

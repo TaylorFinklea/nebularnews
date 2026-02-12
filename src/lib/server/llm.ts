@@ -24,21 +24,38 @@ const supportsReasoningFallback = (status: number, bodyText: string) =>
   status === 400 &&
   /reasoning|reasoning_effort|unknown parameter|additional properties|schema/i.test(bodyText);
 
-const callOpenAI = async (apiKey: string, model: string, messages: ChatMessage[], options?: LlmOptions) => {
+const supportsTemperatureFallback = (status: number, bodyText: string) =>
+  status === 400 && /temperature|unsupported value|does not support/i.test(bodyText);
+
+const buildOpenAiPayloads = (model: string, messages: ChatMessage[], effort?: ReasoningEffort) => {
   const basePayload = {
     model,
-    messages,
-    temperature: 0.2
+    messages
   };
-  const effort = options?.reasoningEffort;
+  const tempPayload = { ...basePayload, temperature: 0.2 };
 
   const payloads = effort
     ? [
+        { ...tempPayload, reasoning: { effort } },
+        { ...tempPayload, reasoning_effort: effort },
+        tempPayload,
         { ...basePayload, reasoning: { effort } },
         { ...basePayload, reasoning_effort: effort },
         basePayload
       ]
-    : [basePayload];
+    : [tempPayload, basePayload];
+
+  const dedupe = new Map<string, (typeof payloads)[number]>();
+  for (const payload of payloads) {
+    dedupe.set(JSON.stringify(payload), payload);
+  }
+  return [...dedupe.values()];
+};
+
+const callOpenAI = async (apiKey: string, model: string, messages: ChatMessage[], options?: LlmOptions) => {
+  const effort = options?.reasoningEffort;
+
+  const payloads = buildOpenAiPayloads(model, messages, effort);
 
   let lastError = '';
   for (const payload of payloads) {
@@ -61,8 +78,11 @@ const callOpenAI = async (apiKey: string, model: string, messages: ChatMessage[]
     const bodyText = await res.text();
     lastError = `OpenAI error: ${res.status} ${bodyText}`.trim();
 
-    // Some models/endpoints reject reasoning keys. Fall through to a compatible payload.
-    if (effort && supportsReasoningFallback(res.status, bodyText)) continue;
+    // Some models/endpoints reject reasoning keys or temperature overrides. Fall through to a compatible payload.
+    const usesReasoning = 'reasoning' in payload || 'reasoning_effort' in payload;
+    const usesTemperature = 'temperature' in payload;
+    if (usesReasoning && supportsReasoningFallback(res.status, bodyText)) continue;
+    if (usesTemperature && supportsTemperatureFallback(res.status, bodyText)) continue;
 
     throw new Error(lastError);
   }

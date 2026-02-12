@@ -14,6 +14,15 @@ const sha256 = async (text: string) => {
 };
 
 const POLL_INTERVAL_MS = 1000 * 60 * 60;
+const MAX_PUBLISHED_FUTURE_MS = 1000 * 60 * 60 * 24;
+
+export function normalizePublishedAt(publishedAt: number | null | undefined, fallbackAt: number) {
+  if (!publishedAt || !Number.isFinite(publishedAt)) return null;
+  if (publishedAt > fallbackAt + MAX_PUBLISHED_FUTURE_MS) {
+    return fallbackAt;
+  }
+  return publishedAt;
+}
 
 export type FeedPollError = {
   feedId: string;
@@ -104,6 +113,8 @@ async function ingestFeedItem(db: Db, feedId: string, item: FeedItem): Promise<b
   const url = normalizeUrl(item.url ?? null);
   if (!url) return false;
   const guid = item.guid ?? url;
+  const fetchedAt = now();
+  const normalizedPublishedAt = normalizePublishedAt(item.publishedAt, fetchedAt);
 
   let contentHtml = item.contentHtml ?? null;
   let contentText = item.contentText ?? null;
@@ -146,8 +157,8 @@ async function ingestFeedItem(db: Db, feedId: string, item: FeedItem): Promise<b
         guid,
         item.title,
         item.author,
-        item.publishedAt,
-        now(),
+        normalizedPublishedAt,
+        fetchedAt,
         contentHtml,
         contentText,
         excerpt,
@@ -187,7 +198,7 @@ async function ingestFeedItem(db: Db, feedId: string, item: FeedItem): Promise<b
   await dbRun(
     db,
     'INSERT OR IGNORE INTO article_sources (id, article_id, feed_id, item_guid, original_url, published_at) VALUES (?, ?, ?, ?, ?, ?)',
-    [nanoid(), articleId, feedId, guid, url, item.publishedAt]
+    [nanoid(), articleId, feedId, guid, url, normalizedPublishedAt]
   );
 
   return true;

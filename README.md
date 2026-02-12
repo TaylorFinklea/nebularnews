@@ -26,7 +26,10 @@ ADMIN_PASSWORD_HASH=pbkdf2$...
 SESSION_SECRET=replace-with-long-random
 ENCRYPTION_KEY=base64-32-bytes
 DEFAULT_PROVIDER=openai
-DEFAULT_MODEL=gpt-4o-mini
+DEFAULT_INGEST_MODEL=gpt-5-mini
+DEFAULT_CHAT_MODEL=gpt-5.2
+DEFAULT_INGEST_REASONING_EFFORT=low
+DEFAULT_CHAT_REASONING_EFFORT=medium
 DEFAULT_REASONING_EFFORT=medium
 ```
 
@@ -68,4 +71,6 @@ wrangler deploy
 
 - Feed polling runs every 60 minutes via Cloudflare Cron triggers.
 - API keys are stored encrypted server‑side using AES‑GCM.
+- You can set separate LLM defaults for pipeline jobs vs chat in Settings.
+- Settings can auto-fetch available model IDs from OpenAI/Anthropic using your saved key.
 - This project is licensed under AGPLv3.

@@ -77,6 +77,16 @@ CREATE TABLE IF NOT EXISTS article_feedback (
   FOREIGN KEY(feed_id) REFERENCES feeds(id) ON DELETE SET NULL
 );
 
+CREATE TABLE IF NOT EXISTS article_reactions (
+  id TEXT PRIMARY KEY,
+  article_id TEXT NOT NULL UNIQUE,
+  feed_id TEXT NOT NULL,
+  value INTEGER NOT NULL CHECK (value IN (-1, 1)),
+  created_at INTEGER NOT NULL,
+  FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE,
+  FOREIGN KEY(feed_id) REFERENCES feeds(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS chat_threads (
   id TEXT PRIMARY KEY,
   scope TEXT NOT NULL,
@@ -118,7 +128,9 @@ CREATE TABLE IF NOT EXISTS jobs (
   status TEXT NOT NULL,
   attempts INTEGER NOT NULL DEFAULT 0,
   run_after INTEGER NOT NULL,
-  last_error TEXT
+  last_error TEXT,
+  provider TEXT,
+  model TEXT
 );
 
 CREATE TABLE IF NOT EXISTS settings (
@@ -144,4 +156,5 @@ CREATE INDEX IF NOT EXISTS idx_article_sources_article ON article_sources(articl
 CREATE INDEX IF NOT EXISTS idx_article_scores_article ON article_scores(article_id);
 CREATE INDEX IF NOT EXISTS idx_article_feedback_article ON article_feedback(article_id);
 CREATE INDEX IF NOT EXISTS idx_article_feedback_feed ON article_feedback(feed_id);
+CREATE INDEX IF NOT EXISTS idx_article_reactions_feed ON article_reactions(feed_id);
 CREATE INDEX IF NOT EXISTS idx_chat_messages_thread ON chat_messages(thread_id);

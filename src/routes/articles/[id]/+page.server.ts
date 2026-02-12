@@ -10,7 +10,7 @@ export const load = async ({ params, platform }) => {
 
   const summary = await dbGet(
     platform.env.DB,
-    'SELECT summary_text, key_points_json FROM article_summaries WHERE article_id = ? ORDER BY created_at DESC LIMIT 1',
+    'SELECT summary_text, key_points_json, provider, model, created_at, prompt_version FROM article_summaries WHERE article_id = ? ORDER BY created_at DESC LIMIT 1',
     [params.id]
   );
 
@@ -25,9 +25,14 @@ export const load = async ({ params, platform }) => {
     'SELECT rating, comment, created_at FROM article_feedback WHERE article_id = ? ORDER BY created_at DESC',
     [params.id]
   );
+  const reaction = await dbGet(
+    platform.env.DB,
+    'SELECT value, feed_id, created_at FROM article_reactions WHERE article_id = ? LIMIT 1',
+    [params.id]
+  );
 
   const preferredSource = await getPreferredSourceForArticle(platform.env.DB, params.id);
   const sources = await listSourcesForArticle(platform.env.DB, params.id);
 
-  return { article, summary, score, feedback, preferredSource, sources };
+  return { article, summary, score, feedback, reaction, preferredSource, sources };
 };

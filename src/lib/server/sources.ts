@@ -19,8 +19,8 @@ type SourceCandidateRow = {
 
 type FeedReputationRow = {
   feed_id: string;
-  feedback_count: number;
-  rating_sum: number;
+  reaction_count: number;
+  reaction_sum: number;
 };
 
 export type PreferredSource = {
@@ -38,7 +38,7 @@ export type ArticleSource = PreferredSource & {
 
 export function computeFeedReputation(ratingSum: number, feedbackCount: number, priorWeight = REPUTATION_PRIOR_WEIGHT) {
   if (feedbackCount <= 0) return 0;
-  return (ratingSum - 3 * feedbackCount) / (feedbackCount + priorWeight);
+  return ratingSum / (feedbackCount + priorWeight);
 }
 
 const hostnameFromUrl = (value: string | null) => {
@@ -112,8 +112,8 @@ async function getFeedReputations(db: Db, feedIds: string[]) {
   if (feedIds.length === 0) return new Map<string, FeedReputation>();
   const rows = await dbAll<FeedReputationRow>(
     db,
-    `SELECT feed_id, COUNT(*) as feedback_count, COALESCE(SUM(rating), 0) as rating_sum
-    FROM article_feedback
+    `SELECT feed_id, COUNT(*) as reaction_count, COALESCE(SUM(value), 0) as reaction_sum
+    FROM article_reactions
     WHERE feed_id IN (${placeholders(feedIds.length)})
     GROUP BY feed_id`,
     feedIds
@@ -122,9 +122,9 @@ async function getFeedReputations(db: Db, feedIds: string[]) {
   const reputations = new Map<string, FeedReputation>();
   for (const row of rows) {
     reputations.set(row.feed_id, {
-      feedbackCount: row.feedback_count,
-      ratingSum: row.rating_sum,
-      score: computeFeedReputation(row.rating_sum, row.feedback_count)
+      feedbackCount: row.reaction_count,
+      ratingSum: row.reaction_sum,
+      score: computeFeedReputation(row.reaction_sum, row.reaction_count)
     });
   }
   return reputations;

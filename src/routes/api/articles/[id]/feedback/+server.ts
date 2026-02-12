@@ -32,7 +32,9 @@ export const POST = async ({ params, request, platform }) => {
        status = excluded.status,
        attempts = 0,
        run_after = excluded.run_after,
-       last_error = NULL`,
+       last_error = NULL,
+       provider = NULL,
+       model = NULL`,
     [nanoid(), 'refresh_profile', 'profile', 'pending', 0, now()]
   );
 

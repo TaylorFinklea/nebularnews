@@ -39,6 +39,31 @@ export async function ensureSchema(db: Db) {
     await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_article_reactions_feed ON article_reactions(feed_id)');
     await runSafe(db, 'ALTER TABLE jobs ADD COLUMN provider TEXT');
     await runSafe(db, 'ALTER TABLE jobs ADD COLUMN model TEXT');
+    await runSafe(
+      db,
+      `CREATE TABLE IF NOT EXISTS article_score_overrides (
+        article_id TEXT PRIMARY KEY,
+        score INTEGER NOT NULL CHECK (score >= 1 AND score <= 5),
+        comment TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE
+      )`
+    );
+    await runSafe(
+      db,
+      `INSERT OR IGNORE INTO article_score_overrides (article_id, score, comment, created_at, updated_at)
+       SELECT af.article_id, af.rating, af.comment, af.created_at, af.created_at
+       FROM article_feedback af
+       JOIN (
+         SELECT article_id, MAX(created_at) as max_created_at
+         FROM article_feedback
+         GROUP BY article_id
+       ) latest
+         ON latest.article_id = af.article_id
+        AND latest.max_created_at = af.created_at
+       WHERE af.rating BETWEEN 1 AND 5`
+    );
     const futureCutoff = Date.now() + MAX_PUBLISHED_FUTURE_MS;
     await runSafe(
       db,

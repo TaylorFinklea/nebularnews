@@ -24,6 +24,18 @@ export const POST = async ({ params, request, platform }) => {
     [nanoid(), id, feedId, rating, comment, now()]
   );
 
+  const timestamp = now();
+  await dbRun(
+    platform.env.DB,
+    `INSERT INTO article_score_overrides (article_id, score, comment, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(article_id) DO UPDATE SET
+       score = excluded.score,
+       comment = excluded.comment,
+       updated_at = excluded.updated_at`,
+    [id, rating, comment, timestamp, timestamp]
+  );
+
   await dbRun(
     platform.env.DB,
     `INSERT INTO jobs (id, type, article_id, status, attempts, run_after, last_error)

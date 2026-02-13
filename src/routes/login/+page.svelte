@@ -29,11 +29,12 @@
   }
 
   .card {
-    background: rgba(255, 255, 255, 0.9);
+    background: var(--surface);
     padding: 2.5rem;
     border-radius: 24px;
     width: min(420px, 100%);
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 20px 40px var(--shadow-color);
+    border: 1px solid var(--surface-border);
   }
 
   h1 {
@@ -51,12 +52,12 @@
     width: 100%;
     padding: 0.7rem 0.8rem;
     border-radius: 12px;
-    border: 1px solid rgba(0, 0, 0, 0.15);
+    border: 1px solid var(--input-border);
   }
 
   button {
-    background: #c55b2a;
-    color: white;
+    background: var(--button-bg);
+    color: var(--button-text);
     border: none;
     padding: 0.8rem 1rem;
     border-radius: 999px;
@@ -65,7 +66,7 @@
   }
 
   .error {
-    color: #b42318;
+    color: var(--danger);
     font-size: 0.9rem;
   }
 </style>

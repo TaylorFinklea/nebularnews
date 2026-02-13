@@ -281,10 +281,11 @@
   }
 
   .card {
-    background: rgba(255, 255, 255, 0.94);
+    background: var(--surface-strong);
     padding: 1.5rem;
     border-radius: 20px;
-    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 12px 24px var(--shadow-color);
+    border: 1px solid var(--surface-border);
     display: grid;
     gap: 0.8rem;
   }
@@ -300,12 +301,12 @@
     width: 100%;
     padding: 0.7rem;
     border-radius: 12px;
-    border: 1px solid rgba(0, 0, 0, 0.15);
+    border: 1px solid var(--input-border);
   }
 
   button {
-    background: #1f1f1f;
-    color: white;
+    background: var(--button-bg);
+    color: var(--button-text);
     border: none;
     padding: 0.6rem 1rem;
     border-radius: 999px;
@@ -314,8 +315,8 @@
 
   .ghost {
     background: transparent;
-    border: 1px solid rgba(197, 91, 42, 0.4);
-    color: #c55b2a;
+    border: 1px solid var(--ghost-border);
+    color: var(--ghost-color);
   }
 
   .key-row {
@@ -326,7 +327,7 @@
 
   .divider {
     height: 1px;
-    background: rgba(0, 0, 0, 0.08);
+    background: var(--surface-border);
     margin: 0.8rem 0;
   }
 
@@ -340,7 +341,7 @@
   }
 
   .muted {
-    color: rgba(0, 0, 0, 0.6);
+    color: var(--muted-text);
     font-size: 0.85rem;
   }
 </style>

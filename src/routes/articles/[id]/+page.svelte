@@ -197,19 +197,20 @@
   }
 
   .card {
-    background: rgba(255, 255, 255, 0.94);
+    background: var(--surface-strong);
     padding: 1.5rem;
     border-radius: 20px;
-    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 12px 24px var(--shadow-color);
+    border: 1px solid var(--surface-border);
   }
 
   .meta {
-    color: rgba(0, 0, 0, 0.6);
+    color: var(--muted-text);
   }
 
   .score {
     font-weight: 600;
-    color: #c55b2a;
+    color: var(--primary);
   }
 
   .card ul {
@@ -224,7 +225,7 @@
   .card li span {
     margin-left: 0.4rem;
     font-size: 0.85rem;
-    color: rgba(0, 0, 0, 0.65);
+    color: var(--muted-text);
   }
 
   input,
@@ -233,13 +234,13 @@
     margin-top: 0.5rem;
     padding: 0.7rem;
     border-radius: 12px;
-    border: 1px solid rgba(0, 0, 0, 0.15);
+    border: 1px solid var(--input-border);
   }
 
   button {
     margin-top: 0.7rem;
-    background: #1f1f1f;
-    color: white;
+    background: var(--button-bg);
+    color: var(--button-text);
     border: none;
     padding: 0.6rem 1rem;
     border-radius: 999px;
@@ -253,28 +254,28 @@
 
   .reaction-row button {
     margin-top: 0;
-    background: transparent;
-    color: #1f1f1f;
-    border: 1px solid rgba(0, 0, 0, 0.2);
+    background: var(--surface-soft);
+    color: var(--text-color);
+    border: 1px solid var(--input-border);
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
   }
 
   .reaction-row button.active {
-    border-color: rgba(197, 91, 42, 0.5);
-    background: rgba(197, 91, 42, 0.14);
-    color: #7f3b1f;
+    border-color: var(--ghost-border);
+    background: var(--primary-soft);
+    color: var(--primary);
   }
 
   .ghost {
     background: transparent;
-    border: 1px solid rgba(197, 91, 42, 0.4);
-    color: #c55b2a;
+    border: 1px solid var(--ghost-border);
+    color: var(--ghost-color);
   }
 
   .chat-box {
-    background: #f6f1ea;
+    background: var(--surface-soft);
     border-radius: 16px;
     padding: 1rem;
     display: grid;
@@ -291,13 +292,13 @@
 
   .bubble.user {
     justify-self: end;
-    background: #1f1f1f;
-    color: white;
+    background: var(--button-bg);
+    color: var(--button-text);
   }
 
   .bubble.assistant {
     justify-self: start;
-    background: white;
+    background: var(--surface-strong);
   }
 
   .row {
@@ -309,6 +310,6 @@
   .article-text {
     white-space: pre-line;
     line-height: 1.6;
-    color: rgba(0, 0, 0, 0.75);
+    color: var(--text-color);
   }
 </style>

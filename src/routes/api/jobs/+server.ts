@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit';
+import { parse as parseCookie } from 'cookie';
 import {
   cancelAllPendingJobs,
   cancelPendingJob,
@@ -10,9 +11,11 @@ import {
   listJobs,
   markJobPendingNow,
   normalizeJobFilter,
+  queueMissingTodayArticleJobs,
   retryFailedJobs,
   runQueueCycles
 } from '$lib/server/jobs-admin';
+import { clampTimezoneOffsetMinutes } from '$lib/server/time';
 
 const validActions = new Set([
   'run_queue',
@@ -21,7 +24,8 @@ const validActions = new Set([
   'delete',
   'retry_failed',
   'cancel_pending_all',
-  'clear_finished'
+  'clear_finished',
+  'queue_today_missing'
 ]);
 
 export const GET = async ({ url, platform }) => {
@@ -41,6 +45,13 @@ export const POST = async ({ request, platform }) => {
 
   const jobId = typeof body?.jobId === 'string' ? body.jobId.trim() : '';
   const db = platform.env.DB;
+  const cookieHeader = request.headers.get('cookie') ?? '';
+  const cookies = parseCookie(cookieHeader);
+  const requestedOffset =
+    body?.tzOffsetMinutes ??
+    body?.timezoneOffsetMinutes ??
+    (cookies.nebular_tz_offset_min ? Number(cookies.nebular_tz_offset_min) : undefined);
+  const tzOffsetMinutes = clampTimezoneOffsetMinutes(requestedOffset, 0);
 
   if (action === 'run_queue') {
     const cycles = clampQueueCycles(body?.cycles ?? 1);
@@ -62,6 +73,16 @@ export const POST = async ({ request, platform }) => {
   if (action === 'clear_finished') {
     const deleted = await clearFinishedJobs(db);
     return json({ ok: true, action, deleted, counts: await getJobCounts(db) });
+  }
+
+  if (action === 'queue_today_missing') {
+    const queued = await queueMissingTodayArticleJobs(db, { tzOffsetMinutes });
+    return json({
+      ok: true,
+      action,
+      queued,
+      counts: await getJobCounts(db)
+    });
   }
 
   if (!jobId) {

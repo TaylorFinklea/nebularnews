@@ -99,10 +99,11 @@
   }
 
   .card {
-    background: rgba(255, 255, 255, 0.95);
+    background: var(--surface-strong);
     padding: 1.6rem;
     border-radius: 22px;
-    box-shadow: 0 16px 30px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 16px 30px var(--shadow-color);
+    border: 1px solid var(--surface-border);
   }
 
   .card-head {
@@ -113,8 +114,8 @@
   }
 
   .pill {
-    background: rgba(197, 91, 42, 0.16);
-    color: #c55b2a;
+    background: var(--primary-soft);
+    color: var(--primary);
     padding: 0.3rem 0.7rem;
     border-radius: 999px;
     font-size: 0.8rem;
@@ -123,28 +124,28 @@
 
   .excerpt {
     margin-top: 0.8rem;
-    color: rgba(0, 0, 0, 0.7);
+    color: var(--muted-text);
   }
 
   .meta {
     display: flex;
     justify-content: space-between;
     font-size: 0.85rem;
-    color: rgba(0, 0, 0, 0.6);
+    color: var(--muted-text);
     margin-top: 0.8rem;
   }
 
   .byline {
     margin-top: 0.4rem;
     font-size: 0.85rem;
-    color: rgba(0, 0, 0, 0.55);
+    color: var(--muted-text);
   }
 
   .button {
     margin-top: 1rem;
     display: inline-block;
-    background: #1f1f1f;
-    color: white;
+    background: var(--button-bg);
+    color: var(--button-text);
     padding: 0.5rem 1rem;
     border-radius: 999px;
   }
@@ -156,20 +157,21 @@
   }
 
   .reactions button {
-    border: 1px solid rgba(0, 0, 0, 0.18);
-    background: transparent;
+    border: 1px solid var(--input-border);
+    background: var(--surface-soft);
     border-radius: 999px;
     padding: 0.35rem 0.65rem;
     cursor: pointer;
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
+    color: var(--text-color);
   }
 
   .reactions button.active {
-    border-color: rgba(197, 91, 42, 0.5);
-    background: rgba(197, 91, 42, 0.15);
-    color: #7f3b1f;
+    border-color: var(--ghost-border);
+    background: var(--primary-soft);
+    color: var(--primary);
   }
 
   .filters {
@@ -183,7 +185,7 @@
   select {
     padding: 0.6rem 0.8rem;
     border-radius: 12px;
-    border: 1px solid rgba(0, 0, 0, 0.15);
+    border: 1px solid var(--input-border);
     font-family: inherit;
   }
 
@@ -192,8 +194,8 @@
   }
 
   form button {
-    background: #c55b2a;
-    color: white;
+    background: var(--button-bg);
+    color: var(--button-text);
     border: none;
     padding: 0.6rem 1rem;
     border-radius: 999px;
@@ -201,7 +203,7 @@
   }
 
   .muted {
-    color: rgba(0, 0, 0, 0.6);
+    color: var(--muted-text);
   }
 
   @media (max-width: 700px) {

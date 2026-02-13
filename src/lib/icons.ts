@@ -1,1 +1,1 @@
-export { IconThumbDown, IconThumbUp } from '@tabler/icons-svelte';
+export { IconMoonStars, IconSun, IconThumbDown, IconThumbUp } from '@tabler/icons-svelte';

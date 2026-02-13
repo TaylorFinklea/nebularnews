@@ -15,6 +15,12 @@ const sha256 = async (text: string) => {
 
 const POLL_INTERVAL_MS = 1000 * 60 * 60;
 const MAX_PUBLISHED_FUTURE_MS = 1000 * 60 * 60 * 24;
+const DAY_MS = 1000 * 60 * 60 * 24;
+
+const utcDayStart = (timestamp: number) => {
+  const day = new Date(timestamp);
+  return Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate());
+};
 
 export function normalizePublishedAt(publishedAt: number | null | undefined, fallbackAt: number) {
   if (!publishedAt || !Number.isFinite(publishedAt)) return null;
@@ -22,6 +28,17 @@ export function normalizePublishedAt(publishedAt: number | null | undefined, fal
     return fallbackAt;
   }
   return publishedAt;
+}
+
+export function shouldAutoQueueArticleJobs(
+  publishedAt: number | null | undefined,
+  fetchedAt: number,
+  referenceAt = fetchedAt
+) {
+  const candidateAt = typeof publishedAt === 'number' && Number.isFinite(publishedAt) ? publishedAt : fetchedAt;
+  const dayStart = utcDayStart(referenceAt);
+  const dayEnd = dayStart + DAY_MS;
+  return candidateAt >= dayStart && candidateAt < dayEnd;
 }
 
 export type FeedPollError = {
@@ -181,17 +198,19 @@ async function ingestFeedItem(db: Db, feedId: string, item: FeedItem): Promise<b
         [articleId, item.title, contentText ?? '', '']
       );
 
-      const jobs = [
-        {
-          sql: 'INSERT OR IGNORE INTO jobs (id, type, article_id, status, attempts, run_after) VALUES (?, ?, ?, ?, ?, ?)',
-          params: [nanoid(), 'summarize', articleId, 'pending', 0, now()]
-        },
-        {
-          sql: 'INSERT OR IGNORE INTO jobs (id, type, article_id, status, attempts, run_after) VALUES (?, ?, ?, ?, ?, ?)',
-          params: [nanoid(), 'score', articleId, 'pending', 0, now()]
-        }
-      ];
-      await dbBatch(db, jobs);
+      if (shouldAutoQueueArticleJobs(normalizedPublishedAt, fetchedAt)) {
+        const jobs = [
+          {
+            sql: 'INSERT OR IGNORE INTO jobs (id, type, article_id, status, attempts, run_after) VALUES (?, ?, ?, ?, ?, ?)',
+            params: [nanoid(), 'summarize', articleId, 'pending', 0, now()]
+          },
+          {
+            sql: 'INSERT OR IGNORE INTO jobs (id, type, article_id, status, attempts, run_after) VALUES (?, ?, ?, ?, ?, ?)',
+            params: [nanoid(), 'score', articleId, 'pending', 0, now()]
+          }
+        ];
+        await dbBatch(db, jobs);
+      }
     }
   }
 

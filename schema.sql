@@ -66,6 +66,15 @@ CREATE TABLE IF NOT EXISTS article_scores (
   FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS article_score_overrides (
+  article_id TEXT PRIMARY KEY,
+  score INTEGER NOT NULL CHECK (score >= 1 AND score <= 5),
+  comment TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS article_feedback (
   id TEXT PRIMARY KEY,
   article_id TEXT NOT NULL,

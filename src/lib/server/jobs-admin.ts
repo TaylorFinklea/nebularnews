@@ -1,5 +1,6 @@
 import { dbAll, dbGet, dbRun, now, type Db } from './db';
 import { processJobs } from './jobs';
+import { dayRangeForTimezoneOffset } from './time';
 
 const JOB_FILTERS = ['all', 'pending', 'running', 'failed', 'done', 'cancelled'] as const;
 const MAX_LIMIT = 250;
@@ -135,6 +136,61 @@ export async function runQueueCycles(env: App.Platform['env'], cycles: number, o
   return {
     cycles: runCount,
     counts: await getJobCounts(env.DB)
+  };
+}
+
+export async function queueMissingTodayArticleJobs(
+  db: Db,
+  options?: { referenceAt?: number; tzOffsetMinutes?: number }
+) {
+  const referenceAt = options?.referenceAt ?? now();
+  const range = dayRangeForTimezoneOffset(referenceAt, options?.tzOffsetMinutes ?? 0);
+  const { dayStart, dayEnd } = range;
+  const runAfter = referenceAt;
+
+  const summarizeResult = await dbRun(
+    db,
+    `INSERT INTO jobs (id, type, article_id, status, attempts, run_after, last_error, provider, model)
+     SELECT lower(hex(randomblob(16))), 'summarize', a.id, 'pending', 0, ?, NULL, NULL, NULL
+     FROM articles a
+     WHERE COALESCE(a.published_at, a.fetched_at) >= ?
+       AND COALESCE(a.published_at, a.fetched_at) < ?
+       AND NOT EXISTS (SELECT 1 FROM article_summaries s WHERE s.article_id = a.id)
+     ON CONFLICT(type, article_id) DO UPDATE SET
+       status = excluded.status,
+       attempts = 0,
+       run_after = excluded.run_after,
+       last_error = NULL,
+       provider = NULL,
+       model = NULL`,
+    [runAfter, dayStart, dayEnd]
+  );
+
+  const scoreResult = await dbRun(
+    db,
+    `INSERT INTO jobs (id, type, article_id, status, attempts, run_after, last_error, provider, model)
+     SELECT lower(hex(randomblob(16))), 'score', a.id, 'pending', 0, ?, NULL, NULL, NULL
+     FROM articles a
+     WHERE COALESCE(a.published_at, a.fetched_at) >= ?
+       AND COALESCE(a.published_at, a.fetched_at) < ?
+       AND NOT EXISTS (SELECT 1 FROM article_scores s WHERE s.article_id = a.id)
+       AND NOT EXISTS (SELECT 1 FROM article_score_overrides o WHERE o.article_id = a.id)
+     ON CONFLICT(type, article_id) DO UPDATE SET
+       status = excluded.status,
+       attempts = 0,
+       run_after = excluded.run_after,
+       last_error = NULL,
+       provider = NULL,
+       model = NULL`,
+    [runAfter, dayStart, dayEnd]
+  );
+
+  return {
+    dayStart,
+    dayEnd,
+    tzOffsetMinutes: range.tzOffsetMinutes,
+    summarizeQueued: getAffectedRows(summarizeResult),
+    scoreQueued: getAffectedRows(scoreResult)
   };
 }
 

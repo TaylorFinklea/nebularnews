@@ -7,6 +7,15 @@
   let busyKey = '';
   let message = '';
 
+  const formatUtcOffset = (offsetMinutes) => {
+    const normalized = Number(offsetMinutes ?? 0);
+    const sign = normalized <= 0 ? '+' : '-';
+    const absolute = Math.abs(normalized);
+    const hours = String(Math.floor(absolute / 60)).padStart(2, '0');
+    const minutes = String(absolute % 60).padStart(2, '0');
+    return `UTC${sign}${hours}:${minutes}`;
+  };
+
   const runAction = async (action, options = {}) => {
     const { jobId = null, label = action, cycles = 1 } = options;
     busyKey = `${action}:${jobId ?? 'all'}`;
@@ -15,7 +24,13 @@
       const res = await fetch('/api/jobs', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ action, jobId, cycles, forceDue: action === 'run_queue' ? true : undefined })
+        body: JSON.stringify({
+          action,
+          jobId,
+          cycles,
+          forceDue: action === 'run_queue' ? true : undefined,
+          tzOffsetMinutes: action === 'queue_today_missing' ? new Date().getTimezoneOffset() : undefined
+        })
       });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -26,6 +41,15 @@
       const touched = payload?.updated ?? payload?.deleted;
       if (action === 'run_queue') {
         message = `Queue ran ${payload.cycles} cycle${payload.cycles === 1 ? '' : 's'}. Pending: ${payload.counts.pending}, running: ${payload.counts.running}, failed: ${payload.counts.failed}.`;
+      } else if (action === 'queue_today_missing') {
+        const summarizeQueued = payload?.queued?.summarizeQueued ?? 0;
+        const scoreQueued = payload?.queued?.scoreQueued ?? 0;
+        if (summarizeQueued === 0 && scoreQueued === 0) {
+          const label = payload?.queued?.dayStart ? new Date(payload.queued.dayStart).toLocaleDateString() : 'today';
+          message = `No missing summarize/score jobs found for ${label}.`;
+        } else {
+          message = `Queued today's missing jobs: ${summarizeQueued} summarize, ${scoreQueued} score.`;
+        }
       } else if (typeof touched === 'number') {
         message = `${label} updated ${touched} job${touched === 1 ? '' : 's'}.`;
       } else {
@@ -48,6 +72,13 @@
     <p>Inspect and control pending, failed, and completed jobs.</p>
   </div>
 </section>
+
+<div class="today-missing">
+  <strong>Today missing:</strong>
+  <span>{data.today.missingSummaries} summaries</span>
+  <span>{data.today.missingScores} scores</span>
+  <span>({formatUtcOffset(data.today.tzOffsetMinutes)})</span>
+</div>
 
 <div class="stats">
   <div class="stat">
@@ -75,6 +106,12 @@
 <div class="controls">
   <button disabled={isBusy('run_queue')} on:click={() => runAction('run_queue', { label: 'Run queue', cycles: 2 })}>
     Run queue now
+  </button>
+  <button
+    disabled={isBusy('queue_today_missing')}
+    on:click={() => runAction('queue_today_missing', { label: 'Queue today missing' })}
+  >
+    Queue missing today jobs
   </button>
   <button
     class="ghost"
@@ -193,6 +230,16 @@
 </div>
 
 <style>
+  .today-missing {
+    margin-top: 0.8rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.65rem;
+    color: var(--muted-text);
+    font-size: 0.9rem;
+  }
+
   .stats {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
@@ -201,10 +248,11 @@
   }
 
   .stat {
-    background: rgba(255, 255, 255, 0.9);
+    background: var(--surface);
     border-radius: 16px;
     padding: 0.8rem;
-    box-shadow: 0 10px 22px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 10px 22px var(--shadow-color);
+    border: 1px solid var(--surface-border);
   }
 
   .stat strong {
@@ -213,7 +261,7 @@
   }
 
   .stat span {
-    color: rgba(0, 0, 0, 0.65);
+    color: var(--muted-text);
     font-size: 0.9rem;
   }
 
@@ -228,16 +276,16 @@
     border: none;
     border-radius: 999px;
     padding: 0.55rem 0.9rem;
-    background: #1f1f1f;
-    color: white;
+    background: var(--button-bg);
+    color: var(--button-text);
     cursor: pointer;
   }
 
   .controls .ghost,
   .actions .ghost {
     background: transparent;
-    color: #c55b2a;
-    border: 1px solid rgba(197, 91, 42, 0.4);
+    color: var(--ghost-color);
+    border: 1px solid var(--ghost-border);
   }
 
   .controls button:disabled,
@@ -248,7 +296,7 @@
 
   .message {
     margin-top: 0.8rem;
-    color: rgba(0, 0, 0, 0.72);
+    color: var(--muted-text);
   }
 
   .filters {
@@ -261,23 +309,24 @@
   .filters a {
     padding: 0.3rem 0.7rem;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.7);
-    border: 1px solid rgba(0, 0, 0, 0.08);
+    background: var(--surface-soft);
+    border: 1px solid var(--surface-border);
     text-transform: capitalize;
     font-size: 0.85rem;
   }
 
   .filters a.active {
-    background: rgba(197, 91, 42, 0.2);
-    border-color: rgba(197, 91, 42, 0.35);
+    background: var(--primary-soft);
+    border-color: var(--ghost-border);
   }
 
   .table-wrap {
     margin-top: 1rem;
     overflow-x: auto;
-    background: rgba(255, 255, 255, 0.92);
+    background: var(--surface-strong);
     border-radius: 18px;
-    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.08);
+    box-shadow: 0 10px 24px var(--shadow-color);
+    border: 1px solid var(--surface-border);
   }
 
   table {
@@ -290,20 +339,20 @@
   td {
     text-align: left;
     padding: 0.7rem 0.8rem;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+    border-bottom: 1px solid var(--surface-border);
     vertical-align: top;
   }
 
   th {
     font-size: 0.85rem;
-    color: rgba(0, 0, 0, 0.65);
+    color: var(--muted-text);
     text-transform: uppercase;
     letter-spacing: 0.02em;
   }
 
   .error {
     max-width: 360px;
-    color: rgba(0, 0, 0, 0.7);
+    color: var(--text-color);
     white-space: pre-wrap;
     word-break: break-word;
   }
@@ -329,31 +378,31 @@
   }
 
   .status.pending {
-    background: rgba(197, 91, 42, 0.15);
-    color: #c55b2a;
+    background: var(--primary-soft);
+    color: var(--primary);
   }
 
   .status.running {
-    background: rgba(63, 121, 186, 0.16);
-    color: #244e7e;
+    background: rgba(88, 174, 255, 0.2);
+    color: #72c3ff;
   }
 
   .status.failed {
-    background: rgba(185, 48, 48, 0.15);
-    color: #7f2323;
+    background: rgba(255, 110, 150, 0.2);
+    color: #ff9dbc;
   }
 
   .status.done {
-    background: rgba(44, 128, 76, 0.14);
-    color: #1f5e36;
+    background: rgba(114, 236, 200, 0.18);
+    color: #91f0cd;
   }
 
   .status.cancelled {
-    background: rgba(0, 0, 0, 0.1);
-    color: rgba(0, 0, 0, 0.75);
+    background: rgba(130, 142, 190, 0.2);
+    color: var(--muted-text);
   }
 
   .muted {
-    color: rgba(0, 0, 0, 0.55);
+    color: var(--muted-text);
   }
 </style>

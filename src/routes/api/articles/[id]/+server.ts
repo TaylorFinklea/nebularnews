@@ -17,11 +17,37 @@ export const GET = async ({ params, platform }) => {
     [id]
   );
 
-  const score = await dbGet(
+  const scoreOverride = await dbGet<{ score: number; comment: string | null; updated_at: number }>(
+    platform.env.DB,
+    'SELECT score, comment, updated_at FROM article_score_overrides WHERE article_id = ? LIMIT 1',
+    [id]
+  );
+  const aiScore = await dbGet<{
+    score: number;
+    label: string | null;
+    reason_text: string | null;
+    evidence_json: string | null;
+    created_at: number;
+  }>(
     platform.env.DB,
     'SELECT score, label, reason_text, evidence_json, created_at FROM article_scores WHERE article_id = ? ORDER BY created_at DESC LIMIT 1',
     [id]
   );
+  const score = scoreOverride
+    ? {
+        score: scoreOverride.score,
+        label: 'User corrected',
+        reason_text: scoreOverride.comment ?? 'User-set rating override',
+        evidence_json: null,
+        created_at: scoreOverride.updated_at,
+        source: 'user'
+      }
+    : aiScore
+      ? {
+          ...aiScore,
+          source: 'ai'
+        }
+      : null;
 
   const feedback = await dbAll(
     platform.env.DB,

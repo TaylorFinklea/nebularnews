@@ -10,6 +10,7 @@
   let chatLog = [];
   let sending = false;
   let rerunBusy = false;
+  let chatError = '';
 
   const submitFeedback = async () => {
     await fetch(`/api/articles/${data.article.id}/feedback`, {
@@ -31,30 +32,48 @@
   };
 
   const sendMessage = async () => {
+    if (!data.chatReadiness?.canChat) {
+      chatError = data.chatReadiness?.reasons?.[0] ?? 'Chat is not ready yet.';
+      return;
+    }
     if (!message) return;
     sending = true;
-    if (!threadId) {
-      const res = await fetch('/api/chat/threads', {
+    chatError = '';
+    try {
+      if (!threadId) {
+        const threadRes = await fetch('/api/chat/threads', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ scope: 'article', articleId: data.article.id, title: data.article.title })
+        });
+        const created = await threadRes.json().catch(() => ({}));
+        if (!threadRes.ok || !created?.id) {
+          chatError = created?.error ?? 'Failed to start article chat';
+          return;
+        }
+        threadId = created.id;
+      }
+
+      const userText = message;
+      chatLog = [...chatLog, { role: 'user', content: userText }];
+      message = '';
+
+      const res = await fetch(`/api/chat/threads/${threadId}/messages`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ scope: 'article', articleId: data.article.id, title: data.article.title })
+        body: JSON.stringify({ message: userText })
       });
-      const created = await res.json();
-      threadId = created.id;
+      const response = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        chatError = response?.error ?? 'Chat request failed';
+        return;
+      }
+      chatLog = [...chatLog, { role: 'assistant', content: response.response }];
+    } catch {
+      chatError = 'Chat request failed';
+    } finally {
+      sending = false;
     }
-
-    const userText = message;
-    chatLog = [...chatLog, { role: 'user', content: userText }];
-    message = '';
-
-    const res = await fetch(`/api/chat/threads/${threadId}/messages`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ message: userText })
-    });
-    const response = await res.json();
-    chatLog = [...chatLog, { role: 'assistant', content: response.response }];
-    sending = false;
   };
 
   const rerunJobs = async (types) => {
@@ -172,15 +191,43 @@
 
     <div class="card">
       <h2>Chat with this article</h2>
+      <div class="readiness">
+        <span class={`status-pill ${data.chatReadiness?.canChat ? 'ok' : 'warn'}`}>
+          {data.chatReadiness?.canChat ? 'Ready' : 'Needs setup'}
+        </span>
+        <div class="readiness-meta">
+          <div>Context: {data.chatReadiness?.hasArticleContext ? 'ok' : 'missing'}</div>
+          <div>Model: {data.chatReadiness?.hasModelConfig ? 'ok' : 'missing'}</div>
+          <div>API key: {data.chatReadiness?.hasAnyProviderKey ? 'ok' : 'missing'}</div>
+        </div>
+        {#if data.chatReadiness?.modelCandidates?.length}
+          <div class="muted">
+            Models:
+            {#each data.chatReadiness.modelCandidates as candidate, index}
+              {candidate.provider}/{candidate.model}{index < data.chatReadiness.modelCandidates.length - 1 ? ' · ' : ''}
+            {/each}
+          </div>
+        {/if}
+        {#if data.chatReadiness?.reasons?.length}
+          <div class="muted">{data.chatReadiness.reasons.join(' ')}</div>
+        {/if}
+      </div>
       <div class="chat-box">
         {#each chatLog as entry}
           <div class={`bubble ${entry.role}`}>{entry.content}</div>
         {/each}
       </div>
       <div class="row">
-        <input placeholder="Ask about this article" bind:value={message} />
-        <button on:click={sendMessage} disabled={sending}>Send</button>
+        <input
+          placeholder={data.chatReadiness?.canChat ? 'Ask about this article' : 'Complete chat setup first'}
+          bind:value={message}
+          disabled={!data.chatReadiness?.canChat}
+        />
+        <button on:click={sendMessage} disabled={sending || !data.chatReadiness?.canChat}>Send</button>
       </div>
+      {#if chatError}
+        <p class="muted">{chatError}</p>
+      {/if}
     </div>
 
     <div class="card">
@@ -282,6 +329,38 @@
     gap: 0.6rem;
     max-height: 260px;
     overflow-y: auto;
+  }
+
+  .readiness {
+    margin-bottom: 0.8rem;
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .status-pill {
+    justify-self: start;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+
+  .status-pill.ok {
+    background: rgba(114, 236, 200, 0.18);
+    color: #91f0cd;
+  }
+
+  .status-pill.warn {
+    background: rgba(255, 110, 150, 0.2);
+    color: #ff9dbc;
+  }
+
+  .readiness-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.7rem;
+    font-size: 0.85rem;
+    color: var(--muted-text);
   }
 
   .bubble {

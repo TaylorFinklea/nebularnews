@@ -6,6 +6,11 @@ export const POST = async ({ params, request, platform }) => {
   const message = body?.message?.trim();
   if (!message) return json({ error: 'Missing message' }, { status: 400 });
 
-  const result = await runThreadMessage(platform.env.DB, platform.env, params.id, message);
-  return json({ ok: true, response: result.content, sources: result.sources });
+  try {
+    const result = await runThreadMessage(platform.env.DB, platform.env, params.id, message);
+    return json({ ok: true, response: result.content, sources: result.sources });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Chat request failed';
+    return json({ error: message }, { status: 500 });
+  }
 };

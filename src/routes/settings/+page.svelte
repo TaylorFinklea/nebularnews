@@ -9,6 +9,8 @@
   let chatProvider = data.settings.chatProvider;
   let chatModel = data.settings.chatModel;
   let chatReasoningEffort = data.settings.chatReasoningEffort;
+  let scoreSystemPrompt = data.settings.scoreSystemPrompt;
+  let scoreUserPromptTemplate = data.settings.scoreUserPromptTemplate;
   let summaryStyle = data.settings.summaryStyle;
   let summaryLength = data.settings.summaryLength;
 
@@ -96,6 +98,23 @@
       })
     });
     await invalidate();
+  };
+
+  const saveScorePrompt = async () => {
+    await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        scoreSystemPrompt,
+        scoreUserPromptTemplate
+      })
+    });
+    await invalidate();
+  };
+
+  const resetScorePromptDefaults = () => {
+    scoreSystemPrompt = data.scorePromptDefaults.scoreSystemPrompt;
+    scoreUserPromptTemplate = data.scorePromptDefaults.scoreUserPromptTemplate;
   };
 
   const saveKey = async (provider) => {
@@ -228,6 +247,26 @@
     <button on:click={saveSettings}>Save model settings</button>
   </div>
 
+  <div class="card span-two">
+    <h2>AI Fit Score Algorithm</h2>
+    <p class="muted">
+      This global prompt controls how relevance is scored for all articles. Variables:
+      <code>{'{{profile}}'}</code>, <code>{'{{title}}'}</code>, <code>{'{{url}}'}</code>, <code>{'{{content}}'}</code>.
+    </p>
+    <label>
+      System prompt
+      <textarea rows="4" bind:value={scoreSystemPrompt}></textarea>
+    </label>
+    <label>
+      User prompt template
+      <textarea rows="12" bind:value={scoreUserPromptTemplate}></textarea>
+    </label>
+    <div class="row-actions">
+      <button on:click={saveScorePrompt}>Save AI fit prompt</button>
+      <button class="ghost" on:click={resetScorePromptDefaults}>Reset defaults</button>
+    </div>
+  </div>
+
   <div class="card">
     <h2>API Keys</h2>
     <div class="key-row">
@@ -297,7 +336,8 @@
   }
 
   input,
-  select {
+  select,
+  textarea {
     width: 100%;
     padding: 0.7rem;
     border-radius: 12px;
@@ -343,5 +383,21 @@
   .muted {
     color: var(--muted-text);
     font-size: 0.85rem;
+  }
+
+  .span-two {
+    grid-column: span 2;
+  }
+
+  .row-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  @media (max-width: 900px) {
+    .span-two {
+      grid-column: span 1;
+    }
   }
 </style>

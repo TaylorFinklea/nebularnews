@@ -135,14 +135,16 @@
   {/if}
 </section>
 
-<section class="next-steps">
-  <h3>Suggested Next Steps</h3>
-  <ul>
-    <li>Use the Jobs page if today's summary/score backlog is non-zero.</li>
-    <li>Open top-rated stories and apply thumbs feedback to tune source reputation.</li>
-    <li>Regenerate summary with chat model only for stories you care about most.</li>
-  </ul>
-</section>
+{#if data.stats.feeds === 0}
+  <section class="next-steps">
+    <h3>Suggested Next Steps</h3>
+    <ul>
+      <li>Add your first feed in Settings -> Feeds.</li>
+      <li>Run a manual pull to ingest your first articles.</li>
+      <li>Set provider keys in Settings -> General to enable summaries and scoring.</li>
+    </ul>
+  </section>
+{/if}
 
 <style>
   .hero {

@@ -2,6 +2,10 @@ export type Provider = 'openai' | 'anthropic';
 export type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
 export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
 export type LlmOptions = { reasoningEffort?: ReasoningEffort };
+export type ScorePromptConfig = {
+  systemPrompt: string;
+  userPromptTemplate: string;
+};
 
 export type LlmUsage = {
   prompt_tokens?: number;
@@ -26,6 +30,32 @@ const supportsReasoningFallback = (status: number, bodyText: string) =>
 
 const supportsTemperatureFallback = (status: number, bodyText: string) =>
   status === 400 && /temperature|unsupported value|does not support/i.test(bodyText);
+
+export const DEFAULT_SCORE_SYSTEM_PROMPT =
+  'You are a transparent relevance scorer. Judge fit against the user profile only, not writing quality.';
+export const DEFAULT_SCORE_USER_PROMPT_TEMPLATE = `You are scoring how well this article matches the user's preferences.
+
+Preferences:
+{{profile}}
+
+Article:
+Title: {{title}}
+URL: {{url}}
+
+Content:
+{{content}}
+
+Return JSON with keys:
+- score (1-5 integer)
+- label (short text)
+- reason (one paragraph)
+- evidence (array of short quoted snippets from article content)`;
+
+const renderScorePromptTemplate = (
+  template: string,
+  values: { profile: string; title: string; url: string; content: string }
+) =>
+  template.replace(/\{\{\s*(profile|title|url|content)\s*\}\}/g, (_, key: keyof typeof values) => values[key]);
 
 const buildOpenAiPayloads = (model: string, messages: ChatMessage[], effort?: ReasoningEffort) => {
   const basePayload = {
@@ -161,16 +191,20 @@ export async function scoreArticle(
   apiKey: string,
   model: string,
   input: { title: string | null; url: string | null; contentText: string; profile: string },
-  options?: LlmOptions
+  options?: LlmOptions,
+  promptConfig?: ScorePromptConfig
 ) {
-  const prompt = `You are scoring how well this article matches the user's preferences.\n\nPreferences:\n${
-    input.profile
-  }\n\nArticle:\nTitle: ${input.title ?? 'Untitled'}\nURL: ${input.url ?? 'Unknown'}\n\nContent:\n${
-    input.contentText
-  }\n\nReturn JSON with keys: score (1-5 integer), label, reason, evidence (array of short quotes).`;
+  const systemPrompt = (promptConfig?.systemPrompt ?? '').trim() || DEFAULT_SCORE_SYSTEM_PROMPT;
+  const promptTemplate = (promptConfig?.userPromptTemplate ?? '').trim() || DEFAULT_SCORE_USER_PROMPT_TEMPLATE;
+  const prompt = renderScorePromptTemplate(promptTemplate, {
+    profile: input.profile,
+    title: input.title ?? 'Untitled',
+    url: input.url ?? 'Unknown',
+    content: input.contentText
+  });
 
   const { content, usage } = await runChat(provider, apiKey, model, [
-    { role: 'system', content: 'You are a transparent relevance scorer.' },
+    { role: 'system', content: systemPrompt },
     { role: 'user', content: prompt }
   ], options);
 

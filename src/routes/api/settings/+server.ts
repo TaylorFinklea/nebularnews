@@ -1,11 +1,20 @@
 import { json } from '@sveltejs/kit';
 import { dbAll } from '$lib/server/db';
-import { getChatProviderModel, getIngestProviderModel, getSetting, setSetting } from '$lib/server/settings';
+import {
+  DEFAULT_SCORE_SYSTEM_PROMPT,
+  DEFAULT_SCORE_USER_PROMPT_TEMPLATE,
+  getChatProviderModel,
+  getIngestProviderModel,
+  getScorePromptConfig,
+  getSetting,
+  setSetting
+} from '$lib/server/settings';
 
 export const GET = async ({ platform }) => {
   const db = platform.env.DB;
   const ingestModel = await getIngestProviderModel(db, platform.env);
   const chatModel = await getChatProviderModel(db, platform.env);
+  const scorePrompt = await getScorePromptConfig(db);
   const settings = {
     ingestProvider: ingestModel.provider,
     ingestModel: ingestModel.model,
@@ -13,6 +22,8 @@ export const GET = async ({ platform }) => {
     chatProvider: chatModel.provider,
     chatModel: chatModel.model,
     chatReasoningEffort: chatModel.reasoningEffort,
+    scoreSystemPrompt: scorePrompt.systemPrompt,
+    scoreUserPromptTemplate: scorePrompt.userPromptTemplate,
     summaryStyle: (await getSetting(db, 'summary_style')) ?? 'concise',
     summaryLength: (await getSetting(db, 'summary_length')) ?? 'short',
     pollInterval: (await getSetting(db, 'poll_interval')) ?? '60'
@@ -24,7 +35,14 @@ export const GET = async ({ platform }) => {
     if (key.provider in keyMap) keyMap[key.provider as 'openai' | 'anthropic'] = true;
   }
 
-  return json({ settings, keys: keyMap });
+  return json({
+    settings,
+    keys: keyMap,
+    scorePromptDefaults: {
+      scoreSystemPrompt: DEFAULT_SCORE_SYSTEM_PROMPT,
+      scoreUserPromptTemplate: DEFAULT_SCORE_USER_PROMPT_TEMPLATE
+    }
+  });
 };
 
 export const POST = async ({ request, platform }) => {
@@ -67,6 +85,12 @@ export const POST = async ({ request, platform }) => {
   if (body?.summaryStyle) entries.push(['summary_style', body.summaryStyle]);
   if (body?.summaryLength) entries.push(['summary_length', body.summaryLength]);
   if (body?.pollInterval) entries.push(['poll_interval', String(body.pollInterval)]);
+  if (typeof body?.scoreSystemPrompt === 'string' && body.scoreSystemPrompt.trim()) {
+    entries.push(['score_system_prompt', body.scoreSystemPrompt.trim()]);
+  }
+  if (typeof body?.scoreUserPromptTemplate === 'string' && body.scoreUserPromptTemplate.trim()) {
+    entries.push(['score_user_prompt_template', body.scoreUserPromptTemplate.trim()]);
+  }
 
   for (const [key, value] of entries) {
     await setSetting(platform.env.DB, key, value);

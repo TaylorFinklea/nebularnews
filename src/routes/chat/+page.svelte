@@ -4,34 +4,48 @@
   let chatLog = [];
   let sources = [];
   let sending = false;
+  let chatError = '';
 
   const sendMessage = async () => {
     if (!message) return;
     sending = true;
+    chatError = '';
+    try {
+      if (!threadId) {
+        const res = await fetch('/api/chat/threads', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ scope: 'global', title: 'Global chat' })
+        });
+        const created = await res.json().catch(() => ({}));
+        if (!res.ok || !created?.id) {
+          chatError = created?.error ?? 'Failed to start chat';
+          return;
+        }
+        threadId = created.id;
+      }
 
-    if (!threadId) {
-      const res = await fetch('/api/chat/threads', {
+      const userText = message;
+      chatLog = [...chatLog, { role: 'user', content: userText }];
+      message = '';
+
+      const res = await fetch(`/api/chat/threads/${threadId}/messages`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ scope: 'global', title: 'Global chat' })
+        body: JSON.stringify({ message: userText })
       });
-      const created = await res.json();
-      threadId = created.id;
+      const response = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        chatError = response?.error ?? 'Chat request failed';
+        return;
+      }
+      chatLog = [...chatLog, { role: 'assistant', content: response.response }];
+      sources = response.sources ?? [];
+    } catch {
+      chatError = 'Chat request failed';
+    } finally {
+      sending = false;
     }
-
-    const userText = message;
-    chatLog = [...chatLog, { role: 'user', content: userText }];
-    message = '';
-
-    const res = await fetch(`/api/chat/threads/${threadId}/messages`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ message: userText })
-    });
-    const response = await res.json();
-    chatLog = [...chatLog, { role: 'assistant', content: response.response }];
-    sources = response.sources ?? [];
-    sending = false;
   };
 </script>
 
@@ -53,6 +67,9 @@
       <input placeholder="Ask about recent stories" bind:value={message} />
       <button on:click={sendMessage} disabled={sending}>Send</button>
     </div>
+    {#if chatError}
+      <p class="muted">{chatError}</p>
+    {/if}
   </div>
 
   <div class="card">

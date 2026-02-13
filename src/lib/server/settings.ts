@@ -1,7 +1,12 @@
 import { nanoid } from 'nanoid';
 import { dbGet, dbRun, type Db } from './db';
 import { decryptString, encryptString } from './crypto';
-import type { Provider } from './llm';
+import {
+  DEFAULT_SCORE_SYSTEM_PROMPT,
+  DEFAULT_SCORE_USER_PROMPT_TEMPLATE,
+  type Provider,
+  type ScorePromptConfig
+} from './llm';
 import { now } from './db';
 
 export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
@@ -9,6 +14,8 @@ export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
 const DEFAULT_REASONING_EFFORT: ReasoningEffort = 'medium';
 const DEFAULT_PROVIDER: Provider = 'openai';
 const DEFAULT_MODEL = 'gpt-4o-mini';
+
+export { DEFAULT_SCORE_SYSTEM_PROMPT, DEFAULT_SCORE_USER_PROMPT_TEMPLATE };
 
 const toReasoningEffort = (value: string | null): ReasoningEffort => {
   if (value === 'minimal' || value === 'low' || value === 'medium' || value === 'high') {
@@ -100,6 +107,12 @@ export async function getChatProviderModel(db: Db, env: App.Platform['env']): Pr
   );
 
   return { provider, model, reasoningEffort };
+}
+
+export async function getScorePromptConfig(db: Db): Promise<ScorePromptConfig> {
+  const systemPrompt = (await getSetting(db, 'score_system_prompt')) ?? DEFAULT_SCORE_SYSTEM_PROMPT;
+  const userPromptTemplate = (await getSetting(db, 'score_user_prompt_template')) ?? DEFAULT_SCORE_USER_PROMPT_TEMPLATE;
+  return { systemPrompt, userPromptTemplate };
 }
 
 export async function getProviderKey(db: Db, env: App.Platform['env'], provider: Provider) {

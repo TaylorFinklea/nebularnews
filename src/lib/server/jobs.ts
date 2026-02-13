@@ -1,7 +1,7 @@
 import { nanoid } from 'nanoid';
 import { dbAll, dbGet, dbRun, now, type Db } from './db';
 import { refreshPreferenceProfile, scoreArticle, summarizeArticle } from './llm';
-import { getChatProviderModel, getIngestProviderModel, getProviderKey } from './settings';
+import { getChatProviderModel, getIngestProviderModel, getProviderKey, getScorePromptConfig } from './settings';
 import { ensurePreferenceProfile } from './profile';
 
 const MAX_JOB_ATTEMPTS = 3;
@@ -114,12 +114,13 @@ async function runScoreJob(db: Db, env: App.Platform['env'], articleId: string):
   if (!apiKey) throw new Error('No provider key');
 
   const contentText = article.content_text.slice(0, 12000);
+  const scorePromptConfig = await getScorePromptConfig(db);
   const scored = await scoreArticle(provider, apiKey, model, {
     title: article.title,
     url: article.canonical_url,
     contentText,
     profile: profile.profile_text
-  }, { reasoningEffort });
+  }, { reasoningEffort }, scorePromptConfig);
 
   await dbRun(
     db,

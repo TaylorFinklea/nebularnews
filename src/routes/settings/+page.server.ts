@@ -1,11 +1,19 @@
 import { dbAll } from '$lib/server/db';
-import { getChatProviderModel, getIngestProviderModel, getSetting } from '$lib/server/settings';
+import {
+  DEFAULT_SCORE_SYSTEM_PROMPT,
+  DEFAULT_SCORE_USER_PROMPT_TEMPLATE,
+  getChatProviderModel,
+  getIngestProviderModel,
+  getScorePromptConfig,
+  getSetting
+} from '$lib/server/settings';
 import { ensurePreferenceProfile } from '$lib/server/profile';
 
 export const load = async ({ platform }) => {
   const db = platform.env.DB;
   const ingestModel = await getIngestProviderModel(db, platform.env);
   const chatModel = await getChatProviderModel(db, platform.env);
+  const scorePrompt = await getScorePromptConfig(db);
   const settings = {
     ingestProvider: ingestModel.provider,
     ingestModel: ingestModel.model,
@@ -13,6 +21,8 @@ export const load = async ({ platform }) => {
     chatProvider: chatModel.provider,
     chatModel: chatModel.model,
     chatReasoningEffort: chatModel.reasoningEffort,
+    scoreSystemPrompt: scorePrompt.systemPrompt,
+    scoreUserPromptTemplate: scorePrompt.userPromptTemplate,
     summaryStyle: (await getSetting(db, 'summary_style')) ?? 'concise',
     summaryLength: (await getSetting(db, 'summary_length')) ?? 'short'
   };
@@ -25,5 +35,10 @@ export const load = async ({ platform }) => {
 
   const profile = await ensurePreferenceProfile(db);
 
-  return { settings, keyMap, profile };
+  const scorePromptDefaults = {
+    scoreSystemPrompt: DEFAULT_SCORE_SYSTEM_PROMPT,
+    scoreUserPromptTemplate: DEFAULT_SCORE_USER_PROMPT_TEMPLATE
+  };
+
+  return { settings, keyMap, profile, scorePromptDefaults };
 };

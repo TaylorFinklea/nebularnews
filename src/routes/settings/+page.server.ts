@@ -2,6 +2,9 @@ import { dbAll } from '$lib/server/db';
 import {
   DEFAULT_SCORE_SYSTEM_PROMPT,
   DEFAULT_SCORE_USER_PROMPT_TEMPLATE,
+  MAX_AUTO_READ_DELAY_MS,
+  MIN_AUTO_READ_DELAY_MS,
+  getAutoReadDelayMs,
   getChatProviderModel,
   getIngestProviderModel,
   getScorePromptConfig,
@@ -24,7 +27,8 @@ export const load = async ({ platform }) => {
     scoreSystemPrompt: scorePrompt.systemPrompt,
     scoreUserPromptTemplate: scorePrompt.userPromptTemplate,
     summaryStyle: (await getSetting(db, 'summary_style')) ?? 'concise',
-    summaryLength: (await getSetting(db, 'summary_length')) ?? 'short'
+    summaryLength: (await getSetting(db, 'summary_length')) ?? 'short',
+    autoReadDelayMs: await getAutoReadDelayMs(db)
   };
 
   const keys = await dbAll<{ provider: string }>(db, 'SELECT provider FROM provider_keys');
@@ -40,5 +44,5 @@ export const load = async ({ platform }) => {
     scoreUserPromptTemplate: DEFAULT_SCORE_USER_PROMPT_TEMPLATE
   };
 
-  return { settings, keyMap, profile, scorePromptDefaults };
+  return { settings, keyMap, profile, scorePromptDefaults, autoReadDelayRange: { min: MIN_AUTO_READ_DELAY_MS, max: MAX_AUTO_READ_DELAY_MS } };
 };

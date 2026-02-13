@@ -1,7 +1,13 @@
 import { nanoid } from 'nanoid';
 import { dbAll, dbGet, dbRun, now, type Db } from './db';
-import { refreshPreferenceProfile, scoreArticle, summarizeArticle } from './llm';
-import { getChatProviderModel, getIngestProviderModel, getProviderKey, getScorePromptConfig } from './settings';
+import { generateArticleKeyPoints, refreshPreferenceProfile, scoreArticle, summarizeArticle } from './llm';
+import {
+  getChatProviderModel,
+  getIngestProviderModel,
+  getProviderKey,
+  getScorePromptConfig,
+  getSummaryConfig
+} from './settings';
 import { ensurePreferenceProfile } from './profile';
 
 const MAX_JOB_ATTEMPTS = 3;
@@ -28,6 +34,8 @@ export async function processJobs(env: App.Platform['env']) {
         runMetadata = await runSummarizeJob(db, env, job.article_id, 'pipeline');
       } else if (job.type === 'summarize_chat' && job.article_id) {
         runMetadata = await runSummarizeJob(db, env, job.article_id, 'chat');
+      } else if (job.type === 'key_points' && job.article_id) {
+        runMetadata = await runKeyPointsJob(db, env, job.article_id);
       } else if (job.type === 'score' && job.article_id) {
         runMetadata = await runScoreJob(db, env, job.article_id);
       } else if (job.type === 'refresh_profile') {
@@ -72,12 +80,21 @@ async function runSummarizeJob(
   const apiKey = await getProviderKey(db, env, provider);
   if (!apiKey) throw new Error('No provider key');
 
+  const summaryConfig = await getSummaryConfig(db);
   const contentText = article.content_text.slice(0, 12000);
-  const summary = await summarizeArticle(provider, apiKey, model, {
-    title: article.title,
-    url: article.canonical_url,
-    contentText
-  }, { reasoningEffort });
+  const summary = await summarizeArticle(
+    provider,
+    apiKey,
+    model,
+    {
+      title: article.title,
+      url: article.canonical_url,
+      contentText,
+      style: summaryConfig.style,
+      length: summaryConfig.length
+    },
+    { reasoningEffort }
+  );
 
   await dbRun(
     db,
@@ -88,14 +105,59 @@ async function runSummarizeJob(
       provider,
       model,
       summary.summary,
-      JSON.stringify(summary.keyPoints),
+      null,
       now(),
       JSON.stringify(summary.usage ?? {}),
-      mode === 'chat' ? 'v1-chat' : 'v1-pipeline'
+      mode === 'chat' ? 'v2-chat' : 'v2-pipeline'
     ]
   );
 
   await dbRun(db, 'UPDATE article_search SET summary_text = ? WHERE article_id = ?', [summary.summary, articleId]);
+  return { provider, model };
+}
+
+async function runKeyPointsJob(db: Db, env: App.Platform['env'], articleId: string): Promise<{ provider: string; model: string }> {
+  const article = await dbGet<{
+    title: string | null;
+    canonical_url: string | null;
+    content_text: string | null;
+  }>(db, 'SELECT title, canonical_url, content_text FROM articles WHERE id = ?', [articleId]);
+  if (!article?.content_text) throw new Error('Missing article content');
+
+  const { provider, model, reasoningEffort } = await getIngestProviderModel(db, env);
+  const apiKey = await getProviderKey(db, env, provider);
+  if (!apiKey) throw new Error('No provider key');
+
+  const summaryConfig = await getSummaryConfig(db);
+  const contentText = article.content_text.slice(0, 12000);
+  const keyPointResult = await generateArticleKeyPoints(
+    provider,
+    apiKey,
+    model,
+    {
+      title: article.title,
+      url: article.canonical_url,
+      contentText,
+      length: summaryConfig.length
+    },
+    { reasoningEffort }
+  );
+
+  await dbRun(
+    db,
+    'INSERT INTO article_key_points (id, article_id, provider, model, key_points_json, created_at, token_usage_json, prompt_version) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    [
+      nanoid(),
+      articleId,
+      provider,
+      model,
+      JSON.stringify(keyPointResult.keyPoints),
+      now(),
+      JSON.stringify(keyPointResult.usage ?? {}),
+      'v1-pipeline'
+    ]
+  );
+
   return { provider, model };
 }
 

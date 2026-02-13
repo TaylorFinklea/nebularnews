@@ -13,6 +13,8 @@
   let scoreUserPromptTemplate = data.settings.scoreUserPromptTemplate;
   let summaryStyle = data.settings.summaryStyle;
   let summaryLength = data.settings.summaryLength;
+  let autoReadDelayMs = Number(data.settings.autoReadDelayMs ?? 4000);
+  $: autoReadDelaySeconds = (Number(autoReadDelayMs) / 1000).toFixed(2);
 
   let openaiKey = '';
   let anthropicKey = '';
@@ -94,7 +96,8 @@
         chatModel,
         chatReasoningEffort,
         summaryStyle,
-        summaryLength
+        summaryLength,
+        autoReadDelayMs
       })
     });
     await invalidate();
@@ -227,7 +230,7 @@
   </div>
 
   <div class="card">
-    <h2>Summary defaults</h2>
+    <h2>Behavior defaults</h2>
     <label>
       Summary style
       <select bind:value={summaryStyle}>
@@ -244,6 +247,19 @@
         <option value="long">Long</option>
       </select>
     </label>
+    <label>
+      Mark article as read after (ms)
+      <input
+        type="number"
+        min={data.autoReadDelayRange.min}
+        max={data.autoReadDelayRange.max}
+        step="250"
+        bind:value={autoReadDelayMs}
+      />
+    </label>
+    <p class="muted">
+      Applies on article detail pages. Current delay: {autoReadDelaySeconds}s. 0 means immediate. Range {data.autoReadDelayRange.min}-{data.autoReadDelayRange.max} ms.
+    </p>
     <button on:click={saveSettings}>Save model settings</button>
   </div>
 
@@ -315,24 +331,27 @@
 <style>
   .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 1.5rem;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: 1.75rem;
   }
 
   .card {
     background: var(--surface-strong);
-    padding: 1.5rem;
+    padding: 1.8rem;
     border-radius: 20px;
     box-shadow: 0 12px 24px var(--shadow-color);
     border: 1px solid var(--surface-border);
     display: grid;
-    gap: 0.8rem;
+    gap: 1rem;
+    align-content: start;
+    min-width: 0;
   }
 
   label {
     display: grid;
-    gap: 0.4rem;
+    gap: 0.45rem;
     font-size: 0.9rem;
+    min-width: 0;
   }
 
   input,
@@ -342,6 +361,8 @@
     padding: 0.7rem;
     border-radius: 12px;
     border: 1px solid var(--input-border);
+    min-width: 0;
+    max-width: 100%;
   }
 
   button {
@@ -351,6 +372,9 @@
     padding: 0.6rem 1rem;
     border-radius: 999px;
     cursor: pointer;
+    max-width: 100%;
+    white-space: normal;
+    line-height: 1.25;
   }
 
   .ghost {
@@ -362,7 +386,9 @@
   .key-row {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
+    gap: 0.8rem;
+    flex-wrap: wrap;
   }
 
   .divider {
@@ -386,7 +412,7 @@
   }
 
   .span-two {
-    grid-column: span 2;
+    grid-column: 1 / -1;
   }
 
   .row-actions {
@@ -396,6 +422,15 @@
   }
 
   @media (max-width: 900px) {
+    .grid {
+      grid-template-columns: 1fr;
+      gap: 1.25rem;
+    }
+
+    .card {
+      padding: 1.25rem;
+    }
+
     .span-two {
       grid-column: span 1;
     }

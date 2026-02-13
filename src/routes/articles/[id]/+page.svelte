@@ -1,5 +1,6 @@
 <script>
-  import { invalidate } from '$app/navigation';
+  import { invalidateAll } from '$app/navigation';
+  import { onMount } from 'svelte';
   import { IconThumbDown, IconThumbUp } from '$lib/icons';
   export let data;
 
@@ -10,7 +11,10 @@
   let chatLog = [];
   let sending = false;
   let rerunBusy = false;
+  let readStateBusy = false;
   let chatError = '';
+  const AUTO_MARK_READ_DELAY_MS = Number(data.autoReadDelayMs ?? 4000);
+  let autoReadTimer = null;
 
   const submitFeedback = async () => {
     await fetch(`/api/articles/${data.article.id}/feedback`, {
@@ -19,7 +23,7 @@
       body: JSON.stringify({ rating, comment, feedId: data.preferredSource?.feedId ?? null })
     });
     comment = '';
-    await invalidate();
+    await invalidateAll();
   };
 
   const setReaction = async (value) => {
@@ -28,7 +32,7 @@
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ value, feedId: data.preferredSource?.feedId ?? null })
     });
-    await invalidate();
+    await invalidateAll();
   };
 
   const sendMessage = async () => {
@@ -84,8 +88,35 @@
       body: JSON.stringify({ types })
     });
     rerunBusy = false;
-    await invalidate();
+    await invalidateAll();
   };
+
+  const setReadState = async (isRead) => {
+    readStateBusy = true;
+    try {
+      await fetch(`/api/articles/${data.article.id}/read`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ isRead })
+      });
+    } finally {
+      readStateBusy = false;
+      await invalidateAll();
+    }
+  };
+
+  onMount(() => {
+    if (data.article && !data.article.is_read) {
+      autoReadTimer = setTimeout(() => {
+        if (!data.article?.is_read) {
+          void setReadState(true);
+        }
+      }, AUTO_MARK_READ_DELAY_MS);
+    }
+    return () => {
+      if (autoReadTimer) clearTimeout(autoReadTimer);
+    };
+  });
 </script>
 
 {#if !data.article}
@@ -106,23 +137,47 @@
 
   <div class="grid">
     <div class="card">
+      <h2>Read Status</h2>
+      <div class="read-row">
+        <span class={`status-pill ${data.article.is_read ? 'ok' : 'warn'}`}>
+          {data.article.is_read ? 'Read' : 'Unread'}
+        </span>
+        <button class="ghost" on:click={() => setReadState(!data.article.is_read)} disabled={readStateBusy}>
+          {data.article.is_read ? 'Mark unread' : 'Mark read'}
+        </button>
+      </div>
+    </div>
+
+    <div class="card">
       <h2>Summary</h2>
       <p>{data.summary?.summary_text ?? 'Summary pending.'}</p>
       {#if data.summary?.provider && data.summary?.model}
         <p class="muted">Latest summary model: {data.summary.provider}/{data.summary.model}</p>
-      {/if}
-      {#if data.summary?.key_points_json}
-        <ul>
-          {#each JSON.parse(data.summary.key_points_json) as point}
-            <li>{point}</li>
-          {/each}
-        </ul>
       {/if}
       <button class="ghost" on:click={() => rerunJobs(['summarize'])} disabled={rerunBusy}>
         Re-run summary (pipeline model)
       </button>
       <button class="ghost" on:click={() => rerunJobs(['summarize_chat'])} disabled={rerunBusy}>
         Regenerate with chat model
+      </button>
+    </div>
+
+    <div class="card">
+      <h2>Key Points</h2>
+      {#if data.keyPoints?.key_points_json}
+        <ul>
+          {#each JSON.parse(data.keyPoints.key_points_json) as point}
+            <li>{point}</li>
+          {/each}
+        </ul>
+      {:else}
+        <p class="muted">No key points generated yet.</p>
+      {/if}
+      {#if data.keyPoints?.provider && data.keyPoints?.model}
+        <p class="muted">Latest key points model: {data.keyPoints.provider}/{data.keyPoints.model}</p>
+      {/if}
+      <button class="ghost" on:click={() => rerunJobs(['key_points'])} disabled={rerunBusy}>
+        Generate key points
       </button>
     </div>
 
@@ -353,6 +408,14 @@
   .status-pill.warn {
     background: rgba(255, 110, 150, 0.2);
     color: #ff9dbc;
+  }
+
+  .read-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8rem;
+    flex-wrap: wrap;
   }
 
   .readiness-meta {

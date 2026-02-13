@@ -52,6 +52,31 @@ export async function ensureSchema(db: Db) {
     );
     await runSafe(
       db,
+      `CREATE TABLE IF NOT EXISTS article_read_state (
+        article_id TEXT PRIMARY KEY,
+        is_read INTEGER NOT NULL CHECK (is_read IN (0, 1)),
+        updated_at INTEGER NOT NULL,
+        FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE
+      )`
+    );
+    await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_article_read_state_updated ON article_read_state(updated_at)');
+    await runSafe(
+      db,
+      `CREATE TABLE IF NOT EXISTS article_key_points (
+        id TEXT PRIMARY KEY,
+        article_id TEXT NOT NULL,
+        provider TEXT NOT NULL,
+        model TEXT NOT NULL,
+        key_points_json TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        token_usage_json TEXT,
+        prompt_version TEXT,
+        FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE
+      )`
+    );
+    await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_article_key_points_article ON article_key_points(article_id)');
+    await runSafe(
+      db,
       `INSERT OR IGNORE INTO article_score_overrides (article_id, score, comment, created_at, updated_at)
        SELECT af.article_id, af.rating, af.comment, af.created_at, af.created_at
        FROM article_feedback af

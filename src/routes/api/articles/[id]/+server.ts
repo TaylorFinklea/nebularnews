@@ -6,14 +6,33 @@ export const GET = async ({ params, platform }) => {
   const { id } = params;
   const article = await dbGet(
     platform.env.DB,
-    'SELECT id, canonical_url, title, author, published_at, fetched_at, content_html, content_text, excerpt, word_count FROM articles WHERE id = ?',
+    `SELECT
+      id,
+      canonical_url,
+      title,
+      author,
+      published_at,
+      fetched_at,
+      content_html,
+      content_text,
+      excerpt,
+      word_count,
+      COALESCE((SELECT is_read FROM article_read_state WHERE article_id = articles.id LIMIT 1), 0) as is_read
+    FROM articles
+    WHERE id = ?`,
     [id]
   );
   if (!article) return json({ error: 'Not found' }, { status: 404 });
 
   const summary = await dbGet(
     platform.env.DB,
-    'SELECT summary_text, key_points_json, provider, model, created_at FROM article_summaries WHERE article_id = ? ORDER BY created_at DESC LIMIT 1',
+    'SELECT summary_text, provider, model, created_at FROM article_summaries WHERE article_id = ? ORDER BY created_at DESC LIMIT 1',
+    [id]
+  );
+
+  const keyPoints = await dbGet(
+    platform.env.DB,
+    'SELECT key_points_json, provider, model, created_at FROM article_key_points WHERE article_id = ? ORDER BY created_at DESC LIMIT 1',
     [id]
   );
 
@@ -63,5 +82,5 @@ export const GET = async ({ params, platform }) => {
   const preferredSource = await getPreferredSourceForArticle(platform.env.DB, id);
   const sources = await listSourcesForArticle(platform.env.DB, id);
 
-  return json({ article, summary, score, feedback, reaction, preferredSource, sources });
+  return json({ article, summary, keyPoints, score, feedback, reaction, preferredSource, sources });
 };

@@ -1,6 +1,8 @@
 export type Provider = 'openai' | 'anthropic';
 export type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
 export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
+export type SummaryStyle = 'concise' | 'detailed' | 'bullet';
+export type SummaryLength = 'short' | 'medium' | 'long';
 export type LlmOptions = { reasoningEffort?: ReasoningEffort };
 export type ScorePromptConfig = {
   systemPrompt: string;
@@ -22,6 +24,83 @@ const parseJson = (text: string) => {
   } catch {
     return null;
   }
+};
+
+const summaryConstraints: Record<SummaryLength, { minWords: number; maxWords: number }> = {
+  short: { minWords: 28, maxWords: 55 },
+  medium: { minWords: 55, maxWords: 95 },
+  long: { minWords: 95, maxWords: 170 }
+};
+
+const keyPointCountByLength: Record<SummaryLength, number> = {
+  short: 4,
+  medium: 6,
+  long: 8
+};
+
+const clampWords = (text: string, maxWords: number) => {
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length <= maxWords) return text.trim();
+  return `${words.slice(0, maxWords).join(' ').trim()}...`;
+};
+
+const normalizeParagraphSummary = (text: string, length: SummaryLength) => {
+  const withoutListMarkers = text
+    .replace(/^\s*[-*•]\s+/gm, '')
+    .replace(/^\s*\d+[\).]\s+/gm, '');
+  const flattened = withoutListMarkers.replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
+  return clampWords(flattened, summaryConstraints[length].maxWords);
+};
+
+const normalizeBulletSummary = (text: string, length: SummaryLength) => {
+  const maxBullets = keyPointCountByLength[length];
+  const lines = text
+    .split('\n')
+    .map((line) => line.trim())
+    .map((line) => line.replace(/^\s*[-*•]\s*/, '').replace(/^\s*\d+[\).]\s*/, '').trim())
+    .filter(Boolean)
+    .slice(0, maxBullets)
+    .map((line) => `- ${clampWords(line, 16)}`);
+
+  if (lines.length > 0) return lines.join('\n');
+
+  const fallback = normalizeParagraphSummary(text, length);
+  return `- ${fallback}`;
+};
+
+const normalizeKeyPoints = (input: unknown, length: SummaryLength) => {
+  const raw = Array.isArray(input)
+    ? input
+    : String(input ?? '')
+        .split('\n')
+        .map((line) => line.trim());
+
+  const cleaned = raw
+    .map((entry) => String(entry ?? '').trim())
+    .map((entry) => entry.replace(/^\s*[-*•]\s*/, '').replace(/^\s*\d+[\).]\s*/, '').trim())
+    .filter(Boolean);
+
+  const deduped = [...new Set(cleaned)];
+  return deduped.slice(0, keyPointCountByLength[length]).map((point) => clampWords(point, 18));
+};
+
+const buildSummaryInstruction = (style: SummaryStyle, length: SummaryLength) => {
+  const bounds = summaryConstraints[length];
+  if (style === 'bullet') {
+    return `Write ${keyPointCountByLength[length]} concise bullet points only.
+- Each bullet must be <= 14 words.
+- No intro text and no conclusion.
+- Output plain text bullets.`;
+  }
+
+  const styleHint =
+    style === 'concise'
+      ? 'Keep only the most important facts and outcome.'
+      : 'Include key context and why it matters in addition to core facts.';
+  return `Write a single plain-text paragraph (no bullets, no numbering, no markdown).
+- Target ${bounds.minWords}-${bounds.maxWords} words.
+- ${styleHint}
+- Do not include a "Key points" section.`;
 };
 
 const supportsReasoningFallback = (status: number, bodyText: string) =>
@@ -167,23 +246,72 @@ export async function summarizeArticle(
   provider: Provider,
   apiKey: string,
   model: string,
-  input: { title: string | null; url: string | null; contentText: string },
+  input: {
+    title: string | null;
+    url: string | null;
+    contentText: string;
+    style?: SummaryStyle;
+    length?: SummaryLength;
+  },
   options?: LlmOptions
 ) {
-  const prompt = `Summarize the article below. Return JSON with keys: summary, key_points (array).\n\nTitle: ${
-    input.title ?? 'Untitled'
-  }\nURL: ${input.url ?? 'Unknown'}\n\nContent:\n${input.contentText}`;
+  const style: SummaryStyle = input.style ?? 'concise';
+  const length: SummaryLength = input.length ?? 'short';
+  const prompt = `Summarize the article below.\n\nTitle: ${input.title ?? 'Untitled'}\nURL: ${
+    input.url ?? 'Unknown'
+  }\n\nInstructions:\n${buildSummaryInstruction(style, length)}\n\nContent:\n${input.contentText}`;
 
-  const { content, usage } = await runChat(provider, apiKey, model, [
-    { role: 'system', content: 'You are Nebular News, a concise summarizer.' },
-    { role: 'user', content: prompt }
-  ], options);
+  const { content, usage } = await runChat(
+    provider,
+    apiKey,
+    model,
+    [
+      { role: 'system', content: 'You are Nebular News. Follow formatting constraints exactly.' },
+      { role: 'user', content: prompt }
+    ],
+    options
+  );
 
   const parsed = parseJson(content);
-  const summary = parsed?.summary ?? content.trim();
-  const keyPoints = Array.isArray(parsed?.key_points) ? parsed.key_points : [];
+  const rawSummary = typeof parsed?.summary === 'string' ? parsed.summary : content.trim();
+  const summary = style === 'bullet' ? normalizeBulletSummary(rawSummary, length) : normalizeParagraphSummary(rawSummary, length);
 
-  return { summary, keyPoints, usage };
+  return { summary, usage };
+}
+
+export async function generateArticleKeyPoints(
+  provider: Provider,
+  apiKey: string,
+  model: string,
+  input: { title: string | null; url: string | null; contentText: string; length?: SummaryLength },
+  options?: LlmOptions
+) {
+  const length: SummaryLength = input.length ?? 'short';
+  const targetCount = keyPointCountByLength[length];
+
+  const prompt = `Extract the key points from this article.\n\nTitle: ${input.title ?? 'Untitled'}\nURL: ${
+    input.url ?? 'Unknown'
+  }\n\nRequirements:
+- Return JSON only with key "key_points" (array of strings).
+- Provide exactly ${targetCount} points.
+- Each point must be <= 14 words.
+- Focus on facts, outcomes, and concrete signals.
+\nArticle:\n${input.contentText}`;
+
+  const { content, usage } = await runChat(
+    provider,
+    apiKey,
+    model,
+    [
+      { role: 'system', content: 'You extract high-signal key points for quick scanning.' },
+      { role: 'user', content: prompt }
+    ],
+    options
+  );
+
+  const parsed = parseJson(content);
+  const keyPoints = normalizeKeyPoints(parsed?.key_points ?? content, length);
+  return { keyPoints, usage };
 }
 
 export async function scoreArticle(

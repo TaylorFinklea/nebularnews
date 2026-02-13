@@ -10,12 +10,20 @@ import {
 import { now } from './db';
 
 export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
+export type SummaryStyle = 'concise' | 'detailed' | 'bullet';
+export type SummaryLength = 'short' | 'medium' | 'long';
 
 const DEFAULT_REASONING_EFFORT: ReasoningEffort = 'medium';
 const DEFAULT_PROVIDER: Provider = 'openai';
 const DEFAULT_MODEL = 'gpt-4o-mini';
+const DEFAULT_SUMMARY_STYLE: SummaryStyle = 'concise';
+const DEFAULT_SUMMARY_LENGTH: SummaryLength = 'short';
+const DEFAULT_AUTO_READ_DELAY_MS = 4000;
+const MIN_AUTO_READ_DELAY_MS = 0;
+const MAX_AUTO_READ_DELAY_MS = 30000;
 
 export { DEFAULT_SCORE_SYSTEM_PROMPT, DEFAULT_SCORE_USER_PROMPT_TEMPLATE };
+export { DEFAULT_AUTO_READ_DELAY_MS, MIN_AUTO_READ_DELAY_MS, MAX_AUTO_READ_DELAY_MS };
 
 const toReasoningEffort = (value: string | null): ReasoningEffort => {
   if (value === 'minimal' || value === 'low' || value === 'medium' || value === 'high') {
@@ -29,10 +37,26 @@ const toProvider = (value: string | null): Provider => {
   return DEFAULT_PROVIDER;
 };
 
+const toSummaryStyle = (value: string | null): SummaryStyle => {
+  if (value === 'concise' || value === 'detailed' || value === 'bullet') return value;
+  return DEFAULT_SUMMARY_STYLE;
+};
+
+const toSummaryLength = (value: string | null): SummaryLength => {
+  if (value === 'short' || value === 'medium' || value === 'long') return value;
+  return DEFAULT_SUMMARY_LENGTH;
+};
+
 export type ProviderModelConfig = {
   provider: Provider;
   model: string;
   reasoningEffort: ReasoningEffort;
+};
+
+export const clampAutoReadDelayMs = (value: unknown) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return DEFAULT_AUTO_READ_DELAY_MS;
+  return Math.min(MAX_AUTO_READ_DELAY_MS, Math.max(MIN_AUTO_READ_DELAY_MS, Math.round(parsed)));
 };
 
 const getFirstSetting = async (db: Db, keys: string[]) => {
@@ -113,6 +137,18 @@ export async function getScorePromptConfig(db: Db): Promise<ScorePromptConfig> {
   const systemPrompt = (await getSetting(db, 'score_system_prompt')) ?? DEFAULT_SCORE_SYSTEM_PROMPT;
   const userPromptTemplate = (await getSetting(db, 'score_user_prompt_template')) ?? DEFAULT_SCORE_USER_PROMPT_TEMPLATE;
   return { systemPrompt, userPromptTemplate };
+}
+
+export async function getSummaryConfig(db: Db): Promise<{ style: SummaryStyle; length: SummaryLength }> {
+  return {
+    style: toSummaryStyle(await getSetting(db, 'summary_style')),
+    length: toSummaryLength(await getSetting(db, 'summary_length'))
+  };
+}
+
+export async function getAutoReadDelayMs(db: Db) {
+  const raw = await getSetting(db, 'auto_read_delay_ms');
+  return clampAutoReadDelayMs(raw);
 }
 
 export async function getProviderKey(db: Db, env: App.Platform['env'], provider: Provider) {

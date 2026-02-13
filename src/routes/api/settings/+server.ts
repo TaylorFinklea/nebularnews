@@ -3,6 +3,8 @@ import { dbAll } from '$lib/server/db';
 import {
   DEFAULT_SCORE_SYSTEM_PROMPT,
   DEFAULT_SCORE_USER_PROMPT_TEMPLATE,
+  clampAutoReadDelayMs,
+  getAutoReadDelayMs,
   getChatProviderModel,
   getIngestProviderModel,
   getScorePromptConfig,
@@ -26,7 +28,8 @@ export const GET = async ({ platform }) => {
     scoreUserPromptTemplate: scorePrompt.userPromptTemplate,
     summaryStyle: (await getSetting(db, 'summary_style')) ?? 'concise',
     summaryLength: (await getSetting(db, 'summary_length')) ?? 'short',
-    pollInterval: (await getSetting(db, 'poll_interval')) ?? '60'
+    pollInterval: (await getSetting(db, 'poll_interval')) ?? '60',
+    autoReadDelayMs: await getAutoReadDelayMs(db)
   };
 
   const keys = await dbAll<{ provider: string }>(db, 'SELECT provider FROM provider_keys');
@@ -85,6 +88,9 @@ export const POST = async ({ request, platform }) => {
   if (body?.summaryStyle) entries.push(['summary_style', body.summaryStyle]);
   if (body?.summaryLength) entries.push(['summary_length', body.summaryLength]);
   if (body?.pollInterval) entries.push(['poll_interval', String(body.pollInterval)]);
+  if (body?.autoReadDelayMs !== undefined && body?.autoReadDelayMs !== null) {
+    entries.push(['auto_read_delay_ms', String(clampAutoReadDelayMs(body.autoReadDelayMs))]);
+  }
   if (typeof body?.scoreSystemPrompt === 'string' && body.scoreSystemPrompt.trim()) {
     entries.push(['score_system_prompt', body.scoreSystemPrompt.trim()]);
   }

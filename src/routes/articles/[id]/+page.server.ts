@@ -1,18 +1,34 @@
 import { dbAll, dbGet } from '$lib/server/db';
 import { getPreferredSourceForArticle, listSourcesForArticle } from '$lib/server/sources';
-import { getChatProviderModel, getIngestProviderModel } from '$lib/server/settings';
+import { getAutoReadDelayMs, getChatProviderModel, getIngestProviderModel } from '$lib/server/settings';
 
 export const load = async ({ params, platform }) => {
   const db = platform.env.DB;
   const article = await dbGet(
     db,
-    'SELECT id, canonical_url, title, author, published_at, content_html, content_text FROM articles WHERE id = ?',
+    `SELECT
+      id,
+      canonical_url,
+      title,
+      author,
+      published_at,
+      content_html,
+      content_text,
+      COALESCE((SELECT is_read FROM article_read_state WHERE article_id = articles.id LIMIT 1), 0) as is_read
+    FROM articles
+    WHERE id = ?`,
     [params.id]
   );
 
   const summary = await dbGet(
     db,
-    'SELECT summary_text, key_points_json, provider, model, created_at, prompt_version FROM article_summaries WHERE article_id = ? ORDER BY created_at DESC LIMIT 1',
+    'SELECT summary_text, provider, model, created_at, prompt_version FROM article_summaries WHERE article_id = ? ORDER BY created_at DESC LIMIT 1',
+    [params.id]
+  );
+
+  const keyPoints = await dbGet(
+    db,
+    'SELECT key_points_json, provider, model, created_at, prompt_version FROM article_key_points WHERE article_id = ? ORDER BY created_at DESC LIMIT 1',
     [params.id]
   );
 
@@ -100,5 +116,7 @@ export const load = async ({ params, platform }) => {
     reasons: blockingReasons
   };
 
-  return { article, summary, score, feedback, reaction, preferredSource, sources, chatReadiness };
+  const autoReadDelayMs = await getAutoReadDelayMs(db);
+
+  return { article, summary, keyPoints, score, feedback, reaction, preferredSource, sources, chatReadiness, autoReadDelayMs };
 };

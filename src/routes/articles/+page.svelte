@@ -14,15 +14,26 @@
 
   let query = data.q ?? '';
   let scoreFilter = data.scoreFilter ?? 'all';
+  let readFilter = data.readFilter ?? 'all';
 
   $: query = data.q ?? '';
   $: scoreFilter = data.scoreFilter ?? 'all';
+  $: readFilter = data.readFilter ?? 'all';
 
   const reactToArticle = async (articleId, value, feedId) => {
     await fetch(`/api/articles/${articleId}/reaction`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ value, feedId })
+    });
+    await invalidateAll();
+  };
+
+  const setReadState = async (articleId, isRead) => {
+    await fetch(`/api/articles/${articleId}/read`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ isRead })
     });
     await invalidateAll();
   };
@@ -44,6 +55,11 @@
     <option value="low">1–2 (Low fit)</option>
     <option value="unscored">Unscored</option>
   </select>
+  <select name="read" bind:value={readFilter}>
+    <option value="all">All articles</option>
+    <option value="unread">Unread only</option>
+    <option value="read">Read only</option>
+  </select>
   <button type="submit">Filter</button>
 </form>
 
@@ -55,7 +71,12 @@
       <article class="card">
         <div class="card-head">
           <h2>{article.title ?? 'Untitled article'}</h2>
-          <span class="pill">{scoreLabel(article.score)}</span>
+          <div class="pills">
+            <span class={`pill ${article.is_read ? 'read' : 'unread'}`}>
+              {article.is_read ? 'Read' : 'Unread'}
+            </span>
+            <span class="pill">{scoreLabel(article.score)}</span>
+          </div>
         </div>
         <p class="excerpt">{article.summary_text ?? article.excerpt ?? ''}</p>
         <div class="meta">
@@ -72,6 +93,7 @@
         {/if}
         <div class="reactions">
           <button
+            type="button"
             class:active={article.reaction_value === 1}
             on:click={() => reactToArticle(article.id, 1, article.source_feed_id)}
           >
@@ -79,11 +101,21 @@
             <span>Thumbs up</span>
           </button>
           <button
+            type="button"
             class:active={article.reaction_value === -1}
             on:click={() => reactToArticle(article.id, -1, article.source_feed_id)}
           >
             <IconThumbDown size={16} stroke={1.9} />
             <span>Thumbs down</span>
+          </button>
+        </div>
+        <div class="read-actions">
+          <button
+            type="button"
+            class="ghost"
+            on:click={() => setReadState(article.id, article.is_read ? false : true)}
+          >
+            {article.is_read ? 'Mark unread' : 'Mark read'}
           </button>
         </div>
         <a class="button" href={`/articles/${article.id}`}>Open</a>
@@ -113,6 +145,11 @@
     gap: 1rem;
   }
 
+  .pills {
+    display: inline-flex;
+    gap: 0.5rem;
+  }
+
   .pill {
     background: var(--primary-soft);
     color: var(--primary);
@@ -120,6 +157,16 @@
     border-radius: 999px;
     font-size: 0.8rem;
     font-weight: 600;
+  }
+
+  .pill.read {
+    background: var(--surface-soft);
+    color: var(--muted-text);
+  }
+
+  .pill.unread {
+    background: var(--primary-soft);
+    color: var(--primary);
   }
 
   .excerpt {
@@ -172,6 +219,19 @@
     border-color: var(--ghost-border);
     background: var(--primary-soft);
     color: var(--primary);
+  }
+
+  .read-actions {
+    margin-top: 0.7rem;
+  }
+
+  .read-actions .ghost {
+    border: 1px solid var(--ghost-border);
+    background: transparent;
+    color: var(--ghost-color);
+    border-radius: 999px;
+    padding: 0.35rem 0.75rem;
+    cursor: pointer;
   }
 
   .filters {

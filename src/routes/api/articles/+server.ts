@@ -7,12 +7,17 @@ const effectiveScoreExpr = `COALESCE(
   (SELECT score FROM article_score_overrides WHERE article_id = a.id LIMIT 1),
   (SELECT score FROM article_scores WHERE article_id = a.id ORDER BY created_at DESC LIMIT 1)
 )`;
+const effectiveReadExpr = `COALESCE(
+  (SELECT is_read FROM article_read_state WHERE article_id = a.id LIMIT 1),
+  0
+)`;
 
 export const GET = async ({ url, platform }) => {
   const limit = Math.min(50, Number(url.searchParams.get('limit') ?? 20));
   const offset = Math.max(0, Number(url.searchParams.get('offset') ?? 0));
   const q = url.searchParams.get('q')?.trim() ?? '';
   const scoreFilter = url.searchParams.get('score') ?? 'all';
+  const readFilter = url.searchParams.get('read') ?? 'all';
   const safeQuery = sanitizeQuery(q);
 
   const conditions: string[] = [];
@@ -33,6 +38,12 @@ export const GET = async ({ url, platform }) => {
     conditions.push(`${effectiveScoreExpr} <= 2`);
   }
 
+  if (readFilter === 'unread') {
+    conditions.push(`${effectiveReadExpr} = 0`);
+  } else if (readFilter === 'read') {
+    conditions.push(`${effectiveReadExpr} = 1`);
+  }
+
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
   const articles = await dbAll(
@@ -45,6 +56,7 @@ export const GET = async ({ url, platform }) => {
       a.published_at,
       a.excerpt,
       a.word_count,
+      ${effectiveReadExpr} as is_read,
       (SELECT value FROM article_reactions WHERE article_id = a.id LIMIT 1) as reaction_value,
       (SELECT summary_text FROM article_summaries WHERE article_id = a.id ORDER BY created_at DESC LIMIT 1) as summary_text,
       ${effectiveScoreExpr} as score,
@@ -76,5 +88,5 @@ export const GET = async ({ url, platform }) => {
     };
   });
 
-  return json({ articles: hydratedArticles });
+  return json({ articles: hydratedArticles, readFilter });
 };

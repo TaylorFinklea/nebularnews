@@ -54,6 +54,18 @@ CREATE TABLE IF NOT EXISTS article_summaries (
   FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS article_key_points (
+  id TEXT PRIMARY KEY,
+  article_id TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  model TEXT NOT NULL,
+  key_points_json TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  token_usage_json TEXT,
+  prompt_version TEXT,
+  FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS article_scores (
   id TEXT PRIMARY KEY,
   article_id TEXT NOT NULL,
@@ -94,6 +106,13 @@ CREATE TABLE IF NOT EXISTS article_reactions (
   created_at INTEGER NOT NULL,
   FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE,
   FOREIGN KEY(feed_id) REFERENCES feeds(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS article_read_state (
+  article_id TEXT PRIMARY KEY,
+  is_read INTEGER NOT NULL CHECK (is_read IN (0, 1)),
+  updated_at INTEGER NOT NULL,
+  FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS chat_threads (
@@ -163,7 +182,9 @@ CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status, run_after);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_unique ON jobs(type, article_id);
 CREATE INDEX IF NOT EXISTS idx_article_sources_article ON article_sources(article_id);
 CREATE INDEX IF NOT EXISTS idx_article_scores_article ON article_scores(article_id);
+CREATE INDEX IF NOT EXISTS idx_article_key_points_article ON article_key_points(article_id);
 CREATE INDEX IF NOT EXISTS idx_article_feedback_article ON article_feedback(article_id);
 CREATE INDEX IF NOT EXISTS idx_article_feedback_feed ON article_feedback(feed_id);
 CREATE INDEX IF NOT EXISTS idx_article_reactions_feed ON article_reactions(feed_id);
+CREATE INDEX IF NOT EXISTS idx_article_read_state_updated ON article_read_state(updated_at);
 CREATE INDEX IF NOT EXISTS idx_chat_messages_thread ON chat_messages(thread_id);

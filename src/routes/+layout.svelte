@@ -137,6 +137,7 @@ import { IconMoonStars, IconSun } from '$lib/icons';
           <summary>Settings</summary>
           <div class="submenu">
             <a href="/settings" on:click={closeSettingsMenu}>General</a>
+            <a href="/tags" on:click={closeSettingsMenu}>Tags</a>
             <a href="/feeds" on:click={closeSettingsMenu}>Feeds</a>
             <a href="/jobs" on:click={closeSettingsMenu}>Jobs</a>
           </div>

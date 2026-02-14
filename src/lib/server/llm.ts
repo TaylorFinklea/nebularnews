@@ -16,6 +16,15 @@ export type LlmUsage = {
 };
 
 const parseJson = (text: string) => {
+  const trimmed = text.trim();
+  if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      // Fall through to slice-based parsing.
+    }
+  }
+
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}');
   if (start === -1 || end === -1 || end <= start) return null;
@@ -82,6 +91,64 @@ const normalizeKeyPoints = (input: unknown, length: SummaryLength) => {
 
   const deduped = [...new Set(cleaned)];
   return deduped.slice(0, keyPointCountByLength[length]).map((point) => clampWords(point, 18));
+};
+
+const normalizeTagName = (value: unknown) =>
+  String(value ?? '')
+    .replace(/^\s*[-*•]\s*/, '')
+    .replace(/^\s*\d+[\).]\s*/, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 64);
+
+const normalizeTagConfidence = (value: unknown) => {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  return Math.max(0, Math.min(1, parsed));
+};
+
+const normalizeTagCandidates = (input: unknown, maxTags: number) => {
+  const entries = Array.isArray(input)
+    ? input
+    : String(input ?? '')
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean);
+
+  const normalized = entries
+    .map((entry) => {
+      if (typeof entry === 'string') {
+        return { name: normalizeTagName(entry), confidence: null };
+      }
+      const row = entry as Record<string, unknown>;
+      const name = normalizeTagName(row.name ?? row.tag ?? row.label);
+      const confidence = normalizeTagConfidence(row.confidence ?? row.score);
+      return { name, confidence };
+    })
+    .filter((entry) => entry.name.length > 0);
+
+  const deduped = new Map<string, { name: string; confidence: number | null }>();
+  for (const entry of normalized) {
+    const key = entry.name.toLowerCase();
+    const existing = deduped.get(key);
+    if (!existing) {
+      deduped.set(key, entry);
+      continue;
+    }
+    const betterConfidence =
+      existing.confidence === null
+        ? entry.confidence
+        : entry.confidence === null
+          ? existing.confidence
+          : Math.max(existing.confidence, entry.confidence);
+    deduped.set(key, {
+      name: existing.name.length >= entry.name.length ? existing.name : entry.name,
+      confidence: betterConfidence
+    });
+  }
+
+  return [...deduped.values()].slice(0, maxTags);
 };
 
 const buildSummaryInstruction = (style: SummaryStyle, length: SummaryLength) => {
@@ -312,6 +379,42 @@ export async function generateArticleKeyPoints(
   const parsed = parseJson(content);
   const keyPoints = normalizeKeyPoints(parsed?.key_points ?? content, length);
   return { keyPoints, usage };
+}
+
+export async function generateArticleTags(
+  provider: Provider,
+  apiKey: string,
+  model: string,
+  input: { title: string | null; url: string | null; contentText: string; maxTags?: number },
+  options?: LlmOptions
+) {
+  const maxTags = Math.min(12, Math.max(2, Math.floor(Number(input.maxTags ?? 6))));
+  const prompt = `Generate topical tags for this article.\n\nTitle: ${input.title ?? 'Untitled'}\nURL: ${
+    input.url ?? 'Unknown'
+  }\n\nRequirements:
+- Return JSON only with key "tags".
+- "tags" must be an array with up to ${maxTags} objects.
+- Each object must contain:
+  - "name": short title-case tag, 1-3 words.
+  - "confidence": number from 0.0 to 1.0.
+- Avoid generic tags such as "News", "Update", "Article", or source names.
+- Keep tags specific and reusable across similar articles.
+\nArticle:\n${input.contentText}`;
+
+  const { content, usage } = await runChat(
+    provider,
+    apiKey,
+    model,
+    [
+      { role: 'system', content: 'You assign clean, specific article tags for categorization and filtering.' },
+      { role: 'user', content: prompt }
+    ],
+    options
+  );
+
+  const parsed = parseJson(content);
+  const tags = normalizeTagCandidates((parsed as Record<string, unknown> | null)?.tags ?? parsed ?? content, maxTags);
+  return { tags, usage };
 }
 
 export async function scoreArticle(

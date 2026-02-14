@@ -207,6 +207,10 @@ async function ingestFeedItem(db: Db, feedId: string, item: FeedItem): Promise<b
           {
             sql: 'INSERT OR IGNORE INTO jobs (id, type, article_id, status, attempts, run_after) VALUES (?, ?, ?, ?, ?, ?)',
             params: [nanoid(), 'score', articleId, 'pending', 0, now()]
+          },
+          {
+            sql: 'INSERT OR IGNORE INTO jobs (id, type, article_id, status, attempts, run_after) VALUES (?, ?, ?, ?, ?, ?)',
+            params: [nanoid(), 'auto_tag', articleId, 'pending', 0, now()]
           }
         ];
         await dbBatch(db, jobs);

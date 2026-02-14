@@ -1,6 +1,7 @@
 import { dbAll, dbGet } from '$lib/server/db';
 import { getPreferredSourceForArticle, listSourcesForArticle } from '$lib/server/sources';
-import { getAutoReadDelayMs, getChatProviderModel, getIngestProviderModel } from '$lib/server/settings';
+import { getAutoReadDelayMs, getFeatureModelLane, getFeatureProviderModel } from '$lib/server/settings';
+import { listTags, listTagsForArticle } from '$lib/server/tags';
 
 export const load = async ({ params, platform }) => {
   const db = platform.env.DB;
@@ -70,25 +71,21 @@ export const load = async ({ params, platform }) => {
 
   const preferredSource = await getPreferredSourceForArticle(db, params.id);
   const sources = await listSourcesForArticle(db, params.id);
+  const tags = await listTagsForArticle(db, params.id);
+  const availableTags = await listTags(db, { limit: 200 });
 
-  const chatModel = await getChatProviderModel(db, platform.env);
-  const fallbackModel = await getIngestProviderModel(db, platform.env);
+  const articleChatLane = await getFeatureModelLane(db, 'article_chat');
+  const chatModel = await getFeatureProviderModel(db, platform.env, 'article_chat');
   const modelCandidates = [
     {
       provider: chatModel.provider,
       model: chatModel.model
     }
   ];
-  if (fallbackModel.provider !== chatModel.provider || fallbackModel.model !== chatModel.model) {
-    modelCandidates.push({
-      provider: fallbackModel.provider,
-      model: fallbackModel.model
-    });
-  }
 
   const keyRows = await dbAll<{ provider: string }>(db, 'SELECT provider FROM provider_keys');
   const keySet = new Set(keyRows.map((row) => row.provider));
-  const providersNeeded = [...new Set(modelCandidates.map((candidate) => candidate.provider))];
+  const providersNeeded = [chatModel.provider];
   const providersWithKeys = providersNeeded.filter((provider) => keySet.has(provider));
   const hasArticleContext = Boolean(article?.content_text && article.content_text.trim().length >= 120);
   const hasModelConfig = modelCandidates.every((candidate) => Boolean(candidate.model?.trim()));
@@ -110,6 +107,7 @@ export const load = async ({ params, platform }) => {
     hasArticleContext,
     hasModelConfig,
     hasAnyProviderKey,
+    selectedLane: articleChatLane,
     providersNeeded,
     providersWithKeys,
     modelCandidates,
@@ -118,5 +116,18 @@ export const load = async ({ params, platform }) => {
 
   const autoReadDelayMs = await getAutoReadDelayMs(db);
 
-  return { article, summary, keyPoints, score, feedback, reaction, preferredSource, sources, chatReadiness, autoReadDelayMs };
+  return {
+    article,
+    summary,
+    keyPoints,
+    score,
+    feedback,
+    reaction,
+    preferredSource,
+    sources,
+    tags,
+    availableTags,
+    chatReadiness,
+    autoReadDelayMs
+  };
 };

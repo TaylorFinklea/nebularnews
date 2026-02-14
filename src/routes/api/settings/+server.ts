@@ -5,8 +5,9 @@ import {
   DEFAULT_SCORE_USER_PROMPT_TEMPLATE,
   clampAutoReadDelayMs,
   getAutoReadDelayMs,
-  getChatProviderModel,
-  getIngestProviderModel,
+  getConfiguredChatProviderModel,
+  getConfiguredIngestProviderModel,
+  getFeatureModelLanes,
   getScorePromptConfig,
   getSetting,
   setSetting
@@ -14,10 +15,20 @@ import {
 
 export const GET = async ({ platform }) => {
   const db = platform.env.DB;
-  const ingestModel = await getIngestProviderModel(db, platform.env);
-  const chatModel = await getChatProviderModel(db, platform.env);
+  const featureLanes = await getFeatureModelLanes(db);
+  const ingestModel = await getConfiguredIngestProviderModel(db, platform.env);
+  const chatModel = await getConfiguredChatProviderModel(db, platform.env);
   const scorePrompt = await getScorePromptConfig(db);
   const settings = {
+    featureLanes: {
+      summaries: featureLanes.summaries,
+      scoring: featureLanes.scoring,
+      profileRefresh: featureLanes.profile_refresh,
+      keyPoints: featureLanes.key_points,
+      autoTagging: featureLanes.auto_tagging,
+      articleChat: featureLanes.article_chat,
+      globalChat: featureLanes.global_chat
+    },
     ingestProvider: ingestModel.provider,
     ingestModel: ingestModel.model,
     ingestReasoningEffort: ingestModel.reasoningEffort,
@@ -53,6 +64,23 @@ export const POST = async ({ request, platform }) => {
   const entries: [string, string][] = [];
   const validProviders = new Set(['openai', 'anthropic']);
   const validEfforts = new Set(['minimal', 'low', 'medium', 'high']);
+  const validModelLanes = new Set(['pipeline', 'chat']);
+  const featureLaneKeys: Record<string, string> = {
+    summaries: 'lane_summaries',
+    scoring: 'lane_scoring',
+    profileRefresh: 'lane_profile_refresh',
+    keyPoints: 'lane_key_points',
+    autoTagging: 'lane_auto_tagging',
+    articleChat: 'lane_article_chat',
+    globalChat: 'lane_global_chat'
+  };
+
+  for (const [bodyKey, settingKey] of Object.entries(featureLaneKeys)) {
+    const value = body?.featureLanes?.[bodyKey];
+    if (value && validModelLanes.has(value)) {
+      entries.push([settingKey, value]);
+    }
+  }
 
   if (body?.ingestProvider && validProviders.has(body.ingestProvider)) {
     entries.push(['ingest_provider', body.ingestProvider]);

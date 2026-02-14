@@ -2,11 +2,12 @@ import { dbAll } from '$lib/server/db';
 import {
   DEFAULT_SCORE_SYSTEM_PROMPT,
   DEFAULT_SCORE_USER_PROMPT_TEMPLATE,
+  getFeatureModelLanes,
   MAX_AUTO_READ_DELAY_MS,
   MIN_AUTO_READ_DELAY_MS,
   getAutoReadDelayMs,
-  getChatProviderModel,
-  getIngestProviderModel,
+  getConfiguredChatProviderModel,
+  getConfiguredIngestProviderModel,
   getScorePromptConfig,
   getSetting
 } from '$lib/server/settings';
@@ -14,10 +15,20 @@ import { ensurePreferenceProfile } from '$lib/server/profile';
 
 export const load = async ({ platform }) => {
   const db = platform.env.DB;
-  const ingestModel = await getIngestProviderModel(db, platform.env);
-  const chatModel = await getChatProviderModel(db, platform.env);
+  const featureLanes = await getFeatureModelLanes(db);
+  const ingestModel = await getConfiguredIngestProviderModel(db, platform.env);
+  const chatModel = await getConfiguredChatProviderModel(db, platform.env);
   const scorePrompt = await getScorePromptConfig(db);
   const settings = {
+    featureLanes: {
+      summaries: featureLanes.summaries,
+      scoring: featureLanes.scoring,
+      profileRefresh: featureLanes.profile_refresh,
+      keyPoints: featureLanes.key_points,
+      autoTagging: featureLanes.auto_tagging,
+      articleChat: featureLanes.article_chat,
+      globalChat: featureLanes.global_chat
+    },
     ingestProvider: ingestModel.provider,
     ingestModel: ingestModel.model,
     ingestReasoningEffort: ingestModel.reasoningEffort,

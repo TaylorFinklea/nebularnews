@@ -1,8 +1,10 @@
 import { json } from '@sveltejs/kit';
 import { dbAll } from '$lib/server/db';
 import { getPreferredSourcesForArticles } from '$lib/server/sources';
+import { listTagsForArticles, resolveTagsByTokens } from '$lib/server/tags';
 
 const sanitizeQuery = (value: string) => (value.toLowerCase().match(/\w+/g) ?? []).join(' ');
+const placeholders = (count: number) => Array.from({ length: count }, () => '?').join(', ');
 const effectiveScoreExpr = `COALESCE(
   (SELECT score FROM article_score_overrides WHERE article_id = a.id LIMIT 1),
   (SELECT score FROM article_scores WHERE article_id = a.id ORDER BY created_at DESC LIMIT 1)
@@ -18,6 +20,17 @@ export const GET = async ({ url, platform }) => {
   const q = url.searchParams.get('q')?.trim() ?? '';
   const scoreFilter = url.searchParams.get('score') ?? 'all';
   const readFilter = url.searchParams.get('read') ?? 'all';
+  const requestedTagTokens = [
+    ...new Set(
+      url.searchParams
+        .getAll('tags')
+        .flatMap((entry) => entry.split(','))
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+    )
+  ];
+  const selectedTags = await resolveTagsByTokens(platform.env.DB, requestedTagTokens);
+  const selectedTagIds = selectedTags.map((tag) => tag.id);
   const safeQuery = sanitizeQuery(q);
 
   const conditions: string[] = [];
@@ -42,6 +55,17 @@ export const GET = async ({ url, platform }) => {
     conditions.push(`${effectiveReadExpr} = 0`);
   } else if (readFilter === 'read') {
     conditions.push(`${effectiveReadExpr} = 1`);
+  }
+
+  if (selectedTagIds.length > 0) {
+    conditions.push(
+      `(SELECT COUNT(DISTINCT atf.tag_id)
+        FROM article_tags atf
+        WHERE atf.article_id = a.id
+          AND atf.tag_id IN (${placeholders(selectedTagIds.length)})) = ?`
+    );
+    params.push(...selectedTagIds);
+    params.push(selectedTagIds.length);
   }
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -76,11 +100,16 @@ export const GET = async ({ url, platform }) => {
     platform.env.DB,
     articles.map((article: { id: string }) => article.id)
   );
+  const tagsByArticle = await listTagsForArticles(
+    platform.env.DB,
+    articles.map((article: { id: string }) => article.id)
+  );
 
   const hydratedArticles = articles.map((article: { id: string }) => {
     const source = sourceByArticle.get(article.id);
     return {
       ...article,
+      tags: tagsByArticle.get(article.id) ?? [],
       source_name: source?.sourceName ?? null,
       source_feed_id: source?.feedId ?? null,
       source_reputation: source?.reputation ?? 0,
@@ -88,5 +117,5 @@ export const GET = async ({ url, platform }) => {
     };
   });
 
-  return json({ articles: hydratedArticles, readFilter });
+  return json({ articles: hydratedArticles, readFilter, selectedTagIds });
 };

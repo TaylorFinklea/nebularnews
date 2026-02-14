@@ -3,6 +3,13 @@
   import { onMount } from 'svelte';
   export let data;
 
+  let laneSummaries = data.settings.featureLanes?.summaries ?? 'pipeline';
+  let laneScoring = data.settings.featureLanes?.scoring ?? 'pipeline';
+  let laneProfileRefresh = data.settings.featureLanes?.profileRefresh ?? 'pipeline';
+  let laneKeyPoints = data.settings.featureLanes?.keyPoints ?? 'pipeline';
+  let laneAutoTagging = data.settings.featureLanes?.autoTagging ?? 'pipeline';
+  let laneArticleChat = data.settings.featureLanes?.articleChat ?? 'chat';
+  let laneGlobalChat = data.settings.featureLanes?.globalChat ?? 'chat';
   let ingestProvider = data.settings.ingestProvider;
   let ingestModel = data.settings.ingestModel;
   let ingestReasoningEffort = data.settings.ingestReasoningEffort;
@@ -89,6 +96,15 @@
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
+        featureLanes: {
+          summaries: laneSummaries,
+          scoring: laneScoring,
+          profileRefresh: laneProfileRefresh,
+          keyPoints: laneKeyPoints,
+          autoTagging: laneAutoTagging,
+          articleChat: laneArticleChat,
+          globalChat: laneGlobalChat
+        },
         ingestProvider,
         ingestModel,
         ingestReasoningEffort,
@@ -159,6 +175,113 @@
 </section>
 
 <div class="grid">
+  <div class="card span-two">
+    <h2>AI Feature Routing</h2>
+    <p class="muted">
+      Set the model lane per AI feature.
+    </p>
+    <div class="feature-lanes">
+      <div class="feature-lane">
+        <div class="feature-name">Summaries</div>
+        <div class="lane-toggle" role="radiogroup" aria-label="Summaries model lane">
+          <label class:active={laneSummaries === 'pipeline'}>
+            <input type="radio" name="laneSummaries" value="pipeline" bind:group={laneSummaries} />
+            <span>Pipeline</span>
+          </label>
+          <label class:active={laneSummaries === 'chat'}>
+            <input type="radio" name="laneSummaries" value="chat" bind:group={laneSummaries} />
+            <span>Chat</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="feature-lane">
+        <div class="feature-name">Key Points</div>
+        <div class="lane-toggle" role="radiogroup" aria-label="Key points model lane">
+          <label class:active={laneKeyPoints === 'pipeline'}>
+            <input type="radio" name="laneKeyPoints" value="pipeline" bind:group={laneKeyPoints} />
+            <span>Pipeline</span>
+          </label>
+          <label class:active={laneKeyPoints === 'chat'}>
+            <input type="radio" name="laneKeyPoints" value="chat" bind:group={laneKeyPoints} />
+            <span>Chat</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="feature-lane">
+        <div class="feature-name">Auto Tagging</div>
+        <div class="lane-toggle" role="radiogroup" aria-label="Auto tagging model lane">
+          <label class:active={laneAutoTagging === 'pipeline'}>
+            <input type="radio" name="laneAutoTagging" value="pipeline" bind:group={laneAutoTagging} />
+            <span>Pipeline</span>
+          </label>
+          <label class:active={laneAutoTagging === 'chat'}>
+            <input type="radio" name="laneAutoTagging" value="chat" bind:group={laneAutoTagging} />
+            <span>Chat</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="feature-lane">
+        <div class="feature-name">Scoring</div>
+        <div class="lane-toggle" role="radiogroup" aria-label="Scoring model lane">
+          <label class:active={laneScoring === 'pipeline'}>
+            <input type="radio" name="laneScoring" value="pipeline" bind:group={laneScoring} />
+            <span>Pipeline</span>
+          </label>
+          <label class:active={laneScoring === 'chat'}>
+            <input type="radio" name="laneScoring" value="chat" bind:group={laneScoring} />
+            <span>Chat</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="feature-lane">
+        <div class="feature-name">Profile Refresh</div>
+        <div class="lane-toggle" role="radiogroup" aria-label="Profile refresh model lane">
+          <label class:active={laneProfileRefresh === 'pipeline'}>
+            <input type="radio" name="laneProfileRefresh" value="pipeline" bind:group={laneProfileRefresh} />
+            <span>Pipeline</span>
+          </label>
+          <label class:active={laneProfileRefresh === 'chat'}>
+            <input type="radio" name="laneProfileRefresh" value="chat" bind:group={laneProfileRefresh} />
+            <span>Chat</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="feature-lane">
+        <div class="feature-name">Article Chat</div>
+        <div class="lane-toggle" role="radiogroup" aria-label="Article chat model lane">
+          <label class:active={laneArticleChat === 'pipeline'}>
+            <input type="radio" name="laneArticleChat" value="pipeline" bind:group={laneArticleChat} />
+            <span>Pipeline</span>
+          </label>
+          <label class:active={laneArticleChat === 'chat'}>
+            <input type="radio" name="laneArticleChat" value="chat" bind:group={laneArticleChat} />
+            <span>Chat</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="feature-lane">
+        <div class="feature-name">Global Chat</div>
+        <div class="lane-toggle" role="radiogroup" aria-label="Global chat model lane">
+          <label class:active={laneGlobalChat === 'pipeline'}>
+            <input type="radio" name="laneGlobalChat" value="pipeline" bind:group={laneGlobalChat} />
+            <span>Pipeline</span>
+          </label>
+          <label class:active={laneGlobalChat === 'chat'}>
+            <input type="radio" name="laneGlobalChat" value="chat" bind:group={laneGlobalChat} />
+            <span>Chat</span>
+          </label>
+        </div>
+      </div>
+    </div>
+    <button on:click={saveSettings}>Save AI settings</button>
+  </div>
+
   <div class="card">
     <h2>Pipeline model (cheaper)</h2>
     <label>
@@ -191,7 +314,7 @@
         <option value="high">High</option>
       </select>
     </label>
-    <p class="muted">Used for summarize, score, and profile-refresh jobs.</p>
+    <p class="muted">This defines the Pipeline model lane configuration.</p>
   </div>
 
   <div class="card">
@@ -226,7 +349,7 @@
         <option value="high">High</option>
       </select>
     </label>
-    <p class="muted">Used for global chat and article chat responses.</p>
+    <p class="muted">This defines the Chat model lane configuration.</p>
   </div>
 
   <div class="card">
@@ -260,7 +383,7 @@
     <p class="muted">
       Applies on article detail pages. Current delay: {autoReadDelaySeconds}s. 0 means immediate. Range {data.autoReadDelayRange.min}-{data.autoReadDelayRange.max} ms.
     </p>
-    <button on:click={saveSettings}>Save model settings</button>
+    <button on:click={saveSettings}>Save AI settings</button>
   </div>
 
   <div class="card span-two">
@@ -419,6 +542,58 @@
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem;
+  }
+
+  .lane-toggle {
+    display: inline-grid;
+    grid-template-columns: 1fr 1fr;
+    border: 1px solid var(--input-border);
+    border-radius: 999px;
+    padding: 0.25rem;
+    background: var(--surface-soft);
+    max-width: 420px;
+    width: 100%;
+  }
+
+  .feature-lanes {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .feature-lane {
+    display: grid;
+    gap: 0.4rem;
+  }
+
+  .feature-name {
+    font-size: 0.88rem;
+    color: var(--muted-text);
+    font-weight: 600;
+  }
+
+  .lane-toggle label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    padding: 0.45rem 0.8rem;
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--muted-text);
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+
+  .lane-toggle label.active {
+    background: var(--button-bg);
+    color: var(--button-text);
+  }
+
+  .lane-toggle input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+    width: 1px;
+    height: 1px;
   }
 
   @media (max-width: 900px) {

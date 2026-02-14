@@ -77,6 +77,37 @@ export async function ensureSchema(db: Db) {
     await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_article_key_points_article ON article_key_points(article_id)');
     await runSafe(
       db,
+      `CREATE TABLE IF NOT EXISTS tags (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        name_normalized TEXT NOT NULL UNIQUE,
+        slug TEXT NOT NULL UNIQUE,
+        color TEXT,
+        description TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )`
+    );
+    await runSafe(
+      db,
+      `CREATE TABLE IF NOT EXISTS article_tags (
+        id TEXT PRIMARY KEY,
+        article_id TEXT NOT NULL,
+        tag_id TEXT NOT NULL,
+        source TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'ai', 'system')),
+        confidence REAL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        UNIQUE(article_id, tag_id),
+        FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE,
+        FOREIGN KEY(tag_id) REFERENCES tags(id) ON DELETE CASCADE
+      )`
+    );
+    await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_article_tags_article ON article_tags(article_id)');
+    await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_article_tags_tag ON article_tags(tag_id)');
+    await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_tags_updated ON tags(updated_at)');
+    await runSafe(
+      db,
       `INSERT OR IGNORE INTO article_score_overrides (article_id, score, comment, created_at, updated_at)
        SELECT af.article_id, af.rating, af.comment, af.created_at, af.created_at
        FROM article_feedback af

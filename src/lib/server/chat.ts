@@ -1,7 +1,7 @@
 import { nanoid } from 'nanoid';
 import { dbAll, dbGet, dbRun, now, type Db } from './db';
 import { runChat } from './llm';
-import { getChatProviderModel, getIngestProviderModel, getProviderKey, type ProviderModelConfig } from './settings';
+import { getFeatureProviderModel, getProviderKey } from './settings';
 
 export type ChatScope = 'global' | 'article';
 
@@ -90,12 +90,8 @@ export async function runThreadMessage(
   if (!thread) throw new Error('Thread not found');
 
   const { context, sources } = await buildContext(db, thread.scope, thread.article_id, userMessage);
-  const primary = await getChatProviderModel(db, env);
-  const fallback = await getIngestProviderModel(db, env);
-  const candidates: ProviderModelConfig[] = [primary];
-  if (fallback.provider !== primary.provider || fallback.model !== primary.model) {
-    candidates.push(fallback);
-  }
+  const feature = thread.scope === 'article' ? 'article_chat' : 'global_chat';
+  const selectedModel = await getFeatureProviderModel(db, env, feature);
 
   const history = await dbAll<{ role: string; content: string }>(
     db,
@@ -105,41 +101,23 @@ export async function runThreadMessage(
   const historyOrdered = history.reverse().map((entry) => ({ role: entry.role as 'user' | 'assistant', content: entry.content }));
 
   const system = `You are Nebular News. Use the provided sources to answer. Cite source titles in your answer.`;
-  let content = '';
-  let usage: unknown = undefined;
-  let lastError: string | null = null;
-  let responded = false;
-  for (const candidate of candidates) {
-    const apiKey = await getProviderKey(db, env, candidate.provider);
-    if (!apiKey) {
-      lastError = `Missing API key for ${candidate.provider}`;
-      continue;
-    }
-
-    try {
-      const response = await runChat(
-        candidate.provider,
-        apiKey,
-        candidate.model,
-        [
-          { role: 'system', content: `${system}\n\n${context}` },
-          ...historyOrdered,
-          { role: 'user', content: userMessage }
-        ],
-        { reasoningEffort: candidate.reasoningEffort }
-      );
-      content = response.content;
-      usage = response.usage;
-      responded = true;
-      break;
-    } catch (err) {
-      lastError = err instanceof Error ? err.message : String(err);
-    }
+  const apiKey = await getProviderKey(db, env, selectedModel.provider);
+  if (!apiKey) {
+    throw new Error(`Missing API key for ${selectedModel.provider}`);
   }
-
-  if (!responded) {
-    throw new Error(lastError ?? 'Chat failed');
-  }
+  const response = await runChat(
+    selectedModel.provider,
+    apiKey,
+    selectedModel.model,
+    [
+      { role: 'system', content: `${system}\n\n${context}` },
+      ...historyOrdered,
+      { role: 'user', content: userMessage }
+    ],
+    { reasoningEffort: selectedModel.reasoningEffort }
+  );
+  const content = response.content;
+  const usage = response.usage;
 
   await addChatMessage(db, threadId, 'user', userMessage);
   await addChatMessage(db, threadId, 'assistant', content, usage);

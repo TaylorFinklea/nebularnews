@@ -2,7 +2,11 @@ import { json } from '@sveltejs/kit';
 import { nanoid } from 'nanoid';
 import { dbRun, now } from '$lib/server/db';
 
-const enqueueJob = async (db: D1Database, type: 'summarize' | 'summarize_chat' | 'score' | 'key_points', articleId: string) => {
+const enqueueJob = async (
+  db: D1Database,
+  type: 'summarize' | 'summarize_chat' | 'score' | 'key_points' | 'auto_tag',
+  articleId: string
+) => {
   await dbRun(
     db,
     `INSERT INTO jobs (id, type, article_id, status, attempts, run_after, last_error)
@@ -22,7 +26,7 @@ export const POST = async ({ params, request, platform }) => {
   const body = await request.json().catch(() => ({}));
   const types = Array.isArray(body?.types) ? body.types : ['summarize', 'score'];
   const articleId = params.id;
-  const allowed = new Set(['summarize', 'summarize_chat', 'score', 'key_points']);
+  const allowed = new Set(['summarize', 'summarize_chat', 'score', 'key_points', 'auto_tag']);
   const filtered = types.filter((type: string) => allowed.has(type));
   if (filtered.length === 0) return json({ error: 'No valid types' }, { status: 400 });
 
@@ -37,6 +41,9 @@ export const POST = async ({ params, request, platform }) => {
   }
   if (filtered.includes('key_points')) {
     await enqueueJob(platform.env.DB, 'key_points', articleId);
+  }
+  if (filtered.includes('auto_tag')) {
+    await enqueueJob(platform.env.DB, 'auto_tag', articleId);
   }
 
   return json({ ok: true, queued: filtered });

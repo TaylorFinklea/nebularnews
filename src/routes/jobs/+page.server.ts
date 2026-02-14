@@ -29,6 +29,20 @@ export const load = async ({ platform, url, request }) => {
        AND NOT EXISTS (SELECT 1 FROM article_score_overrides o WHERE o.article_id = a.id)`,
     [dayStart, dayEnd]
   );
+  const todayMissingAutoTags = await dbGet<{ count: number }>(
+    platform.env.DB,
+    `SELECT COUNT(*) as count
+     FROM articles a
+     WHERE COALESCE(a.published_at, a.fetched_at) >= ?
+       AND COALESCE(a.published_at, a.fetched_at) < ?
+       AND NOT EXISTS (
+         SELECT 1
+         FROM article_tags t
+         WHERE t.article_id = a.id
+           AND t.source = 'ai'
+       )`,
+    [dayStart, dayEnd]
+  );
 
   return {
     jobs,
@@ -37,6 +51,7 @@ export const load = async ({ platform, url, request }) => {
     today: {
       missingSummaries: todayMissingSummaries?.count ?? 0,
       missingScores: todayMissingScores?.count ?? 0,
+      missingAutoTags: todayMissingAutoTags?.count ?? 0,
       tzOffsetMinutes
     }
   };

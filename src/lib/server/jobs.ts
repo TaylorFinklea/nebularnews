@@ -1,14 +1,14 @@
 import { nanoid } from 'nanoid';
 import { dbAll, dbGet, dbRun, now, type Db } from './db';
-import { generateArticleKeyPoints, refreshPreferenceProfile, scoreArticle, summarizeArticle } from './llm';
+import { generateArticleKeyPoints, generateArticleTags, refreshPreferenceProfile, scoreArticle, summarizeArticle } from './llm';
 import {
-  getChatProviderModel,
-  getIngestProviderModel,
+  getFeatureProviderModel,
   getProviderKey,
   getScorePromptConfig,
   getSummaryConfig
 } from './settings';
 import { ensurePreferenceProfile } from './profile';
+import { attachTagToArticle, ensureTagByName } from './tags';
 
 const MAX_JOB_ATTEMPTS = 3;
 type JobRunMetadata = { provider: string; model: string } | null;
@@ -31,11 +31,14 @@ export async function processJobs(env: App.Platform['env']) {
     try {
       let runMetadata: JobRunMetadata = null;
       if (job.type === 'summarize' && job.article_id) {
-        runMetadata = await runSummarizeJob(db, env, job.article_id, 'pipeline');
+        runMetadata = await runSummarizeJob(db, env, job.article_id);
       } else if (job.type === 'summarize_chat' && job.article_id) {
-        runMetadata = await runSummarizeJob(db, env, job.article_id, 'chat');
+        // Backward compatibility for older queued jobs; follows current Summaries lane setting.
+        runMetadata = await runSummarizeJob(db, env, job.article_id);
       } else if (job.type === 'key_points' && job.article_id) {
         runMetadata = await runKeyPointsJob(db, env, job.article_id);
+      } else if (job.type === 'auto_tag' && job.article_id) {
+        runMetadata = await runAutoTagJob(db, env, job.article_id);
       } else if (job.type === 'score' && job.article_id) {
         runMetadata = await runScoreJob(db, env, job.article_id);
       } else if (job.type === 'refresh_profile') {
@@ -64,8 +67,7 @@ export async function processJobs(env: App.Platform['env']) {
 async function runSummarizeJob(
   db: Db,
   env: App.Platform['env'],
-  articleId: string,
-  mode: 'pipeline' | 'chat'
+  articleId: string
 ): Promise<{ provider: string; model: string }> {
   const article = await dbGet<{
     title: string | null;
@@ -74,9 +76,7 @@ async function runSummarizeJob(
   }>(db, 'SELECT title, canonical_url, content_text FROM articles WHERE id = ?', [articleId]);
   if (!article?.content_text) throw new Error('Missing article content');
 
-  const modelSettings =
-    mode === 'chat' ? await getChatProviderModel(db, env) : await getIngestProviderModel(db, env);
-  const { provider, model, reasoningEffort } = modelSettings;
+  const { provider, model, reasoningEffort } = await getFeatureProviderModel(db, env, 'summaries');
   const apiKey = await getProviderKey(db, env, provider);
   if (!apiKey) throw new Error('No provider key');
 
@@ -108,7 +108,7 @@ async function runSummarizeJob(
       null,
       now(),
       JSON.stringify(summary.usage ?? {}),
-      mode === 'chat' ? 'v2-chat' : 'v2-pipeline'
+      'v3-feature-lane'
     ]
   );
 
@@ -124,7 +124,7 @@ async function runKeyPointsJob(db: Db, env: App.Platform['env'], articleId: stri
   }>(db, 'SELECT title, canonical_url, content_text FROM articles WHERE id = ?', [articleId]);
   if (!article?.content_text) throw new Error('Missing article content');
 
-  const { provider, model, reasoningEffort } = await getIngestProviderModel(db, env);
+  const { provider, model, reasoningEffort } = await getFeatureProviderModel(db, env, 'key_points');
   const apiKey = await getProviderKey(db, env, provider);
   if (!apiKey) throw new Error('No provider key');
 
@@ -161,6 +161,50 @@ async function runKeyPointsJob(db: Db, env: App.Platform['env'], articleId: stri
   return { provider, model };
 }
 
+async function runAutoTagJob(db: Db, env: App.Platform['env'], articleId: string): Promise<{ provider: string; model: string }> {
+  const article = await dbGet<{
+    title: string | null;
+    canonical_url: string | null;
+    content_text: string | null;
+  }>(db, 'SELECT title, canonical_url, content_text FROM articles WHERE id = ?', [articleId]);
+  if (!article?.content_text) throw new Error('Missing article content');
+
+  const { provider, model, reasoningEffort } = await getFeatureProviderModel(db, env, 'auto_tagging');
+  const apiKey = await getProviderKey(db, env, provider);
+  if (!apiKey) throw new Error('No provider key');
+
+  const generated = await generateArticleTags(
+    provider,
+    apiKey,
+    model,
+    {
+      title: article.title,
+      url: article.canonical_url,
+      contentText: article.content_text.slice(0, 12000),
+      maxTags: 6
+    },
+    { reasoningEffort }
+  );
+  if (generated.tags.length === 0) {
+    throw new Error('No tags generated');
+  }
+
+  // Replace previous AI-generated tags only. Manual/system tags are retained.
+  await dbRun(db, 'DELETE FROM article_tags WHERE article_id = ? AND source = ?', [articleId, 'ai']);
+
+  for (const candidate of generated.tags) {
+    const tag = await ensureTagByName(db, candidate.name);
+    await attachTagToArticle(db, {
+      articleId,
+      tagId: tag.id,
+      source: 'ai',
+      confidence: candidate.confidence
+    });
+  }
+
+  return { provider, model };
+}
+
 
 async function runScoreJob(db: Db, env: App.Platform['env'], articleId: string): Promise<{ provider: string; model: string }> {
   const article = await dbGet<{
@@ -171,7 +215,7 @@ async function runScoreJob(db: Db, env: App.Platform['env'], articleId: string):
   if (!article?.content_text) throw new Error('Missing article content');
 
   const profile = await ensurePreferenceProfile(db);
-  const { provider, model, reasoningEffort } = await getIngestProviderModel(db, env);
+  const { provider, model, reasoningEffort } = await getFeatureProviderModel(db, env, 'scoring');
   const apiKey = await getProviderKey(db, env, provider);
   if (!apiKey) throw new Error('No provider key');
 
@@ -214,7 +258,7 @@ async function runRefreshProfile(db: Db, env: App.Platform['env']): Promise<{ pr
 
   if (feedback.length === 0) return null;
 
-  const { provider, model, reasoningEffort } = await getIngestProviderModel(db, env);
+  const { provider, model, reasoningEffort } = await getFeatureProviderModel(db, env, 'profile_refresh');
   const apiKey = await getProviderKey(db, env, provider);
   if (!apiKey) throw new Error('No provider key');
 

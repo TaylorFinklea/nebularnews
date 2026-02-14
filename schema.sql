@@ -115,6 +115,30 @@ CREATE TABLE IF NOT EXISTS article_read_state (
   FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS tags (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  name_normalized TEXT NOT NULL UNIQUE,
+  slug TEXT NOT NULL UNIQUE,
+  color TEXT,
+  description TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS article_tags (
+  id TEXT PRIMARY KEY,
+  article_id TEXT NOT NULL,
+  tag_id TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'ai', 'system')),
+  confidence REAL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  UNIQUE(article_id, tag_id),
+  FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE,
+  FOREIGN KEY(tag_id) REFERENCES tags(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS chat_threads (
   id TEXT PRIMARY KEY,
   scope TEXT NOT NULL,
@@ -187,4 +211,7 @@ CREATE INDEX IF NOT EXISTS idx_article_feedback_article ON article_feedback(arti
 CREATE INDEX IF NOT EXISTS idx_article_feedback_feed ON article_feedback(feed_id);
 CREATE INDEX IF NOT EXISTS idx_article_reactions_feed ON article_reactions(feed_id);
 CREATE INDEX IF NOT EXISTS idx_article_read_state_updated ON article_read_state(updated_at);
+CREATE INDEX IF NOT EXISTS idx_article_tags_article ON article_tags(article_id);
+CREATE INDEX IF NOT EXISTS idx_article_tags_tag ON article_tags(tag_id);
+CREATE INDEX IF NOT EXISTS idx_tags_updated ON tags(updated_at);
 CREATE INDEX IF NOT EXISTS idx_chat_messages_thread ON chat_messages(thread_id);

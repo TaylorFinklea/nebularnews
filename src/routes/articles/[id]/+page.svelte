@@ -12,6 +12,9 @@
   let sending = false;
   let rerunBusy = false;
   let readStateBusy = false;
+  let tagBusy = false;
+  let tagError = '';
+  let tagInput = '';
   let chatError = '';
   const AUTO_MARK_READ_DELAY_MS = Number(data.autoReadDelayMs ?? 4000);
   let autoReadTimer = null;
@@ -105,6 +108,51 @@
     }
   };
 
+  const addTags = async () => {
+    const names = tagInput
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+    if (names.length === 0) return;
+    tagBusy = true;
+    tagError = '';
+    try {
+      const res = await fetch(`/api/articles/${data.article.id}/tags`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ addTagNames: names, source: 'manual' })
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        tagError = payload?.error ?? 'Failed to add tags';
+        return;
+      }
+      tagInput = '';
+    } finally {
+      tagBusy = false;
+      await invalidateAll();
+    }
+  };
+
+  const removeTag = async (tagId) => {
+    tagBusy = true;
+    tagError = '';
+    try {
+      const res = await fetch(`/api/articles/${data.article.id}/tags`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ removeTagIds: [tagId] })
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        tagError = payload?.error ?? 'Failed to remove tag';
+      }
+    } finally {
+      tagBusy = false;
+      await invalidateAll();
+    }
+  };
+
   onMount(() => {
     if (data.article && !data.article.is_read) {
       autoReadTimer = setTimeout(() => {
@@ -149,16 +197,48 @@
     </div>
 
     <div class="card">
+      <h2>Tags</h2>
+      {#if data.tags?.length}
+        <div class="tag-row">
+          {#each data.tags as tag}
+            <button class="tag-pill removable" on:click={() => removeTag(tag.id)} disabled={tagBusy}>
+              <span>{tag.name}</span>
+              {#if tag.source === 'ai'}
+                <span class="tag-source">AI</span>
+              {/if}
+              <span class="x">x</span>
+            </button>
+          {/each}
+        </div>
+      {:else}
+        <p class="muted">No tags yet.</p>
+      {/if}
+      <div class="row">
+        <input
+          list="article-tag-options"
+          placeholder="Add tag (or comma-separated tags)"
+          bind:value={tagInput}
+          disabled={tagBusy}
+        />
+        <button class="ghost" on:click={addTags} disabled={tagBusy}>Add tags</button>
+      </div>
+      <button class="ghost" on:click={() => rerunJobs(['auto_tag'])} disabled={rerunBusy}>
+        Generate AI tags (uses Auto Tagging setting)
+      </button>
+      <p class="muted">Tip: type a new tag name to create it.</p>
+      {#if tagError}
+        <p class="muted">{tagError}</p>
+      {/if}
+    </div>
+
+    <div class="card">
       <h2>Summary</h2>
       <p>{data.summary?.summary_text ?? 'Summary pending.'}</p>
       {#if data.summary?.provider && data.summary?.model}
         <p class="muted">Latest summary model: {data.summary.provider}/{data.summary.model}</p>
       {/if}
       <button class="ghost" on:click={() => rerunJobs(['summarize'])} disabled={rerunBusy}>
-        Re-run summary (pipeline model)
-      </button>
-      <button class="ghost" on:click={() => rerunJobs(['summarize_chat'])} disabled={rerunBusy}>
-        Regenerate with chat model
+        Re-run summary (uses Summaries setting)
       </button>
     </div>
 
@@ -177,7 +257,7 @@
         <p class="muted">Latest key points model: {data.keyPoints.provider}/{data.keyPoints.model}</p>
       {/if}
       <button class="ghost" on:click={() => rerunJobs(['key_points'])} disabled={rerunBusy}>
-        Generate key points
+        Generate key points (uses Key Points setting)
       </button>
     </div>
 
@@ -251,6 +331,7 @@
           {data.chatReadiness?.canChat ? 'Ready' : 'Needs setup'}
         </span>
         <div class="readiness-meta">
+          <div>Lane: {data.chatReadiness?.selectedLane ?? 'unknown'}</div>
           <div>Context: {data.chatReadiness?.hasArticleContext ? 'ok' : 'missing'}</div>
           <div>Model: {data.chatReadiness?.hasModelConfig ? 'ok' : 'missing'}</div>
           <div>API key: {data.chatReadiness?.hasAnyProviderKey ? 'ok' : 'missing'}</div>
@@ -291,6 +372,12 @@
     </div>
   </div>
 {/if}
+
+<datalist id="article-tag-options">
+  {#each data.availableTags ?? [] as tag}
+    <option value={tag.name}></option>
+  {/each}
+</datalist>
 
 <style>
   .grid {
@@ -368,6 +455,41 @@
     border-color: var(--ghost-border);
     background: var(--primary-soft);
     color: var(--primary);
+  }
+
+  .tag-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+  }
+
+  .tag-pill {
+    border: 1px solid var(--input-border);
+    background: var(--surface-soft);
+    color: var(--text-color);
+    border-radius: 999px;
+    padding: 0.3rem 0.6rem;
+    font-size: 0.82rem;
+    display: inline-flex;
+    gap: 0.4rem;
+    align-items: center;
+  }
+
+  .tag-pill.removable {
+    margin-top: 0;
+    cursor: pointer;
+  }
+
+  .tag-pill .x {
+    color: var(--muted-text);
+  }
+
+  .tag-source {
+    font-size: 0.72rem;
+    color: var(--muted-text);
+    border: 1px solid var(--surface-border);
+    border-radius: 999px;
+    padding: 0.05rem 0.35rem;
   }
 
   .ghost {

@@ -44,11 +44,12 @@
       } else if (action === 'queue_today_missing') {
         const summarizeQueued = payload?.queued?.summarizeQueued ?? 0;
         const scoreQueued = payload?.queued?.scoreQueued ?? 0;
-        if (summarizeQueued === 0 && scoreQueued === 0) {
+        const autoTagQueued = payload?.queued?.autoTagQueued ?? 0;
+        if (summarizeQueued === 0 && scoreQueued === 0 && autoTagQueued === 0) {
           const label = payload?.queued?.dayStart ? new Date(payload.queued.dayStart).toLocaleDateString() : 'today';
-          message = `No missing summarize/score jobs found for ${label}.`;
+          message = `No missing summarize/score/auto-tag jobs found for ${label}.`;
         } else {
-          message = `Queued today's missing jobs: ${summarizeQueued} summarize, ${scoreQueued} score.`;
+          message = `Queued today's missing jobs: ${summarizeQueued} summarize, ${scoreQueued} score, ${autoTagQueued} auto-tag.`;
         }
       } else if (typeof touched === 'number') {
         message = `${label} updated ${touched} job${touched === 1 ? '' : 's'}.`;
@@ -77,6 +78,7 @@
   <strong>Today missing:</strong>
   <span>{data.today.missingSummaries} summaries</span>
   <span>{data.today.missingScores} scores</span>
+  <span>{data.today.missingAutoTags} auto-tags</span>
   <span>({formatUtcOffset(data.today.tzOffsetMinutes)})</span>
 </div>
 

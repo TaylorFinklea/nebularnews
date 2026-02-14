@@ -15,10 +15,12 @@
   let query = data.q ?? '';
   let scoreFilter = data.scoreFilter ?? 'all';
   let readFilter = data.readFilter ?? 'all';
+  let selectedTagIds = data.selectedTagIds ?? [];
 
   $: query = data.q ?? '';
   $: scoreFilter = data.scoreFilter ?? 'all';
   $: readFilter = data.readFilter ?? 'all';
+  $: selectedTagIds = data.selectedTagIds ?? [];
 
   const reactToArticle = async (articleId, value, feedId) => {
     await fetch(`/api/articles/${articleId}/reaction`, {
@@ -60,7 +62,15 @@
     <option value="unread">Unread only</option>
     <option value="read">Read only</option>
   </select>
+  <select name="tags" multiple bind:value={selectedTagIds} size="4">
+    {#each data.availableTags ?? [] as tag}
+      <option value={tag.id}>{tag.name} ({tag.article_count})</option>
+    {/each}
+  </select>
   <button type="submit">Filter</button>
+  {#if selectedTagIds.length > 0}
+    <a class="clear-link" href="/articles">Clear tags</a>
+  {/if}
 </form>
 
 <div class="articles">
@@ -90,6 +100,13 @@
         </div>
         {#if article.author}
           <div class="byline">By {article.author}</div>
+        {/if}
+        {#if article.tags?.length}
+          <div class="tag-row">
+            {#each article.tags as tag}
+              <span class="tag-pill">{tag.name}</span>
+            {/each}
+          </div>
         {/if}
         <div class="reactions">
           <button
@@ -234,6 +251,22 @@
     cursor: pointer;
   }
 
+  .tag-row {
+    margin-top: 0.7rem;
+    display: flex;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+  }
+
+  .tag-pill {
+    border: 1px solid var(--input-border);
+    background: var(--surface-soft);
+    border-radius: 999px;
+    padding: 0.2rem 0.55rem;
+    font-size: 0.78rem;
+    color: var(--muted-text);
+  }
+
   .filters {
     display: flex;
     gap: 0.8rem;
@@ -253,6 +286,11 @@
     min-width: 180px;
   }
 
+  select[multiple] {
+    min-width: 230px;
+    min-height: 126px;
+  }
+
   form button {
     background: var(--button-bg);
     color: var(--button-text);
@@ -260,6 +298,11 @@
     padding: 0.6rem 1rem;
     border-radius: 999px;
     cursor: pointer;
+  }
+
+  .clear-link {
+    color: var(--muted-text);
+    font-size: 0.9rem;
   }
 
   .muted {

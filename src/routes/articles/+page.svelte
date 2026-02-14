@@ -21,14 +21,16 @@
   };
 
   let query = data.q ?? '';
-  let scoreFilter = data.scoreFilter ?? 'all';
+  let selectedScores = data.selectedScores ?? ['5', '4', '3', '2', '1', 'unscored'];
   let readFilter = data.readFilter ?? 'all';
+  let sort = data.sort ?? 'newest';
   let selectedReactions = data.selectedReactions ?? ['up', 'down', 'none'];
   let selectedTagIds = data.selectedTagIds ?? [];
 
   $: query = data.q ?? '';
-  $: scoreFilter = data.scoreFilter ?? 'all';
+  $: selectedScores = data.selectedScores ?? ['5', '4', '3', '2', '1', 'unscored'];
   $: readFilter = data.readFilter ?? 'all';
+  $: sort = data.sort ?? 'newest';
   $: selectedReactions = data.selectedReactions ?? ['up', 'down', 'none'];
   $: selectedTagIds = data.selectedTagIds ?? [];
 
@@ -60,17 +62,52 @@
 
 <form class="filters" method="get">
   <input name="q" placeholder="Search headlines and summaries" bind:value={query} />
-  <select name="score" bind:value={scoreFilter}>
-    <option value="all">All scores</option>
-    <option value="4plus">4–5 (Strong fit)</option>
-    <option value="3plus">3–5 (Okay+)</option>
-    <option value="low">1–2 (Low fit)</option>
-    <option value="unscored">Unscored</option>
-  </select>
+  <fieldset class="score-filter">
+    <legend>Scores</legend>
+    <label>
+      <input type="checkbox" name="score" value="5" bind:group={selectedScores} />
+      <span>5</span>
+    </label>
+    <label>
+      <input type="checkbox" name="score" value="4" bind:group={selectedScores} />
+      <span>4</span>
+    </label>
+    <label>
+      <input type="checkbox" name="score" value="3" bind:group={selectedScores} />
+      <span>3</span>
+    </label>
+    <label>
+      <input type="checkbox" name="score" value="2" bind:group={selectedScores} />
+      <span>2</span>
+    </label>
+    <label>
+      <input type="checkbox" name="score" value="1" bind:group={selectedScores} />
+      <span>1</span>
+    </label>
+    <label>
+      <input type="checkbox" name="score" value="unscored" bind:group={selectedScores} />
+      <span>Unscored</span>
+    </label>
+    <button
+      type="button"
+      class="score-all ghost"
+      on:click={() => (selectedScores = ['5', '4', '3', '2', '1', 'unscored'])}
+    >
+      All
+    </button>
+  </fieldset>
   <select name="read" bind:value={readFilter}>
     <option value="all">All articles</option>
     <option value="unread">Unread only</option>
     <option value="read">Read only</option>
+  </select>
+  <select name="sort" bind:value={sort}>
+    <option value="newest">Newest</option>
+    <option value="oldest">Oldest</option>
+    <option value="score_desc">Score high-low</option>
+    <option value="score_asc">Score low-high</option>
+    <option value="unread_first">Unread first</option>
+    <option value="title_az">Title A-Z</option>
   </select>
   <fieldset class="reaction-filter">
     <legend>Reactions</legend>
@@ -335,6 +372,7 @@
     display: flex;
     gap: 0.8rem;
     align-items: center;
+    flex-wrap: wrap;
     margin-bottom: 1.5rem;
   }
 
@@ -384,22 +422,26 @@
     font-size: 0.9rem;
   }
 
+  .score-filter,
   .reaction-filter {
     border: 1px solid var(--input-border);
     border-radius: 12px;
     padding: 0.45rem 0.6rem;
     display: inline-flex;
     align-items: center;
+    flex-wrap: wrap;
     gap: 0.55rem;
     min-width: 260px;
   }
 
+  .score-filter legend,
   .reaction-filter legend {
     font-size: 0.75rem;
     color: var(--muted-text);
     padding: 0 0.25rem;
   }
 
+  .score-filter label,
   .reaction-filter label {
     display: inline-flex;
     align-items: center;
@@ -408,11 +450,13 @@
     color: var(--muted-text);
   }
 
+  .score-filter input[type='checkbox'],
   .reaction-filter input[type='checkbox'] {
     margin: 0;
     accent-color: var(--primary);
   }
 
+  .score-all,
   .reaction-all {
     margin-left: auto;
     border: 1px solid var(--ghost-border);

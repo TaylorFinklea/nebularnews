@@ -4,8 +4,12 @@ import { listTags, listTagsForArticles, resolveTagsByTokens } from '$lib/server/
 
 const sanitizeQuery = (value: string) => (value.toLowerCase().match(/\w+/g) ?? []).join(' ');
 const placeholders = (count: number) => Array.from({ length: count }, () => '?').join(', ');
+const SCORE_VALUES = ['5', '4', '3', '2', '1', 'unscored'] as const;
+type ScoreValue = (typeof SCORE_VALUES)[number];
 const REACTION_VALUES = ['up', 'down', 'none'] as const;
 type ReactionValue = (typeof REACTION_VALUES)[number];
+const SORT_VALUES = ['newest', 'oldest', 'score_desc', 'score_asc', 'unread_first', 'title_az'] as const;
+type SortValue = (typeof SORT_VALUES)[number];
 const effectiveScoreExpr = `COALESCE(
   (SELECT score FROM article_score_overrides WHERE article_id = a.id LIMIT 1),
   (SELECT score FROM article_scores WHERE article_id = a.id ORDER BY created_at DESC LIMIT 1)
@@ -17,8 +21,34 @@ const effectiveReadExpr = `COALESCE(
 
 export const load = async ({ platform, url }) => {
   const q = url.searchParams.get('q')?.trim() ?? '';
-  const scoreFilter = url.searchParams.get('score') ?? 'all';
+  const selectedScores = (() => {
+    const requested = [
+      ...new Set(
+        url.searchParams
+          .getAll('score')
+          .flatMap((entry) => entry.split(','))
+          .map((entry) => entry.trim().toLowerCase())
+          .filter(Boolean)
+      )
+    ];
+    const expanded = requested.flatMap((value) => {
+      if (value === 'all') return [...SCORE_VALUES];
+      if (value === '4plus') return ['5', '4'] as ScoreValue[];
+      if (value === '3plus') return ['5', '4', '3'] as ScoreValue[];
+      if (value === 'low') return ['2', '1'] as ScoreValue[];
+      if (value === 'unscored') return ['unscored'] as ScoreValue[];
+      return [value];
+    });
+    const valid = [...new Set(expanded)].filter((value): value is ScoreValue =>
+      SCORE_VALUES.includes(value as ScoreValue)
+    );
+    return valid.length > 0 ? valid : [...SCORE_VALUES];
+  })();
   const readFilter = url.searchParams.get('read') ?? 'all';
+  const sort = (() => {
+    const value = (url.searchParams.get('sort') ?? 'newest').trim().toLowerCase();
+    return SORT_VALUES.includes(value as SortValue) ? (value as SortValue) : 'newest';
+  })();
   const selectedReactions = (() => {
     const requested = [
       ...new Set(
@@ -55,14 +85,19 @@ export const load = async ({ platform, url }) => {
     params.push(safeQuery || q);
   }
 
-  if (scoreFilter === 'unscored') {
-    conditions.push(`${effectiveScoreExpr} IS NULL`);
-  } else if (scoreFilter === '4plus') {
-    conditions.push(`${effectiveScoreExpr} >= 4`);
-  } else if (scoreFilter === '3plus') {
-    conditions.push(`${effectiveScoreExpr} >= 3`);
-  } else if (scoreFilter === 'low') {
-    conditions.push(`${effectiveScoreExpr} <= 2`);
+  if (selectedScores.length < SCORE_VALUES.length) {
+    const scoreConditions: string[] = [];
+    const numericScores = selectedScores.filter((value) => value !== 'unscored').map((value) => Number(value));
+    if (numericScores.length > 0) {
+      scoreConditions.push(`${effectiveScoreExpr} IN (${placeholders(numericScores.length)})`);
+      params.push(...numericScores);
+    }
+    if (selectedScores.includes('unscored')) {
+      scoreConditions.push(`${effectiveScoreExpr} IS NULL`);
+    }
+    if (scoreConditions.length > 0) {
+      conditions.push(`(${scoreConditions.join(' OR ')})`);
+    }
   }
 
   if (readFilter === 'unread') {
@@ -94,6 +129,22 @@ export const load = async ({ platform, url }) => {
   }
 
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  const orderBy = (() => {
+    if (sort === 'oldest') return 'COALESCE(a.published_at, a.fetched_at) ASC';
+    if (sort === 'score_desc') {
+      return `CASE WHEN ${effectiveScoreExpr} IS NULL THEN 1 ELSE 0 END ASC, ${effectiveScoreExpr} DESC, a.published_at DESC NULLS LAST, a.fetched_at DESC`;
+    }
+    if (sort === 'score_asc') {
+      return `CASE WHEN ${effectiveScoreExpr} IS NULL THEN 1 ELSE 0 END ASC, ${effectiveScoreExpr} ASC, a.published_at DESC NULLS LAST, a.fetched_at DESC`;
+    }
+    if (sort === 'unread_first') {
+      return `${effectiveReadExpr} ASC, a.published_at DESC NULLS LAST, a.fetched_at DESC`;
+    }
+    if (sort === 'title_az') {
+      return `COALESCE(a.title, '') COLLATE NOCASE ASC, a.published_at DESC NULLS LAST, a.fetched_at DESC`;
+    }
+    return 'a.published_at DESC NULLS LAST, a.fetched_at DESC';
+  })();
 
   const articles = await dbAll(
     platform.env.DB,
@@ -115,7 +166,7 @@ export const load = async ({ platform, url }) => {
     FROM articles a
     ${q ? 'JOIN article_search ON article_search.article_id = a.id' : ''}
     ${where}
-    ORDER BY a.published_at DESC NULLS LAST, a.fetched_at DESC
+    ORDER BY ${orderBy}
     LIMIT 50`,
     params
   );
@@ -142,5 +193,14 @@ export const load = async ({ platform, url }) => {
     };
   });
 
-  return { articles: hydratedArticles, q, scoreFilter, readFilter, selectedReactions, availableTags, selectedTagIds };
+  return {
+    articles: hydratedArticles,
+    q,
+    selectedScores,
+    readFilter,
+    sort,
+    selectedReactions,
+    availableTags,
+    selectedTagIds
+  };
 };

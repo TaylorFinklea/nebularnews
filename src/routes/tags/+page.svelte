@@ -1,5 +1,14 @@
 <script>
   import { invalidateAll } from '$app/navigation';
+  import {
+    IconArrowsTransferUpDown,
+    IconDeviceFloppy,
+    IconEdit,
+    IconFilterX,
+    IconPlus,
+    IconSearch,
+    IconTrash
+  } from '$lib/icons';
   export let data;
 
   let search = data.q ?? '';
@@ -167,9 +176,15 @@
 
 <form class="search-row" method="get">
   <input name="q" placeholder="Search tags by name or slug" bind:value={search} />
-  <button type="submit">Search</button>
+  <button type="submit" class="icon-button" title="Search tags" aria-label="Search tags">
+    <IconSearch size={16} stroke={1.9} />
+    <span class="sr-only">Search tags</span>
+  </button>
   {#if data.q}
-    <a class="clear-link" href="/tags">Clear</a>
+    <a class="clear-link icon-link" href="/tags">
+      <IconFilterX size={14} stroke={1.9} />
+      <span>Clear</span>
+    </a>
   {/if}
 </form>
 
@@ -192,7 +207,10 @@
       Description (optional)
       <textarea rows="3" bind:value={createDescription}></textarea>
     </label>
-    <button on:click|preventDefault={createTag} disabled={busy}>Create tag</button>
+    <button on:click|preventDefault={createTag} disabled={busy} class="inline-button">
+      <IconPlus size={16} stroke={1.9} />
+      <span>Create</span>
+    </button>
   </div>
 
   <div class="card">
@@ -223,7 +241,10 @@
         Description
         <textarea rows="3" bind:value={editDescription}></textarea>
       </label>
-      <button on:click|preventDefault={updateTag} disabled={busy}>Save tag</button>
+      <button on:click|preventDefault={updateTag} disabled={busy} class="inline-button">
+        <IconDeviceFloppy size={16} stroke={1.9} />
+        <span>Save</span>
+      </button>
     {:else}
       <p class="muted">Select a tag first.</p>
     {/if}
@@ -253,7 +274,10 @@
       <input type="checkbox" bind:checked={mergeDeleteSource} />
       <span>Delete source tag after merge</span>
     </label>
-    <button on:click|preventDefault={mergeTags} disabled={busy}>Merge</button>
+    <button on:click|preventDefault={mergeTags} disabled={busy} class="inline-button">
+      <IconArrowsTransferUpDown size={16} stroke={1.9} />
+      <span>Merge</span>
+    </button>
   </div>
 
   <div class="card">
@@ -281,7 +305,10 @@
       <input type="checkbox" bind:checked={reassignKeepFrom} />
       <span>Keep source tag record</span>
     </label>
-    <button on:click|preventDefault={reassignTags} disabled={busy}>Reassign</button>
+    <button on:click|preventDefault={reassignTags} disabled={busy} class="inline-button">
+      <IconArrowsTransferUpDown size={16} stroke={1.9} />
+      <span>Reassign</span>
+    </button>
   </div>
 
   <div class="card span-two">
@@ -318,9 +345,25 @@
                 <td>{tag.description ?? '—'}</td>
                 <td>
                   <div class="actions">
-                    <button class="ghost" on:click|preventDefault={() => pickTag(tag)} disabled={busy}>Edit</button>
-                    <button class="ghost danger" on:click|preventDefault={() => deleteTag(tag.id)} disabled={busy}>
-                      Delete
+                    <button
+                      class="ghost icon-button"
+                      on:click|preventDefault={() => pickTag(tag)}
+                      disabled={busy}
+                      title="Edit tag"
+                      aria-label="Edit tag"
+                    >
+                      <IconEdit size={15} stroke={1.9} />
+                      <span class="sr-only">Edit tag</span>
+                    </button>
+                    <button
+                      class="ghost danger icon-button"
+                      on:click|preventDefault={() => deleteTag(tag.id)}
+                      disabled={busy}
+                      title="Delete tag"
+                      aria-label="Delete tag"
+                    >
+                      <IconTrash size={15} stroke={1.9} />
+                      <span class="sr-only">Delete tag</span>
                     </button>
                   </div>
                 </td>
@@ -426,6 +469,12 @@
     font-size: 0.9rem;
   }
 
+  .icon-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+
   .table-wrap {
     overflow-x: auto;
   }
@@ -464,6 +513,22 @@
     display: flex;
     gap: 0.35rem;
     flex-wrap: wrap;
+  }
+
+  .icon-button {
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .inline-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    width: fit-content;
   }
 
   .muted {

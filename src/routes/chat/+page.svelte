@@ -1,4 +1,5 @@
 <script>
+  import { IconExternalLink, IconSend } from '$lib/icons';
   let threadId = null;
   let message = '';
   let chatLog = [];
@@ -65,7 +66,16 @@
     </div>
     <div class="row">
       <input placeholder="Ask about recent stories" bind:value={message} />
-      <button on:click={sendMessage} disabled={sending}>Send</button>
+      <button
+        class="icon-button"
+        on:click={sendMessage}
+        disabled={sending}
+        title="Send message"
+        aria-label="Send message"
+      >
+        <IconSend size={16} stroke={1.9} />
+        <span class="sr-only">Send message</span>
+      </button>
     </div>
     {#if chatError}
       <p class="muted">{chatError}</p>
@@ -81,7 +91,12 @@
         {#each sources as source}
           <li>
             <strong>{source.title ?? 'Untitled'}</strong>
-            <div class="meta">{source.url ?? ''}</div>
+            {#if source.url}
+              <a class="source-link" href={source.url} target="_blank" rel="noopener noreferrer" title="Open source article">
+                <IconExternalLink size={14} stroke={1.9} />
+                <span class="sr-only">Open source article</span>
+              </a>
+            {/if}
           </li>
         {/each}
       </ul>
@@ -152,6 +167,15 @@
     cursor: pointer;
   }
 
+  .icon-button {
+    width: 2.2rem;
+    height: 2.2rem;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
   ul {
     list-style: none;
     padding: 0;
@@ -163,6 +187,13 @@
   .meta {
     font-size: 0.85rem;
     color: var(--muted-text);
+  }
+
+  .source-link {
+    margin-left: 0.45rem;
+    display: inline-flex;
+    color: var(--primary);
+    vertical-align: middle;
   }
 
   .muted {

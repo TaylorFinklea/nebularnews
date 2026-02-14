@@ -1,6 +1,7 @@
 <script>
   import { invalidate } from '$app/navigation';
   import { onMount } from 'svelte';
+  import { IconDeviceFloppy, IconRefresh, IconRestore, IconTrash } from '$lib/icons';
   export let data;
 
   let laneSummaries = data.settings.featureLanes?.summaries ?? 'pipeline';
@@ -279,7 +280,10 @@
         </div>
       </div>
     </div>
-    <button on:click={saveSettings}>Save AI settings</button>
+    <button on:click={saveSettings} class="inline-button">
+      <IconDeviceFloppy size={16} stroke={1.9} />
+      <span>Save</span>
+    </button>
   </div>
 
   <div class="card">
@@ -301,7 +305,8 @@
     </label>
     <div class="model-tools">
       <button class="ghost" on:click={() => syncModels(ingestProvider)} disabled={isLoadingModels(ingestProvider)}>
-        {isLoadingModels(ingestProvider) ? 'Loading models...' : `Refresh ${ingestProvider} models`}
+        <IconRefresh size={16} stroke={1.9} />
+        <span>{isLoadingModels(ingestProvider) ? 'Loading...' : `Refresh ${ingestProvider}`}</span>
       </button>
       <p class="muted">{modelStatus(ingestProvider)}</p>
     </div>
@@ -336,7 +341,8 @@
     </label>
     <div class="model-tools">
       <button class="ghost" on:click={() => syncModels(chatProvider)} disabled={isLoadingModels(chatProvider)}>
-        {isLoadingModels(chatProvider) ? 'Loading models...' : `Refresh ${chatProvider} models`}
+        <IconRefresh size={16} stroke={1.9} />
+        <span>{isLoadingModels(chatProvider) ? 'Loading...' : `Refresh ${chatProvider}`}</span>
       </button>
       <p class="muted">{modelStatus(chatProvider)}</p>
     </div>
@@ -383,7 +389,10 @@
     <p class="muted">
       Applies on article detail pages. Current delay: {autoReadDelaySeconds}s. 0 means immediate. Range {data.autoReadDelayRange.min}-{data.autoReadDelayRange.max} ms.
     </p>
-    <button on:click={saveSettings}>Save AI settings</button>
+    <button on:click={saveSettings} class="inline-button">
+      <IconDeviceFloppy size={16} stroke={1.9} />
+      <span>Save</span>
+    </button>
   </div>
 
   <div class="card span-two">
@@ -401,8 +410,14 @@
       <textarea rows="12" bind:value={scoreUserPromptTemplate}></textarea>
     </label>
     <div class="row-actions">
-      <button on:click={saveScorePrompt}>Save AI fit prompt</button>
-      <button class="ghost" on:click={resetScorePromptDefaults}>Reset defaults</button>
+      <button on:click={saveScorePrompt} class="inline-button">
+        <IconDeviceFloppy size={16} stroke={1.9} />
+        <span>Save prompt</span>
+      </button>
+      <button class="ghost inline-button" on:click={resetScorePromptDefaults}>
+        <IconRestore size={16} stroke={1.9} />
+        <span>Reset</span>
+      </button>
     </div>
   </div>
 
@@ -413,10 +428,16 @@
         <strong>OpenAI</strong>
         <p class="muted">{data.keyMap.openai ? 'Key stored' : 'No key yet'}</p>
       </div>
-      <button class="ghost" on:click={() => removeKey('openai')}>Remove</button>
+      <button class="ghost icon-button" on:click={() => removeKey('openai')} title="Remove OpenAI key" aria-label="Remove OpenAI key">
+        <IconTrash size={16} stroke={1.9} />
+        <span class="sr-only">Remove OpenAI key</span>
+      </button>
     </div>
     <input type="password" placeholder="Paste OpenAI key" bind:value={openaiKey} />
-    <button on:click={() => saveKey('openai')}>Save OpenAI key</button>
+    <button on:click={() => saveKey('openai')} class="inline-button">
+      <IconDeviceFloppy size={16} stroke={1.9} />
+      <span>Save OpenAI key</span>
+    </button>
 
     <div class="divider"></div>
 
@@ -425,17 +446,26 @@
         <strong>Anthropic</strong>
         <p class="muted">{data.keyMap.anthropic ? 'Key stored' : 'No key yet'}</p>
       </div>
-      <button class="ghost" on:click={() => removeKey('anthropic')}>Remove</button>
+      <button class="ghost icon-button" on:click={() => removeKey('anthropic')} title="Remove Anthropic key" aria-label="Remove Anthropic key">
+        <IconTrash size={16} stroke={1.9} />
+        <span class="sr-only">Remove Anthropic key</span>
+      </button>
     </div>
     <input type="password" placeholder="Paste Anthropic key" bind:value={anthropicKey} />
-    <button on:click={() => saveKey('anthropic')}>Save Anthropic key</button>
+    <button on:click={() => saveKey('anthropic')} class="inline-button">
+      <IconDeviceFloppy size={16} stroke={1.9} />
+      <span>Save Anthropic key</span>
+    </button>
   </div>
 
   <div class="card">
     <h2>AI Preference Profile</h2>
     <p class="muted">Version {data.profile.version} · Updated {new Date(data.profile.updated_at).toLocaleString()}</p>
     <textarea rows="8" bind:value={profileText}></textarea>
-    <button on:click={saveProfile}>Save profile</button>
+    <button on:click={saveProfile} class="inline-button">
+      <IconDeviceFloppy size={16} stroke={1.9} />
+      <span>Save profile</span>
+    </button>
   </div>
 </div>
 
@@ -542,6 +572,21 @@
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem;
+  }
+
+  .inline-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
+  .icon-button {
+    width: 2.1rem;
+    height: 2.1rem;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .lane-toggle {

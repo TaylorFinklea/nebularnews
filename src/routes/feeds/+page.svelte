@@ -1,5 +1,6 @@
 <script>
   import { invalidate } from '$app/navigation';
+  import { IconDownload, IconPlus, IconTrash, IconUpload } from '$lib/icons';
   export let data;
 
   let newUrl = '';
@@ -38,7 +39,10 @@
     <h1>Feeds</h1>
     <p>Curate the signals that power your Nebular News.</p>
   </div>
-  <a class="button" href="/api/feeds/export">Export OPML</a>
+  <a class="icon-button button" href="/api/feeds/export" title="Export OPML" aria-label="Export OPML">
+    <IconDownload size={16} stroke={1.9} />
+    <span class="sr-only">Export OPML</span>
+  </a>
 </section>
 
 <div class="grid">
@@ -46,11 +50,17 @@
     <h2>Add a feed</h2>
     <div class="row">
       <input placeholder="https://example.com/rss" bind:value={newUrl} />
-      <button on:click={addFeed}>Add</button>
+      <button class="icon-button" on:click={addFeed} title="Add feed" aria-label="Add feed">
+        <IconPlus size={16} stroke={1.9} />
+        <span class="sr-only">Add feed</span>
+      </button>
     </div>
     <h3>Import OPML</h3>
     <textarea rows="6" placeholder="Paste OPML here" bind:value={opmlText}></textarea>
-    <button on:click={importOpml}>Import feeds</button>
+    <button on:click={importOpml} class="inline-button">
+      <IconUpload size={16} stroke={1.9} />
+      <span>Import</span>
+    </button>
   </div>
 
   <div class="card">
@@ -73,7 +83,10 @@
                 {/if}
               </div>
             </div>
-            <button class="ghost" on:click={() => removeFeed(feed.id)}>Remove</button>
+            <button class="ghost icon-button" on:click={() => removeFeed(feed.id)} title="Remove feed" aria-label="Remove feed">
+              <IconTrash size={16} stroke={1.9} />
+              <span class="sr-only">Remove feed</span>
+            </button>
           </li>
         {/each}
       </ul>
@@ -92,9 +105,6 @@
   .button {
     background: var(--button-bg);
     color: var(--button-text);
-    padding: 0.6rem 1rem;
-    border-radius: 999px;
-    font-weight: 600;
   }
 
   .grid {
@@ -137,6 +147,23 @@
     background: transparent;
     color: var(--ghost-color);
     border: 1px solid var(--ghost-border);
+  }
+
+  .icon-button {
+    width: 2.2rem;
+    height: 2.2rem;
+    padding: 0;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .inline-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    width: fit-content;
   }
 
   ul {

@@ -1,5 +1,6 @@
 <script>
   import { invalidateAll } from '$app/navigation';
+  import { IconClockPlay, IconExternalLink } from '$lib/icons';
 
   export let data;
 
@@ -52,8 +53,15 @@
     <h1>Your Nebula at a glance</h1>
     <p>Track the pulse of your feeds, summaries, and personalization queue.</p>
     <div class="dev-tools">
-      <button on:click={runManualPull} disabled={isPulling}>
-        {isPulling ? 'Pulling...' : 'Pull now'}
+      <button
+        class="icon-button"
+        on:click={runManualPull}
+        disabled={isPulling}
+        title={isPulling ? 'Pulling now' : 'Pull now'}
+        aria-label={isPulling ? 'Pulling now' : 'Pull now'}
+      >
+        <IconClockPlay size={16} stroke={1.9} />
+        <span class="sr-only">{isPulling ? 'Pulling now' : 'Pull now'}</span>
       </button>
       {#if pullMessage}
         <p class="pull-message">{pullMessage}</p>
@@ -79,7 +87,10 @@
 <section class="pipeline">
   <div class="section-head">
     <h3>Today’s Pipeline Coverage</h3>
-    <a href="/jobs">Manage queue in Jobs</a>
+    <a href="/jobs" class="inline-action">
+      <IconExternalLink size={14} stroke={1.9} />
+      <span>Jobs</span>
+    </a>
   </div>
   <div class="pipeline-stats">
     <div class="stat">
@@ -112,7 +123,10 @@
 <section class="top-rated">
   <div class="section-head">
     <h3>Top Rated Today (3+/5)</h3>
-    <a href="/articles?score=3plus">Open full list</a>
+    <a href="/articles?score=3plus" class="inline-action">
+      <IconExternalLink size={14} stroke={1.9} />
+      <span>Full list</span>
+    </a>
   </div>
   {#if data.topRatedArticles.length === 0}
     <p class="muted">No top-rated items yet today. Run a pull or wait for scoring jobs to finish.</p>
@@ -220,6 +234,12 @@
     font-size: 0.9rem;
   }
 
+  .inline-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+
   .top-list {
     margin-top: 0.9rem;
     display: grid;
@@ -272,17 +292,21 @@
     gap: 0.5rem;
   }
 
-  .dev-tools button {
-    width: fit-content;
+  .dev-tools .icon-button {
+    width: 2.2rem;
+    height: 2.2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     border: none;
     border-radius: 999px;
-    padding: 0.55rem 0.95rem;
+    padding: 0;
     background: var(--button-bg);
     color: var(--button-text);
     cursor: pointer;
   }
 
-  .dev-tools button:disabled {
+  .dev-tools .icon-button:disabled {
     opacity: 0.6;
     cursor: default;
   }

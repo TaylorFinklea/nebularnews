@@ -4,6 +4,8 @@ import { listTags, listTagsForArticles, resolveTagsByTokens } from '$lib/server/
 
 const sanitizeQuery = (value: string) => (value.toLowerCase().match(/\w+/g) ?? []).join(' ');
 const placeholders = (count: number) => Array.from({ length: count }, () => '?').join(', ');
+const REACTION_VALUES = ['up', 'down', 'none'] as const;
+type ReactionValue = (typeof REACTION_VALUES)[number];
 const effectiveScoreExpr = `COALESCE(
   (SELECT score FROM article_score_overrides WHERE article_id = a.id LIMIT 1),
   (SELECT score FROM article_scores WHERE article_id = a.id ORDER BY created_at DESC LIMIT 1)
@@ -17,6 +19,21 @@ export const load = async ({ platform, url }) => {
   const q = url.searchParams.get('q')?.trim() ?? '';
   const scoreFilter = url.searchParams.get('score') ?? 'all';
   const readFilter = url.searchParams.get('read') ?? 'all';
+  const selectedReactions = (() => {
+    const requested = [
+      ...new Set(
+        url.searchParams
+          .getAll('reaction')
+          .flatMap((entry) => entry.split(','))
+          .map((entry) => entry.trim().toLowerCase())
+          .filter(Boolean)
+      )
+    ];
+    const valid = requested.filter((value): value is ReactionValue =>
+      REACTION_VALUES.includes(value as ReactionValue)
+    );
+    return valid.length > 0 ? valid : [...REACTION_VALUES];
+  })();
   const requestedTagTokens = [
     ...new Set(
       url.searchParams
@@ -52,6 +69,17 @@ export const load = async ({ platform, url }) => {
     conditions.push(`${effectiveReadExpr} = 0`);
   } else if (readFilter === 'read') {
     conditions.push(`${effectiveReadExpr} = 1`);
+  }
+
+  const reactionExpr = '(SELECT value FROM article_reactions WHERE article_id = a.id LIMIT 1)';
+  if (selectedReactions.length < REACTION_VALUES.length) {
+    const reactionConditions: string[] = [];
+    if (selectedReactions.includes('up')) reactionConditions.push(`${reactionExpr} = 1`);
+    if (selectedReactions.includes('down')) reactionConditions.push(`${reactionExpr} = -1`);
+    if (selectedReactions.includes('none')) reactionConditions.push(`${reactionExpr} IS NULL`);
+    if (reactionConditions.length > 0) {
+      conditions.push(`(${reactionConditions.join(' OR ')})`);
+    }
   }
 
   if (selectedTagIds.length > 0) {
@@ -114,5 +142,5 @@ export const load = async ({ platform, url }) => {
     };
   });
 
-  return { articles: hydratedArticles, q, scoreFilter, readFilter, availableTags, selectedTagIds };
+  return { articles: hydratedArticles, q, scoreFilter, readFilter, selectedReactions, availableTags, selectedTagIds };
 };

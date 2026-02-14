@@ -1,6 +1,14 @@
 <script>
   import { invalidateAll } from '$app/navigation';
-  import { IconThumbDown, IconThumbUp } from '$lib/icons';
+  import {
+    IconEye,
+    IconEyeOff,
+    IconExternalLink,
+    IconFilterX,
+    IconSearch,
+    IconThumbDown,
+    IconThumbUp
+  } from '$lib/icons';
   export let data;
 
   const scoreLabel = (score) => {
@@ -15,11 +23,13 @@
   let query = data.q ?? '';
   let scoreFilter = data.scoreFilter ?? 'all';
   let readFilter = data.readFilter ?? 'all';
+  let selectedReactions = data.selectedReactions ?? ['up', 'down', 'none'];
   let selectedTagIds = data.selectedTagIds ?? [];
 
   $: query = data.q ?? '';
   $: scoreFilter = data.scoreFilter ?? 'all';
   $: readFilter = data.readFilter ?? 'all';
+  $: selectedReactions = data.selectedReactions ?? ['up', 'down', 'none'];
   $: selectedTagIds = data.selectedTagIds ?? [];
 
   const reactToArticle = async (articleId, value, feedId) => {
@@ -62,14 +72,42 @@
     <option value="unread">Unread only</option>
     <option value="read">Read only</option>
   </select>
+  <fieldset class="reaction-filter">
+    <legend>Reactions</legend>
+    <label>
+      <input type="checkbox" name="reaction" value="up" bind:group={selectedReactions} />
+      <span>Up</span>
+    </label>
+    <label>
+      <input type="checkbox" name="reaction" value="none" bind:group={selectedReactions} />
+      <span>None</span>
+    </label>
+    <label>
+      <input type="checkbox" name="reaction" value="down" bind:group={selectedReactions} />
+      <span>Down</span>
+    </label>
+    <button
+      type="button"
+      class="reaction-all ghost"
+      on:click={() => (selectedReactions = ['up', 'none', 'down'])}
+    >
+      All
+    </button>
+  </fieldset>
   <select name="tags" multiple bind:value={selectedTagIds} size="4">
     {#each data.availableTags ?? [] as tag}
       <option value={tag.id}>{tag.name} ({tag.article_count})</option>
     {/each}
   </select>
-  <button type="submit">Filter</button>
+  <button type="submit" class="icon-button" title="Apply filters" aria-label="Apply filters">
+    <IconSearch size={16} stroke={1.9} />
+    <span class="sr-only">Apply filters</span>
+  </button>
   {#if selectedTagIds.length > 0}
-    <a class="clear-link" href="/articles">Clear tags</a>
+    <a class="clear-link icon-link" href="/articles" title="Clear tag filters">
+      <IconFilterX size={14} stroke={1.9} />
+      <span>Clear</span>
+    </a>
   {/if}
 </form>
 
@@ -111,31 +149,48 @@
         <div class="reactions">
           <button
             type="button"
+            class="icon-button"
             class:active={article.reaction_value === 1}
             on:click={() => reactToArticle(article.id, 1, article.source_feed_id)}
+            title="Thumbs up feed"
+            aria-label="Thumbs up feed"
           >
             <IconThumbUp size={16} stroke={1.9} />
-            <span>Thumbs up</span>
+            <span class="sr-only">Thumbs up feed</span>
           </button>
           <button
             type="button"
+            class="icon-button"
             class:active={article.reaction_value === -1}
             on:click={() => reactToArticle(article.id, -1, article.source_feed_id)}
+            title="Thumbs down feed"
+            aria-label="Thumbs down feed"
           >
             <IconThumbDown size={16} stroke={1.9} />
-            <span>Thumbs down</span>
+            <span class="sr-only">Thumbs down feed</span>
           </button>
         </div>
         <div class="read-actions">
           <button
             type="button"
-            class="ghost"
+            class="ghost icon-button"
             on:click={() => setReadState(article.id, article.is_read ? false : true)}
+            title={article.is_read ? 'Mark unread' : 'Mark read'}
+            aria-label={article.is_read ? 'Mark unread' : 'Mark read'}
           >
-            {article.is_read ? 'Mark unread' : 'Mark read'}
+            {#if article.is_read}
+              <IconEyeOff size={16} stroke={1.9} />
+              <span class="sr-only">Mark unread</span>
+            {:else}
+              <IconEye size={16} stroke={1.9} />
+              <span class="sr-only">Mark read</span>
+            {/if}
           </button>
         </div>
-        <a class="button" href={`/articles/${article.id}`}>Open</a>
+        <a class="button icon-link" href={`/articles/${article.id}`} title="Open article">
+          <IconExternalLink size={15} stroke={1.9} />
+          <span>Open</span>
+        </a>
       </article>
     {/each}
   {/if}
@@ -207,7 +262,9 @@
 
   .button {
     margin-top: 1rem;
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
     background: var(--button-bg);
     color: var(--button-text);
     padding: 0.5rem 1rem;
@@ -224,12 +281,14 @@
     border: 1px solid var(--input-border);
     background: var(--surface-soft);
     border-radius: 999px;
-    padding: 0.35rem 0.65rem;
+    padding: 0;
     cursor: pointer;
     display: inline-flex;
     align-items: center;
-    gap: 0.35rem;
+    justify-content: center;
     color: var(--text-color);
+    width: 2.1rem;
+    height: 2.1rem;
   }
 
   .reactions button.active {
@@ -247,8 +306,13 @@
     background: transparent;
     color: var(--ghost-color);
     border-radius: 999px;
-    padding: 0.35rem 0.75rem;
+    padding: 0;
     cursor: pointer;
+    width: 2.1rem;
+    height: 2.1rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .tag-row {
@@ -274,7 +338,7 @@
     margin-bottom: 1.5rem;
   }
 
-  input,
+  input:not([type='checkbox']),
   select {
     padding: 0.6rem 0.8rem;
     border-radius: 12px;
@@ -300,9 +364,65 @@
     cursor: pointer;
   }
 
+  .icon-button {
+    width: 2.2rem;
+    height: 2.2rem;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .icon-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+
   .clear-link {
     color: var(--muted-text);
     font-size: 0.9rem;
+  }
+
+  .reaction-filter {
+    border: 1px solid var(--input-border);
+    border-radius: 12px;
+    padding: 0.45rem 0.6rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    min-width: 260px;
+  }
+
+  .reaction-filter legend {
+    font-size: 0.75rem;
+    color: var(--muted-text);
+    padding: 0 0.25rem;
+  }
+
+  .reaction-filter label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.82rem;
+    color: var(--muted-text);
+  }
+
+  .reaction-filter input[type='checkbox'] {
+    margin: 0;
+    accent-color: var(--primary);
+  }
+
+  .reaction-all {
+    margin-left: auto;
+    border: 1px solid var(--ghost-border);
+    background: transparent;
+    color: var(--ghost-color);
+    cursor: pointer;
+    border-radius: 999px;
+    padding: 0.18rem 0.55rem;
+    font-size: 0.78rem;
+    line-height: 1.2;
   }
 
   .muted {

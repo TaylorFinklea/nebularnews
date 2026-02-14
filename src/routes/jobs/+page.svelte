@@ -1,5 +1,13 @@
 <script>
   import { invalidateAll } from '$app/navigation';
+  import {
+    IconBan,
+    IconClockPlay,
+    IconPlayerPlay,
+    IconPlaylistAdd,
+    IconRepeat,
+    IconTrash
+  } from '$lib/icons';
 
   export let data;
 
@@ -106,35 +114,55 @@
 </div>
 
 <div class="controls">
-  <button disabled={isBusy('run_queue')} on:click={() => runAction('run_queue', { label: 'Run queue', cycles: 2 })}>
-    Run queue now
+  <button
+    class="icon-button"
+    disabled={isBusy('run_queue')}
+    on:click={() => runAction('run_queue', { label: 'Run queue', cycles: 2 })}
+    title="Run queue now"
+    aria-label="Run queue now"
+  >
+    <IconPlayerPlay size={16} stroke={1.9} />
+    <span class="sr-only">Run queue now</span>
   </button>
   <button
+    class="icon-button"
     disabled={isBusy('queue_today_missing')}
     on:click={() => runAction('queue_today_missing', { label: 'Queue today missing' })}
+    title="Queue missing today jobs"
+    aria-label="Queue missing today jobs"
   >
-    Queue missing today jobs
+    <IconPlaylistAdd size={16} stroke={1.9} />
+    <span class="sr-only">Queue missing today jobs</span>
   </button>
   <button
-    class="ghost"
+    class="ghost icon-button"
     disabled={isBusy('retry_failed')}
     on:click={() => runAction('retry_failed', { label: 'Retry failed' })}
+    title="Retry failed jobs"
+    aria-label="Retry failed jobs"
   >
-    Retry failed
+    <IconRepeat size={16} stroke={1.9} />
+    <span class="sr-only">Retry failed jobs</span>
   </button>
   <button
-    class="ghost"
+    class="ghost icon-button"
     disabled={isBusy('cancel_pending_all')}
     on:click={() => runAction('cancel_pending_all', { label: 'Cancel pending' })}
+    title="Cancel pending jobs"
+    aria-label="Cancel pending jobs"
   >
-    Cancel pending
+    <IconBan size={16} stroke={1.9} />
+    <span class="sr-only">Cancel pending jobs</span>
   </button>
   <button
-    class="ghost"
+    class="ghost icon-button"
     disabled={isBusy('clear_finished')}
     on:click={() => runAction('clear_finished', { label: 'Clear finished' })}
+    title="Clear finished jobs"
+    aria-label="Clear finished jobs"
   >
-    Clear finished
+    <IconTrash size={16} stroke={1.9} />
+    <span class="sr-only">Clear finished jobs</span>
   </button>
 </div>
 
@@ -197,29 +225,38 @@
               <div class="actions">
                 {#if job.status !== 'running'}
                   <button
-                    class="ghost"
+                    class="ghost icon-button"
                     disabled={isBusy('run_now', job.id)}
                     on:click={() => runAction('run_now', { jobId: job.id, label: 'Run now' })}
+                    title="Run job now"
+                    aria-label="Run job now"
                   >
-                    Run now
+                    <IconClockPlay size={15} stroke={1.9} />
+                    <span class="sr-only">Run job now</span>
                   </button>
                 {/if}
                 {#if job.status === 'pending'}
                   <button
-                    class="ghost"
+                    class="ghost icon-button"
                     disabled={isBusy('cancel', job.id)}
                     on:click={() => runAction('cancel', { jobId: job.id, label: 'Cancel' })}
+                    title="Cancel job"
+                    aria-label="Cancel job"
                   >
-                    Cancel
+                    <IconBan size={15} stroke={1.9} />
+                    <span class="sr-only">Cancel job</span>
                   </button>
                 {/if}
                 {#if job.status !== 'running'}
                   <button
-                    class="ghost"
+                    class="ghost icon-button"
                     disabled={isBusy('delete', job.id)}
                     on:click={() => runAction('delete', { jobId: job.id, label: 'Delete' })}
+                    title="Delete job"
+                    aria-label="Delete job"
                   >
-                    Delete
+                    <IconTrash size={15} stroke={1.9} />
+                    <span class="sr-only">Delete job</span>
                   </button>
                 {/if}
               </div>
@@ -281,6 +318,15 @@
     background: var(--button-bg);
     color: var(--button-text);
     cursor: pointer;
+  }
+
+  .icon-button {
+    width: 2.2rem;
+    height: 2.2rem;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .controls .ghost,
@@ -366,9 +412,14 @@
   }
 
   .actions button {
-    padding: 0.35rem 0.65rem;
+    padding: 0;
     border-radius: 999px;
     cursor: pointer;
+    width: 1.95rem;
+    height: 1.95rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .status {

@@ -1,7 +1,22 @@
 <script>
   import { invalidateAll } from '$app/navigation';
   import { onMount } from 'svelte';
-  import { IconThumbDown, IconThumbUp } from '$lib/icons';
+  import {
+    IconCheck,
+    IconEye,
+    IconEyeOff,
+    IconExternalLink,
+    IconFileText,
+    IconListDetails,
+    IconPlus,
+    IconSend,
+    IconSparkles,
+    IconStars,
+    IconTag,
+    IconThumbDown,
+    IconThumbUp,
+    IconX
+  } from '$lib/icons';
   export let data;
 
   let rating = 3;
@@ -179,7 +194,19 @@
           · rep {data.preferredSource.reputation.toFixed(2)} ({data.preferredSource.feedbackCount} votes)
         {/if}
       </p>
-      <p class="meta">Author: {data.article.author ?? 'Unknown author'} · {data.article.canonical_url}</p>
+      <p class="meta">Author: {data.article.author ?? 'Unknown author'}</p>
+      {#if data.article.canonical_url}
+        <a
+          class="source-link-button icon-link"
+          href={data.article.canonical_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Open original article"
+        >
+          <IconExternalLink size={15} stroke={1.9} />
+          <span>Open article</span>
+        </a>
+      {/if}
     </div>
   </section>
 
@@ -190,8 +217,20 @@
         <span class={`status-pill ${data.article.is_read ? 'ok' : 'warn'}`}>
           {data.article.is_read ? 'Read' : 'Unread'}
         </span>
-        <button class="ghost" on:click={() => setReadState(!data.article.is_read)} disabled={readStateBusy}>
-          {data.article.is_read ? 'Mark unread' : 'Mark read'}
+        <button
+          class="ghost icon-button"
+          on:click={() => setReadState(!data.article.is_read)}
+          disabled={readStateBusy}
+          title={data.article.is_read ? 'Mark unread' : 'Mark read'}
+          aria-label={data.article.is_read ? 'Mark unread' : 'Mark read'}
+        >
+          {#if data.article.is_read}
+            <IconEyeOff size={16} stroke={1.9} />
+            <span class="sr-only">Mark unread</span>
+          {:else}
+            <IconEye size={16} stroke={1.9} />
+            <span class="sr-only">Mark read</span>
+          {/if}
         </button>
       </div>
     </div>
@@ -201,12 +240,19 @@
       {#if data.tags?.length}
         <div class="tag-row">
           {#each data.tags as tag}
-            <button class="tag-pill removable" on:click={() => removeTag(tag.id)} disabled={tagBusy}>
+            <button
+              class="tag-pill removable"
+              on:click={() => removeTag(tag.id)}
+              disabled={tagBusy}
+              title={`Remove tag ${tag.name}`}
+              aria-label={`Remove tag ${tag.name}`}
+            >
               <span>{tag.name}</span>
               {#if tag.source === 'ai'}
                 <span class="tag-source">AI</span>
               {/if}
-              <span class="x">x</span>
+              <IconX size={12} stroke={2} />
+              <span class="sr-only">Remove {tag.name}</span>
             </button>
           {/each}
         </div>
@@ -220,10 +266,14 @@
           bind:value={tagInput}
           disabled={tagBusy}
         />
-        <button class="ghost" on:click={addTags} disabled={tagBusy}>Add tags</button>
+        <button class="ghost icon-button" on:click={addTags} disabled={tagBusy} title="Add tags" aria-label="Add tags">
+          <IconPlus size={16} stroke={1.9} />
+          <span class="sr-only">Add tags</span>
+        </button>
       </div>
-      <button class="ghost" on:click={() => rerunJobs(['auto_tag'])} disabled={rerunBusy}>
-        Generate AI tags (uses Auto Tagging setting)
+      <button class="ghost inline-button" on:click={() => rerunJobs(['auto_tag'])} disabled={rerunBusy}>
+        <IconTag size={16} stroke={1.9} />
+        <span>AI tags</span>
       </button>
       <p class="muted">Tip: type a new tag name to create it.</p>
       {#if tagError}
@@ -237,8 +287,9 @@
       {#if data.summary?.provider && data.summary?.model}
         <p class="muted">Latest summary model: {data.summary.provider}/{data.summary.model}</p>
       {/if}
-      <button class="ghost" on:click={() => rerunJobs(['summarize'])} disabled={rerunBusy}>
-        Re-run summary (uses Summaries setting)
+      <button class="ghost inline-button" on:click={() => rerunJobs(['summarize'])} disabled={rerunBusy}>
+        <IconFileText size={16} stroke={1.9} />
+        <span>Rebuild summary</span>
       </button>
     </div>
 
@@ -256,8 +307,9 @@
       {#if data.keyPoints?.provider && data.keyPoints?.model}
         <p class="muted">Latest key points model: {data.keyPoints.provider}/{data.keyPoints.model}</p>
       {/if}
-      <button class="ghost" on:click={() => rerunJobs(['key_points'])} disabled={rerunBusy}>
-        Generate key points (uses Key Points setting)
+      <button class="ghost inline-button" on:click={() => rerunJobs(['key_points'])} disabled={rerunBusy}>
+        <IconListDetails size={16} stroke={1.9} />
+        <span>Key points</span>
       </button>
     </div>
 
@@ -276,8 +328,9 @@
       {:else}
         <p>Score pending.</p>
       {/if}
-      <button class="ghost" on:click={() => rerunJobs(['score'])} disabled={rerunBusy}>
-        Re-run score
+      <button class="ghost inline-button" on:click={() => rerunJobs(['score'])} disabled={rerunBusy}>
+        <IconStars size={16} stroke={1.9} />
+        <span>Re-score</span>
       </button>
     </div>
 
@@ -287,13 +340,23 @@
         Use thumbs to tune source reputation. This does not edit the AI relevance score.
       </p>
       <div class="reaction-row">
-        <button class:active={data.reaction?.value === 1} on:click={() => setReaction(1)}>
+        <button
+          class:active={data.reaction?.value === 1}
+          on:click={() => setReaction(1)}
+          title="Thumbs up feed"
+          aria-label="Thumbs up feed"
+        >
           <IconThumbUp size={16} stroke={1.9} />
-          <span>Thumbs up</span>
+          <span class="sr-only">Thumbs up feed</span>
         </button>
-        <button class:active={data.reaction?.value === -1} on:click={() => setReaction(-1)}>
+        <button
+          class:active={data.reaction?.value === -1}
+          on:click={() => setReaction(-1)}
+          title="Thumbs down feed"
+          aria-label="Thumbs down feed"
+        >
           <IconThumbDown size={16} stroke={1.9} />
-          <span>Thumbs down</span>
+          <span class="sr-only">Thumbs down feed</span>
         </button>
       </div>
     </div>
@@ -305,7 +368,10 @@
         <input type="number" min="1" max="5" bind:value={rating} />
       </label>
       <textarea rows="4" placeholder="What did the AI miss?" bind:value={comment}></textarea>
-      <button on:click={submitFeedback}>Submit feedback</button>
+      <button on:click={submitFeedback} class="inline-button">
+        <IconCheck size={16} stroke={1.9} />
+        <span>Save feedback</span>
+      </button>
     </div>
 
     <div class="card">
@@ -359,7 +425,16 @@
           bind:value={message}
           disabled={!data.chatReadiness?.canChat}
         />
-        <button on:click={sendMessage} disabled={sending || !data.chatReadiness?.canChat}>Send</button>
+        <button
+          on:click={sendMessage}
+          disabled={sending || !data.chatReadiness?.canChat}
+          class="icon-button"
+          title="Send message"
+          aria-label="Send message"
+        >
+          <IconSend size={16} stroke={1.9} />
+          <span class="sr-only">Send message</span>
+        </button>
       </div>
       {#if chatError}
         <p class="muted">{chatError}</p>
@@ -395,6 +470,19 @@
 
   .meta {
     color: var(--muted-text);
+  }
+
+  .source-link-button {
+    margin-top: 0.7rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    background: var(--button-bg);
+    color: var(--button-text);
+    border-radius: 999px;
+    padding: 0.48rem 0.95rem;
+    font-size: 0.88rem;
+    font-weight: 600;
   }
 
   .score {
@@ -448,7 +536,10 @@
     border: 1px solid var(--input-border);
     display: inline-flex;
     align-items: center;
-    gap: 0.35rem;
+    justify-content: center;
+    width: 2.1rem;
+    height: 2.1rem;
+    padding: 0;
   }
 
   .reaction-row button.active {
@@ -480,8 +571,25 @@
     cursor: pointer;
   }
 
-  .tag-pill .x {
-    color: var(--muted-text);
+  .inline-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    width: fit-content;
+  }
+
+  .icon-button {
+    width: 2.15rem;
+    height: 2.15rem;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .icon-link {
+    display: inline-flex;
+    align-items: center;
   }
 
   .tag-source {

@@ -3,7 +3,14 @@ import { invalidateAll } from '$app/navigation';
 import { page } from '$app/stores';
 import { onMount } from 'svelte';
 import { get } from 'svelte/store';
-import { IconMoonStars, IconSun } from '$lib/icons';
+import {
+  IconArticle,
+  IconLayoutDashboard,
+  IconMessage2,
+  IconMoonStars,
+  IconSettings,
+  IconSun
+} from '$lib/icons';
 
   const THEME_KEY = 'nebular-theme';
   const DASHBOARD_REFRESH_INTERVAL_MS = 2000;
@@ -130,11 +137,23 @@ import { IconMoonStars, IconSun } from '$lib/icons';
     </div>
     <div class="top-actions">
       <nav class="nav-links">
-        <a href="/">Dashboard</a>
-        <a href="/articles">Articles</a>
-        <a href="/chat">Chat</a>
+        <a href="/" class="nav-link">
+          <IconLayoutDashboard size={16} stroke={1.9} />
+          <span>Dashboard</span>
+        </a>
+        <a href="/articles" class="nav-link">
+          <IconArticle size={16} stroke={1.9} />
+          <span>Articles</span>
+        </a>
+        <a href="/chat" class="nav-link">
+          <IconMessage2 size={16} stroke={1.9} />
+          <span>Chat</span>
+        </a>
         <details class="settings-menu" bind:this={settingsMenu}>
-          <summary>Settings</summary>
+          <summary>
+            <IconSettings size={16} stroke={1.9} />
+            <span>Settings</span>
+          </summary>
           <div class="submenu">
             <a href="/settings" on:click={closeSettingsMenu}>General</a>
             <a href="/tags" on:click={closeSettingsMenu}>Tags</a>
@@ -250,6 +269,18 @@ import { IconMoonStars, IconSun } from '$lib/icons';
     color: var(--muted-text);
   }
 
+  :global(.sr-only) {
+    position: absolute !important;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
   .app-shell {
     min-height: 100vh;
     display: flex;
@@ -299,6 +330,12 @@ import { IconMoonStars, IconSun } from '$lib/icons';
     transition: background 0.2s ease;
   }
 
+  .nav-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+  }
+
   .nav-links a:hover {
     background: var(--primary-soft);
   }
@@ -313,6 +350,9 @@ import { IconMoonStars, IconSun } from '$lib/icons';
     padding: 0.3rem 0.6rem;
     border-radius: 999px;
     user-select: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
   }
 
   .settings-menu summary::-webkit-details-marker {

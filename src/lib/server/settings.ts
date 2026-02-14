@@ -31,6 +31,12 @@ const DEFAULT_AI_MODEL_LANE: AiModelLane = 'pipeline';
 const DEFAULT_AUTO_READ_DELAY_MS = 4000;
 const MIN_AUTO_READ_DELAY_MS = 0;
 const MAX_AUTO_READ_DELAY_MS = 30000;
+const DEFAULT_DASHBOARD_TOP_RATED_CUTOFF = 3;
+const MIN_DASHBOARD_TOP_RATED_CUTOFF = 1;
+const MAX_DASHBOARD_TOP_RATED_CUTOFF = 5;
+const DEFAULT_DASHBOARD_TOP_RATED_LIMIT = 5;
+const MIN_DASHBOARD_TOP_RATED_LIMIT = 1;
+const MAX_DASHBOARD_TOP_RATED_LIMIT = 20;
 const FEATURE_LANE_DEFAULTS: Record<AiFeature, AiModelLane> = {
   summaries: 'pipeline',
   scoring: 'pipeline',
@@ -52,6 +58,14 @@ const FEATURE_LANE_KEYS: Record<AiFeature, string> = {
 
 export { DEFAULT_SCORE_SYSTEM_PROMPT, DEFAULT_SCORE_USER_PROMPT_TEMPLATE };
 export { DEFAULT_AUTO_READ_DELAY_MS, MIN_AUTO_READ_DELAY_MS, MAX_AUTO_READ_DELAY_MS };
+export {
+  DEFAULT_DASHBOARD_TOP_RATED_CUTOFF,
+  MIN_DASHBOARD_TOP_RATED_CUTOFF,
+  MAX_DASHBOARD_TOP_RATED_CUTOFF,
+  DEFAULT_DASHBOARD_TOP_RATED_LIMIT,
+  MIN_DASHBOARD_TOP_RATED_LIMIT,
+  MAX_DASHBOARD_TOP_RATED_LIMIT
+};
 
 const toReasoningEffort = (value: string | null): ReasoningEffort => {
   if (value === 'minimal' || value === 'low' || value === 'medium' || value === 'high') {
@@ -90,6 +104,21 @@ export const clampAutoReadDelayMs = (value: unknown) => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return DEFAULT_AUTO_READ_DELAY_MS;
   return Math.min(MAX_AUTO_READ_DELAY_MS, Math.max(MIN_AUTO_READ_DELAY_MS, Math.round(parsed)));
+};
+
+export const clampDashboardTopRatedCutoff = (value: unknown) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return DEFAULT_DASHBOARD_TOP_RATED_CUTOFF;
+  return Math.min(
+    MAX_DASHBOARD_TOP_RATED_CUTOFF,
+    Math.max(MIN_DASHBOARD_TOP_RATED_CUTOFF, Math.round(parsed))
+  );
+};
+
+export const clampDashboardTopRatedLimit = (value: unknown) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return DEFAULT_DASHBOARD_TOP_RATED_LIMIT;
+  return Math.min(MAX_DASHBOARD_TOP_RATED_LIMIT, Math.max(MIN_DASHBOARD_TOP_RATED_LIMIT, Math.round(parsed)));
 };
 
 const getFirstSetting = async (db: Db, keys: string[]) => {
@@ -233,6 +262,12 @@ export async function getSummaryConfig(db: Db): Promise<{ style: SummaryStyle; l
 export async function getAutoReadDelayMs(db: Db) {
   const raw = await getSetting(db, 'auto_read_delay_ms');
   return clampAutoReadDelayMs(raw);
+}
+
+export async function getDashboardTopRatedConfig(db: Db) {
+  const cutoff = clampDashboardTopRatedCutoff(await getSetting(db, 'dashboard_top_rated_cutoff'));
+  const limit = clampDashboardTopRatedLimit(await getSetting(db, 'dashboard_top_rated_limit'));
+  return { cutoff, limit };
 }
 
 export async function getProviderKey(db: Db, env: App.Platform['env'], provider: Provider) {

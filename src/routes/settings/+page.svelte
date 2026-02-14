@@ -22,6 +22,8 @@
   let summaryStyle = data.settings.summaryStyle;
   let summaryLength = data.settings.summaryLength;
   let autoReadDelayMs = Number(data.settings.autoReadDelayMs ?? 4000);
+  let dashboardTopRatedCutoff = Number(data.settings.dashboardTopRatedCutoff ?? 3);
+  let dashboardTopRatedLimit = Number(data.settings.dashboardTopRatedLimit ?? 5);
   $: autoReadDelaySeconds = (Number(autoReadDelayMs) / 1000).toFixed(2);
 
   let openaiKey = '';
@@ -114,7 +116,9 @@
         chatReasoningEffort,
         summaryStyle,
         summaryLength,
-        autoReadDelayMs
+        autoReadDelayMs,
+        dashboardTopRatedCutoff,
+        dashboardTopRatedLimit
       })
     });
     await invalidate();
@@ -388,6 +392,29 @@
     </label>
     <p class="muted">
       Applies on article detail pages. Current delay: {autoReadDelaySeconds}s. 0 means immediate. Range {data.autoReadDelayRange.min}-{data.autoReadDelayRange.max} ms.
+    </p>
+    <label>
+      Dashboard top-rated cutoff (1-5)
+      <input
+        type="number"
+        min={data.dashboardTopRatedRange.cutoff.min}
+        max={data.dashboardTopRatedRange.cutoff.max}
+        step="1"
+        bind:value={dashboardTopRatedCutoff}
+      />
+    </label>
+    <label>
+      Dashboard top-rated count
+      <input
+        type="number"
+        min={data.dashboardTopRatedRange.limit.min}
+        max={data.dashboardTopRatedRange.limit.max}
+        step="1"
+        bind:value={dashboardTopRatedLimit}
+      />
+    </label>
+    <p class="muted">
+      Controls the dashboard's Top Rated section. Cutoff range {data.dashboardTopRatedRange.cutoff.min}-{data.dashboardTopRatedRange.cutoff.max}; count range {data.dashboardTopRatedRange.limit.min}-{data.dashboardTopRatedRange.limit.max}.
     </p>
     <button on:click={saveSettings} class="inline-button">
       <IconDeviceFloppy size={16} stroke={1.9} />

@@ -1,5 +1,14 @@
 import { json } from '@sveltejs/kit';
-import { runManualPull } from '$lib/server/manual-pull';
+import { getManualPullState, runManualPull } from '$lib/server/manual-pull';
+
+export const GET = async ({ platform }) => {
+  const state = await getManualPullState(platform.env.DB);
+  return json({
+    inProgress: state.inProgress,
+    startedAt: state.startedAt,
+    completedAt: state.completedAt
+  });
+};
 
 export const POST = async ({ request, platform }) => {
   const body = await request.json().catch(() => ({}));

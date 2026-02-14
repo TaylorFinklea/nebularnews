@@ -1,5 +1,6 @@
 import { dev } from '$app/environment';
 import { dbGet } from '$lib/server/db';
+import { getDashboardTopRatedConfig } from '$lib/server/settings';
 import { getPreferredSourcesForArticles } from '$lib/server/sources';
 import { parse as parseCookie } from 'cookie';
 import { clampTimezoneOffsetMinutes, dayRangeForTimezoneOffset } from '$lib/server/time';
@@ -11,6 +12,9 @@ const effectiveScoreExpr = `COALESCE(
 
 export const load = async ({ platform, request }) => {
   const db = platform.env.DB;
+  const dashboardTopRated = await getDashboardTopRatedConfig(db);
+  const scoreCutoff = dashboardTopRated.cutoff;
+  const topRatedLimit = dashboardTopRated.limit;
   const cookies = parseCookie(request.headers.get('cookie') ?? '');
   const tzOffsetMinutes = clampTimezoneOffsetMinutes(cookies.nebular_tz_offset_min, 0);
   const { dayStart, dayEnd } = dayRangeForTimezoneOffset(Date.now(), tzOffsetMinutes);
@@ -91,11 +95,11 @@ export const load = async ({ platform, request }) => {
     FROM articles a
     WHERE COALESCE(a.published_at, a.fetched_at) >= ?
       AND COALESCE(a.published_at, a.fetched_at) < ?
-      AND ${effectiveScoreExpr} >= 3
+      AND ${effectiveScoreExpr} >= ?
     ORDER BY score DESC, COALESCE(a.published_at, a.fetched_at) DESC
-    LIMIT 5`
+    LIMIT ?`
   )
-    .bind(dayStart, dayEnd)
+    .bind(dayStart, dayEnd, scoreCutoff, topRatedLimit)
     .all<{
       id: string;
       title: string | null;
@@ -120,6 +124,10 @@ export const load = async ({ platform, request }) => {
       source_name: source?.sourceName ?? null
     };
   });
+  const topRatedScoreQuery = Array.from({ length: 5 }, (_, index) => 5 - index)
+    .filter((score) => score >= scoreCutoff)
+    .map((score) => `score=${score}`)
+    .join('&');
 
   return {
     isDev: dev,
@@ -136,6 +144,11 @@ export const load = async ({ platform, request }) => {
       missingSummaries: todayMissingSummaries?.count ?? 0,
       missingScores: todayMissingScores?.count ?? 0,
       tzOffsetMinutes
+    },
+    topRatedConfig: {
+      scoreCutoff,
+      limit: topRatedLimit,
+      href: topRatedScoreQuery ? `/articles?${topRatedScoreQuery}` : '/articles'
     },
     topRatedArticles
   };

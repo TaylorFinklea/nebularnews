@@ -24,6 +24,7 @@
   let selectedScores = data.selectedScores ?? ['5', '4', '3', '2', '1', 'unscored'];
   let readFilter = data.readFilter ?? 'all';
   let sort = data.sort ?? 'newest';
+  let view = data.view ?? 'list';
   let selectedReactions = data.selectedReactions ?? ['up', 'down', 'none'];
   let selectedTagIds = data.selectedTagIds ?? [];
 
@@ -31,6 +32,7 @@
   $: selectedScores = data.selectedScores ?? ['5', '4', '3', '2', '1', 'unscored'];
   $: readFilter = data.readFilter ?? 'all';
   $: sort = data.sort ?? 'newest';
+  $: view = data.view ?? 'list';
   $: selectedReactions = data.selectedReactions ?? ['up', 'down', 'none'];
   $: selectedTagIds = data.selectedTagIds ?? [];
 
@@ -50,6 +52,43 @@
       body: JSON.stringify({ isRead })
     });
     await invalidateAll();
+  };
+
+  const publishDateKey = (article) => {
+    const sourceDate = article.published_at ?? article.fetched_at;
+    if (!sourceDate) return 'undated';
+    const parsed = new Date(sourceDate);
+    if (Number.isNaN(parsed.getTime())) return 'undated';
+    const year = parsed.getFullYear();
+    const month = String(parsed.getMonth() + 1).padStart(2, '0');
+    const day = String(parsed.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const publishDateLabel = (article) => {
+    const sourceDate = article.published_at ?? article.fetched_at;
+    if (!sourceDate) return 'No publish date';
+    const parsed = new Date(sourceDate);
+    if (Number.isNaN(parsed.getTime())) return 'No publish date';
+    return parsed.toLocaleDateString(undefined, {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  };
+
+  const pageHref = (nextPage) => {
+    const params = new URLSearchParams();
+    if (data.q) params.set('q', data.q);
+    for (const score of data.selectedScores ?? []) params.append('score', score);
+    if (data.readFilter && data.readFilter !== 'all') params.set('read', data.readFilter);
+    if (data.sort && data.sort !== 'newest') params.set('sort', data.sort);
+    if (data.view && data.view !== 'list') params.set('view', data.view);
+    for (const reaction of data.selectedReactions ?? []) params.append('reaction', reaction);
+    for (const tagId of data.selectedTagIds ?? []) params.append('tags', tagId);
+    params.set('page', String(nextPage));
+    return `/articles?${params.toString()}`;
   };
 </script>
 
@@ -109,6 +148,17 @@
     <option value="unread_first">Unread first</option>
     <option value="title_az">Title A-Z</option>
   </select>
+  <fieldset class="view-toggle">
+    <legend>View</legend>
+    <label>
+      <input type="radio" name="view" value="list" bind:group={view} />
+      <span>List</span>
+    </label>
+    <label>
+      <input type="radio" name="view" value="grouped" bind:group={view} />
+      <span>Group by date</span>
+    </label>
+  </fieldset>
   <fieldset class="reaction-filter">
     <legend>Reactions</legend>
     <label>
@@ -148,11 +198,40 @@
   {/if}
 </form>
 
+<div class="pagination-meta">
+  <span>
+    Showing {data.pagination?.start ?? 0}-{data.pagination?.end ?? 0}
+    of {data.pagination?.total ?? 0}
+  </span>
+  {#if (data.pagination?.totalPages ?? 1) > 1}
+    <nav class="pagination" aria-label="Article pages">
+      {#if data.pagination?.hasPrev}
+        <a class="ghost page-link" href={pageHref((data.pagination?.page ?? 1) - 1)}>Prev</a>
+      {:else}
+        <span class="ghost page-link disabled" aria-disabled="true">Prev</span>
+      {/if}
+      <span class="page-current">Page {data.pagination?.page ?? 1} / {data.pagination?.totalPages ?? 1}</span>
+      {#if data.pagination?.hasNext}
+        <a class="ghost page-link" href={pageHref((data.pagination?.page ?? 1) + 1)}>Next</a>
+      {:else}
+        <span class="ghost page-link disabled" aria-disabled="true">Next</span>
+      {/if}
+    </nav>
+  {/if}
+</div>
+
 <div class="articles">
   {#if data.articles.length === 0}
     <p class="muted">No articles yet. Add feeds to start pulling stories.</p>
   {:else}
-    {#each data.articles as article}
+    {#each data.articles as article, index}
+      {#if data.view === 'grouped'}
+        {@const currentDateKey = publishDateKey(article)}
+        {@const previousDateKey = index > 0 ? publishDateKey(data.articles[index - 1]) : null}
+        {#if currentDateKey !== previousDateKey}
+          <h2 class="date-group-heading">{publishDateLabel(article)}</h2>
+        {/if}
+      {/if}
       <article class="card">
         <div class="card-head">
           <h2>{article.title ?? 'Untitled article'}</h2>
@@ -232,6 +311,24 @@
     {/each}
   {/if}
 </div>
+
+{#if (data.pagination?.totalPages ?? 1) > 1}
+  <div class="pagination-bottom">
+    <nav class="pagination" aria-label="Article pages bottom">
+      {#if data.pagination?.hasPrev}
+        <a class="ghost page-link" href={pageHref((data.pagination?.page ?? 1) - 1)}>Prev</a>
+      {:else}
+        <span class="ghost page-link disabled" aria-disabled="true">Prev</span>
+      {/if}
+      <span class="page-current">Page {data.pagination?.page ?? 1} / {data.pagination?.totalPages ?? 1}</span>
+      {#if data.pagination?.hasNext}
+        <a class="ghost page-link" href={pageHref((data.pagination?.page ?? 1) + 1)}>Next</a>
+      {:else}
+        <span class="ghost page-link disabled" aria-disabled="true">Next</span>
+      {/if}
+    </nav>
+  </div>
+{/if}
 
 <style>
   .articles {
@@ -422,8 +519,56 @@
     font-size: 0.9rem;
   }
 
+  .pagination-meta {
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8rem;
+    color: var(--muted-text);
+    font-size: 0.88rem;
+    flex-wrap: wrap;
+  }
+
+  .pagination-bottom {
+    margin-top: 1rem;
+    display: flex;
+    justify-content: center;
+  }
+
+  .pagination {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+  }
+
+  .page-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 3rem;
+    border: 1px solid var(--ghost-border);
+    border-radius: 999px;
+    padding: 0.25rem 0.7rem;
+    color: var(--ghost-color);
+    text-decoration: none;
+  }
+
+  .page-link.disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  .page-current {
+    color: var(--muted-text);
+    font-size: 0.85rem;
+    min-width: 6.6rem;
+    text-align: center;
+  }
+
   .score-filter,
-  .reaction-filter {
+  .reaction-filter,
+  .view-toggle {
     border: 1px solid var(--input-border);
     border-radius: 12px;
     padding: 0.45rem 0.6rem;
@@ -435,14 +580,16 @@
   }
 
   .score-filter legend,
-  .reaction-filter legend {
+  .reaction-filter legend,
+  .view-toggle legend {
     font-size: 0.75rem;
     color: var(--muted-text);
     padding: 0 0.25rem;
   }
 
   .score-filter label,
-  .reaction-filter label {
+  .reaction-filter label,
+  .view-toggle label {
     display: inline-flex;
     align-items: center;
     gap: 0.25rem;
@@ -452,6 +599,11 @@
 
   .score-filter input[type='checkbox'],
   .reaction-filter input[type='checkbox'] {
+    margin: 0;
+    accent-color: var(--primary);
+  }
+
+  .view-toggle input[type='radio'] {
     margin: 0;
     accent-color: var(--primary);
   }
@@ -471,6 +623,15 @@
 
   .muted {
     color: var(--muted-text);
+  }
+
+  .date-group-heading {
+    margin: 0.5rem 0 0.1rem;
+    color: var(--muted-text);
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
   }
 
   @media (max-width: 700px) {

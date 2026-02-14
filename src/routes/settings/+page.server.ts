@@ -2,7 +2,14 @@ import { dbAll } from '$lib/server/db';
 import {
   DEFAULT_SCORE_SYSTEM_PROMPT,
   DEFAULT_SCORE_USER_PROMPT_TEMPLATE,
+  DEFAULT_DASHBOARD_TOP_RATED_CUTOFF,
+  DEFAULT_DASHBOARD_TOP_RATED_LIMIT,
+  MAX_DASHBOARD_TOP_RATED_CUTOFF,
+  MAX_DASHBOARD_TOP_RATED_LIMIT,
+  MIN_DASHBOARD_TOP_RATED_CUTOFF,
+  MIN_DASHBOARD_TOP_RATED_LIMIT,
   getFeatureModelLanes,
+  getDashboardTopRatedConfig,
   MAX_AUTO_READ_DELAY_MS,
   MIN_AUTO_READ_DELAY_MS,
   getAutoReadDelayMs,
@@ -19,6 +26,7 @@ export const load = async ({ platform }) => {
   const ingestModel = await getConfiguredIngestProviderModel(db, platform.env);
   const chatModel = await getConfiguredChatProviderModel(db, platform.env);
   const scorePrompt = await getScorePromptConfig(db);
+  const dashboardTopRated = await getDashboardTopRatedConfig(db);
   const settings = {
     featureLanes: {
       summaries: featureLanes.summaries,
@@ -39,7 +47,9 @@ export const load = async ({ platform }) => {
     scoreUserPromptTemplate: scorePrompt.userPromptTemplate,
     summaryStyle: (await getSetting(db, 'summary_style')) ?? 'concise',
     summaryLength: (await getSetting(db, 'summary_length')) ?? 'short',
-    autoReadDelayMs: await getAutoReadDelayMs(db)
+    autoReadDelayMs: await getAutoReadDelayMs(db),
+    dashboardTopRatedCutoff: dashboardTopRated.cutoff,
+    dashboardTopRatedLimit: dashboardTopRated.limit
   };
 
   const keys = await dbAll<{ provider: string }>(db, 'SELECT provider FROM provider_keys');
@@ -55,5 +65,23 @@ export const load = async ({ platform }) => {
     scoreUserPromptTemplate: DEFAULT_SCORE_USER_PROMPT_TEMPLATE
   };
 
-  return { settings, keyMap, profile, scorePromptDefaults, autoReadDelayRange: { min: MIN_AUTO_READ_DELAY_MS, max: MAX_AUTO_READ_DELAY_MS } };
+  return {
+    settings,
+    keyMap,
+    profile,
+    scorePromptDefaults,
+    autoReadDelayRange: { min: MIN_AUTO_READ_DELAY_MS, max: MAX_AUTO_READ_DELAY_MS },
+    dashboardTopRatedRange: {
+      cutoff: {
+        min: MIN_DASHBOARD_TOP_RATED_CUTOFF,
+        max: MAX_DASHBOARD_TOP_RATED_CUTOFF,
+        default: DEFAULT_DASHBOARD_TOP_RATED_CUTOFF
+      },
+      limit: {
+        min: MIN_DASHBOARD_TOP_RATED_LIMIT,
+        max: MAX_DASHBOARD_TOP_RATED_LIMIT,
+        default: DEFAULT_DASHBOARD_TOP_RATED_LIMIT
+      }
+    }
+  };
 };

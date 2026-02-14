@@ -121,7 +121,7 @@
     title="Run queue now"
     aria-label="Run queue now"
   >
-    <IconPlayerPlay size={16} stroke={1.9} />
+    <IconPlayerPlay size={20} stroke={2.2} />
     <span class="sr-only">Run queue now</span>
   </button>
   <button
@@ -131,7 +131,7 @@
     title="Queue missing today jobs"
     aria-label="Queue missing today jobs"
   >
-    <IconPlaylistAdd size={16} stroke={1.9} />
+    <IconPlaylistAdd size={20} stroke={2.2} />
     <span class="sr-only">Queue missing today jobs</span>
   </button>
   <button
@@ -141,7 +141,7 @@
     title="Retry failed jobs"
     aria-label="Retry failed jobs"
   >
-    <IconRepeat size={16} stroke={1.9} />
+    <IconRepeat size={20} stroke={2.2} />
     <span class="sr-only">Retry failed jobs</span>
   </button>
   <button
@@ -151,7 +151,7 @@
     title="Cancel pending jobs"
     aria-label="Cancel pending jobs"
   >
-    <IconBan size={16} stroke={1.9} />
+    <IconBan size={20} stroke={2.2} />
     <span class="sr-only">Cancel pending jobs</span>
   </button>
   <button
@@ -161,7 +161,7 @@
     title="Clear finished jobs"
     aria-label="Clear finished jobs"
   >
-    <IconTrash size={16} stroke={1.9} />
+    <IconTrash size={20} stroke={2.2} />
     <span class="sr-only">Clear finished jobs</span>
   </button>
 </div>
@@ -231,7 +231,7 @@
                     title="Run job now"
                     aria-label="Run job now"
                   >
-                    <IconClockPlay size={15} stroke={1.9} />
+                    <IconClockPlay size={17} stroke={2.05} />
                     <span class="sr-only">Run job now</span>
                   </button>
                 {/if}
@@ -243,7 +243,7 @@
                     title="Cancel job"
                     aria-label="Cancel job"
                   >
-                    <IconBan size={15} stroke={1.9} />
+                    <IconBan size={17} stroke={2.05} />
                     <span class="sr-only">Cancel job</span>
                   </button>
                 {/if}
@@ -255,7 +255,7 @@
                     title="Delete job"
                     aria-label="Delete job"
                   >
-                    <IconTrash size={15} stroke={1.9} />
+                    <IconTrash size={17} stroke={2.05} />
                     <span class="sr-only">Delete job</span>
                   </button>
                 {/if}
@@ -327,6 +327,22 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+  }
+
+  .icon-button :global(svg) {
+    width: 1.15rem;
+    height: 1.15rem;
+    display: block;
+  }
+
+  .controls .icon-button {
+    width: 2.7rem;
+    height: 2.7rem;
+  }
+
+  .controls .icon-button :global(svg) {
+    width: 1.32rem;
+    height: 1.32rem;
   }
 
   .controls .ghost,
@@ -415,11 +431,16 @@
     padding: 0;
     border-radius: 999px;
     cursor: pointer;
-    width: 1.95rem;
-    height: 1.95rem;
+    width: 2.15rem;
+    height: 2.15rem;
     display: inline-flex;
     align-items: center;
     justify-content: center;
+  }
+
+  .actions button :global(svg) {
+    width: 1.04rem;
+    height: 1.04rem;
   }
 
   .status {

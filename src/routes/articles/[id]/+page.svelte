@@ -33,6 +33,110 @@
   let chatError = '';
   const AUTO_MARK_READ_DELAY_MS = Number(data.autoReadDelayMs ?? 4000);
   let autoReadTimer = null;
+  let fullTextSource = '';
+  let articleBlocks = [];
+
+  const decodeHtmlEntities = (value) =>
+    value
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&amp;/gi, '&')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&quot;/gi, '"')
+      .replace(/&#39;/gi, "'")
+      .replace(/&#x27;/gi, "'");
+
+  const htmlToMarkdownish = (html) => {
+    if (!html) return '';
+    return decodeHtmlEntities(
+      String(html)
+        .replace(/<script[\s\S]*?<\/script>/gi, '')
+        .replace(/<style[\s\S]*?<\/style>/gi, '')
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<(h[1-6])[^>]*>/gi, '\n\n')
+        .replace(/<\/h[1-6]>/gi, '\n\n')
+        .replace(/<li[^>]*>/gi, '\n- ')
+        .replace(/<\/li>/gi, '')
+        .replace(/<\/(p|div|section|article|blockquote|ul|ol|pre|table|tr)>/gi, '\n\n')
+        .replace(/<[^>]+>/g, '')
+        .replace(/\r\n?/g, '\n')
+        .replace(/[ \t]+\n/g, '\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim()
+    );
+  };
+
+  const splitLongParagraph = (text) => {
+    const compact = text.trim();
+    if (compact.length < 520) return [compact];
+    const sentences = compact
+      .match(/[^.!?]+[.!?]+(?=\s|$)|[^.!?]+$/g)
+      ?.map((sentence) => sentence.trim())
+      .filter(Boolean);
+    if (!sentences || sentences.length < 4) return [compact];
+    const groups = [];
+    for (let i = 0; i < sentences.length; i += 3) {
+      groups.push(sentences.slice(i, i + 3).join(' '));
+    }
+    return groups;
+  };
+
+  const parseArticleBlocks = (text) => {
+    if (!text) return [];
+    const normalized = String(text).replace(/\r\n?/g, '\n').replace(/\t/g, ' ').trim();
+    if (!normalized) return [];
+
+    return normalized
+      .split(/\n{2,}/)
+      .map((chunk) => chunk.trim())
+      .filter(Boolean)
+      .map((chunk) => {
+        const lines = chunk
+          .split('\n')
+          .map((line) => line.trim())
+          .filter(Boolean);
+        if (lines.length === 0) return null;
+
+        if (lines.length === 1 && /^#{1,6}\s+/.test(lines[0])) {
+          const headingText = lines[0].replace(/^#{1,6}\s+/, '').trim();
+          if (!headingText) return null;
+          return {
+            type: 'heading',
+            text: headingText
+          };
+        }
+
+        const bulletLines = lines.filter((line) => /^(?:[-*•]\s+|\d+[.)]\s+)/.test(line));
+        if (bulletLines.length >= Math.max(2, Math.ceil(lines.length * 0.6))) {
+          return {
+            type: 'list',
+            items: bulletLines.map((line) => line.replace(/^(?:[-*•]\s+|\d+[.)]\s+)/, '').trim()).filter(Boolean)
+          };
+        }
+
+        const paragraph = lines.join(' ');
+        const chunks = splitLongParagraph(paragraph);
+        if (chunks.length === 1) {
+          return {
+            type: 'paragraph',
+            text: chunks[0]
+          };
+        }
+        return {
+          type: 'paragraph_group',
+          paragraphs: chunks
+        };
+      })
+      .filter(Boolean);
+  };
+
+  $: fullTextSource = (() => {
+    const htmlFirst = htmlToMarkdownish(data.article?.content_html ?? '');
+    if (htmlFirst && htmlFirst.length >= 80) return htmlFirst;
+    return data.article?.content_text ?? '';
+  })();
+
+  $: articleBlocks = parseArticleBlocks(fullTextSource);
 
   const submitFeedback = async () => {
     await fetch(`/api/articles/${data.article.id}/feedback`, {
@@ -443,7 +547,29 @@
 
     <div class="card">
       <h2>Full text</h2>
-      <p class="article-text">{data.article.content_text ?? 'Full text pending.'}</p>
+      <div class="article-text">
+        {#if articleBlocks.length === 0}
+          <p class="muted">Full text pending.</p>
+        {:else}
+          {#each articleBlocks as block}
+            {#if block.type === 'list'}
+              <ul class="article-list">
+                {#each block.items as item}
+                  <li>{item}</li>
+                {/each}
+              </ul>
+            {:else if block.type === 'heading'}
+              <h3 class="article-heading">{block.text}</h3>
+            {:else if block.type === 'paragraph_group'}
+              {#each block.paragraphs as paragraph}
+                <p class="article-paragraph">{paragraph}</p>
+              {/each}
+            {:else}
+              <p class="article-paragraph">{block.text}</p>
+            {/if}
+          {/each}
+        {/if}
+      </div>
     </div>
   </div>
 {/if}
@@ -680,8 +806,28 @@
   }
 
   .article-text {
-    white-space: pre-line;
-    line-height: 1.6;
+    display: grid;
+    gap: 0.85rem;
+    max-width: 78ch;
+    line-height: 1.7;
+    color: var(--text-color);
+  }
+
+  .article-paragraph {
+    margin: 0;
+  }
+
+  .article-list {
+    margin: 0;
+    padding-left: 1.2rem;
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .article-heading {
+    margin: 0.25rem 0 0;
+    font-size: 1rem;
+    font-weight: 700;
     color: var(--text-color);
   }
 </style>

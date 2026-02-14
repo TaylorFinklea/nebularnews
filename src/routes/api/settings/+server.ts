@@ -4,8 +4,11 @@ import {
   DEFAULT_SCORE_SYSTEM_PROMPT,
   DEFAULT_SCORE_USER_PROMPT_TEMPLATE,
   clampAutoReadDelayMs,
+  clampDashboardTopRatedCutoff,
+  clampDashboardTopRatedLimit,
   getAutoReadDelayMs,
   getConfiguredChatProviderModel,
+  getDashboardTopRatedConfig,
   getConfiguredIngestProviderModel,
   getFeatureModelLanes,
   getScorePromptConfig,
@@ -19,6 +22,7 @@ export const GET = async ({ platform }) => {
   const ingestModel = await getConfiguredIngestProviderModel(db, platform.env);
   const chatModel = await getConfiguredChatProviderModel(db, platform.env);
   const scorePrompt = await getScorePromptConfig(db);
+  const dashboardTopRated = await getDashboardTopRatedConfig(db);
   const settings = {
     featureLanes: {
       summaries: featureLanes.summaries,
@@ -40,7 +44,9 @@ export const GET = async ({ platform }) => {
     summaryStyle: (await getSetting(db, 'summary_style')) ?? 'concise',
     summaryLength: (await getSetting(db, 'summary_length')) ?? 'short',
     pollInterval: (await getSetting(db, 'poll_interval')) ?? '60',
-    autoReadDelayMs: await getAutoReadDelayMs(db)
+    autoReadDelayMs: await getAutoReadDelayMs(db),
+    dashboardTopRatedCutoff: dashboardTopRated.cutoff,
+    dashboardTopRatedLimit: dashboardTopRated.limit
   };
 
   const keys = await dbAll<{ provider: string }>(db, 'SELECT provider FROM provider_keys');
@@ -118,6 +124,12 @@ export const POST = async ({ request, platform }) => {
   if (body?.pollInterval) entries.push(['poll_interval', String(body.pollInterval)]);
   if (body?.autoReadDelayMs !== undefined && body?.autoReadDelayMs !== null) {
     entries.push(['auto_read_delay_ms', String(clampAutoReadDelayMs(body.autoReadDelayMs))]);
+  }
+  if (body?.dashboardTopRatedCutoff !== undefined && body?.dashboardTopRatedCutoff !== null) {
+    entries.push(['dashboard_top_rated_cutoff', String(clampDashboardTopRatedCutoff(body.dashboardTopRatedCutoff))]);
+  }
+  if (body?.dashboardTopRatedLimit !== undefined && body?.dashboardTopRatedLimit !== null) {
+    entries.push(['dashboard_top_rated_limit', String(clampDashboardTopRatedLimit(body.dashboardTopRatedLimit))]);
   }
   if (typeof body?.scoreSystemPrompt === 'string' && body.scoreSystemPrompt.trim()) {
     entries.push(['score_system_prompt', body.scoreSystemPrompt.trim()]);

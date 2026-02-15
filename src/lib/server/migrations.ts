@@ -37,6 +37,7 @@ export async function ensureSchema(db: Db) {
       )`
     );
     await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_article_reactions_feed ON article_reactions(feed_id)');
+    await runSafe(db, 'ALTER TABLE articles ADD COLUMN image_url TEXT');
     await runSafe(db, 'ALTER TABLE jobs ADD COLUMN provider TEXT');
     await runSafe(db, 'ALTER TABLE jobs ADD COLUMN model TEXT');
     await runSafe(

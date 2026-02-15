@@ -137,15 +137,27 @@ import {
     </div>
     <div class="top-actions">
       <nav class="nav-links">
-        <a href="/" class="nav-link">
+        <a
+          href="/"
+          class="nav-link"
+          data-sveltekit-reload={get(page).url.pathname.startsWith('/articles') ? 'true' : undefined}
+        >
           <IconLayoutDashboard size={16} stroke={1.9} />
           <span>Dashboard</span>
         </a>
-        <a href="/articles" class="nav-link">
+        <a
+          href="/articles"
+          class="nav-link"
+          data-sveltekit-reload={get(page).url.pathname.startsWith('/articles') ? 'true' : undefined}
+        >
           <IconArticle size={16} stroke={1.9} />
           <span>Articles</span>
         </a>
-        <a href="/chat" class="nav-link">
+        <a
+          href="/chat"
+          class="nav-link"
+          data-sveltekit-reload={get(page).url.pathname.startsWith('/articles') ? 'true' : undefined}
+        >
           <IconMessage2 size={16} stroke={1.9} />
           <span>Chat</span>
         </a>
@@ -155,10 +167,34 @@ import {
             <span>Settings</span>
           </summary>
           <div class="submenu">
-            <a href="/settings" on:click={closeSettingsMenu}>General</a>
-            <a href="/tags" on:click={closeSettingsMenu}>Tags</a>
-            <a href="/feeds" on:click={closeSettingsMenu}>Feeds</a>
-            <a href="/jobs" on:click={closeSettingsMenu}>Jobs</a>
+            <a
+              href="/settings"
+              on:click={closeSettingsMenu}
+              data-sveltekit-reload={get(page).url.pathname.startsWith('/articles') ? 'true' : undefined}
+            >
+              General
+            </a>
+            <a
+              href="/tags"
+              on:click={closeSettingsMenu}
+              data-sveltekit-reload={get(page).url.pathname.startsWith('/articles') ? 'true' : undefined}
+            >
+              Tags
+            </a>
+            <a
+              href="/feeds"
+              on:click={closeSettingsMenu}
+              data-sveltekit-reload={get(page).url.pathname.startsWith('/articles') ? 'true' : undefined}
+            >
+              Feeds
+            </a>
+            <a
+              href="/jobs"
+              on:click={closeSettingsMenu}
+              data-sveltekit-reload={get(page).url.pathname.startsWith('/articles') ? 'true' : undefined}
+            >
+              Jobs
+            </a>
           </div>
         </details>
       </nav>

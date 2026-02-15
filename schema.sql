@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS articles (
   excerpt TEXT,
   word_count INTEGER,
   content_hash TEXT UNIQUE,
+  image_url TEXT,
   status TEXT
 );
 

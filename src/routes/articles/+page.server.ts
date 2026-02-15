@@ -175,6 +175,7 @@ export const load = async ({ platform, url }) => {
     `SELECT
       a.id,
       a.canonical_url,
+      a.image_url,
       a.title,
       a.author,
       a.published_at,

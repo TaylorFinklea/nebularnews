@@ -1,5 +1,6 @@
 import { XMLParser } from 'fast-xml-parser';
 import { htmlToText } from './text';
+import { extractLeadImageUrlFromHtml, normalizeImageUrl } from './images';
 
 export type FeedItem = {
   guid: string | null;
@@ -9,6 +10,7 @@ export type FeedItem = {
   author: string | null;
   contentHtml: string | null;
   contentText: string | null;
+  imageUrl: string | null;
 };
 
 export type ParsedFeed = {
@@ -52,6 +54,98 @@ const pickLink = (value: unknown): string | null => {
   return null;
 };
 
+const looksLikeImageUrl = (value: string) =>
+  /\.(?:avif|gif|jpe?g|png|webp|bmp|svg)(?:$|[?#])/i.test(value) ||
+  value.includes('/photo-') ||
+  value.includes('images.unsplash.com');
+
+const pickUrlField = (value: unknown): string | null => {
+  if (!value) return null;
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const candidate = pickUrlField(entry);
+      if (candidate) return candidate;
+    }
+    return null;
+  }
+  if (typeof value === 'object') {
+    const url = (value as { url?: string; href?: string; src?: string }).url;
+    if (typeof url === 'string') return url;
+    const href = (value as { url?: string; href?: string; src?: string }).href;
+    if (typeof href === 'string') return href;
+    const src = (value as { url?: string; href?: string; src?: string }).src;
+    if (typeof src === 'string') return src;
+    return null;
+  }
+  return null;
+};
+
+const pickRssImage = (item: any, itemUrl: string | null, contentHtml: string | null) => {
+  const rssCandidates: string[] = [];
+  const mediaCandidates = [
+    item['media:thumbnail'],
+    item['media:content'],
+    item['media:group']?.['media:thumbnail'],
+    item['media:group']?.['media:content'],
+    item.image
+  ];
+
+  for (const candidate of mediaCandidates) {
+    const raw = pickUrlField(candidate);
+    if (raw) rssCandidates.push(raw);
+  }
+
+  const enclosures = arrify(item.enclosure);
+  for (const enclosure of enclosures) {
+    const raw = pickUrlField(enclosure);
+    if (!raw) continue;
+    const typeValue = typeof enclosure?.type === 'string' ? enclosure.type.toLowerCase() : '';
+    if (typeValue.startsWith('image/') || !typeValue || looksLikeImageUrl(raw)) {
+      rssCandidates.push(raw);
+    }
+  }
+
+  for (const candidate of rssCandidates) {
+    const normalized = normalizeImageUrl(candidate, itemUrl);
+    if (normalized) return normalized;
+  }
+
+  if (contentHtml) {
+    return extractLeadImageUrlFromHtml(contentHtml, itemUrl);
+  }
+
+  return null;
+};
+
+const pickAtomImage = (entry: any, entryUrl: string | null, contentHtml: string | null) => {
+  const linkNodes = arrify(entry.link);
+  for (const link of linkNodes) {
+    const rel = typeof link?.rel === 'string' ? link.rel.toLowerCase() : '';
+    const type = typeof link?.type === 'string' ? link.type.toLowerCase() : '';
+    if (rel !== 'enclosure') continue;
+    const raw = pickUrlField(link);
+    if (!raw) continue;
+    if (type.startsWith('image/') || !type || looksLikeImageUrl(raw)) {
+      const normalized = normalizeImageUrl(raw, entryUrl);
+      if (normalized) return normalized;
+    }
+  }
+
+  const mediaCandidates = [entry['media:thumbnail'], entry['media:content'], entry['media:group']?.['media:content']];
+  for (const candidate of mediaCandidates) {
+    const raw = pickUrlField(candidate);
+    const normalized = normalizeImageUrl(raw, entryUrl);
+    if (normalized) return normalized;
+  }
+
+  if (contentHtml) {
+    return extractLeadImageUrlFromHtml(contentHtml, entryUrl);
+  }
+
+  return null;
+};
+
 const parseDate = (value: unknown): number | null => {
   const text = getText(value);
   if (!text) return null;
@@ -66,14 +160,16 @@ export function parseFeedXml(xml: string): ParsedFeed {
     const items = arrify(channel.item).map((item: any) => {
       const contentHtml = getText(item['content:encoded'] ?? item.description ?? item.content);
       const contentText = contentHtml ? htmlToText(contentHtml) : null;
+      const itemUrl = getText(item.link);
       return {
         guid: getText(item.guid) ?? getText(item.id),
         title: getText(item.title),
-        url: getText(item.link),
+        url: itemUrl,
         publishedAt: parseDate(item.pubDate ?? item.published ?? item.updated),
         author: getText(item.author ?? item['dc:creator']),
         contentHtml: contentHtml ?? null,
-        contentText
+        contentText,
+        imageUrl: pickRssImage(item, itemUrl, contentHtml ?? null)
       } satisfies FeedItem;
     });
     return {
@@ -88,14 +184,16 @@ export function parseFeedXml(xml: string): ParsedFeed {
     const items = arrify(feed.entry).map((entry: any) => {
       const contentHtml = getText(entry.content?.['#text'] ?? entry.content ?? entry.summary?.['#text'] ?? entry.summary);
       const contentText = contentHtml ? htmlToText(contentHtml) : null;
+      const entryUrl = pickLink(entry.link);
       return {
         guid: getText(entry.id),
         title: getText(entry.title),
-        url: pickLink(entry.link),
+        url: entryUrl,
         publishedAt: parseDate(entry.published ?? entry.updated),
         author: getText(entry.author?.name ?? entry.author),
         contentHtml: contentHtml ?? null,
-        contentText
+        contentText,
+        imageUrl: pickAtomImage(entry, entryUrl, contentHtml ?? null)
       } satisfies FeedItem;
     });
     return {

@@ -10,6 +10,7 @@ export const GET = async ({ params, platform }) => {
     `SELECT
       id,
       canonical_url,
+      image_url,
       title,
       author,
       published_at,

@@ -1,4 +1,5 @@
 export {
+  IconArrowLeft,
   IconArticle,
   IconArrowsTransferUpDown,
   IconBan,

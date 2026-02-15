@@ -154,6 +154,7 @@ export const GET = async ({ url, platform }) => {
     `SELECT
       a.id,
       a.canonical_url,
+      a.image_url,
       a.title,
       a.author,
       a.published_at,

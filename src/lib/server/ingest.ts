@@ -3,6 +3,7 @@ import { dbAll, dbBatch, dbGet, dbRun, now, type Db } from './db';
 import { fetchAndParseFeed, type FeedItem } from './feeds';
 import { extractMainContent, computeWordCount } from './text';
 import { normalizeUrl } from './urls';
+import { extractLeadImageUrlFromHtml, normalizeImageUrl } from './images';
 
 const textEncoder = new TextEncoder();
 
@@ -135,8 +136,13 @@ async function ingestFeedItem(db: Db, feedId: string, item: FeedItem): Promise<b
 
   let contentHtml = item.contentHtml ?? null;
   let contentText = item.contentText ?? null;
+  let imageUrl = normalizeImageUrl(item.imageUrl, url);
 
-  if (!contentText || contentText.length < 200) {
+  if (!imageUrl && contentHtml) {
+    imageUrl = extractLeadImageUrlFromHtml(contentHtml, url);
+  }
+
+  if (!contentText || contentText.length < 200 || !imageUrl) {
     try {
       const res = await fetch(url, { headers: { 'user-agent': 'NebularNews/0.1 (+article)' } });
       if (res.ok) {
@@ -144,6 +150,9 @@ async function ingestFeedItem(db: Db, feedId: string, item: FeedItem): Promise<b
         const extracted = extractMainContent(html, url);
         contentHtml = extracted.contentHtml;
         contentText = extracted.contentText;
+        if (!imageUrl) {
+          imageUrl = extractLeadImageUrlFromHtml(html, url);
+        }
       }
     } catch {
       // ignore fetch failures
@@ -167,7 +176,7 @@ async function ingestFeedItem(db: Db, feedId: string, item: FeedItem): Promise<b
 
     const result = await dbRun(
       db,
-      'INSERT OR IGNORE INTO articles (id, canonical_url, guid, title, author, published_at, fetched_at, content_html, content_text, excerpt, word_count, content_hash, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT OR IGNORE INTO articles (id, canonical_url, guid, title, author, published_at, fetched_at, content_html, content_text, excerpt, word_count, content_hash, image_url, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
         articleId,
         url,
@@ -181,6 +190,7 @@ async function ingestFeedItem(db: Db, feedId: string, item: FeedItem): Promise<b
         excerpt,
         wordCount,
         contentHash,
+        imageUrl,
         'ingested'
       ]
     );
@@ -216,6 +226,8 @@ async function ingestFeedItem(db: Db, feedId: string, item: FeedItem): Promise<b
         await dbBatch(db, jobs);
       }
     }
+  } else if (imageUrl) {
+    await dbRun(db, 'UPDATE articles SET image_url = COALESCE(image_url, ?) WHERE id = ?', [imageUrl, articleId]);
   }
 
   await dbRun(

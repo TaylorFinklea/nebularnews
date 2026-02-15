@@ -1,7 +1,10 @@
 <script>
   import { invalidateAll } from '$app/navigation';
+  import { page } from '$app/stores';
   import { onMount } from 'svelte';
+  import { resolveArticleImageUrl } from '$lib/article-image';
   import {
+    IconArrowLeft,
     IconCheck,
     IconEye,
     IconEyeOff,
@@ -35,6 +38,13 @@
   let autoReadTimer = null;
   let fullTextSource = '';
   let articleBlocks = [];
+  let backHref = '/articles';
+  let articleImageUrl = '';
+
+  const sanitizeBackHref = (value) => {
+    if (!value || typeof value !== 'string') return '/articles';
+    return value.startsWith('/articles') ? value : '/articles';
+  };
 
   const decodeHtmlEntities = (value) =>
     value
@@ -136,6 +146,14 @@
     return data.article?.content_text ?? '';
   })();
 
+  $: backHref = sanitizeBackHref($page.url.searchParams.get('from'));
+  $: articleImageUrl = resolveArticleImageUrl({
+    id: data.article?.id ?? null,
+    title: data.article?.title ?? null,
+    source_name: data.preferredSource?.sourceName ?? null,
+    image_url: data.article?.image_url ?? null,
+    tags: data.tags ?? []
+  });
   $: articleBlocks = parseArticleBlocks(fullTextSource);
 
   const submitFeedback = async () => {
@@ -291,6 +309,16 @@
 {:else}
   <section class="page-header">
     <div>
+      <a
+        class="ghost back-link icon-link"
+        href={backHref}
+        title="Back to articles"
+        aria-label="Back to articles"
+        data-sveltekit-reload="true"
+      >
+        <IconArrowLeft size={16} stroke={1.9} />
+        <span>Back to list</span>
+      </a>
       <h1>{data.article.title ?? 'Untitled article'}</h1>
       <p class="meta">
         Source: {data.preferredSource?.sourceName ?? 'Unknown source'}
@@ -313,6 +341,10 @@
       {/if}
     </div>
   </section>
+
+  <div class="article-hero-wrap">
+    <img class="article-hero-image" src={articleImageUrl} alt="" decoding="async" />
+  </div>
 
   <div class="grid">
     <div class="card">
@@ -616,6 +648,21 @@
     color: var(--primary);
   }
 
+  .article-hero-wrap {
+    margin: 0 0 1.2rem;
+    border-radius: 18px;
+    overflow: hidden;
+    border: 1px solid var(--surface-border);
+    background: var(--surface-soft);
+  }
+
+  .article-hero-image {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    display: block;
+  }
+
   .card ul {
     margin-top: 0.8rem;
     padding-left: 1.1rem;
@@ -716,6 +763,12 @@
   .icon-link {
     display: inline-flex;
     align-items: center;
+    gap: 0.35rem;
+  }
+
+  .back-link {
+    margin-bottom: 0.8rem;
+    width: fit-content;
   }
 
   .tag-source {

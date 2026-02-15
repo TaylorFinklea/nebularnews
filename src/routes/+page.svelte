@@ -1,7 +1,8 @@
 <script>
   import { invalidateAll } from '$app/navigation';
   import { onDestroy, onMount } from 'svelte';
-  import { IconClockPlay, IconExternalLink } from '$lib/icons';
+  import { IconClockPlay, IconExternalLink, IconTrash } from '$lib/icons';
+  import { resolveArticleImageUrl } from '$lib/article-image';
 
   export let data;
 
@@ -13,6 +14,7 @@
   let pullStatusTimer = null;
   let localPullRequestActive = false;
   let lastServerPullState = false;
+  let feedActionMessage = '';
 
   const readPullFlag = () => {
     try {
@@ -126,6 +128,25 @@
     }
   };
 
+  const removeLowRatedFeed = async (feedId, label) => {
+    const targetLabel = label?.trim() || 'this feed';
+    const confirmed = confirm(`Remove "${targetLabel}"?`);
+    if (!confirmed) return;
+
+    feedActionMessage = '';
+    try {
+      const res = await fetch(`/api/feeds/${feedId}`, { method: 'DELETE' });
+      if (!res.ok) {
+        feedActionMessage = 'Failed to remove feed.';
+        return;
+      }
+      feedActionMessage = `Removed "${targetLabel}".`;
+      await invalidateAll();
+    } catch {
+      feedActionMessage = 'Failed to remove feed.';
+    }
+  };
+
 </script>
 
 <section class="hero">
@@ -192,7 +213,7 @@
 
 <section class="top-rated">
   <div class="section-head">
-    <h3>Top Rated Today ({data.topRatedConfig?.scoreCutoff ?? 3}+/5)</h3>
+    <h3>Top Rated Today</h3>
     <a href={data.topRatedConfig?.href ?? '/articles'} class="inline-action">
       <IconExternalLink size={14} stroke={1.9} />
       <span>Full list</span>
@@ -205,6 +226,15 @@
     <div class="top-list">
       {#each data.topRatedArticles as article}
         <article class="top-card">
+          <a class="top-card-image-link" href={`/articles/${article.id}`}>
+            <img
+              class="top-card-image"
+              src={resolveArticleImageUrl(article)}
+              alt=""
+              loading="lazy"
+              decoding="async"
+            />
+          </a>
           <div class="top-card-head">
             <a class="title" href={`/articles/${article.id}`}>{article.title ?? 'Untitled article'}</a>
             <span class="pill">{article.score}/5 · {scoreLabel(article.score)}</span>
@@ -217,6 +247,46 @@
         </article>
       {/each}
     </div>
+  {/if}
+</section>
+
+<section class="lowest-rated-feeds">
+  <div class="section-head">
+    <h3>Lowest Rated Feeds</h3>
+    <a href="/feeds" class="inline-action">
+      <IconExternalLink size={14} stroke={1.9} />
+      <span>Manage feeds</span>
+    </a>
+  </div>
+  {#if data.lowestRatedFeeds.length === 0}
+    <p class="muted">No rated feeds yet.</p>
+  {:else}
+    <ul class="feed-risk-list">
+      {#each data.lowestRatedFeeds as feed}
+        <li>
+          <div class="feed-risk-details">
+            <a class="title" href={feed.url} target="_blank" rel="noopener noreferrer">
+              {feed.title ?? feed.url}
+            </a>
+            <div class="meta">
+              rep {Number(feed.reputation).toFixed(2)} · {feed.feedback_count} vote{feed.feedback_count === 1 ? '' : 's'}
+            </div>
+          </div>
+          <button
+            class="ghost icon-button"
+            on:click={() => removeLowRatedFeed(feed.id, feed.title ?? feed.url)}
+            title="Remove feed"
+            aria-label="Remove feed"
+          >
+            <IconTrash size={16} stroke={1.9} />
+            <span class="sr-only">Remove feed</span>
+          </button>
+        </li>
+      {/each}
+    </ul>
+  {/if}
+  {#if feedActionMessage}
+    <p class="muted">{feedActionMessage}</p>
   {/if}
 </section>
 
@@ -286,6 +356,14 @@
     padding: 1.4rem;
   }
 
+  .lowest-rated-feeds {
+    margin-top: 1rem;
+    background: var(--surface);
+    border-radius: 20px;
+    border: 1px solid var(--surface-border);
+    padding: 1.4rem;
+  }
+
   .section-head {
     display: flex;
     align-items: center;
@@ -310,6 +388,31 @@
     gap: 0.9rem;
   }
 
+  .feed-risk-list {
+    margin: 0.9rem 0 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 0.8rem;
+  }
+
+  .feed-risk-list li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.7rem;
+    background: var(--surface-strong);
+    border: 1px solid var(--surface-border);
+    border-radius: 14px;
+    padding: 0.85rem;
+  }
+
+  .feed-risk-details {
+    display: grid;
+    gap: 0.25rem;
+    min-width: 0;
+  }
+
   .top-rated-cap {
     margin: 0.4rem 0 0;
   }
@@ -326,6 +429,21 @@
     align-items: center;
     justify-content: space-between;
     gap: 0.6rem;
+  }
+
+  .top-card-image-link {
+    display: block;
+    border-radius: 12px;
+    overflow: hidden;
+    margin-bottom: 0.7rem;
+  }
+
+  .top-card-image {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    display: block;
+    background: var(--surface-soft);
   }
 
   .title {

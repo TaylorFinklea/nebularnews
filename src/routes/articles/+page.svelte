@@ -9,6 +9,7 @@
     IconThumbDown,
     IconThumbUp
   } from '$lib/icons';
+  import { resolveArticleImageUrl } from '$lib/article-image';
   export let data;
 
   const scoreLabel = (score) => {
@@ -89,6 +90,12 @@
     for (const tagId of data.selectedTagIds ?? []) params.append('tags', tagId);
     params.set('page', String(nextPage));
     return `/articles?${params.toString()}`;
+  };
+
+  const articleHref = (articleId) => {
+    const currentPage = data.pagination?.page ?? 1;
+    const from = `${pageHref(currentPage)}#article-${articleId}`;
+    return `/articles/${articleId}?from=${encodeURIComponent(from)}`;
   };
 </script>
 
@@ -191,7 +198,7 @@
     <span class="sr-only">Apply filters</span>
   </button>
   {#if selectedTagIds.length > 0}
-    <a class="clear-link icon-link" href="/articles" title="Clear tag filters">
+    <a class="clear-link icon-link" href="/articles" title="Clear tag filters" data-sveltekit-reload="true">
       <IconFilterX size={14} stroke={1.9} />
       <span>Clear</span>
     </a>
@@ -206,13 +213,13 @@
   {#if (data.pagination?.totalPages ?? 1) > 1}
     <nav class="pagination" aria-label="Article pages">
       {#if data.pagination?.hasPrev}
-        <a class="ghost page-link" href={pageHref((data.pagination?.page ?? 1) - 1)}>Prev</a>
+        <a class="ghost page-link" href={pageHref((data.pagination?.page ?? 1) - 1)} data-sveltekit-reload="true">Prev</a>
       {:else}
         <span class="ghost page-link disabled" aria-disabled="true">Prev</span>
       {/if}
       <span class="page-current">Page {data.pagination?.page ?? 1} / {data.pagination?.totalPages ?? 1}</span>
       {#if data.pagination?.hasNext}
-        <a class="ghost page-link" href={pageHref((data.pagination?.page ?? 1) + 1)}>Next</a>
+        <a class="ghost page-link" href={pageHref((data.pagination?.page ?? 1) + 1)} data-sveltekit-reload="true">Next</a>
       {:else}
         <span class="ghost page-link disabled" aria-disabled="true">Next</span>
       {/if}
@@ -232,7 +239,22 @@
           <h2 class="date-group-heading">{publishDateLabel(article)}</h2>
         {/if}
       {/if}
-      <article class="card">
+      <article class="card" id={`article-${article.id}`}>
+        <a
+          class="card-image-link"
+          href={articleHref(article.id)}
+          title="Open article"
+          aria-label="Open article"
+          data-sveltekit-reload="true"
+        >
+          <img
+            class="card-image"
+            src={resolveArticleImageUrl(article)}
+            alt=""
+            loading="lazy"
+            decoding="async"
+          />
+        </a>
         <div class="card-head">
           <h2>{article.title ?? 'Untitled article'}</h2>
           <div class="pills">
@@ -303,7 +325,12 @@
             {/if}
           </button>
         </div>
-        <a class="button icon-link" href={`/articles/${article.id}`} title="Open article">
+        <a
+          class="button icon-link"
+          href={articleHref(article.id)}
+          title="Open article"
+          data-sveltekit-reload="true"
+        >
           <IconExternalLink size={15} stroke={1.9} />
           <span>Open</span>
         </a>
@@ -316,13 +343,13 @@
   <div class="pagination-bottom">
     <nav class="pagination" aria-label="Article pages bottom">
       {#if data.pagination?.hasPrev}
-        <a class="ghost page-link" href={pageHref((data.pagination?.page ?? 1) - 1)}>Prev</a>
+        <a class="ghost page-link" href={pageHref((data.pagination?.page ?? 1) - 1)} data-sveltekit-reload="true">Prev</a>
       {:else}
         <span class="ghost page-link disabled" aria-disabled="true">Prev</span>
       {/if}
       <span class="page-current">Page {data.pagination?.page ?? 1} / {data.pagination?.totalPages ?? 1}</span>
       {#if data.pagination?.hasNext}
-        <a class="ghost page-link" href={pageHref((data.pagination?.page ?? 1) + 1)}>Next</a>
+        <a class="ghost page-link" href={pageHref((data.pagination?.page ?? 1) + 1)} data-sveltekit-reload="true">Next</a>
       {:else}
         <span class="ghost page-link disabled" aria-disabled="true">Next</span>
       {/if}
@@ -349,6 +376,21 @@
     justify-content: space-between;
     align-items: center;
     gap: 1rem;
+  }
+
+  .card-image-link {
+    display: block;
+    border-radius: 14px;
+    overflow: hidden;
+    margin-bottom: 0.85rem;
+  }
+
+  .card-image {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+    display: block;
+    background: var(--surface-soft);
   }
 
   .pills {

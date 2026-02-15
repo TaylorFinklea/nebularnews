@@ -83,6 +83,7 @@ export const load = async ({ platform, request }) => {
       a.id,
       a.title,
       a.canonical_url,
+      a.image_url,
       a.published_at,
       a.fetched_at,
       a.excerpt,
@@ -104,6 +105,7 @@ export const load = async ({ platform, request }) => {
       id: string;
       title: string | null;
       canonical_url: string | null;
+      image_url: string | null;
       published_at: number | null;
       fetched_at: number | null;
       excerpt: string | null;
@@ -128,6 +130,28 @@ export const load = async ({ platform, request }) => {
     .filter((score) => score >= scoreCutoff)
     .map((score) => `score=${score}`)
     .join('&');
+  const lowestRatedFeeds = await db
+    .prepare(
+      `SELECT
+        f.id,
+        f.title,
+        f.url,
+        COUNT(ar.id) as feedback_count,
+        COALESCE(SUM(ar.value) * 1.0 / (COUNT(ar.id) + 5.0), 0) as reputation
+      FROM feeds f
+      JOIN article_reactions ar ON ar.feed_id = f.id
+      GROUP BY f.id, f.title, f.url
+      HAVING COUNT(ar.id) > 0
+      ORDER BY reputation ASC, feedback_count DESC, COALESCE(f.title, f.url) COLLATE NOCASE ASC
+      LIMIT 12`
+    )
+    .all<{
+      id: string;
+      title: string | null;
+      url: string;
+      feedback_count: number;
+      reputation: number;
+    }>();
 
   return {
     isDev: dev,
@@ -150,6 +174,7 @@ export const load = async ({ platform, request }) => {
       limit: topRatedLimit,
       href: topRatedScoreQuery ? `/articles?${topRatedScoreQuery}` : '/articles'
     },
-    topRatedArticles
+    topRatedArticles,
+    lowestRatedFeeds: lowestRatedFeeds.results ?? []
   };
 };

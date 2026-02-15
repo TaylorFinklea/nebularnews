@@ -22,6 +22,8 @@
   let summaryStyle = data.settings.summaryStyle;
   let summaryLength = data.settings.summaryLength;
   let autoReadDelayMs = Number(data.settings.autoReadDelayMs ?? 4000);
+  let articleCardLayout = data.settings.articleCardLayout ?? 'split';
+  let dashboardTopRatedLayout = data.settings.dashboardTopRatedLayout ?? 'stacked';
   let dashboardTopRatedCutoff = Number(data.settings.dashboardTopRatedCutoff ?? 3);
   let dashboardTopRatedLimit = Number(data.settings.dashboardTopRatedLimit ?? 5);
   $: autoReadDelaySeconds = (Number(autoReadDelayMs) / 1000).toFixed(2);
@@ -117,6 +119,8 @@
         summaryStyle,
         summaryLength,
         autoReadDelayMs,
+        articleCardLayout,
+        dashboardTopRatedLayout,
         dashboardTopRatedCutoff,
         dashboardTopRatedLimit
       })
@@ -393,6 +397,19 @@
     <p class="muted">
       Applies on article detail pages. Current delay: {autoReadDelaySeconds}s. 0 means immediate. Range {data.autoReadDelayRange.min}-{data.autoReadDelayRange.max} ms.
     </p>
+    <div class="field">
+      <div class="field-label">Articles card layout</div>
+      <div class="lane-toggle" role="radiogroup" aria-label="Articles card layout">
+        <label class:active={articleCardLayout === 'split'}>
+          <input type="radio" name="articleCardLayout" value="split" bind:group={articleCardLayout} />
+          <span>Split (1)</span>
+        </label>
+        <label class:active={articleCardLayout === 'stacked'}>
+          <input type="radio" name="articleCardLayout" value="stacked" bind:group={articleCardLayout} />
+          <span>Stacked (2)</span>
+        </label>
+      </div>
+    </div>
     <label>
       Dashboard top-rated cutoff (1-5)
       <input
@@ -413,6 +430,19 @@
         bind:value={dashboardTopRatedLimit}
       />
     </label>
+    <div class="field">
+      <div class="field-label">Dashboard top-rated layout</div>
+      <div class="lane-toggle" role="radiogroup" aria-label="Dashboard top-rated layout">
+        <label class:active={dashboardTopRatedLayout === 'split'}>
+          <input type="radio" name="dashboardTopRatedLayout" value="split" bind:group={dashboardTopRatedLayout} />
+          <span>Split</span>
+        </label>
+        <label class:active={dashboardTopRatedLayout === 'stacked'}>
+          <input type="radio" name="dashboardTopRatedLayout" value="stacked" bind:group={dashboardTopRatedLayout} />
+          <span>Stacked</span>
+        </label>
+      </div>
+    </div>
     <p class="muted">
       Controls the dashboard's Top Rated section. Cutoff range {data.dashboardTopRatedRange.cutoff.min}-{data.dashboardTopRatedRange.cutoff.max}; count range {data.dashboardTopRatedRange.limit.min}-{data.dashboardTopRatedRange.limit.max}.
     </p>
@@ -532,6 +562,16 @@
     gap: 0.45rem;
     font-size: 0.9rem;
     min-width: 0;
+  }
+
+  .field {
+    display: grid;
+    gap: 0.45rem;
+    min-width: 0;
+  }
+
+  .field-label {
+    font-size: 0.9rem;
   }
 
   input,

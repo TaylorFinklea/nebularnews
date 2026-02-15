@@ -1,4 +1,5 @@
-import { dbAll, dbGet } from '$lib/server/db';
+import { dbAll, dbGet, dbRun } from '$lib/server/db';
+import { extractLeadImageUrlFromHtml } from '$lib/server/images';
 import { getPreferredSourceForArticle, listSourcesForArticle } from '$lib/server/sources';
 import { getAutoReadDelayMs, getFeatureModelLane, getFeatureProviderModel } from '$lib/server/settings';
 import { listTags, listTagsForArticle } from '$lib/server/tags';
@@ -21,6 +22,24 @@ export const load = async ({ params, platform }) => {
     WHERE id = ?`,
     [params.id]
   );
+  if (article && !article.image_url && article.content_html) {
+    let extractedImage = extractLeadImageUrlFromHtml(article.content_html, article.canonical_url ?? null);
+    if (!extractedImage && article.canonical_url) {
+      try {
+        const res = await fetch(article.canonical_url, { headers: { 'user-agent': 'NebularNews/0.1 (+article-image)' } });
+        if (res.ok) {
+          const html = await res.text();
+          extractedImage = extractLeadImageUrlFromHtml(html, article.canonical_url);
+        }
+      } catch {
+        // Best-effort image fallback; ignore remote fetch failures.
+      }
+    }
+    if (extractedImage) {
+      article.image_url = extractedImage;
+      await dbRun(db, 'UPDATE articles SET image_url = ? WHERE id = ? AND (image_url IS NULL OR image_url = \'\')', [extractedImage, params.id]);
+    }
+  }
 
   const summary = await dbGet(
     db,

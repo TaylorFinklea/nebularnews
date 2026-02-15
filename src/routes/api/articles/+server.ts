@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { dbAll } from '$lib/server/db';
+import { extractLeadImageUrlFromHtml } from '$lib/server/images';
 import { getPreferredSourcesForArticles } from '$lib/server/sources';
 import { listTagsForArticles, resolveTagsByTokens } from '$lib/server/tags';
 
@@ -155,6 +156,7 @@ export const GET = async ({ url, platform }) => {
       a.id,
       a.canonical_url,
       a.image_url,
+      a.content_html,
       a.title,
       a.author,
       a.published_at,
@@ -185,10 +187,21 @@ export const GET = async ({ url, platform }) => {
     articles.map((article: { id: string }) => article.id)
   );
 
-  const hydratedArticles = articles.map((article: { id: string }) => {
+  const hydratedArticles = articles.map((article: {
+    id: string;
+    image_url?: string | null;
+    content_html?: string | null;
+    canonical_url?: string | null;
+  }) => {
     const source = sourceByArticle.get(article.id);
+    const extractedImage =
+      !article.image_url && article.content_html
+        ? extractLeadImageUrlFromHtml(article.content_html, article.canonical_url ?? null)
+        : null;
+    const { content_html: _contentHtml, ...rest } = article as { content_html?: string | null } & Record<string, unknown>;
     return {
-      ...article,
+      ...rest,
+      image_url: article.image_url ?? extractedImage ?? null,
       tags: tagsByArticle.get(article.id) ?? [],
       source_name: source?.sourceName ?? null,
       source_feed_id: source?.feedId ?? null,

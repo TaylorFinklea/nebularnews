@@ -12,6 +12,6 @@ describe('resolveArticleImageUrl', () => {
     const first = buildUnsplashFallbackUrl({ id: 'a1', title: 'NASA launches new lunar rover mission' });
     const second = buildUnsplashFallbackUrl({ id: 'a1', title: 'NASA launches new lunar rover mission' });
     expect(first).toBe(second);
-    expect(first).toContain('source.unsplash.com');
+    expect(first).toContain('images.unsplash.com');
   });
 });

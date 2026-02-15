@@ -20,6 +20,9 @@ declare namespace App {
       DEFAULT_CHAT_PROVIDER?: string;
       DEFAULT_CHAT_MODEL?: string;
       DEFAULT_CHAT_REASONING_EFFORT?: string;
+      MCP_BEARER_TOKEN?: string;
+      MCP_SERVER_NAME?: string;
+      MCP_SERVER_VERSION?: string;
     };
     context: ExecutionContext;
   }

@@ -1,33 +1,48 @@
 <script>
   import { invalidateAll } from '$app/navigation';
   import { onDestroy, onMount } from 'svelte';
-  import { IconClockPlay, IconExternalLink, IconTrash } from '$lib/icons';
+  import { IconClockPlay, IconExternalLink } from '$lib/icons';
   import { resolveArticleImageUrl } from '$lib/article-image';
 
   export let data;
 
   const PULL_SESSION_KEY = 'nebular:manual-pull-in-progress';
   const PULL_STATUS_POLL_MS = 1500;
+  const PULL_START_GRACE_MS = 15000;
+  const PULL_COMPLETION_SKEW_MS = 5000;
 
   let isPulling = false;
   let pullMessage = '';
   let pullStatusTimer = null;
-  let localPullRequestActive = false;
-  let lastServerPullState = false;
-  let feedActionMessage = '';
+  let pullStatusSyncInFlight = false;
+  let pullTracker = { pending: false, startedAt: null };
 
-  const readPullFlag = () => {
+  const toFiniteNumber = (value) => {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : null;
+  };
+
+  const readPullTracker = () => {
     try {
-      return sessionStorage.getItem(PULL_SESSION_KEY) === '1';
+      const raw = sessionStorage.getItem(PULL_SESSION_KEY);
+      if (!raw) return { pending: false, startedAt: null };
+      if (raw === '1') {
+        return { pending: true, startedAt: Date.now() };
+      }
+      const parsed = JSON.parse(raw);
+      return {
+        pending: Boolean(parsed?.pending),
+        startedAt: toFiniteNumber(parsed?.startedAt)
+      };
     } catch {
-      return false;
+      return { pending: false, startedAt: null };
     }
   };
 
-  const writePullFlag = (value) => {
+  const writePullTracker = (value) => {
     try {
-      if (value) {
-        sessionStorage.setItem(PULL_SESSION_KEY, '1');
+      if (value.pending) {
+        sessionStorage.setItem(PULL_SESSION_KEY, JSON.stringify(value));
       } else {
         sessionStorage.removeItem(PULL_SESSION_KEY);
       }
@@ -36,45 +51,89 @@
     }
   };
 
+  const clearPullTracker = () => {
+    pullTracker = { pending: false, startedAt: null };
+    writePullTracker(pullTracker);
+  };
+
+  const completionMatchesTracker = (completedAt, startedAt) => {
+    if (completedAt === null) return false;
+    if (startedAt === null) return true;
+    return completedAt + PULL_COMPLETION_SKEW_MS >= startedAt;
+  };
+
   const syncPullStatus = async () => {
+    if (pullStatusSyncInFlight) return;
+    pullStatusSyncInFlight = true;
     try {
       const res = await fetch('/api/pull');
       if (!res.ok) return;
       const payload = await res.json().catch(() => ({}));
       const inProgress = Boolean(payload?.inProgress);
-      const hadPendingFlag = readPullFlag();
-      lastServerPullState = inProgress;
+      const startedAt = toFiniteNumber(payload?.startedAt);
+      const completedAt = toFiniteNumber(payload?.completedAt);
+      const lastRunStatus =
+        payload?.lastRunStatus === 'success' || payload?.lastRunStatus === 'failed'
+          ? payload.lastRunStatus
+          : null;
+      const lastError = typeof payload?.lastError === 'string' && payload.lastError.length > 0 ? payload.lastError : null;
 
       if (inProgress) {
         isPulling = true;
-        writePullFlag(true);
+        if (!pullTracker.pending) {
+          pullTracker = { pending: true, startedAt: startedAt ?? Date.now() };
+        } else if (pullTracker.startedAt === null && startedAt !== null) {
+          pullTracker = { ...pullTracker, startedAt };
+        }
+        writePullTracker(pullTracker);
         return;
       }
 
-      if (!localPullRequestActive) {
+      if (!pullTracker.pending) {
         isPulling = false;
-        writePullFlag(false);
-        if (hadPendingFlag) {
-          if (!pullMessage) pullMessage = 'Pull finished. Refreshing dashboard...';
-          await invalidateAll();
-        }
+        return;
       }
+
+      const completedMatches = completionMatchesTracker(completedAt, pullTracker.startedAt);
+      const waitingForStart =
+        pullTracker.startedAt !== null && Date.now() - pullTracker.startedAt < PULL_START_GRACE_MS;
+
+      if (!completedMatches && waitingForStart) {
+        isPulling = true;
+        return;
+      }
+
+      isPulling = false;
+      clearPullTracker();
+      if (completedMatches) {
+        pullMessage =
+          lastRunStatus === 'failed'
+            ? lastError
+              ? `Pull failed: ${lastError}`
+              : 'Pull failed.'
+            : 'Pull complete. Refreshing dashboard...';
+        await invalidateAll();
+        return;
+      }
+
+      pullMessage = 'Pull did not confirm start before timeout. Please try again.';
     } catch {
       // Ignore transient status errors.
+    } finally {
+      pullStatusSyncInFlight = false;
     }
   };
 
   onMount(() => {
-    const pending = readPullFlag();
-    if (pending) {
+    pullTracker = readPullTracker();
+    if (pullTracker.pending) {
       isPulling = true;
-      void syncPullStatus();
+      if (!pullMessage) pullMessage = 'Pulling feeds now...';
     }
 
+    void syncPullStatus();
     pullStatusTimer = setInterval(() => {
-      if (isPulling || readPullFlag() || lastServerPullState) {
-        void syncPullStatus();
-      }
+      void syncPullStatus();
     }, PULL_STATUS_POLL_MS);
   });
 
@@ -97,10 +156,11 @@
   };
 
   const runManualPull = async () => {
+    if (isPulling) return;
     isPulling = true;
     pullMessage = '';
-    localPullRequestActive = true;
-    writePullFlag(true);
+    pullTracker = { pending: true, startedAt: Date.now() };
+    writePullTracker(pullTracker);
     const cycles = data.isDev ? 3 : 1;
     try {
       const res = await fetch('/api/pull', {
@@ -108,9 +168,23 @@
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ cycles })
       });
-      const payload = await res.json();
+      const payload = await res.json().catch(() => ({}));
       if (!res.ok) {
+        if (res.status === 409) {
+          isPulling = true;
+          pullMessage = payload?.error ?? 'Manual pull already in progress';
+          void syncPullStatus();
+          return;
+        }
         pullMessage = payload?.error ?? 'Manual pull failed';
+        isPulling = false;
+        clearPullTracker();
+        return;
+      }
+      if (payload?.started) {
+        isPulling = true;
+        pullMessage = 'Pull started. Running in background...';
+        void syncPullStatus();
         return;
       }
       pullMessage = `Pull complete (${payload.cycles} cycle${payload.cycles === 1 ? '' : 's'}). Due feeds: ${payload.stats.dueFeeds}, items seen: ${payload.stats.itemsSeen}, items processed: ${payload.stats.itemsProcessed}, articles: ${payload.stats.articles}, pending jobs: ${payload.stats.pendingJobs}, feeds with errors: ${payload.stats.feedsWithErrors}.`;
@@ -118,32 +192,16 @@
         const first = payload.stats.recentErrors[0];
         pullMessage += ` First error: ${first.url} -> ${first.message}`;
       }
-      await invalidateAll();
-    } catch {
-      pullMessage = 'Manual pull failed';
-    } finally {
-      localPullRequestActive = false;
       isPulling = false;
-      writePullFlag(false);
-    }
-  };
-
-  const removeLowRatedFeed = async (feedId, label) => {
-    const targetLabel = label?.trim() || 'this feed';
-    const confirmed = confirm(`Remove "${targetLabel}"?`);
-    if (!confirmed) return;
-
-    feedActionMessage = '';
-    try {
-      const res = await fetch(`/api/feeds/${feedId}`, { method: 'DELETE' });
-      if (!res.ok) {
-        feedActionMessage = 'Failed to remove feed.';
+      clearPullTracker();
+      await invalidateAll();
+    } catch (error) {
+      if (typeof DOMException !== 'undefined' && error instanceof DOMException && error.name === 'AbortError') {
         return;
       }
-      feedActionMessage = `Removed "${targetLabel}".`;
-      await invalidateAll();
-    } catch {
-      feedActionMessage = 'Failed to remove feed.';
+      pullMessage = 'Manual pull failed';
+      isPulling = false;
+      clearPullTracker();
     }
   };
 
@@ -225,7 +283,7 @@
   {:else}
     <div class="top-list">
       {#each data.topRatedArticles as article}
-        <article class="top-card">
+        <article class={`top-card layout-${data.topRatedConfig?.layout ?? 'stacked'}`}>
           <a class="top-card-image-link" href={`/articles/${article.id}`}>
             <img
               class="top-card-image"
@@ -247,46 +305,6 @@
         </article>
       {/each}
     </div>
-  {/if}
-</section>
-
-<section class="lowest-rated-feeds">
-  <div class="section-head">
-    <h3>Lowest Rated Feeds</h3>
-    <a href="/feeds" class="inline-action">
-      <IconExternalLink size={14} stroke={1.9} />
-      <span>Manage feeds</span>
-    </a>
-  </div>
-  {#if data.lowestRatedFeeds.length === 0}
-    <p class="muted">No rated feeds yet.</p>
-  {:else}
-    <ul class="feed-risk-list">
-      {#each data.lowestRatedFeeds as feed}
-        <li>
-          <div class="feed-risk-details">
-            <a class="title" href={feed.url} target="_blank" rel="noopener noreferrer">
-              {feed.title ?? feed.url}
-            </a>
-            <div class="meta">
-              rep {Number(feed.reputation).toFixed(2)} · {feed.feedback_count} vote{feed.feedback_count === 1 ? '' : 's'}
-            </div>
-          </div>
-          <button
-            class="ghost icon-button"
-            on:click={() => removeLowRatedFeed(feed.id, feed.title ?? feed.url)}
-            title="Remove feed"
-            aria-label="Remove feed"
-          >
-            <IconTrash size={16} stroke={1.9} />
-            <span class="sr-only">Remove feed</span>
-          </button>
-        </li>
-      {/each}
-    </ul>
-  {/if}
-  {#if feedActionMessage}
-    <p class="muted">{feedActionMessage}</p>
   {/if}
 </section>
 
@@ -356,14 +374,6 @@
     padding: 1.4rem;
   }
 
-  .lowest-rated-feeds {
-    margin-top: 1rem;
-    background: var(--surface);
-    border-radius: 20px;
-    border: 1px solid var(--surface-border);
-    padding: 1.4rem;
-  }
-
   .section-head {
     display: flex;
     align-items: center;
@@ -388,31 +398,6 @@
     gap: 0.9rem;
   }
 
-  .feed-risk-list {
-    margin: 0.9rem 0 0;
-    padding: 0;
-    list-style: none;
-    display: grid;
-    gap: 0.8rem;
-  }
-
-  .feed-risk-list li {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 0.7rem;
-    background: var(--surface-strong);
-    border: 1px solid var(--surface-border);
-    border-radius: 14px;
-    padding: 0.85rem;
-  }
-
-  .feed-risk-details {
-    display: grid;
-    gap: 0.25rem;
-    min-width: 0;
-  }
-
   .top-rated-cap {
     margin: 0.4rem 0 0;
   }
@@ -422,6 +407,17 @@
     border: 1px solid var(--surface-border);
     border-radius: 16px;
     padding: 1rem;
+    display: grid;
+    gap: 0.55rem;
+  }
+
+  .top-card.layout-split {
+    grid-template-columns: 170px minmax(0, 1fr);
+    grid-template-areas:
+      'image head'
+      'image excerpt'
+      'image meta';
+    align-items: start;
   }
 
   .top-card-head {
@@ -429,6 +425,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 0.6rem;
+    grid-area: head;
   }
 
   .top-card-image-link {
@@ -436,6 +433,12 @@
     border-radius: 12px;
     overflow: hidden;
     margin-bottom: 0.7rem;
+    grid-area: image;
+  }
+
+  .top-card.layout-split .top-card-image-link {
+    margin-bottom: 0;
+    height: 114px;
   }
 
   .top-card-image {
@@ -444,6 +447,11 @@
     object-fit: cover;
     display: block;
     background: var(--surface-soft);
+    height: 100%;
+  }
+
+  .top-card.layout-split .top-card-image {
+    aspect-ratio: auto;
   }
 
   .title {
@@ -462,6 +470,7 @@
   .excerpt {
     margin: 0.65rem 0;
     color: var(--muted-text);
+    grid-area: excerpt;
   }
 
   .meta {
@@ -470,6 +479,7 @@
     gap: 0.8rem;
     font-size: 0.82rem;
     color: var(--muted-text);
+    grid-area: meta;
   }
 
   .dev-tools {
@@ -539,6 +549,25 @@
     .top-card-head {
       flex-direction: column;
       align-items: flex-start;
+    }
+
+    .top-card.layout-split {
+      grid-template-columns: 1fr;
+      grid-template-areas:
+        'head'
+        'image'
+        'excerpt'
+        'meta';
+    }
+
+    .top-card.layout-split .top-card-image-link {
+      height: auto;
+      margin-bottom: 0.4rem;
+    }
+
+    .top-card.layout-split .top-card-image {
+      aspect-ratio: 16 / 9;
+      height: auto;
     }
 
     .meta {

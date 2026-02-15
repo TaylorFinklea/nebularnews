@@ -13,6 +13,8 @@ export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
 export type SummaryStyle = 'concise' | 'detailed' | 'bullet';
 export type SummaryLength = 'short' | 'medium' | 'long';
 export type AiModelLane = 'pipeline' | 'chat';
+export type ArticleCardLayout = 'split' | 'stacked';
+export type DashboardTopRatedLayout = 'split' | 'stacked';
 export type AiFeature =
   | 'summaries'
   | 'scoring'
@@ -28,6 +30,8 @@ const DEFAULT_MODEL = 'gpt-4o-mini';
 const DEFAULT_SUMMARY_STYLE: SummaryStyle = 'concise';
 const DEFAULT_SUMMARY_LENGTH: SummaryLength = 'short';
 const DEFAULT_AI_MODEL_LANE: AiModelLane = 'pipeline';
+const DEFAULT_ARTICLE_CARD_LAYOUT: ArticleCardLayout = 'split';
+const DEFAULT_DASHBOARD_TOP_RATED_LAYOUT: DashboardTopRatedLayout = 'stacked';
 const DEFAULT_AUTO_READ_DELAY_MS = 4000;
 const MIN_AUTO_READ_DELAY_MS = 0;
 const MAX_AUTO_READ_DELAY_MS = 30000;
@@ -92,6 +96,16 @@ const toSummaryLength = (value: string | null): SummaryLength => {
 const toAiModelLane = (value: string | null): AiModelLane => {
   if (value === 'chat' || value === 'pipeline') return value;
   return DEFAULT_AI_MODEL_LANE;
+};
+
+const toArticleCardLayout = (value: string | null): ArticleCardLayout => {
+  if (value === 'split' || value === 'stacked') return value;
+  return DEFAULT_ARTICLE_CARD_LAYOUT;
+};
+
+const toDashboardTopRatedLayout = (value: string | null): DashboardTopRatedLayout => {
+  if (value === 'split' || value === 'stacked') return value;
+  return DEFAULT_DASHBOARD_TOP_RATED_LAYOUT;
 };
 
 export type ProviderModelConfig = {
@@ -268,6 +282,14 @@ export async function getDashboardTopRatedConfig(db: Db) {
   const cutoff = clampDashboardTopRatedCutoff(await getSetting(db, 'dashboard_top_rated_cutoff'));
   const limit = clampDashboardTopRatedLimit(await getSetting(db, 'dashboard_top_rated_limit'));
   return { cutoff, limit };
+}
+
+export async function getDashboardTopRatedLayout(db: Db): Promise<DashboardTopRatedLayout> {
+  return toDashboardTopRatedLayout(await getSetting(db, 'dashboard_top_rated_layout'));
+}
+
+export async function getArticleCardLayout(db: Db): Promise<ArticleCardLayout> {
+  return toArticleCardLayout(await getSetting(db, 'article_card_layout'));
 }
 
 export async function getProviderKey(db: Db, env: App.Platform['env'], provider: Provider) {

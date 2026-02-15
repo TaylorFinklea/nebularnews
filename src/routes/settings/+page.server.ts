@@ -13,6 +13,8 @@ import {
   MAX_AUTO_READ_DELAY_MS,
   MIN_AUTO_READ_DELAY_MS,
   getAutoReadDelayMs,
+  getArticleCardLayout,
+  getDashboardTopRatedLayout,
   getConfiguredChatProviderModel,
   getConfiguredIngestProviderModel,
   getScorePromptConfig,
@@ -27,6 +29,7 @@ export const load = async ({ platform }) => {
   const chatModel = await getConfiguredChatProviderModel(db, platform.env);
   const scorePrompt = await getScorePromptConfig(db);
   const dashboardTopRated = await getDashboardTopRatedConfig(db);
+  const dashboardTopRatedLayout = await getDashboardTopRatedLayout(db);
   const settings = {
     featureLanes: {
       summaries: featureLanes.summaries,
@@ -48,6 +51,8 @@ export const load = async ({ platform }) => {
     summaryStyle: (await getSetting(db, 'summary_style')) ?? 'concise',
     summaryLength: (await getSetting(db, 'summary_length')) ?? 'short',
     autoReadDelayMs: await getAutoReadDelayMs(db),
+    articleCardLayout: await getArticleCardLayout(db),
+    dashboardTopRatedLayout,
     dashboardTopRatedCutoff: dashboardTopRated.cutoff,
     dashboardTopRatedLimit: dashboardTopRated.limit
   };

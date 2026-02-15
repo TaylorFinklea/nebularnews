@@ -1,4 +1,6 @@
 import { dbAll, dbGet } from '$lib/server/db';
+import { getArticleCardLayout } from '$lib/server/settings';
+import { extractLeadImageUrlFromHtml } from '$lib/server/images';
 import { getPreferredSourcesForArticles } from '$lib/server/sources';
 import { listTags, listTagsForArticles, resolveTagsByTokens } from '$lib/server/tags';
 
@@ -11,6 +13,8 @@ const REACTION_VALUES = ['up', 'down', 'none'] as const;
 type ReactionValue = (typeof REACTION_VALUES)[number];
 const VIEW_VALUES = ['list', 'grouped'] as const;
 type ViewValue = (typeof VIEW_VALUES)[number];
+const LAYOUT_VALUES = ['split', 'stacked'] as const;
+type LayoutValue = (typeof LAYOUT_VALUES)[number];
 const SORT_VALUES = ['newest', 'oldest', 'score_desc', 'score_asc', 'unread_first', 'title_az'] as const;
 type SortValue = (typeof SORT_VALUES)[number];
 const effectiveScoreExpr = `COALESCE(
@@ -23,11 +27,16 @@ const effectiveReadExpr = `COALESCE(
 )`;
 
 export const load = async ({ platform, url }) => {
+  const defaultCardLayout = await getArticleCardLayout(platform.env.DB);
   const q = url.searchParams.get('q')?.trim() ?? '';
   const requestedPage = Math.max(1, Number(url.searchParams.get('page') ?? 1) || 1);
   const view = (() => {
     const value = (url.searchParams.get('view') ?? 'list').trim().toLowerCase();
     return VIEW_VALUES.includes(value as ViewValue) ? (value as ViewValue) : 'list';
+  })();
+  const layout = (() => {
+    const value = (url.searchParams.get('layout') ?? defaultCardLayout).trim().toLowerCase();
+    return LAYOUT_VALUES.includes(value as LayoutValue) ? (value as LayoutValue) : defaultCardLayout;
   })();
   const selectedScores = (() => {
     const requested = [
@@ -176,6 +185,7 @@ export const load = async ({ platform, url }) => {
       a.id,
       a.canonical_url,
       a.image_url,
+      a.content_html,
       a.title,
       a.author,
       a.published_at,
@@ -207,10 +217,21 @@ export const load = async ({ platform, url }) => {
   );
   const availableTags = await listTags(platform.env.DB, { limit: 150 });
 
-  const hydratedArticles = articles.map((article: { id: string }) => {
+  const hydratedArticles = articles.map((article: {
+    id: string;
+    image_url?: string | null;
+    content_html?: string | null;
+    canonical_url?: string | null;
+  }) => {
     const source = sourceByArticle.get(article.id);
+    const extractedImage =
+      !article.image_url && article.content_html
+        ? extractLeadImageUrlFromHtml(article.content_html, article.canonical_url ?? null)
+        : null;
+    const { content_html: _contentHtml, ...rest } = article as { content_html?: string | null } & Record<string, unknown>;
     return {
-      ...article,
+      ...rest,
+      image_url: article.image_url ?? extractedImage ?? null,
       tags: tagsByArticle.get(article.id) ?? [],
       source_name: source?.sourceName ?? null,
       source_feed_id: source?.feedId ?? null,
@@ -226,6 +247,7 @@ export const load = async ({ platform, url }) => {
     readFilter,
     sort,
     view,
+    layout,
     selectedReactions,
     availableTags,
     selectedTagIds,

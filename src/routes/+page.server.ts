@@ -1,6 +1,6 @@
 import { dev } from '$app/environment';
 import { dbGet } from '$lib/server/db';
-import { getDashboardTopRatedConfig } from '$lib/server/settings';
+import { getDashboardTopRatedConfig, getDashboardTopRatedLayout } from '$lib/server/settings';
 import { getPreferredSourcesForArticles } from '$lib/server/sources';
 import { parse as parseCookie } from 'cookie';
 import { clampTimezoneOffsetMinutes, dayRangeForTimezoneOffset } from '$lib/server/time';
@@ -13,6 +13,7 @@ const effectiveScoreExpr = `COALESCE(
 export const load = async ({ platform, request }) => {
   const db = platform.env.DB;
   const dashboardTopRated = await getDashboardTopRatedConfig(db);
+  const dashboardTopRatedLayout = await getDashboardTopRatedLayout(db);
   const scoreCutoff = dashboardTopRated.cutoff;
   const topRatedLimit = dashboardTopRated.limit;
   const cookies = parseCookie(request.headers.get('cookie') ?? '');
@@ -130,28 +131,6 @@ export const load = async ({ platform, request }) => {
     .filter((score) => score >= scoreCutoff)
     .map((score) => `score=${score}`)
     .join('&');
-  const lowestRatedFeeds = await db
-    .prepare(
-      `SELECT
-        f.id,
-        f.title,
-        f.url,
-        COUNT(ar.id) as feedback_count,
-        COALESCE(SUM(ar.value) * 1.0 / (COUNT(ar.id) + 5.0), 0) as reputation
-      FROM feeds f
-      JOIN article_reactions ar ON ar.feed_id = f.id
-      GROUP BY f.id, f.title, f.url
-      HAVING COUNT(ar.id) > 0
-      ORDER BY reputation ASC, feedback_count DESC, COALESCE(f.title, f.url) COLLATE NOCASE ASC
-      LIMIT 12`
-    )
-    .all<{
-      id: string;
-      title: string | null;
-      url: string;
-      feedback_count: number;
-      reputation: number;
-    }>();
 
   return {
     isDev: dev,
@@ -172,9 +151,9 @@ export const load = async ({ platform, request }) => {
     topRatedConfig: {
       scoreCutoff,
       limit: topRatedLimit,
+      layout: dashboardTopRatedLayout,
       href: topRatedScoreQuery ? `/articles?${topRatedScoreQuery}` : '/articles'
     },
-    topRatedArticles,
-    lowestRatedFeeds: lowestRatedFeeds.results ?? []
+    topRatedArticles
   };
 };

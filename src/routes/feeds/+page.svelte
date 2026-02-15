@@ -64,6 +64,32 @@
   </div>
 
   <div class="card">
+    <h2>Lowest Rated Feeds</h2>
+    <p class="muted">Only feeds with thumbs feedback appear here.</p>
+    {#if data.lowestRatedFeeds.length === 0}
+      <p class="muted">No rated feeds yet.</p>
+    {:else}
+      <ul class="ranked-list">
+        {#each data.lowestRatedFeeds as feed}
+          <li>
+            <div>
+              <strong>{feed.title ?? feed.url}</strong>
+              <div class="meta">{feed.url}</div>
+              <div class="meta">
+                Reputation: {Number(feed.reputation ?? 0).toFixed(2)} ({feed.feedback_count} votes)
+              </div>
+            </div>
+            <button class="ghost icon-button" on:click={() => removeFeed(feed.id)} title="Remove feed" aria-label="Remove feed">
+              <IconTrash size={16} stroke={1.9} />
+              <span class="sr-only">Remove feed</span>
+            </button>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+  </div>
+
+  <div class="card">
     <h2>Current feeds</h2>
     {#if data.feeds.length === 0}
       <p class="muted">No feeds yet. Add your first RSS feed to get started.</p>
@@ -179,6 +205,14 @@
     justify-content: space-between;
     align-items: center;
     gap: 1rem;
+  }
+
+  .ranked-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 0.8rem;
   }
 
   .meta {

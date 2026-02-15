@@ -4,7 +4,7 @@ import { pollFeeds } from '$lib/server/ingest';
 import { processJobs } from '$lib/server/jobs';
 import { ensureSchema } from '$lib/server/migrations';
 
-const publicPaths = ['/login', '/api/auth/login', '/api/auth/logout', '/favicon', '/robots.txt'];
+const publicPaths = ['/login', '/api/auth/login', '/api/auth/logout', '/favicon', '/robots.txt', '/mcp'];
 
 export const handle: Handle = async ({ event, resolve }) => {
   const { pathname } = event.url;

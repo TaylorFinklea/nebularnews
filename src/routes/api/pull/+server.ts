@@ -6,7 +6,9 @@ export const GET = async ({ platform }) => {
   return json({
     inProgress: state.inProgress,
     startedAt: state.startedAt,
-    completedAt: state.completedAt
+    completedAt: state.completedAt,
+    lastRunStatus: state.lastRunStatus,
+    lastError: state.lastError
   });
 };
 
@@ -18,8 +20,20 @@ export const POST = async ({ request, platform }) => {
     : 1;
 
   try {
-    const stats = await runManualPull(platform.env, cycles);
-    return json({ ok: true, cycles, stats });
+    const state = await getManualPullState(platform.env.DB);
+    if (state.inProgress) {
+      return json({ error: 'Manual pull already in progress' }, { status: 409 });
+    }
+
+    // Keep the pull running even if the user navigates away or refreshes.
+    const runPromise = runManualPull(platform.env, cycles);
+    platform.context.waitUntil(
+      runPromise.catch((error) => {
+        console.error('Background manual pull failed', error);
+      })
+    );
+
+    return json({ ok: true, cycles, started: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Manual pull failed';
     if (message.includes('already in progress')) {

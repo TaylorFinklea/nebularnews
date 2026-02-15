@@ -7,6 +7,8 @@ import {
   clampDashboardTopRatedCutoff,
   clampDashboardTopRatedLimit,
   getAutoReadDelayMs,
+  getArticleCardLayout,
+  getDashboardTopRatedLayout,
   getConfiguredChatProviderModel,
   getDashboardTopRatedConfig,
   getConfiguredIngestProviderModel,
@@ -23,6 +25,7 @@ export const GET = async ({ platform }) => {
   const chatModel = await getConfiguredChatProviderModel(db, platform.env);
   const scorePrompt = await getScorePromptConfig(db);
   const dashboardTopRated = await getDashboardTopRatedConfig(db);
+  const dashboardTopRatedLayout = await getDashboardTopRatedLayout(db);
   const settings = {
     featureLanes: {
       summaries: featureLanes.summaries,
@@ -45,6 +48,8 @@ export const GET = async ({ platform }) => {
     summaryLength: (await getSetting(db, 'summary_length')) ?? 'short',
     pollInterval: (await getSetting(db, 'poll_interval')) ?? '60',
     autoReadDelayMs: await getAutoReadDelayMs(db),
+    articleCardLayout: await getArticleCardLayout(db),
+    dashboardTopRatedLayout,
     dashboardTopRatedCutoff: dashboardTopRated.cutoff,
     dashboardTopRatedLimit: dashboardTopRated.limit
   };
@@ -71,6 +76,8 @@ export const POST = async ({ request, platform }) => {
   const validProviders = new Set(['openai', 'anthropic']);
   const validEfforts = new Set(['minimal', 'low', 'medium', 'high']);
   const validModelLanes = new Set(['pipeline', 'chat']);
+  const validArticleCardLayouts = new Set(['split', 'stacked']);
+  const validDashboardTopRatedLayouts = new Set(['split', 'stacked']);
   const featureLaneKeys: Record<string, string> = {
     summaries: 'lane_summaries',
     scoring: 'lane_scoring',
@@ -121,6 +128,12 @@ export const POST = async ({ request, platform }) => {
 
   if (body?.summaryStyle) entries.push(['summary_style', body.summaryStyle]);
   if (body?.summaryLength) entries.push(['summary_length', body.summaryLength]);
+  if (body?.articleCardLayout && validArticleCardLayouts.has(body.articleCardLayout)) {
+    entries.push(['article_card_layout', body.articleCardLayout]);
+  }
+  if (body?.dashboardTopRatedLayout && validDashboardTopRatedLayouts.has(body.dashboardTopRatedLayout)) {
+    entries.push(['dashboard_top_rated_layout', body.dashboardTopRatedLayout]);
+  }
   if (body?.pollInterval) entries.push(['poll_interval', String(body.pollInterval)]);
   if (body?.autoReadDelayMs !== undefined && body?.autoReadDelayMs !== null) {
     entries.push(['auto_read_delay_ms', String(clampAutoReadDelayMs(body.autoReadDelayMs))]);

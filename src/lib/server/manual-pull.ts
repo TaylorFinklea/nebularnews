@@ -20,27 +20,39 @@ export type PullStats = {
   recentErrors: { url: string; message: string }[];
 };
 
+export type PullRunStatus = 'success' | 'failed' | null;
+
 export type ManualPullState = {
   inProgress: boolean;
   startedAt: number | null;
   completedAt: number | null;
+  lastRunStatus: PullRunStatus;
+  lastError: string | null;
 };
 
 const parseManualPullState = (raw: string | null): ManualPullState => {
-  if (!raw) return { inProgress: false, startedAt: null, completedAt: null };
+  if (!raw) {
+    return { inProgress: false, startedAt: null, completedAt: null, lastRunStatus: null, lastError: null };
+  }
   try {
     const parsed = JSON.parse(raw) as {
       inProgress?: boolean;
       startedAt?: number | null;
       completedAt?: number | null;
+      lastRunStatus?: PullRunStatus;
+      lastError?: string | null;
     };
+    const lastRunStatus =
+      parsed?.lastRunStatus === 'success' || parsed?.lastRunStatus === 'failed' ? parsed.lastRunStatus : null;
     return {
       inProgress: Boolean(parsed?.inProgress),
       startedAt: typeof parsed?.startedAt === 'number' ? parsed.startedAt : null,
-      completedAt: typeof parsed?.completedAt === 'number' ? parsed.completedAt : null
+      completedAt: typeof parsed?.completedAt === 'number' ? parsed.completedAt : null,
+      lastRunStatus,
+      lastError: typeof parsed?.lastError === 'string' && parsed.lastError.length > 0 ? parsed.lastError : null
     };
   } catch {
-    return { inProgress: false, startedAt: null, completedAt: null };
+    return { inProgress: false, startedAt: null, completedAt: null, lastRunStatus: null, lastError: null };
   }
 };
 
@@ -68,7 +80,9 @@ export async function getManualPullState(db: Db): Promise<ManualPullState> {
     const resetState: ManualPullState = {
       inProgress: false,
       startedAt: null,
-      completedAt: persisted.completedAt
+      completedAt: persisted.completedAt,
+      lastRunStatus: persisted.lastRunStatus,
+      lastError: persisted.lastError
     };
     await writeManualPullState(db, resetState);
     return resetState;
@@ -77,7 +91,9 @@ export async function getManualPullState(db: Db): Promise<ManualPullState> {
     return {
       inProgress: true,
       startedAt: pullStartedAt,
-      completedAt: pullCompletedAt
+      completedAt: pullCompletedAt,
+      lastRunStatus: persisted.lastRunStatus,
+      lastError: persisted.lastError
     };
   }
   return persisted;
@@ -103,8 +119,12 @@ export async function runManualPull(env: App.Platform['env'], cycles: number): P
   await writeManualPullState(env.DB, {
     inProgress: true,
     startedAt: pullStartedAt,
-    completedAt: persisted.completedAt
+    completedAt: persisted.completedAt,
+    lastRunStatus: null,
+    lastError: null
   });
+  let runError: string | null = null;
+  let stats: PullStats | null = null;
   try {
     // Manual pulls should bypass polling backoff windows and retry immediately.
     await dbRun(env.DB, 'UPDATE feeds SET next_poll_at = ? WHERE disabled = 0', [now()]);
@@ -137,7 +157,7 @@ export async function runManualPull(env: App.Platform['env'], cycles: number): P
       'SELECT COUNT(*) as count FROM feeds WHERE error_count > 0'
     );
 
-    return {
+    stats = {
       feeds: feeds?.count ?? 0,
       articles: articles?.count ?? 0,
       pendingJobs: pendingJobs?.count ?? 0,
@@ -147,6 +167,10 @@ export async function runManualPull(env: App.Platform['env'], cycles: number): P
       itemsProcessed,
       recentErrors
     };
+    return stats;
+  } catch (error) {
+    runError = error instanceof Error ? error.message : 'Manual pull failed';
+    throw error;
   } finally {
     pullInProgress = false;
     pullCompletedAt = Date.now();
@@ -154,7 +178,9 @@ export async function runManualPull(env: App.Platform['env'], cycles: number): P
     await writeManualPullState(env.DB, {
       inProgress: false,
       startedAt: null,
-      completedAt: pullCompletedAt
+      completedAt: pullCompletedAt,
+      lastRunStatus: runError ? 'failed' : stats ? 'success' : null,
+      lastError: runError
     });
   }
 }

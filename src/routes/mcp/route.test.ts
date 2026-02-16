@@ -155,4 +155,93 @@ describe('/mcp route auth behavior', () => {
     expect(names).toContain('search');
     expect(names).toContain('fetch');
   });
+
+  it('serves resources/list and resources/read over MCP with bearer auth', async () => {
+    const listResponse = await POST({
+      request: new Request('http://localhost/mcp', {
+        method: 'POST',
+        headers: {
+          authorization: 'Bearer mcp-token',
+          'content-type': 'application/json',
+          accept: 'application/json, text/event-stream',
+          'mcp-protocol-version': '2025-06-18'
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 200,
+          method: 'resources/list',
+          params: {}
+        })
+      }),
+      platform: createPlatform()
+    } as Parameters<typeof POST>[0]);
+
+    expect(listResponse.status).toBe(200);
+    const listPayload = await parseMcpPayload(listResponse);
+    expect(listPayload.jsonrpc).toBe('2.0');
+    expect(listPayload.id).toBe(200);
+    const resources = listPayload.result?.resources ?? [];
+    const uris = resources.map((resource: { uri: string }) => resource.uri);
+    expect(uris).toContain('nebular://server/info');
+
+    const readResponse = await POST({
+      request: new Request('http://localhost/mcp', {
+        method: 'POST',
+        headers: {
+          authorization: 'Bearer mcp-token',
+          'content-type': 'application/json',
+          accept: 'application/json, text/event-stream',
+          'mcp-protocol-version': '2025-06-18'
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 201,
+          method: 'resources/read',
+          params: {
+            uri: 'nebular://server/info'
+          }
+        })
+      }),
+      platform: createPlatform()
+    } as Parameters<typeof POST>[0]);
+
+    expect(readResponse.status).toBe(200);
+    const readPayload = await parseMcpPayload(readResponse);
+    expect(readPayload.jsonrpc).toBe('2.0');
+    expect(readPayload.id).toBe(201);
+    const contents = readPayload.result?.contents ?? [];
+    expect(contents.length).toBeGreaterThan(0);
+    expect(contents[0].uri).toBe('nebular://server/info');
+    const parsedText = JSON.parse(contents[0].text);
+    expect(parsedText.name).toBe('Nebular News MCP');
+  });
+
+  it('serves resources/templates/list over MCP with bearer auth', async () => {
+    const response = await POST({
+      request: new Request('http://localhost/mcp', {
+        method: 'POST',
+        headers: {
+          authorization: 'Bearer mcp-token',
+          'content-type': 'application/json',
+          accept: 'application/json, text/event-stream',
+          'mcp-protocol-version': '2025-06-18'
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 300,
+          method: 'resources/templates/list',
+          params: {}
+        })
+      }),
+      platform: createPlatform()
+    } as Parameters<typeof POST>[0]);
+
+    expect(response.status).toBe(200);
+    const payload = await parseMcpPayload(response);
+    expect(payload.jsonrpc).toBe('2.0');
+    expect(payload.id).toBe(300);
+    const templates = payload.result?.resourceTemplates ?? [];
+    const templateUris = templates.map((entry: { uriTemplate: string }) => entry.uriTemplate);
+    expect(templateUris).toContain('nebular://article/{article_id}');
+  });
 });

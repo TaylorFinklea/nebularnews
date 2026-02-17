@@ -71,7 +71,11 @@ const sameOrigin = (request: Request) => {
   }
 
   const referer = request.headers.get('referer');
-  if (!referer) return false;
+  if (!referer) {
+    const fetchSite = request.headers.get('sec-fetch-site');
+    if (!fetchSite) return false;
+    return fetchSite === 'same-origin' || fetchSite === 'same-site' || fetchSite === 'none';
+  }
   try {
     return new URL(referer).origin === requestUrl.origin;
   } catch {
@@ -86,14 +90,14 @@ export const validateCsrf = (event: RequestEvent) => {
   if (!isMutatingMethod(event.request.method)) return { ok: true } as const;
   if (CSRF_EXEMPT_PATHS.has(pathname)) return { ok: true } as const;
 
-  if (!sameOrigin(event.request)) {
-    return { ok: false, status: 403, message: 'CSRF origin check failed' } as const;
-  }
-
   const cookieToken = readCsrfCookieFromRequest(event.request);
   const headerToken = event.request.headers.get(CSRF_HEADER)?.trim() ?? null;
   if (!cookieToken || !headerToken || !constantTimeEquals(cookieToken, headerToken)) {
     return { ok: false, status: 403, message: 'CSRF token check failed' } as const;
+  }
+
+  if (!sameOrigin(event.request)) {
+    return { ok: false, status: 403, message: 'CSRF origin check failed' } as const;
   }
   return { ok: true } as const;
 };
@@ -109,4 +113,3 @@ export const applySecurityHeaders = (response: Response) => {
     headers
   });
 };
-

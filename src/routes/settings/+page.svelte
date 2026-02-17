@@ -1,6 +1,7 @@
 <script>
   import { invalidate } from '$app/navigation';
   import { onMount } from 'svelte';
+  import { apiFetch } from '$lib/client/api-fetch';
   import { IconDeviceFloppy, IconRefresh, IconRestore, IconTrash } from '$lib/icons';
   export let data;
 
@@ -73,7 +74,7 @@
   const syncModels = async (provider, { silent = false } = {}) => {
     setProviderModelState(provider, { loading: true, error: '' });
     try {
-      const res = await fetch(`/api/models?provider=${provider}`);
+      const res = await apiFetch(`/api/models?provider=${provider}`);
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) {
         if (!silent) setProviderModelState(provider, { error: payload?.error ?? 'Model sync failed' });
@@ -97,7 +98,7 @@
   });
 
   const saveSettings = async () => {
-    await fetch('/api/settings', {
+    await apiFetch('/api/settings', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -129,7 +130,7 @@
   };
 
   const saveScorePrompt = async () => {
-    await fetch('/api/settings', {
+    await apiFetch('/api/settings', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -148,7 +149,7 @@
   const saveKey = async (provider) => {
     const key = provider === 'openai' ? openaiKey : anthropicKey;
     if (!key) return;
-    await fetch('/api/keys', {
+    await apiFetch('/api/keys', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ provider, apiKey: key })
@@ -160,14 +161,23 @@
   };
 
   const removeKey = async (provider) => {
-    await fetch(`/api/keys/${provider}`, { method: 'DELETE' });
+    await apiFetch(`/api/keys/${provider}`, { method: 'DELETE' });
     setProviderModelState(provider, { models: [], error: '', fetchedAt: null });
+    await invalidate();
+  };
+
+  const rotateKeys = async (provider = null) => {
+    await apiFetch('/api/keys/rotate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ provider })
+    });
     await invalidate();
   };
 
   const saveProfile = async () => {
     if (!profileText) return;
-    await fetch('/api/profile', {
+    await apiFetch('/api/profile', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ profileText })
@@ -480,6 +490,12 @@
 
   <div class="card">
     <h2>API Keys</h2>
+    <div class="row key-rotate-row">
+      <button class="ghost inline-button" on:click={() => rotateKeys()}>
+        <IconRefresh size={16} stroke={1.9} />
+        <span>Rotate key ciphers</span>
+      </button>
+    </div>
     <div class="key-row">
       <div>
         <strong>OpenAI</strong>
@@ -609,6 +625,10 @@
     align-items: flex-start;
     gap: 0.8rem;
     flex-wrap: wrap;
+  }
+
+  .key-rotate-row {
+    margin-bottom: 0.8rem;
   }
 
   .divider {

@@ -1,6 +1,7 @@
 <script>
   import { invalidateAll } from '$app/navigation';
   import { onDestroy } from 'svelte';
+  import { apiFetch } from '$lib/client/api-fetch';
   import {
     IconEye,
     IconEyeOff,
@@ -219,7 +220,7 @@
     setOptimisticPatch(articleId, { reaction_value: value });
     setPending(articleId, true);
     try {
-      const res = await fetch(`/api/articles/${articleId}/reaction`, {
+      const res = await apiFetch(`/api/articles/${articleId}/reaction`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ value, feedId })
@@ -245,7 +246,7 @@
     setOptimisticPatch(articleId, { is_read: isRead ? 1 : 0 });
     setPending(articleId, true);
     try {
-      const res = await fetch(`/api/articles/${articleId}/read`, {
+      const res = await apiFetch(`/api/articles/${articleId}/read`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ isRead })

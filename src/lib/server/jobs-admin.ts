@@ -128,7 +128,7 @@ export async function getJobStatus(db: Db, jobId: string) {
 export async function runQueueCycles(env: App.Platform['env'], cycles: number, options?: { forceDue?: boolean }) {
   const runCount = clampQueueCycles(cycles);
   if (options?.forceDue) {
-    await dbRun(env.DB, "UPDATE jobs SET run_after = ? WHERE status = 'pending'", [now()]);
+    await dbRun(env.DB, "UPDATE jobs SET run_after = ?, updated_at = ? WHERE status = 'pending'", [now(), now()]);
   }
   for (let i = 0; i < runCount; i += 1) {
     await processJobs(env);
@@ -147,11 +147,12 @@ export async function queueMissingTodayArticleJobs(
   const range = dayRangeForTimezoneOffset(referenceAt, options?.tzOffsetMinutes ?? 0);
   const { dayStart, dayEnd } = range;
   const runAfter = referenceAt;
+  const timestamp = referenceAt;
 
   const summarizeResult = await dbRun(
     db,
-    `INSERT INTO jobs (id, type, article_id, status, attempts, run_after, last_error, provider, model)
-     SELECT lower(hex(randomblob(16))), 'summarize', a.id, 'pending', 0, ?, NULL, NULL, NULL
+    `INSERT INTO jobs (id, type, article_id, status, attempts, priority, run_after, last_error, provider, model, created_at, updated_at)
+     SELECT lower(hex(randomblob(16))), 'summarize', a.id, 'pending', 0, 100, ?, NULL, NULL, NULL, ?, ?
      FROM articles a
      WHERE COALESCE(a.published_at, a.fetched_at) >= ?
        AND COALESCE(a.published_at, a.fetched_at) < ?
@@ -159,17 +160,22 @@ export async function queueMissingTodayArticleJobs(
      ON CONFLICT(type, article_id) DO UPDATE SET
        status = excluded.status,
        attempts = 0,
+       priority = excluded.priority,
        run_after = excluded.run_after,
        last_error = NULL,
        provider = NULL,
-       model = NULL`,
-    [runAfter, dayStart, dayEnd]
+       model = NULL,
+       locked_by = NULL,
+       locked_at = NULL,
+       lease_expires_at = NULL,
+       updated_at = excluded.updated_at`,
+    [runAfter, timestamp, timestamp, dayStart, dayEnd]
   );
 
   const scoreResult = await dbRun(
     db,
-    `INSERT INTO jobs (id, type, article_id, status, attempts, run_after, last_error, provider, model)
-     SELECT lower(hex(randomblob(16))), 'score', a.id, 'pending', 0, ?, NULL, NULL, NULL
+    `INSERT INTO jobs (id, type, article_id, status, attempts, priority, run_after, last_error, provider, model, created_at, updated_at)
+     SELECT lower(hex(randomblob(16))), 'score', a.id, 'pending', 0, 100, ?, NULL, NULL, NULL, ?, ?
      FROM articles a
      WHERE COALESCE(a.published_at, a.fetched_at) >= ?
        AND COALESCE(a.published_at, a.fetched_at) < ?
@@ -178,17 +184,22 @@ export async function queueMissingTodayArticleJobs(
      ON CONFLICT(type, article_id) DO UPDATE SET
        status = excluded.status,
        attempts = 0,
+       priority = excluded.priority,
        run_after = excluded.run_after,
        last_error = NULL,
        provider = NULL,
-       model = NULL`,
-    [runAfter, dayStart, dayEnd]
+       model = NULL,
+       locked_by = NULL,
+       locked_at = NULL,
+       lease_expires_at = NULL,
+       updated_at = excluded.updated_at`,
+    [runAfter, timestamp, timestamp, dayStart, dayEnd]
   );
 
   const autoTagResult = await dbRun(
     db,
-    `INSERT INTO jobs (id, type, article_id, status, attempts, run_after, last_error, provider, model)
-     SELECT lower(hex(randomblob(16))), 'auto_tag', a.id, 'pending', 0, ?, NULL, NULL, NULL
+    `INSERT INTO jobs (id, type, article_id, status, attempts, priority, run_after, last_error, provider, model, created_at, updated_at)
+     SELECT lower(hex(randomblob(16))), 'auto_tag', a.id, 'pending', 0, 100, ?, NULL, NULL, NULL, ?, ?
      FROM articles a
      WHERE COALESCE(a.published_at, a.fetched_at) >= ?
        AND COALESCE(a.published_at, a.fetched_at) < ?
@@ -201,11 +212,16 @@ export async function queueMissingTodayArticleJobs(
      ON CONFLICT(type, article_id) DO UPDATE SET
        status = excluded.status,
        attempts = 0,
+       priority = excluded.priority,
        run_after = excluded.run_after,
        last_error = NULL,
        provider = NULL,
-       model = NULL`,
-    [runAfter, dayStart, dayEnd]
+       model = NULL,
+       locked_by = NULL,
+       locked_at = NULL,
+       lease_expires_at = NULL,
+       updated_at = excluded.updated_at`,
+    [runAfter, timestamp, timestamp, dayStart, dayEnd]
   );
 
   return {
@@ -221,8 +237,19 @@ export async function queueMissingTodayArticleJobs(
 export async function retryFailedJobs(db: Db) {
   const result = await dbRun(
     db,
-    "UPDATE jobs SET status = 'pending', attempts = 0, run_after = ?, last_error = NULL, provider = NULL, model = NULL WHERE status = 'failed'",
-    [now()]
+    `UPDATE jobs
+     SET status = 'pending',
+         attempts = 0,
+         run_after = ?,
+         last_error = NULL,
+         provider = NULL,
+         model = NULL,
+         locked_by = NULL,
+         locked_at = NULL,
+         lease_expires_at = NULL,
+         updated_at = ?
+     WHERE status = 'failed'`,
+    [now(), now()]
   );
   return getAffectedRows(result);
 }
@@ -230,19 +257,50 @@ export async function retryFailedJobs(db: Db) {
 export async function markJobPendingNow(db: Db, jobId: string) {
   const result = await dbRun(
     db,
-    "UPDATE jobs SET status = 'pending', attempts = 0, run_after = ?, last_error = NULL, provider = NULL, model = NULL WHERE id = ? AND status <> 'running'",
-    [now(), jobId]
+    `UPDATE jobs
+     SET status = 'pending',
+         attempts = 0,
+         run_after = ?,
+         last_error = NULL,
+         provider = NULL,
+         model = NULL,
+         locked_by = NULL,
+         locked_at = NULL,
+         lease_expires_at = NULL,
+         updated_at = ?
+     WHERE id = ? AND status <> 'running'`,
+    [now(), now(), jobId]
   );
   return getAffectedRows(result);
 }
 
 export async function cancelPendingJob(db: Db, jobId: string) {
-  const result = await dbRun(db, "UPDATE jobs SET status = 'cancelled' WHERE id = ? AND status = 'pending'", [jobId]);
+  const result = await dbRun(
+    db,
+    `UPDATE jobs
+     SET status = 'cancelled',
+         locked_by = NULL,
+         locked_at = NULL,
+         lease_expires_at = NULL,
+         updated_at = ?
+     WHERE id = ? AND status = 'pending'`,
+    [now(), jobId]
+  );
   return getAffectedRows(result);
 }
 
 export async function cancelAllPendingJobs(db: Db) {
-  const result = await dbRun(db, "UPDATE jobs SET status = 'cancelled' WHERE status = 'pending'");
+  const result = await dbRun(
+    db,
+    `UPDATE jobs
+     SET status = 'cancelled',
+         locked_by = NULL,
+         locked_at = NULL,
+         lease_expires_at = NULL,
+         updated_at = ?
+     WHERE status = 'pending'`,
+    [now()]
+  );
   return getAffectedRows(result);
 }
 

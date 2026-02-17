@@ -14,8 +14,8 @@ export const POST = async ({ request, platform }) => {
     : 3;
 
   try {
-    const stats = await runManualPull(platform.env, cycles);
-    return json({ ok: true, cycles, stats });
+    const result = await runManualPull(platform.env, cycles, { trigger: 'api-dev' });
+    return json({ ok: true, cycles, run_id: result.runId, stats: result.stats });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Manual pull failed';
     if (message.includes('already in progress')) {

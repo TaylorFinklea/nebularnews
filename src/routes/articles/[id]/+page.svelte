@@ -3,6 +3,7 @@
   import { page } from '$app/stores';
   import { onMount } from 'svelte';
   import { resolveArticleImageUrl } from '$lib/article-image';
+  import { apiFetch } from '$lib/client/api-fetch';
   import {
     IconArrowLeft,
     IconCheck,
@@ -157,7 +158,7 @@
   $: articleBlocks = parseArticleBlocks(fullTextSource);
 
   const submitFeedback = async () => {
-    await fetch(`/api/articles/${data.article.id}/feedback`, {
+    await apiFetch(`/api/articles/${data.article.id}/feedback`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ rating, comment, feedId: data.preferredSource?.feedId ?? null })
@@ -167,7 +168,7 @@
   };
 
   const setReaction = async (value) => {
-    await fetch(`/api/articles/${data.article.id}/reaction`, {
+    await apiFetch(`/api/articles/${data.article.id}/reaction`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ value, feedId: data.preferredSource?.feedId ?? null })
@@ -185,7 +186,7 @@
     chatError = '';
     try {
       if (!threadId) {
-        const threadRes = await fetch('/api/chat/threads', {
+        const threadRes = await apiFetch('/api/chat/threads', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ scope: 'article', articleId: data.article.id, title: data.article.title })
@@ -202,7 +203,7 @@
       chatLog = [...chatLog, { role: 'user', content: userText }];
       message = '';
 
-      const res = await fetch(`/api/chat/threads/${threadId}/messages`, {
+      const res = await apiFetch(`/api/chat/threads/${threadId}/messages`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ message: userText })
@@ -222,7 +223,7 @@
 
   const rerunJobs = async (types) => {
     rerunBusy = true;
-    await fetch(`/api/articles/${data.article.id}/rerun`, {
+    await apiFetch(`/api/articles/${data.article.id}/rerun`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ types })
@@ -234,7 +235,7 @@
   const setReadState = async (isRead) => {
     readStateBusy = true;
     try {
-      await fetch(`/api/articles/${data.article.id}/read`, {
+      await apiFetch(`/api/articles/${data.article.id}/read`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ isRead })
@@ -254,7 +255,7 @@
     tagBusy = true;
     tagError = '';
     try {
-      const res = await fetch(`/api/articles/${data.article.id}/tags`, {
+      const res = await apiFetch(`/api/articles/${data.article.id}/tags`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ addTagNames: names, source: 'manual' })
@@ -275,7 +276,7 @@
     tagBusy = true;
     tagError = '';
     try {
-      const res = await fetch(`/api/articles/${data.article.id}/tags`, {
+      const res = await apiFetch(`/api/articles/${data.article.id}/tags`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ removeTagIds: [tagId] })

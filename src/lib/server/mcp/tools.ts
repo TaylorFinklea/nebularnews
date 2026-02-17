@@ -224,9 +224,11 @@ export function createNebularMcpServer(input: {
     {
       title: 'Get Pull Status',
       description: 'Get current manual pull status.',
-      inputSchema: {}
+      inputSchema: {
+        run_id: z.string().optional()
+      }
     },
-    withMetrics(input.handlers, 'get_pull_status', logger, async () => input.handlers.getPullStatus())
+    withMetrics(input.handlers, 'get_pull_status', logger, async (args) => input.handlers.getPullStatus(args))
   );
 
   server.registerResource(

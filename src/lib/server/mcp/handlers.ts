@@ -1,9 +1,11 @@
 import { nanoid } from 'nanoid';
 import { dbAll, dbGet, dbRun, now, type Db } from '$lib/server/db';
-import { getManualPullState, runManualPull } from '$lib/server/manual-pull';
+import { getManualPullState, runPullRun, startManualPull } from '$lib/server/manual-pull';
 import { getPreferredSourceForArticle, getPreferredSourcesForArticles, listSourcesForArticle } from '$lib/server/sources';
-import { listTagsForArticle, listTagsForArticles, resolveTagsByTokens } from '$lib/server/tags';
+import { listTagsForArticle, resolveTagsByTokens } from '$lib/server/tags';
 import { normalizeUrl } from '$lib/server/urls';
+import { recordAuditEvent } from '$lib/server/audit';
+import { listArticlesWithFilters } from '$lib/server/article-query';
 
 const SCORE_VALUES = ['5', '4', '3', '2', '1', 'unscored'] as const;
 const REACTION_VALUES = ['up', 'down', 'none'] as const;
@@ -99,6 +101,14 @@ export type McpArticleCard = {
   summary_text: string | null;
   score: number | null;
   score_label: string | null;
+  source: {
+    feed_id: string;
+    name: string;
+    reputation: number;
+    feedback_count: number;
+    feed_url: string;
+    feed_site_url: string | null;
+  } | null;
   source_name: string | null;
   source_feed_id: string | null;
   source_reputation: number;
@@ -160,6 +170,10 @@ type SetFitScoreInput = {
 
 type RefreshFeedsInput = {
   cycles?: number;
+};
+
+type GetPullStatusInput = {
+  run_id?: string;
 };
 
 type ContextSource = {
@@ -315,78 +329,42 @@ const buildArticleSearchWhere = async (db: Db, input: SearchArticlesInput) => {
 };
 
 async function listArticles(db: Db, input: SearchArticlesInput) {
-  const clauses = await buildArticleSearchWhere(db, input);
-  const join = clauses.query ? 'JOIN article_search ON article_search.article_id = a.id' : '';
-  const orderBy = sortOrderClause(clauses.sort);
+  const query = input.query?.trim() ?? '';
+  const selectedScores = normalizeScores(input.scores);
+  const selectedReactions = normalizeReactions(input.reactions);
+  const readFilter = clampRead(input.read);
+  const sort = clampSort(input.sort);
+  const limit = clampInt(input.limit, 1, MAX_LIMIT, 20);
+  const offset = clampInt(input.offset, 0, MAX_OFFSET, 0);
+  const selectedTags = await resolveTagsByTokens(db, input.tags_all ?? []);
+  const selectedTagIds = selectedTags.map((tag) => tag.id);
 
-  const totalRow = await dbGet<{ count: number }>(
-    db,
-    `SELECT COUNT(*) as count
-     FROM articles a
-     ${join}
-     ${clauses.where}`,
-    clauses.params
-  );
-  const total = Number(totalRow?.count ?? 0);
-
-  const rows = await dbAll<McpArticleCard>(
-    db,
-    `SELECT
-      a.id,
-      a.canonical_url,
-      a.title,
-      a.author,
-      a.published_at,
-      a.fetched_at,
-      a.excerpt,
-      a.word_count,
-      ${effectiveReadExpr} as is_read,
-      (SELECT value FROM article_reactions WHERE article_id = a.id LIMIT 1) as reaction_value,
-      (SELECT summary_text FROM article_summaries WHERE article_id = a.id ORDER BY created_at DESC LIMIT 1) as summary_text,
-      ${effectiveScoreExpr} as score,
-      CASE
-        WHEN EXISTS (SELECT 1 FROM article_score_overrides WHERE article_id = a.id) THEN 'User corrected'
-        ELSE (SELECT label FROM article_scores WHERE article_id = a.id ORDER BY created_at DESC LIMIT 1)
-      END as score_label,
-      NULL as source_name,
-      NULL as source_feed_id,
-      0 as source_reputation,
-      0 as source_feedback_count,
-      '[]' as tags
-    FROM articles a
-    ${join}
-    ${clauses.where}
-    ORDER BY ${orderBy}
-    LIMIT ? OFFSET ?`,
-    [...clauses.params, clauses.limit, clauses.offset]
-  );
-
-  const articleIds = rows.map((row) => row.id);
-  const preferredByArticle = await getPreferredSourcesForArticles(db, articleIds);
-  const tagsByArticle = await listTagsForArticles(db, articleIds);
-
-  const articles = rows.map((row) => {
-    const preferred = preferredByArticle.get(row.id);
-    return {
-      ...row,
-      source_name: preferred?.sourceName ?? null,
-      source_feed_id: preferred?.feedId ?? null,
-      source_reputation: preferred?.reputation ?? 0,
-      source_feedback_count: preferred?.feedbackCount ?? 0,
-      tags: compactTags(tagsByArticle.get(row.id))
-    } satisfies McpArticleCard;
+  const result = await listArticlesWithFilters(db, {
+    query,
+    limit,
+    offset,
+    selectedScores,
+    selectedReactions,
+    readFilter,
+    sort,
+    selectedTagIds
   });
+
+  const articles = result.articles.map((article) => ({
+    ...article,
+    tags: compactTags(article.tags)
+  })) as McpArticleCard[];
 
   return {
     articles,
-    total,
-    limit: clauses.limit,
-    offset: clauses.offset,
-    read: clauses.readFilter,
-    sort: clauses.sort,
-    scores: clauses.selectedScores,
-    reactions: clauses.selectedReactions,
-    tags_all: clauses.selectedTagIds
+    total: result.total,
+    limit,
+    offset,
+    read: readFilter,
+    sort,
+    scores: selectedScores,
+    reactions: selectedReactions,
+    tags_all: selectedTagIds
   };
 }
 
@@ -633,6 +611,7 @@ export function createMcpHandlers(input: {
           article_id: article.id,
           title: article.title,
           url: article.canonical_url,
+          source: article.source,
           source_name: article.source_name,
           published_at: article.published_at,
           summary_snippet: toSearchSummarySnippet(article),
@@ -687,6 +666,12 @@ export function createMcpHandlers(input: {
            updated_at = excluded.updated_at`,
         [args.article_id, args.is_read ? 1 : 0, now()]
       );
+      await recordAuditEvent(db, {
+        actor: 'mcp',
+        action: 'mcp.article.set_read',
+        target: args.article_id,
+        metadata: { is_read: Boolean(args.is_read) }
+      });
       return { ok: true, article_id: args.article_id, is_read: Boolean(args.is_read) };
     },
 
@@ -719,6 +704,12 @@ export function createMcpHandlers(input: {
       );
       const feedbackCount = Number(reputationRow?.reaction_count ?? 0);
       const ratingSum = Number(reputationRow?.reaction_sum ?? 0);
+      await recordAuditEvent(db, {
+        actor: 'mcp',
+        action: 'mcp.article.set_reaction',
+        target: args.article_id,
+        metadata: { reaction: args.reaction, feed_id: preferredSource.feedId }
+      });
 
       return {
         ok: true,
@@ -759,17 +750,28 @@ export function createMcpHandlers(input: {
 
       await dbRun(
         db,
-        `INSERT INTO jobs (id, type, article_id, status, attempts, run_after, last_error)
-         VALUES (?, ?, ?, ?, ?, ?, NULL)
+        `INSERT INTO jobs (id, type, article_id, status, attempts, priority, run_after, last_error, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
          ON CONFLICT(type, article_id) DO UPDATE SET
            status = excluded.status,
            attempts = 0,
+           priority = excluded.priority,
            run_after = excluded.run_after,
            last_error = NULL,
            provider = NULL,
-           model = NULL`,
-        [nanoid(), 'refresh_profile', 'profile', 'pending', 0, now()]
+           model = NULL,
+           locked_by = NULL,
+           locked_at = NULL,
+           lease_expires_at = NULL,
+           updated_at = excluded.updated_at`,
+        [nanoid(), 'refresh_profile', 'profile', 'pending', 0, 100, now(), now(), now()]
       );
+      await recordAuditEvent(db, {
+        actor: 'mcp',
+        action: 'mcp.article.set_fit_score',
+        target: args.article_id,
+        metadata: { score, feed_id: feedId }
+      });
 
       return {
         ok: true,
@@ -781,17 +783,28 @@ export function createMcpHandlers(input: {
 
     async refreshFeeds(args: RefreshFeedsInput) {
       const cycles = clampInt(args.cycles, 1, 3, 1);
-      const state = await getManualPullState(db);
-      if (state.inProgress) {
+      const started = await startManualPull(db, {
+        cycles,
+        trigger: 'mcp'
+      });
+      if (!started.started) {
         return {
           ok: true,
           started: false,
           cycles,
-          reason: 'already_in_progress'
+          reason: 'already_in_progress',
+          run_id: started.runId
         };
       }
 
-      const runPromise = runManualPull(env, cycles).catch((error) => {
+      await recordAuditEvent(db, {
+        actor: 'mcp',
+        action: 'mcp.pull.trigger',
+        target: started.runId,
+        metadata: { cycles }
+      });
+
+      const runPromise = runPullRun(env, started.runId).catch((error) => {
         console.error('[mcp] refresh_feeds failed', error instanceof Error ? error.message : String(error));
       });
       context.waitUntil(runPromise);
@@ -799,20 +812,23 @@ export function createMcpHandlers(input: {
       return {
         ok: true,
         started: true,
-        cycles
+        cycles,
+        run_id: started.runId
       };
     },
 
-    async getPullStatus() {
-      const state = await getManualPullState(db);
+    async getPullStatus(args: GetPullStatusInput = {}) {
+      const state = await getManualPullState(db, args.run_id?.trim() || null);
       return {
+        run_id: state.runId,
+        status: state.status,
         in_progress: state.inProgress,
         started_at: state.startedAt,
         completed_at: state.completedAt,
         last_run_status: state.lastRunStatus,
-        last_error: state.lastError
+        last_error: state.lastError,
+        stats: state.stats
       };
     }
   };
 }
-

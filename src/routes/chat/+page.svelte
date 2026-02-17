@@ -1,4 +1,5 @@
 <script>
+  import { apiFetch } from '$lib/client/api-fetch';
   import { IconExternalLink, IconSend } from '$lib/icons';
   let threadId = null;
   let message = '';
@@ -13,7 +14,7 @@
     chatError = '';
     try {
       if (!threadId) {
-        const res = await fetch('/api/chat/threads', {
+        const res = await apiFetch('/api/chat/threads', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ scope: 'global', title: 'Global chat' })
@@ -30,7 +31,7 @@
       chatLog = [...chatLog, { role: 'user', content: userText }];
       message = '';
 
-      const res = await fetch(`/api/chat/threads/${threadId}/messages`, {
+      const res = await apiFetch(`/api/chat/threads/${threadId}/messages`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ message: userText })

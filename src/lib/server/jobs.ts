@@ -11,23 +11,87 @@ import { ensurePreferenceProfile } from './profile';
 import { attachTagToArticle, ensureTagByName } from './tags';
 
 const MAX_JOB_ATTEMPTS = 3;
+const JOB_LEASE_MS = 1000 * 60 * 3;
+const MAX_BACKOFF_MS = 1000 * 60 * 60;
 type JobRunMetadata = { provider: string; model: string } | null;
+
+const getAffectedRows = (result: unknown) => {
+  const cast = result as { meta?: { changes?: number }; changes?: number } | null;
+  return Number(cast?.meta?.changes ?? cast?.changes ?? 0);
+};
+
+const computeRetryDelayMs = (attempts: number) => {
+  const exponential = 1000 * 60 * 2 ** Math.max(0, attempts - 1);
+  return Math.min(MAX_BACKOFF_MS, exponential);
+};
+
+const createPendingTimestamp = () => now();
 
 export async function processJobs(env: App.Platform['env']) {
   const db = env.DB;
+  const processorId = nanoid();
+  const timestamp = now();
+
+  // Reclaim stale running jobs whose lease has expired.
+  await dbRun(
+    db,
+    `UPDATE jobs
+     SET status = 'pending',
+         locked_by = NULL,
+         locked_at = NULL,
+         lease_expires_at = NULL,
+         updated_at = ?
+     WHERE status = 'running'
+       AND lease_expires_at IS NOT NULL
+       AND lease_expires_at <= ?`,
+    [timestamp, timestamp]
+  );
+
   const jobs = await dbAll<{
     id: string;
     type: string;
     article_id: string | null;
     attempts: number;
+    priority: number;
+    run_after: number;
   }>(
     db,
-    'SELECT id, type, article_id, attempts FROM jobs WHERE status = ? AND run_after <= ? ORDER BY run_after ASC LIMIT 5',
-    ['pending', now()]
+    `SELECT id, type, article_id, attempts, priority, run_after
+     FROM jobs
+     WHERE status = 'pending'
+       AND run_after <= ?
+     ORDER BY priority ASC, run_after ASC
+     LIMIT 5`,
+    [timestamp]
   );
 
   for (const job of jobs) {
-    await dbRun(db, 'UPDATE jobs SET status = ? WHERE id = ?', ['running', job.id]);
+    const lockTimestamp = now();
+    const claimResult = await dbRun(
+      db,
+      `UPDATE jobs
+       SET status = 'running',
+           locked_by = ?,
+           locked_at = ?,
+           lease_expires_at = ?,
+           updated_at = ?
+       WHERE id = ?
+         AND status = 'pending'
+         AND run_after <= ?`,
+      [processorId, lockTimestamp, lockTimestamp + JOB_LEASE_MS, lockTimestamp, job.id, lockTimestamp]
+    );
+    if (getAffectedRows(claimResult) === 0) continue;
+
+    const attempt = job.attempts + 1;
+    const jobRunId = nanoid();
+    const startedAt = now();
+    await dbRun(
+      db,
+      `INSERT INTO job_runs (id, job_id, attempt, status, started_at)
+       VALUES (?, ?, ?, ?, ?)`,
+      [jobRunId, job.id, attempt, 'running', startedAt]
+    );
+
     try {
       let runMetadata: JobRunMetadata = null;
       if (job.type === 'summarize' && job.article_id) {
@@ -45,20 +109,63 @@ export async function processJobs(env: App.Platform['env']) {
         runMetadata = await runRefreshProfile(db, env);
       }
 
-      await dbRun(db, 'UPDATE jobs SET status = ?, last_error = NULL, provider = ?, model = ? WHERE id = ?', [
-        'done',
-        runMetadata?.provider ?? null,
-        runMetadata?.model ?? null,
-        job.id
-      ]);
-    } catch (err) {
-      const attempts = job.attempts + 1;
-      const status = attempts >= MAX_JOB_ATTEMPTS ? 'failed' : 'pending';
-      const runAfter = now() + 1000 * 60 * 10;
+      const finishedAt = now();
       await dbRun(
         db,
-        'UPDATE jobs SET status = ?, attempts = ?, last_error = ?, run_after = ?, provider = NULL, model = NULL WHERE id = ?',
-        [status, attempts, String(err), runAfter, job.id]
+        `UPDATE jobs
+         SET status = ?,
+             attempts = ?,
+             last_error = NULL,
+             provider = ?,
+             model = ?,
+             locked_by = NULL,
+             locked_at = NULL,
+             lease_expires_at = NULL,
+             updated_at = ?
+         WHERE id = ?`,
+        ['done', attempt, runMetadata?.provider ?? null, runMetadata?.model ?? null, finishedAt, job.id]
+      );
+      await dbRun(
+        db,
+        `UPDATE job_runs
+         SET status = ?,
+             provider = ?,
+             model = ?,
+             duration_ms = ?,
+             finished_at = ?
+         WHERE id = ?`,
+        ['done', runMetadata?.provider ?? null, runMetadata?.model ?? null, finishedAt - startedAt, finishedAt, jobRunId]
+      );
+    } catch (err) {
+      const status = attempt >= MAX_JOB_ATTEMPTS ? 'failed' : 'pending';
+      const runAfter = status === 'failed' ? job.run_after : createPendingTimestamp() + computeRetryDelayMs(attempt);
+      const errorMessage = String(err);
+      const finishedAt = now();
+      await dbRun(
+        db,
+        `UPDATE jobs
+         SET status = ?,
+             attempts = ?,
+             last_error = ?,
+             run_after = ?,
+             provider = NULL,
+             model = NULL,
+             locked_by = NULL,
+             locked_at = NULL,
+             lease_expires_at = NULL,
+             updated_at = ?
+         WHERE id = ?`,
+        [status, attempt, errorMessage, runAfter, finishedAt, job.id]
+      );
+      await dbRun(
+        db,
+        `UPDATE job_runs
+         SET status = ?,
+             error = ?,
+             duration_ms = ?,
+             finished_at = ?
+         WHERE id = ?`,
+        ['failed', errorMessage, finishedAt - startedAt, finishedAt, jobRunId]
       );
     }
   }

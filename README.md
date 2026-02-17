@@ -17,6 +17,12 @@ wrangler d1 create nebularnews
 wrangler d1 execute nebularnews --file=./schema.sql
 ```
 
+If you are upgrading an existing database, run one scheduled cycle once after deploy to apply runtime migrations:
+
+```bash
+curl "http://localhost:8787/cdn-cgi/handler/scheduled"
+```
+
 3. Configure environment variables
 
 Create a `.dev.vars` with:
@@ -83,6 +89,30 @@ curl -s http://localhost:8787/mcp \
 - Use your deployed HTTPS URL: `https://<your-domain>/mcp`
 - Configure bearer auth with your `MCP_BEARER_TOKEN`
 - For local testing with ChatGPT, expose localhost through a secure tunnel and use the tunnel URL.
+
+## Health, Readiness, Pull Status, and Events
+
+- `GET /api/health` - liveness.
+- `GET /api/ready` - readiness + schema version assertion.
+- `GET /api/pull/status?run_id=<id>` - durable pull-run status.
+- `GET /api/events` - SSE stream with pull/job state snapshots.
+
+`POST /api/pull` now returns a durable `run_id`.
+
+## CSRF Notes
+
+Mutating API routes now enforce:
+
+- same-origin checks
+- `x-csrf-token` header matching the `nn_csrf` cookie
+
+The Nebular UI sends this automatically. Custom clients should read the cookie and echo it in `x-csrf-token`.
+
+## Key Rotation
+
+- `POST /api/keys/rotate`
+  - Re-encrypts stored provider keys and increments `key_version`.
+  - Optional JSON body: `{ "provider": "openai" | "anthropic" }`.
 
 ## Docker (Local)
 

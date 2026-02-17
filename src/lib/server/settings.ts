@@ -1,5 +1,5 @@
 import { nanoid } from 'nanoid';
-import { dbGet, dbRun, type Db } from './db';
+import { dbAll, dbGet, dbRun, type Db } from './db';
 import { decryptString, encryptString } from './crypto';
 import {
   DEFAULT_SCORE_SYSTEM_PROMPT,
@@ -306,18 +306,47 @@ export async function setProviderKey(db: Db, env: App.Platform['env'], provider:
   if (existing) {
     await dbRun(
       db,
-      'UPDATE provider_keys SET encrypted_key = ?, last_used_at = ?, status = ? WHERE provider = ?',
+      'UPDATE provider_keys SET encrypted_key = ?, key_version = key_version + 1, last_used_at = ?, status = ? WHERE provider = ?',
       [encrypted, now(), 'active', provider]
     );
   } else {
     await dbRun(
       db,
-      'INSERT INTO provider_keys (id, provider, encrypted_key, created_at, last_used_at, status) VALUES (?, ?, ?, ?, ?, ?)',
-      [nanoid(), provider, encrypted, now(), now(), 'active']
+      'INSERT INTO provider_keys (id, provider, encrypted_key, key_version, created_at, last_used_at, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [nanoid(), provider, encrypted, 1, now(), now(), 'active']
     );
   }
 }
 
 export async function deleteProviderKey(db: Db, provider: Provider) {
   await dbRun(db, 'DELETE FROM provider_keys WHERE provider = ?', [provider]);
+}
+
+export async function rotateProviderKeyEncryption(db: Db, env: App.Platform['env'], provider?: Provider) {
+  const where = provider ? 'WHERE provider = ?' : '';
+  const params = provider ? [provider] : [];
+  const rows = await dbAll<{ provider: Provider; encrypted_key: string }>(
+    db,
+    `SELECT provider, encrypted_key FROM provider_keys ${where}`,
+    params
+  );
+  let rotated = 0;
+
+  for (const row of rows) {
+    const plaintext = await decryptString(row.encrypted_key, env.ENCRYPTION_KEY);
+    const encrypted = await encryptString(plaintext, env.ENCRYPTION_KEY);
+    await dbRun(
+      db,
+      `UPDATE provider_keys
+       SET encrypted_key = ?,
+           key_version = key_version + 1,
+           last_used_at = ?,
+           status = ?
+       WHERE provider = ?`,
+      [encrypted, now(), 'active', row.provider]
+    );
+    rotated += 1;
+  }
+
+  return rotated;
 }

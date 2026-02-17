@@ -1,5 +1,6 @@
 <script>
   import { invalidateAll } from '$app/navigation';
+  import { apiFetch } from '$lib/client/api-fetch';
   import {
     IconArrowsTransferUpDown,
     IconDeviceFloppy,
@@ -71,7 +72,7 @@
       if (createColor.trim() && color === undefined) {
         throw new Error('Color must look like #12abef');
       }
-      const res = await fetch('/api/tags', {
+      const res = await apiFetch('/api/tags', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -95,7 +96,7 @@
       if (!clearEditColor && editColor.trim() && color === undefined) {
         throw new Error('Color must look like #12abef');
       }
-      const res = await fetch(`/api/tags/${selectedTagId}`, {
+      const res = await apiFetch(`/api/tags/${selectedTagId}`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -111,7 +112,7 @@
 
   const deleteTag = async (tagId) => {
     await run('Delete tag', async () => {
-      const res = await fetch(`/api/tags/${tagId}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/tags/${tagId}`, { method: 'DELETE' });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(payload?.error ?? 'Delete tag failed');
       if (selectedTagId === tagId) {
@@ -129,7 +130,7 @@
       if (!mergeSourceId || !mergeTargetId || mergeSourceId === mergeTargetId) {
         throw new Error('Select different source and target tags');
       }
-      const res = await fetch('/api/tags/merge', {
+      const res = await apiFetch('/api/tags/merge', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -150,7 +151,7 @@
       if (!reassignFromId || !reassignToId || reassignFromId === reassignToId) {
         throw new Error('Select different from/to tags');
       }
-      const res = await fetch('/api/tags/reassign', {
+      const res = await apiFetch('/api/tags/reassign', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({

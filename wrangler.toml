@@ -7,7 +7,7 @@ directory = ".svelte-kit/cloudflare"
 binding = "ASSETS"
 
 [triggers]
-crons = ["0 * * * *"]
+crons = ["*/5 * * * *", "0 * * * *"]
 
 [[d1_databases]]
 binding = "DB"

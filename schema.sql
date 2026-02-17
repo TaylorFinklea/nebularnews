@@ -1,5 +1,11 @@
 PRAGMA foreign_keys = ON;
 
+CREATE TABLE IF NOT EXISTS schema_migrations (
+  version INTEGER PRIMARY KEY,
+  name TEXT NOT NULL,
+  applied_at INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS feeds (
   id TEXT PRIMARY KEY,
   url TEXT NOT NULL UNIQUE,
@@ -169,6 +175,7 @@ CREATE TABLE IF NOT EXISTS provider_keys (
   id TEXT PRIMARY KEY,
   provider TEXT NOT NULL UNIQUE,
   encrypted_key TEXT NOT NULL,
+  key_version INTEGER NOT NULL DEFAULT 1,
   created_at INTEGER NOT NULL,
   last_used_at INTEGER,
   status TEXT NOT NULL
@@ -180,10 +187,16 @@ CREATE TABLE IF NOT EXISTS jobs (
   article_id TEXT,
   status TEXT NOT NULL,
   attempts INTEGER NOT NULL DEFAULT 0,
+  priority INTEGER NOT NULL DEFAULT 100,
   run_after INTEGER NOT NULL,
+  locked_by TEXT,
+  locked_at INTEGER,
+  lease_expires_at INTEGER,
   last_error TEXT,
   provider TEXT,
-  model TEXT
+  model TEXT,
+  created_at INTEGER NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS settings (
@@ -201,9 +214,59 @@ CREATE VIRTUAL TABLE IF NOT EXISTS article_search USING fts5(
   tokenize = 'porter'
 );
 
+CREATE TABLE IF NOT EXISTS pull_runs (
+  id TEXT PRIMARY KEY,
+  status TEXT NOT NULL,
+  trigger TEXT NOT NULL,
+  cycles INTEGER NOT NULL DEFAULT 1,
+  started_at INTEGER,
+  completed_at INTEGER,
+  last_error TEXT,
+  request_id TEXT,
+  stats_json TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS job_runs (
+  id TEXT PRIMARY KEY,
+  job_id TEXT NOT NULL,
+  attempt INTEGER NOT NULL,
+  status TEXT NOT NULL,
+  provider TEXT,
+  model TEXT,
+  duration_ms INTEGER,
+  error TEXT,
+  started_at INTEGER NOT NULL,
+  finished_at INTEGER,
+  FOREIGN KEY(job_id) REFERENCES jobs(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS auth_attempts (
+  id TEXT PRIMARY KEY,
+  identifier TEXT NOT NULL UNIQUE,
+  failed_count INTEGER NOT NULL DEFAULT 0,
+  first_failed_at INTEGER,
+  last_failed_at INTEGER,
+  blocked_until INTEGER,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS audit_log (
+  id TEXT PRIMARY KEY,
+  actor TEXT NOT NULL,
+  action TEXT NOT NULL,
+  target TEXT,
+  metadata_json TEXT,
+  request_id TEXT,
+  created_at INTEGER NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_feeds_next_poll ON feeds(next_poll_at);
 CREATE INDEX IF NOT EXISTS idx_articles_published ON articles(published_at);
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status, run_after);
+CREATE INDEX IF NOT EXISTS idx_jobs_lease ON jobs(status, lease_expires_at);
+CREATE INDEX IF NOT EXISTS idx_jobs_priority ON jobs(status, priority, run_after);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_unique ON jobs(type, article_id);
 CREATE INDEX IF NOT EXISTS idx_article_sources_article ON article_sources(article_id);
 CREATE INDEX IF NOT EXISTS idx_article_scores_article ON article_scores(article_id);
@@ -216,3 +279,10 @@ CREATE INDEX IF NOT EXISTS idx_article_tags_article ON article_tags(article_id);
 CREATE INDEX IF NOT EXISTS idx_article_tags_tag ON article_tags(tag_id);
 CREATE INDEX IF NOT EXISTS idx_tags_updated ON tags(updated_at);
 CREATE INDEX IF NOT EXISTS idx_chat_messages_thread ON chat_messages(thread_id);
+CREATE INDEX IF NOT EXISTS idx_pull_runs_status ON pull_runs(status, created_at);
+CREATE INDEX IF NOT EXISTS idx_job_runs_job ON job_runs(job_id, started_at);
+CREATE INDEX IF NOT EXISTS idx_auth_attempts_identifier ON auth_attempts(identifier);
+CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at);
+
+INSERT OR IGNORE INTO schema_migrations (version, name, applied_at)
+VALUES (2, 'v2_prod_hardening', unixepoch() * 1000);

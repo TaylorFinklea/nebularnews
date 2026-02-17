@@ -209,18 +209,19 @@ async function ingestFeedItem(db: Db, feedId: string, item: FeedItem): Promise<b
       );
 
       if (shouldAutoQueueArticleJobs(normalizedPublishedAt, fetchedAt)) {
+        const queuedAt = now();
         const jobs = [
           {
-            sql: 'INSERT OR IGNORE INTO jobs (id, type, article_id, status, attempts, run_after) VALUES (?, ?, ?, ?, ?, ?)',
-            params: [nanoid(), 'summarize', articleId, 'pending', 0, now()]
+            sql: 'INSERT OR IGNORE INTO jobs (id, type, article_id, status, attempts, priority, run_after, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            params: [nanoid(), 'summarize', articleId, 'pending', 0, 100, queuedAt, queuedAt, queuedAt]
           },
           {
-            sql: 'INSERT OR IGNORE INTO jobs (id, type, article_id, status, attempts, run_after) VALUES (?, ?, ?, ?, ?, ?)',
-            params: [nanoid(), 'score', articleId, 'pending', 0, now()]
+            sql: 'INSERT OR IGNORE INTO jobs (id, type, article_id, status, attempts, priority, run_after, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            params: [nanoid(), 'score', articleId, 'pending', 0, 100, queuedAt, queuedAt, queuedAt]
           },
           {
-            sql: 'INSERT OR IGNORE INTO jobs (id, type, article_id, status, attempts, run_after) VALUES (?, ?, ?, ?, ?, ?)',
-            params: [nanoid(), 'auto_tag', articleId, 'pending', 0, now()]
+            sql: 'INSERT OR IGNORE INTO jobs (id, type, article_id, status, attempts, priority, run_after, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            params: [nanoid(), 'auto_tag', articleId, 'pending', 0, 100, queuedAt, queuedAt, queuedAt]
           }
         ];
         await dbBatch(db, jobs);

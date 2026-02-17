@@ -17,6 +17,7 @@ import {
   getSetting,
   setSetting
 } from '$lib/server/settings';
+import { recordAuditEvent } from '$lib/server/audit';
 
 export const GET = async ({ platform }) => {
   const db = platform.env.DB;
@@ -70,7 +71,7 @@ export const GET = async ({ platform }) => {
   });
 };
 
-export const POST = async ({ request, platform }) => {
+export const POST = async ({ request, platform, locals }) => {
   const body = await request.json();
   const entries: [string, string][] = [];
   const validProviders = new Set(['openai', 'anthropic']);
@@ -154,6 +155,15 @@ export const POST = async ({ request, platform }) => {
   for (const [key, value] of entries) {
     await setSetting(platform.env.DB, key, value);
   }
+
+  await recordAuditEvent(platform.env.DB, {
+    actor: 'admin',
+    action: 'settings.update',
+    requestId: locals.requestId,
+    metadata: {
+      updated_keys: entries.map(([key]) => key)
+    }
+  });
 
   return json({ ok: true });
 };

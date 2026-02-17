@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { expect, test } from '@playwright/test';
 
 const SESSION_COOKIE = 'nn_session';
+const CSRF_COOKIE = 'nn_csrf';
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 14;
 const TRACKER_KEY = 'nebular:manual-pull-in-progress';
 const RUNNING_POLL_RESPONSES = 12;
@@ -54,21 +55,22 @@ test('manual pull status persists across refresh/navigation and clears on comple
   let runStartedAt: number | null = null;
   let getCallsSinceStart = 0;
   let started = false;
-  await page.route('**/api/pull', async (route) => {
+  await page.route('**/api/pull*', async (route) => {
+    const url = new URL(route.request().url());
     const method = route.request().method();
-    if (method === 'POST') {
+    if (method === 'POST' && url.pathname === '/api/pull') {
       started = true;
       runStartedAt = Date.now();
       getCallsSinceStart = 0;
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ ok: true, cycles: 3, started: true })
+        body: JSON.stringify({ ok: true, cycles: 3, started: true, run_id: 'run-1' })
       });
       return;
     }
 
-    if (method === 'GET') {
+    if (method === 'GET' && url.pathname === '/api/pull/status') {
       let payload: PullState;
       if (!started || runStartedAt === null) {
         payload = {
@@ -102,7 +104,15 @@ test('manual pull status persists across refresh/navigation and clears on comple
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify(payload)
+        body: JSON.stringify({
+          run_id: 'run-1',
+          status: payload.inProgress ? 'running' : payload.lastRunStatus ?? 'success',
+          in_progress: payload.inProgress,
+          started_at: payload.startedAt,
+          completed_at: payload.completedAt,
+          last_run_status: payload.lastRunStatus,
+          last_error: payload.lastError
+        })
       });
       return;
     }
@@ -114,6 +124,11 @@ test('manual pull status persists across refresh/navigation and clears on comple
     {
       name: SESSION_COOKIE,
       value: createSessionValue(secret!),
+      url: baseURL!
+    },
+    {
+      name: CSRF_COOKIE,
+      value: 'e2e-csrf-token',
       url: baseURL!
     }
   ]);

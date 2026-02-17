@@ -1,5 +1,6 @@
 <script>
   import { invalidate } from '$app/navigation';
+  import { apiFetch } from '$lib/client/api-fetch';
   import { IconDownload, IconPlus, IconTrash, IconUpload } from '$lib/icons';
   export let data;
 
@@ -8,7 +9,7 @@
 
   const addFeed = async () => {
     if (!newUrl) return;
-    await fetch('/api/feeds', {
+    await apiFetch('/api/feeds', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ url: newUrl })
@@ -18,13 +19,13 @@
   };
 
   const removeFeed = async (id) => {
-    await fetch(`/api/feeds/${id}`, { method: 'DELETE' });
+    await apiFetch(`/api/feeds/${id}`, { method: 'DELETE' });
     await invalidate();
   };
 
   const importOpml = async () => {
     if (!opmlText) return;
-    await fetch('/api/feeds/import', {
+    await apiFetch('/api/feeds/import', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ opml: opmlText })

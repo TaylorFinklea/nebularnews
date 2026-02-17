@@ -1,25 +1,17 @@
 <script>
-import { invalidateAll } from '$app/navigation';
-import { page } from '$app/stores';
-import { onMount } from 'svelte';
-import { get } from 'svelte/store';
-import {
-  IconArticle,
-  IconLayoutDashboard,
-  IconMessage2,
-  IconMoonStars,
-  IconSettings,
-  IconSun
-} from '$lib/icons';
+  import { onMount } from 'svelte';
+  import {
+    IconArticle,
+    IconLayoutDashboard,
+    IconMessage2,
+    IconMoonStars,
+    IconSettings,
+    IconSun
+  } from '$lib/icons';
 
   const THEME_KEY = 'nebular-theme';
-  const DASHBOARD_REFRESH_INTERVAL_MS = 2000;
-  const JOBS_REFRESH_INTERVAL_MS = 1000;
-  const DEFAULT_REFRESH_INTERVAL_MS = 5000;
-  const LIVE_REFRESH_TIMEOUT_MS = 4000;
   let theme = 'dark';
   let settingsMenu;
-  let liveRefreshTimer;
 
   const resolveInitialTheme = () => {
     try {
@@ -45,44 +37,6 @@ import {
   const toggleTheme = () => setTheme(theme === 'dark' ? 'light' : 'dark');
   const closeSettingsMenu = () => settingsMenu?.removeAttribute('open');
 
-  const getLiveRefreshInterval = (pathname) => {
-    if (pathname === '/') return DASHBOARD_REFRESH_INTERVAL_MS;
-    if (pathname.startsWith('/jobs')) return JOBS_REFRESH_INTERVAL_MS;
-    return DEFAULT_REFRESH_INTERVAL_MS;
-  };
-
-  const shouldLiveRefresh = (pathname) => {
-    if (document.hidden) return false;
-    if (pathname.startsWith('/login')) return false;
-    if (pathname.startsWith('/settings')) return false;
-    return pathname === '/' || pathname.startsWith('/jobs');
-  };
-
-  const scheduleLiveRefresh = () => {
-    const pathname = get(page).url.pathname;
-    const interval = getLiveRefreshInterval(pathname);
-    if (liveRefreshTimer) clearTimeout(liveRefreshTimer);
-    liveRefreshTimer = setTimeout(() => {
-      void runLiveRefreshCycle();
-    }, interval);
-  };
-
-  const runLiveRefreshCycle = async () => {
-    const pathname = get(page).url.pathname;
-    try {
-      if (shouldLiveRefresh(pathname)) {
-        await Promise.race([
-          invalidateAll(),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('live refresh timeout')), LIVE_REFRESH_TIMEOUT_MS))
-        ]);
-      }
-    } catch {
-      // Ignore transient refresh failures; next cycle will retry.
-    } finally {
-      scheduleLiveRefresh();
-    }
-  };
-
   onMount(() => {
     setTheme(resolveInitialTheme(), false);
     try {
@@ -91,16 +45,6 @@ import {
     } catch {
       // Ignore cookie errors.
     }
-
-    const unsubscribePage = page.subscribe(() => {
-      scheduleLiveRefresh();
-    });
-    scheduleLiveRefresh();
-
-    return () => {
-      if (liveRefreshTimer) clearTimeout(liveRefreshTimer);
-      unsubscribePage();
-    };
   });
 </script>
 
@@ -137,27 +81,15 @@ import {
     </div>
     <div class="top-actions">
       <nav class="nav-links">
-        <a
-          href="/"
-          class="nav-link"
-          data-sveltekit-reload={get(page).url.pathname.startsWith('/articles') ? 'true' : undefined}
-        >
+        <a href="/" class="nav-link">
           <IconLayoutDashboard size={16} stroke={1.9} />
           <span>Dashboard</span>
         </a>
-        <a
-          href="/articles"
-          class="nav-link"
-          data-sveltekit-reload={get(page).url.pathname.startsWith('/articles') ? 'true' : undefined}
-        >
+        <a href="/articles" class="nav-link">
           <IconArticle size={16} stroke={1.9} />
           <span>Articles</span>
         </a>
-        <a
-          href="/chat"
-          class="nav-link"
-          data-sveltekit-reload={get(page).url.pathname.startsWith('/articles') ? 'true' : undefined}
-        >
+        <a href="/chat" class="nav-link">
           <IconMessage2 size={16} stroke={1.9} />
           <span>Chat</span>
         </a>
@@ -167,32 +99,16 @@ import {
             <span>Settings</span>
           </summary>
           <div class="submenu">
-            <a
-              href="/settings"
-              on:click={closeSettingsMenu}
-              data-sveltekit-reload={get(page).url.pathname.startsWith('/articles') ? 'true' : undefined}
-            >
+            <a href="/settings" on:click={closeSettingsMenu}>
               General
             </a>
-            <a
-              href="/tags"
-              on:click={closeSettingsMenu}
-              data-sveltekit-reload={get(page).url.pathname.startsWith('/articles') ? 'true' : undefined}
-            >
+            <a href="/tags" on:click={closeSettingsMenu}>
               Tags
             </a>
-            <a
-              href="/feeds"
-              on:click={closeSettingsMenu}
-              data-sveltekit-reload={get(page).url.pathname.startsWith('/articles') ? 'true' : undefined}
-            >
+            <a href="/feeds" on:click={closeSettingsMenu}>
               Feeds
             </a>
-            <a
-              href="/jobs"
-              on:click={closeSettingsMenu}
-              data-sveltekit-reload={get(page).url.pathname.startsWith('/articles') ? 'true' : undefined}
-            >
+            <a href="/jobs" on:click={closeSettingsMenu}>
               Jobs
             </a>
           </div>

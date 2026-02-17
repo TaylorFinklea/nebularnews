@@ -1,5 +1,8 @@
 <script>
-  import { invalidateAll } from '$app/navigation';
+  import { invalidate } from '$app/navigation';
+  import { onDestroy, onMount } from 'svelte';
+  import { apiFetch } from '$lib/client/api-fetch';
+  import { liveEvents, startLiveEvents } from '$lib/client/live-events';
   import {
     IconBan,
     IconClockPlay,
@@ -12,8 +15,58 @@
   export let data;
 
   const filters = ['pending', 'running', 'failed', 'done', 'cancelled', 'all'];
+  const LIVE_REFRESH_DEBOUNCE_MS = 600;
   let busyKey = '';
   let message = '';
+  let liveCounts = null;
+  let liveConnected = false;
+  let liveUnsubscribe = () => {};
+  let stopLiveEvents = () => {};
+  let refreshTimer = null;
+  let lastLiveSignature = '';
+
+  $: displayCounts = {
+    ...data.counts,
+    ...(liveCounts
+      ? {
+          pending: liveCounts.pending,
+          running: liveCounts.running,
+          failed: liveCounts.failed,
+          done: liveCounts.done
+        }
+      : {})
+  };
+
+  const scheduleJobsRefresh = () => {
+    if (refreshTimer) return;
+    refreshTimer = setTimeout(async () => {
+      refreshTimer = null;
+      await invalidate('app:jobs');
+    }, LIVE_REFRESH_DEBOUNCE_MS);
+  };
+
+  onMount(() => {
+    stopLiveEvents = startLiveEvents();
+    liveUnsubscribe = liveEvents.subscribe((snapshot) => {
+      liveConnected = snapshot.connected;
+      if (!snapshot.jobs) return;
+      liveCounts = snapshot.jobs;
+
+      const signature = `${snapshot.jobs.pending}:${snapshot.jobs.running}:${snapshot.jobs.failed}:${snapshot.jobs.done}`;
+      if (signature === lastLiveSignature) return;
+      lastLiveSignature = signature;
+      scheduleJobsRefresh();
+    });
+  });
+
+  onDestroy(() => {
+    liveUnsubscribe();
+    stopLiveEvents();
+    if (refreshTimer) {
+      clearTimeout(refreshTimer);
+      refreshTimer = null;
+    }
+  });
 
   const formatUtcOffset = (offsetMinutes) => {
     const normalized = Number(offsetMinutes ?? 0);
@@ -29,7 +82,7 @@
     busyKey = `${action}:${jobId ?? 'all'}`;
     message = '';
     try {
-      const res = await fetch('/api/jobs', {
+      const res = await apiFetch('/api/jobs', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -64,7 +117,7 @@
       } else {
         message = `${label} completed.`;
       }
-      await invalidateAll();
+      await invalidate('app:jobs');
     } catch {
       message = `${label} failed`;
     } finally {
@@ -79,6 +132,7 @@
   <div>
     <h1>Job Queue</h1>
     <p>Inspect and control pending, failed, and completed jobs.</p>
+    <p class="muted live-status">{liveConnected ? 'Live updates connected' : 'Live updates reconnecting...'}</p>
   </div>
 </section>
 
@@ -92,19 +146,19 @@
 
 <div class="stats">
   <div class="stat">
-    <strong>{data.counts.pending}</strong>
+    <strong>{displayCounts.pending}</strong>
     <span>Pending</span>
   </div>
   <div class="stat">
-    <strong>{data.counts.running}</strong>
+    <strong>{displayCounts.running}</strong>
     <span>Running</span>
   </div>
   <div class="stat">
-    <strong>{data.counts.failed}</strong>
+    <strong>{displayCounts.failed}</strong>
     <span>Failed</span>
   </div>
   <div class="stat">
-    <strong>{data.counts.done}</strong>
+    <strong>{displayCounts.done}</strong>
     <span>Done</span>
   </div>
   <div class="stat">
@@ -361,6 +415,10 @@
   .message {
     margin-top: 0.8rem;
     color: var(--muted-text);
+  }
+
+  .live-status {
+    margin-top: 0.35rem;
   }
 
   .filters {

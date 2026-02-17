@@ -10,7 +10,8 @@ const effectiveScoreExpr = `COALESCE(
   (SELECT score FROM article_scores WHERE article_id = a.id ORDER BY created_at DESC LIMIT 1)
 )`;
 
-export const load = async ({ platform, request }) => {
+export const load = async ({ platform, request, depends }) => {
+  depends('app:dashboard');
   const db = platform.env.DB;
   const dashboardTopRated = await getDashboardTopRatedConfig(db);
   const dashboardTopRatedLayout = await getDashboardTopRatedLayout(db);

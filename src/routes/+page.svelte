@@ -1,6 +1,8 @@
 <script>
-  import { invalidateAll } from '$app/navigation';
+  import { invalidate } from '$app/navigation';
   import { onDestroy, onMount } from 'svelte';
+  import { apiFetch } from '$lib/client/api-fetch';
+  import { liveEvents, startLiveEvents } from '$lib/client/live-events';
   import { IconClockPlay, IconExternalLink } from '$lib/icons';
   import { resolveArticleImageUrl } from '$lib/article-image';
 
@@ -10,12 +12,18 @@
   const PULL_STATUS_POLL_MS = 1500;
   const PULL_START_GRACE_MS = 15000;
   const PULL_COMPLETION_SKEW_MS = 5000;
+  const LIVE_REFRESH_DEBOUNCE_MS = 700;
 
   let isPulling = false;
   let pullMessage = '';
   let pullStatusTimer = null;
   let pullStatusSyncInFlight = false;
-  let pullTracker = { pending: false, startedAt: null };
+  let pullTracker = { pending: false, startedAt: null, runId: null };
+  let stopLiveEvents = () => {};
+  let liveUnsubscribe = () => {};
+  let refreshTimer = null;
+  let lastLiveSignature = '';
+  let liveConnected = false;
 
   const toFiniteNumber = (value) => {
     const numeric = Number(value);
@@ -25,17 +33,18 @@
   const readPullTracker = () => {
     try {
       const raw = sessionStorage.getItem(PULL_SESSION_KEY);
-      if (!raw) return { pending: false, startedAt: null };
+      if (!raw) return { pending: false, startedAt: null, runId: null };
       if (raw === '1') {
-        return { pending: true, startedAt: Date.now() };
+        return { pending: true, startedAt: Date.now(), runId: null };
       }
       const parsed = JSON.parse(raw);
       return {
         pending: Boolean(parsed?.pending),
-        startedAt: toFiniteNumber(parsed?.startedAt)
+        startedAt: toFiniteNumber(parsed?.startedAt),
+        runId: typeof parsed?.runId === 'string' && parsed.runId.trim() ? parsed.runId.trim() : null
       };
     } catch {
-      return { pending: false, startedAt: null };
+      return { pending: false, startedAt: null, runId: null };
     }
   };
 
@@ -52,7 +61,7 @@
   };
 
   const clearPullTracker = () => {
-    pullTracker = { pending: false, startedAt: null };
+    pullTracker = { pending: false, startedAt: null, runId: null };
     writePullTracker(pullTracker);
   };
 
@@ -62,61 +71,78 @@
     return completedAt + PULL_COMPLETION_SKEW_MS >= startedAt;
   };
 
+  const scheduleDashboardRefresh = () => {
+    if (refreshTimer) return;
+    refreshTimer = setTimeout(async () => {
+      refreshTimer = null;
+      await invalidate('app:dashboard');
+    }, LIVE_REFRESH_DEBOUNCE_MS);
+  };
+
+  const applyPullState = async ({ inProgress, startedAt, completedAt, runId, lastRunStatus, lastError }) => {
+    if (inProgress) {
+      isPulling = true;
+      if (!pullMessage) pullMessage = 'Pulling feeds now...';
+      const nextStartedAt = pullTracker.startedAt ?? startedAt ?? Date.now();
+      pullTracker = {
+        pending: true,
+        startedAt: nextStartedAt,
+        runId: runId ?? pullTracker.runId
+      };
+      writePullTracker(pullTracker);
+      return;
+    }
+
+    if (!pullTracker.pending) {
+      isPulling = false;
+      return;
+    }
+
+    const completedMatches = completionMatchesTracker(completedAt, pullTracker.startedAt);
+    const waitingForStart =
+      pullTracker.startedAt !== null && Date.now() - pullTracker.startedAt < PULL_START_GRACE_MS;
+
+    if (!completedMatches && waitingForStart) {
+      isPulling = true;
+      return;
+    }
+
+    isPulling = false;
+    clearPullTracker();
+    if (completedMatches) {
+      pullMessage =
+        lastRunStatus === 'failed'
+          ? lastError
+            ? `Pull failed: ${lastError}`
+            : 'Pull failed.'
+          : 'Pull complete. Refreshing dashboard...';
+      await invalidate('app:dashboard');
+      return;
+    }
+
+    pullMessage = 'Pull did not confirm start before timeout. Please try again.';
+  };
+
   const syncPullStatus = async () => {
     if (pullStatusSyncInFlight) return;
     pullStatusSyncInFlight = true;
     try {
-      const res = await fetch('/api/pull');
+      const statusUrl = pullTracker.runId
+        ? `/api/pull/status?run_id=${encodeURIComponent(pullTracker.runId)}`
+        : '/api/pull/status';
+      const res = await apiFetch(statusUrl);
       if (!res.ok) return;
       const payload = await res.json().catch(() => ({}));
-      const inProgress = Boolean(payload?.inProgress);
-      const startedAt = toFiniteNumber(payload?.startedAt);
-      const completedAt = toFiniteNumber(payload?.completedAt);
+      const inProgress = Boolean(payload?.in_progress);
+      const startedAt = toFiniteNumber(payload?.started_at);
+      const completedAt = toFiniteNumber(payload?.completed_at);
+      const runId = typeof payload?.run_id === 'string' && payload.run_id.trim() ? payload.run_id.trim() : null;
       const lastRunStatus =
-        payload?.lastRunStatus === 'success' || payload?.lastRunStatus === 'failed'
-          ? payload.lastRunStatus
+        payload?.last_run_status === 'success' || payload?.last_run_status === 'failed'
+          ? payload.last_run_status
           : null;
-      const lastError = typeof payload?.lastError === 'string' && payload.lastError.length > 0 ? payload.lastError : null;
-
-      if (inProgress) {
-        isPulling = true;
-        if (!pullTracker.pending) {
-          pullTracker = { pending: true, startedAt: startedAt ?? Date.now() };
-        } else if (pullTracker.startedAt === null && startedAt !== null) {
-          pullTracker = { ...pullTracker, startedAt };
-        }
-        writePullTracker(pullTracker);
-        return;
-      }
-
-      if (!pullTracker.pending) {
-        isPulling = false;
-        return;
-      }
-
-      const completedMatches = completionMatchesTracker(completedAt, pullTracker.startedAt);
-      const waitingForStart =
-        pullTracker.startedAt !== null && Date.now() - pullTracker.startedAt < PULL_START_GRACE_MS;
-
-      if (!completedMatches && waitingForStart) {
-        isPulling = true;
-        return;
-      }
-
-      isPulling = false;
-      clearPullTracker();
-      if (completedMatches) {
-        pullMessage =
-          lastRunStatus === 'failed'
-            ? lastError
-              ? `Pull failed: ${lastError}`
-              : 'Pull failed.'
-            : 'Pull complete. Refreshing dashboard...';
-        await invalidateAll();
-        return;
-      }
-
-      pullMessage = 'Pull did not confirm start before timeout. Please try again.';
+      const lastError = typeof payload?.last_error === 'string' && payload.last_error.length > 0 ? payload.last_error : null;
+      await applyPullState({ inProgress, startedAt, completedAt, runId, lastRunStatus, lastError });
     } catch {
       // Ignore transient status errors.
     } finally {
@@ -131,8 +157,36 @@
       if (!pullMessage) pullMessage = 'Pulling feeds now...';
     }
 
+    stopLiveEvents = startLiveEvents();
+    liveUnsubscribe = liveEvents.subscribe((snapshot) => {
+      liveConnected = snapshot.connected;
+      const jobsSignature = snapshot.jobs
+        ? `${snapshot.jobs.pending}:${snapshot.jobs.running}:${snapshot.jobs.failed}:${snapshot.jobs.done}`
+        : 'jobs:none';
+      const pullSignature = snapshot.pull
+        ? `${snapshot.pull.status ?? 'none'}:${snapshot.pull.in_progress ? 1 : 0}:${snapshot.pull.run_id ?? ''}:${snapshot.pull.completed_at ?? ''}`
+        : 'pull:none';
+      const signature = `${jobsSignature}|${pullSignature}`;
+      if (signature !== lastLiveSignature) {
+        lastLiveSignature = signature;
+        scheduleDashboardRefresh();
+      }
+
+      if (snapshot.pull) {
+        void applyPullState({
+          inProgress: Boolean(snapshot.pull.in_progress),
+          startedAt: toFiniteNumber(snapshot.pull.started_at),
+          completedAt: toFiniteNumber(snapshot.pull.completed_at),
+          runId: snapshot.pull.run_id ?? null,
+          lastRunStatus: snapshot.pull.last_run_status,
+          lastError: snapshot.pull.last_error
+        });
+      }
+    });
+
     void syncPullStatus();
     pullStatusTimer = setInterval(() => {
+      if (!isPulling && liveConnected) return;
       void syncPullStatus();
     }, PULL_STATUS_POLL_MS);
   });
@@ -141,6 +195,12 @@
     if (pullStatusTimer) {
       clearInterval(pullStatusTimer);
       pullStatusTimer = null;
+    }
+    liveUnsubscribe();
+    stopLiveEvents();
+    if (refreshTimer) {
+      clearTimeout(refreshTimer);
+      refreshTimer = null;
     }
   });
 
@@ -159,11 +219,11 @@
     if (isPulling) return;
     isPulling = true;
     pullMessage = '';
-    pullTracker = { pending: true, startedAt: Date.now() };
+    pullTracker = { pending: true, startedAt: Date.now(), runId: null };
     writePullTracker(pullTracker);
     const cycles = data.isDev ? 3 : 1;
     try {
-      const res = await fetch('/api/pull', {
+      const res = await apiFetch('/api/pull', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ cycles })
@@ -173,6 +233,10 @@
         if (res.status === 409) {
           isPulling = true;
           pullMessage = payload?.error ?? 'Manual pull already in progress';
+          if (payload?.run_id) {
+            pullTracker = { ...pullTracker, runId: payload.run_id };
+            writePullTracker(pullTracker);
+          }
           void syncPullStatus();
           return;
         }
@@ -183,6 +247,12 @@
       }
       if (payload?.started) {
         isPulling = true;
+        pullTracker = {
+          pending: true,
+          startedAt: pullTracker.startedAt ?? Date.now(),
+          runId: payload?.run_id ?? null
+        };
+        writePullTracker(pullTracker);
         pullMessage = 'Pull started. Running in background...';
         void syncPullStatus();
         return;
@@ -194,7 +264,7 @@
       }
       isPulling = false;
       clearPullTracker();
-      await invalidateAll();
+      await invalidate('app:dashboard');
     } catch (error) {
       if (typeof DOMException !== 'undefined' && error instanceof DOMException && error.name === 'AbortError') {
         return;

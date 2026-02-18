@@ -338,6 +338,10 @@
       </select>
     </label>
     <p class="muted">This defines the Pipeline model lane configuration.</p>
+    <button on:click={saveSettings} class="inline-button">
+      <IconDeviceFloppy size={16} stroke={1.9} />
+      <span>Save pipeline model</span>
+    </button>
   </div>
 
   <div class="card">
@@ -374,6 +378,10 @@
       </select>
     </label>
     <p class="muted">This defines the Chat model lane configuration.</p>
+    <button on:click={saveSettings} class="inline-button">
+      <IconDeviceFloppy size={16} stroke={1.9} />
+      <span>Save chat model</span>
+    </button>
   </div>
 
   <div class="card">

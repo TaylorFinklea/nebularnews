@@ -5,6 +5,7 @@ import {
   DEFAULT_SCORE_USER_PROMPT_TEMPLATE,
   clampAutoReadDelayMs,
   clampInitialFeedLookbackDays,
+  clampRetentionDays,
   clampDashboardTopRatedCutoff,
   clampDashboardTopRatedLimit,
   getAutoReadDelayMs,
@@ -15,6 +16,7 @@ import {
   getConfiguredIngestProviderModel,
   getFeatureModelLanes,
   getInitialFeedLookbackDays,
+  getRetentionConfig,
   getScorePromptConfig,
   getSetting,
   setSetting
@@ -29,6 +31,7 @@ export const GET = async ({ platform }) => {
   const scorePrompt = await getScorePromptConfig(db);
   const dashboardTopRated = await getDashboardTopRatedConfig(db);
   const dashboardTopRatedLayout = await getDashboardTopRatedLayout(db);
+  const retention = await getRetentionConfig(db);
   const settings = {
     featureLanes: {
       summaries: featureLanes.summaries,
@@ -51,6 +54,8 @@ export const GET = async ({ platform }) => {
     summaryLength: (await getSetting(db, 'summary_length')) ?? 'short',
     pollInterval: (await getSetting(db, 'poll_interval')) ?? '60',
     initialFeedLookbackDays: await getInitialFeedLookbackDays(db),
+    retentionDays: retention.days,
+    retentionMode: retention.mode,
     autoReadDelayMs: await getAutoReadDelayMs(db),
     articleCardLayout: await getArticleCardLayout(db),
     dashboardTopRatedLayout,
@@ -82,6 +87,7 @@ export const POST = async ({ request, platform, locals }) => {
   const validModelLanes = new Set(['pipeline', 'chat']);
   const validArticleCardLayouts = new Set(['split', 'stacked']);
   const validDashboardTopRatedLayouts = new Set(['split', 'stacked']);
+  const validRetentionModes = new Set(['archive', 'delete']);
   const featureLaneKeys: Record<string, string> = {
     summaries: 'lane_summaries',
     scoring: 'lane_scoring',
@@ -141,6 +147,12 @@ export const POST = async ({ request, platform, locals }) => {
   if (body?.pollInterval) entries.push(['poll_interval', String(body.pollInterval)]);
   if (body?.initialFeedLookbackDays !== undefined && body?.initialFeedLookbackDays !== null) {
     entries.push(['initial_feed_lookback_days', String(clampInitialFeedLookbackDays(body.initialFeedLookbackDays))]);
+  }
+  if (body?.retentionDays !== undefined && body?.retentionDays !== null) {
+    entries.push(['retention_days', String(clampRetentionDays(body.retentionDays))]);
+  }
+  if (body?.retentionMode && validRetentionModes.has(body.retentionMode)) {
+    entries.push(['retention_mode', body.retentionMode]);
   }
   if (body?.autoReadDelayMs !== undefined && body?.autoReadDelayMs !== null) {
     entries.push(['auto_read_delay_ms', String(clampAutoReadDelayMs(body.autoReadDelayMs))]);

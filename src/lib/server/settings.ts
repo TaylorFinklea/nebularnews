@@ -15,6 +15,7 @@ export type SummaryLength = 'short' | 'medium' | 'long';
 export type AiModelLane = 'pipeline' | 'chat';
 export type ArticleCardLayout = 'split' | 'stacked';
 export type DashboardTopRatedLayout = 'split' | 'stacked';
+export type RetentionMode = 'archive' | 'delete';
 export type AiFeature =
   | 'summaries'
   | 'scoring'
@@ -44,6 +45,10 @@ const MAX_DASHBOARD_TOP_RATED_LIMIT = 20;
 const DEFAULT_INITIAL_FEED_LOOKBACK_DAYS = 45;
 const MIN_INITIAL_FEED_LOOKBACK_DAYS = 0;
 const MAX_INITIAL_FEED_LOOKBACK_DAYS = 3650;
+const DEFAULT_RETENTION_DAYS = 0;
+const MIN_RETENTION_DAYS = 0;
+const MAX_RETENTION_DAYS = 3650;
+const DEFAULT_RETENTION_MODE: RetentionMode = 'archive';
 const FEATURE_LANE_DEFAULTS: Record<AiFeature, AiModelLane> = {
   summaries: 'pipeline',
   scoring: 'pipeline',
@@ -74,7 +79,10 @@ export {
   MAX_DASHBOARD_TOP_RATED_LIMIT,
   DEFAULT_INITIAL_FEED_LOOKBACK_DAYS,
   MIN_INITIAL_FEED_LOOKBACK_DAYS,
-  MAX_INITIAL_FEED_LOOKBACK_DAYS
+  MAX_INITIAL_FEED_LOOKBACK_DAYS,
+  DEFAULT_RETENTION_DAYS,
+  MIN_RETENTION_DAYS,
+  MAX_RETENTION_DAYS
 };
 
 const toReasoningEffort = (value: string | null): ReasoningEffort => {
@@ -114,6 +122,11 @@ const toDashboardTopRatedLayout = (value: string | null): DashboardTopRatedLayou
   return DEFAULT_DASHBOARD_TOP_RATED_LAYOUT;
 };
 
+const toRetentionMode = (value: string | null): RetentionMode => {
+  if (value === 'archive' || value === 'delete') return value;
+  return DEFAULT_RETENTION_MODE;
+};
+
 export type ProviderModelConfig = {
   provider: Provider;
   model: string;
@@ -148,6 +161,12 @@ export const clampInitialFeedLookbackDays = (value: unknown) => {
     MAX_INITIAL_FEED_LOOKBACK_DAYS,
     Math.max(MIN_INITIAL_FEED_LOOKBACK_DAYS, Math.round(parsed))
   );
+};
+
+export const clampRetentionDays = (value: unknown) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return DEFAULT_RETENTION_DAYS;
+  return Math.min(MAX_RETENTION_DAYS, Math.max(MIN_RETENTION_DAYS, Math.round(parsed)));
 };
 
 const getFirstSetting = async (db: Db, keys: string[]) => {
@@ -302,6 +321,12 @@ export async function getDashboardTopRatedConfig(db: Db) {
 export async function getInitialFeedLookbackDays(db: Db) {
   const raw = await getSetting(db, 'initial_feed_lookback_days');
   return clampInitialFeedLookbackDays(raw);
+}
+
+export async function getRetentionConfig(db: Db) {
+  const days = clampRetentionDays(await getSetting(db, 'retention_days'));
+  const mode = toRetentionMode(await getSetting(db, 'retention_mode'));
+  return { days, mode };
 }
 
 export async function getDashboardTopRatedLayout(db: Db): Promise<DashboardTopRatedLayout> {

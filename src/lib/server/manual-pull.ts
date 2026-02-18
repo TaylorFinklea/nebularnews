@@ -2,6 +2,7 @@ import { nanoid } from 'nanoid';
 import { dbGet, dbRun, now, type Db } from './db';
 import { pollFeeds } from './ingest';
 import { processJobs } from './jobs';
+import { logError, logInfo, logWarn } from './log';
 
 const PULL_RUN_STALE_MS = 1000 * 60 * 20;
 
@@ -66,7 +67,7 @@ const staleErrorMessage = `Pull run marked failed after ${Math.floor(PULL_RUN_ST
 const recoverStalePullRuns = async (db: Db) => {
   const timestamp = now();
   const staleBefore = timestamp - PULL_RUN_STALE_MS;
-  await dbRun(
+  const result = await dbRun(
     db,
     `UPDATE pull_runs
      SET status = 'failed',
@@ -77,6 +78,10 @@ const recoverStalePullRuns = async (db: Db) => {
        AND updated_at < ?`,
     [timestamp, staleErrorMessage, timestamp, staleBefore]
   );
+  const changed = Number(result.meta?.changes ?? 0);
+  if (changed > 0) {
+    logWarn('pull.stale_runs_recovered', { recovered: changed, stale_before: staleBefore });
+  }
 };
 
 const touchPullRun = async (db: Db, runId: string) => {
@@ -275,6 +280,7 @@ export async function runPullRun(env: App.Platform['env'], runId: string): Promi
 
   await markPullRunRunning(db, runId);
   await touchPullRun(db, runId);
+  logInfo('pull.run.started', { run_id: runId, cycles: run.cycles });
   let runError: string | null = null;
   let stats: PullStats | null = null;
   try {
@@ -317,10 +323,12 @@ export async function runPullRun(env: App.Platform['env'], runId: string): Promi
     };
 
     await markPullRunFinished(db, runId, { status: 'success', stats });
+    logInfo('pull.run.completed', { run_id: runId, status: 'success', stats });
     return stats;
   } catch (error) {
     runError = error instanceof Error ? error.message : 'Manual pull failed';
     await markPullRunFinished(db, runId, { status: 'failed', error: runError, stats });
+    logError('pull.run.failed', { run_id: runId, status: 'failed', error: runError, stats });
     throw error;
   }
 }

@@ -5,12 +5,15 @@ import {
   DEFAULT_DASHBOARD_TOP_RATED_CUTOFF,
   DEFAULT_DASHBOARD_TOP_RATED_LIMIT,
   DEFAULT_INITIAL_FEED_LOOKBACK_DAYS,
+  DEFAULT_RETENTION_DAYS,
   MAX_DASHBOARD_TOP_RATED_CUTOFF,
   MAX_DASHBOARD_TOP_RATED_LIMIT,
   MAX_INITIAL_FEED_LOOKBACK_DAYS,
+  MAX_RETENTION_DAYS,
   MIN_DASHBOARD_TOP_RATED_CUTOFF,
   MIN_DASHBOARD_TOP_RATED_LIMIT,
   MIN_INITIAL_FEED_LOOKBACK_DAYS,
+  MIN_RETENTION_DAYS,
   getFeatureModelLanes,
   getDashboardTopRatedConfig,
   MAX_AUTO_READ_DELAY_MS,
@@ -21,6 +24,7 @@ import {
   getConfiguredChatProviderModel,
   getConfiguredIngestProviderModel,
   getInitialFeedLookbackDays,
+  getRetentionConfig,
   getScorePromptConfig,
   getSetting
 } from '$lib/server/settings';
@@ -34,6 +38,7 @@ export const load = async ({ platform }) => {
   const scorePrompt = await getScorePromptConfig(db);
   const dashboardTopRated = await getDashboardTopRatedConfig(db);
   const dashboardTopRatedLayout = await getDashboardTopRatedLayout(db);
+  const retention = await getRetentionConfig(db);
   const settings = {
     featureLanes: {
       summaries: featureLanes.summaries,
@@ -55,6 +60,8 @@ export const load = async ({ platform }) => {
     summaryStyle: (await getSetting(db, 'summary_style')) ?? 'concise',
     summaryLength: (await getSetting(db, 'summary_length')) ?? 'short',
     initialFeedLookbackDays: await getInitialFeedLookbackDays(db),
+    retentionDays: retention.days,
+    retentionMode: retention.mode,
     autoReadDelayMs: await getAutoReadDelayMs(db),
     articleCardLayout: await getArticleCardLayout(db),
     dashboardTopRatedLayout,
@@ -84,6 +91,11 @@ export const load = async ({ platform }) => {
       min: MIN_INITIAL_FEED_LOOKBACK_DAYS,
       max: MAX_INITIAL_FEED_LOOKBACK_DAYS,
       default: DEFAULT_INITIAL_FEED_LOOKBACK_DAYS
+    },
+    retentionRange: {
+      min: MIN_RETENTION_DAYS,
+      max: MAX_RETENTION_DAYS,
+      default: DEFAULT_RETENTION_DAYS
     },
     autoReadDelayRange: { min: MIN_AUTO_READ_DELAY_MS, max: MAX_AUTO_READ_DELAY_MS },
     dashboardTopRatedRange: {

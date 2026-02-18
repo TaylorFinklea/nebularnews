@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   clampInitialFeedLookbackDays,
+  clampRetentionDays,
   clampDashboardTopRatedCutoff,
   clampDashboardTopRatedLimit,
   DEFAULT_INITIAL_FEED_LOOKBACK_DAYS,
+  DEFAULT_RETENTION_DAYS,
   DEFAULT_DASHBOARD_TOP_RATED_CUTOFF,
   DEFAULT_DASHBOARD_TOP_RATED_LIMIT
 } from './settings';
@@ -37,5 +39,15 @@ describe('dashboard top-rated settings', () => {
 
   it('falls back to default initial lookback days for invalid values', () => {
     expect(clampInitialFeedLookbackDays('bad')).toBe(DEFAULT_INITIAL_FEED_LOOKBACK_DAYS);
+  });
+
+  it('clamps retention days into supported range', () => {
+    expect(clampRetentionDays(-1)).toBe(0);
+    expect(clampRetentionDays(99999)).toBe(3650);
+    expect(clampRetentionDays(30)).toBe(30);
+  });
+
+  it('falls back to default retention days for invalid values', () => {
+    expect(clampRetentionDays('bad')).toBe(DEFAULT_RETENTION_DAYS);
   });
 });

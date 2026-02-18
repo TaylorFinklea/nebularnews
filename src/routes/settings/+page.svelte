@@ -23,6 +23,8 @@
   let summaryStyle = data.settings.summaryStyle;
   let summaryLength = data.settings.summaryLength;
   let initialFeedLookbackDays = Number(data.settings.initialFeedLookbackDays ?? data.initialFeedLookbackRange?.default ?? 45);
+  let retentionDays = Number(data.settings.retentionDays ?? data.retentionRange?.default ?? 0);
+  let retentionMode = data.settings.retentionMode ?? 'archive';
   let autoReadDelayMs = Number(data.settings.autoReadDelayMs ?? 4000);
   let articleCardLayout = data.settings.articleCardLayout ?? 'split';
   let dashboardTopRatedLayout = data.settings.dashboardTopRatedLayout ?? 'stacked';
@@ -119,6 +121,8 @@
     summaryStyle,
     summaryLength,
     initialFeedLookbackDays: Number(initialFeedLookbackDays ?? 0),
+    retentionDays: Number(retentionDays ?? 0),
+    retentionMode,
     autoReadDelayMs: Number(autoReadDelayMs ?? 0),
     articleCardLayout,
     dashboardTopRatedLayout,
@@ -148,6 +152,8 @@
     summaryStyle,
     summaryLength,
     initialFeedLookbackDays: Number(initialFeedLookbackDays ?? 0),
+    retentionDays: Number(retentionDays ?? 0),
+    retentionMode,
     autoReadDelayMs: Number(autoReadDelayMs ?? 0),
     articleCardLayout,
     dashboardTopRatedLayout,
@@ -176,6 +182,8 @@
     summaryStyle = snapshot.summaryStyle;
     summaryLength = snapshot.summaryLength;
     initialFeedLookbackDays = Number(snapshot.initialFeedLookbackDays ?? 0);
+    retentionDays = Number(snapshot.retentionDays ?? 0);
+    retentionMode = snapshot.retentionMode;
     autoReadDelayMs = Number(snapshot.autoReadDelayMs ?? 0);
     articleCardLayout = snapshot.articleCardLayout;
     dashboardTopRatedLayout = snapshot.dashboardTopRatedLayout;
@@ -219,6 +227,8 @@
           summaryStyle,
           summaryLength,
           initialFeedLookbackDays,
+          retentionDays,
+          retentionMode,
           autoReadDelayMs,
           articleCardLayout,
           dashboardTopRatedLayout,
@@ -543,6 +553,32 @@
     <p class="muted">
       Applies to first-time feed pulls and newly added feeds. Default {data.initialFeedLookbackRange.default} days.
       Set to 0 to include all available history.
+    </p>
+    <label>
+      Retention window (days)
+      <input
+        type="number"
+        min={data.retentionRange.min}
+        max={data.retentionRange.max}
+        step="1"
+        bind:value={retentionDays}
+      />
+    </label>
+    <div class="field">
+      <div class="field-label">Retention mode</div>
+      <div class="lane-toggle" role="radiogroup" aria-label="Retention mode">
+        <label class:active={retentionMode === 'archive'}>
+          <input type="radio" name="retentionMode" value="archive" bind:group={retentionMode} />
+          <span>Archive text</span>
+        </label>
+        <label class:active={retentionMode === 'delete'}>
+          <input type="radio" name="retentionMode" value="delete" bind:group={retentionMode} />
+          <span>Delete records</span>
+        </label>
+      </div>
+    </div>
+    <p class="muted">
+      Daily cleanup runs at 03:30 UTC. 0 days disables cleanup. Archive mode strips article body text; delete mode removes old articles.
     </p>
     <label>
       Mark article as read after (ms)

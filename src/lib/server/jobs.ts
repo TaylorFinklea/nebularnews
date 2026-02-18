@@ -9,6 +9,7 @@ import {
 } from './settings';
 import { ensurePreferenceProfile } from './profile';
 import { attachTagToArticle, ensureTagByName } from './tags';
+import { logInfo } from './log';
 
 const MAX_JOB_ATTEMPTS = 3;
 const JOB_LEASE_MS = 1000 * 60 * 3;
@@ -31,6 +32,11 @@ export async function processJobs(env: App.Platform['env']) {
   const db = env.DB;
   const processorId = nanoid();
   const timestamp = now();
+  const startedAt = Date.now();
+  let claimed = 0;
+  let done = 0;
+  let failed = 0;
+  let retried = 0;
 
   // Reclaim stale running jobs whose lease has expired.
   await dbRun(
@@ -81,6 +87,7 @@ export async function processJobs(env: App.Platform['env']) {
       [processorId, lockTimestamp, lockTimestamp + JOB_LEASE_MS, lockTimestamp, job.id, lockTimestamp]
     );
     if (getAffectedRows(claimResult) === 0) continue;
+    claimed += 1;
 
     const attempt = job.attempts + 1;
     const jobRunId = nanoid();
@@ -136,6 +143,7 @@ export async function processJobs(env: App.Platform['env']) {
          WHERE id = ?`,
         ['done', runMetadata?.provider ?? null, runMetadata?.model ?? null, finishedAt - startedAt, finishedAt, jobRunId]
       );
+      done += 1;
     } catch (err) {
       const status = attempt >= MAX_JOB_ATTEMPTS ? 'failed' : 'pending';
       const runAfter = status === 'failed' ? job.run_after : createPendingTimestamp() + computeRetryDelayMs(attempt);
@@ -167,8 +175,23 @@ export async function processJobs(env: App.Platform['env']) {
          WHERE id = ?`,
         ['failed', errorMessage, finishedAt - startedAt, finishedAt, jobRunId]
       );
+      if (status === 'failed') {
+        failed += 1;
+      } else {
+        retried += 1;
+      }
     }
   }
+
+  logInfo('jobs.process.completed', {
+    processor_id: processorId,
+    selected: jobs.length,
+    claimed,
+    done,
+    failed,
+    retried,
+    duration_ms: Date.now() - startedAt
+  });
 }
 
 async function runSummarizeJob(

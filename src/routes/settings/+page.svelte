@@ -882,7 +882,8 @@
 
   .feature-lanes {
     display: grid;
-    gap: 0.75rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem 1rem;
   }
 
   .feature-lane {
@@ -941,6 +942,10 @@
     }
 
     .model-sections {
+      grid-template-columns: 1fr;
+    }
+
+    .feature-lanes {
       grid-template-columns: 1fr;
     }
   }

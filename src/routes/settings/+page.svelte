@@ -40,6 +40,10 @@
   let anthropicModelsError = '';
   let openaiModelsFetchedAt = null;
   let anthropicModelsFetchedAt = null;
+  let isSaving = false;
+  let hasUnsavedChanges = false;
+  let saveMessage = '';
+  let saveError = '';
 
   const getProviderModels = (provider) => (provider === 'anthropic' ? anthropicModels : openaiModels);
   const isLoadingModels = (provider) => (provider === 'anthropic' ? anthropicModelsLoading : openaiModelsLoading);
@@ -97,53 +101,141 @@
     if (data.keyMap.anthropic) void syncModels('anthropic', { silent: true });
   });
 
-  const saveSettings = async () => {
-    await apiFetch('/api/settings', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        featureLanes: {
-          summaries: laneSummaries,
-          scoring: laneScoring,
-          profileRefresh: laneProfileRefresh,
-          keyPoints: laneKeyPoints,
-          autoTagging: laneAutoTagging,
-          articleChat: laneArticleChat,
-          globalChat: laneGlobalChat
-        },
-        ingestProvider,
-        ingestModel,
-        ingestReasoningEffort,
-        chatProvider,
-        chatModel,
-        chatReasoningEffort,
-        summaryStyle,
-        summaryLength,
-        autoReadDelayMs,
-        articleCardLayout,
-        dashboardTopRatedLayout,
-        dashboardTopRatedCutoff,
-        dashboardTopRatedLimit
-      })
-    });
-    await invalidate();
+  const snapshotFromCurrentForm = () => ({
+    laneSummaries,
+    laneScoring,
+    laneProfileRefresh,
+    laneKeyPoints,
+    laneAutoTagging,
+    laneArticleChat,
+    laneGlobalChat,
+    ingestProvider,
+    ingestModel,
+    ingestReasoningEffort,
+    chatProvider,
+    chatModel,
+    chatReasoningEffort,
+    summaryStyle,
+    summaryLength,
+    autoReadDelayMs: Number(autoReadDelayMs ?? 0),
+    articleCardLayout,
+    dashboardTopRatedLayout,
+    dashboardTopRatedCutoff: Number(dashboardTopRatedCutoff ?? 0),
+    dashboardTopRatedLimit: Number(dashboardTopRatedLimit ?? 0),
+    scoreSystemPrompt,
+    scoreUserPromptTemplate,
+    profileText
+  });
+
+  let savedSnapshot = snapshotFromCurrentForm();
+  $: hasUnsavedChanges = JSON.stringify(snapshotFromCurrentForm()) !== JSON.stringify(savedSnapshot);
+
+  const applySnapshot = (snapshot) => {
+    laneSummaries = snapshot.laneSummaries;
+    laneScoring = snapshot.laneScoring;
+    laneProfileRefresh = snapshot.laneProfileRefresh;
+    laneKeyPoints = snapshot.laneKeyPoints;
+    laneAutoTagging = snapshot.laneAutoTagging;
+    laneArticleChat = snapshot.laneArticleChat;
+    laneGlobalChat = snapshot.laneGlobalChat;
+    ingestProvider = snapshot.ingestProvider;
+    ingestModel = snapshot.ingestModel;
+    ingestReasoningEffort = snapshot.ingestReasoningEffort;
+    chatProvider = snapshot.chatProvider;
+    chatModel = snapshot.chatModel;
+    chatReasoningEffort = snapshot.chatReasoningEffort;
+    summaryStyle = snapshot.summaryStyle;
+    summaryLength = snapshot.summaryLength;
+    autoReadDelayMs = Number(snapshot.autoReadDelayMs ?? 0);
+    articleCardLayout = snapshot.articleCardLayout;
+    dashboardTopRatedLayout = snapshot.dashboardTopRatedLayout;
+    dashboardTopRatedCutoff = Number(snapshot.dashboardTopRatedCutoff ?? 0);
+    dashboardTopRatedLimit = Number(snapshot.dashboardTopRatedLimit ?? 0);
+    scoreSystemPrompt = snapshot.scoreSystemPrompt;
+    scoreUserPromptTemplate = snapshot.scoreUserPromptTemplate;
+    profileText = snapshot.profileText;
   };
 
-  const saveScorePrompt = async () => {
-    await apiFetch('/api/settings', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        scoreSystemPrompt,
-        scoreUserPromptTemplate
-      })
-    });
-    await invalidate();
+  const readApiError = async (res, fallback) => {
+    const payload = await res.json().catch(() => ({}));
+    return payload?.error ?? fallback;
+  };
+
+  const saveAllChanges = async () => {
+    if (isSaving || !hasUnsavedChanges) return;
+    isSaving = true;
+    saveMessage = '';
+    saveError = '';
+    try {
+      const settingsRes = await apiFetch('/api/settings', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          featureLanes: {
+            summaries: laneSummaries,
+            scoring: laneScoring,
+            profileRefresh: laneProfileRefresh,
+            keyPoints: laneKeyPoints,
+            autoTagging: laneAutoTagging,
+            articleChat: laneArticleChat,
+            globalChat: laneGlobalChat
+          },
+          ingestProvider,
+          ingestModel,
+          ingestReasoningEffort,
+          chatProvider,
+          chatModel,
+          chatReasoningEffort,
+          summaryStyle,
+          summaryLength,
+          autoReadDelayMs,
+          articleCardLayout,
+          dashboardTopRatedLayout,
+          dashboardTopRatedCutoff,
+          dashboardTopRatedLimit,
+          scoreSystemPrompt,
+          scoreUserPromptTemplate
+        })
+      });
+      if (!settingsRes.ok) {
+        saveError = await readApiError(settingsRes, 'Failed to save settings');
+        return;
+      }
+
+      const nextProfile = profileText.trim();
+      if (nextProfile) {
+        const profileRes = await apiFetch('/api/profile', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ profileText: nextProfile })
+        });
+        if (!profileRes.ok) {
+          saveError = await readApiError(profileRes, 'Failed to save profile');
+          return;
+        }
+      }
+
+      savedSnapshot = snapshotFromCurrentForm();
+      saveMessage = 'Settings saved.';
+      await invalidate();
+    } catch {
+      saveError = 'Failed to save settings';
+    } finally {
+      isSaving = false;
+    }
   };
 
   const resetScorePromptDefaults = () => {
     scoreSystemPrompt = data.scorePromptDefaults.scoreSystemPrompt;
     scoreUserPromptTemplate = data.scorePromptDefaults.scoreUserPromptTemplate;
+    saveMessage = '';
+    saveError = '';
+  };
+
+  const discardChanges = () => {
+    applySnapshot(savedSnapshot);
+    saveMessage = '';
+    saveError = '';
   };
 
   const saveKey = async (provider) => {
@@ -174,27 +266,43 @@
     });
     await invalidate();
   };
-
-  const saveProfile = async () => {
-    if (!profileText) return;
-    await apiFetch('/api/profile', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ profileText })
-    });
-    await invalidate();
-  };
 </script>
 
 <section class="page-header">
   <div>
     <h1>Settings</h1>
     <p>Configure model routing, provider keys, and summarization defaults.</p>
+    <nav class="settings-subnav" aria-label="Settings sections">
+      <a href="#models">Models</a>
+      <a href="#behavior">Behavior</a>
+      <a href="#fit-score">Fit score prompt</a>
+      <a href="#keys">Keys</a>
+      <a href="#profile">Profile</a>
+    </nav>
+  </div>
+  <div class="header-actions">
+    {#if saveError}
+      <p class="save-status error" role="status" aria-live="polite">{saveError}</p>
+    {:else if saveMessage}
+      <p class="save-status" role="status" aria-live="polite">{saveMessage}</p>
+    {:else if hasUnsavedChanges}
+      <p class="save-status muted">Unsaved changes</p>
+    {/if}
+    <div class="row-actions">
+      <button class="ghost inline-button" on:click={discardChanges} disabled={!hasUnsavedChanges || isSaving}>
+        <IconRestore size={16} stroke={1.9} />
+        <span>Discard</span>
+      </button>
+      <button on:click={saveAllChanges} class="inline-button" disabled={!hasUnsavedChanges || isSaving}>
+        <IconDeviceFloppy size={16} stroke={1.9} />
+        <span>{isSaving ? 'Saving...' : 'Save changes'}</span>
+      </button>
+    </div>
   </div>
 </section>
 
 <div class="grid">
-  <div class="card span-two">
+  <div class="card span-two" id="models">
     <h2>AI Feature Routing</h2>
     <p class="muted">
       Set the model lane per AI feature.
@@ -298,10 +406,6 @@
         </div>
       </div>
     </div>
-    <button on:click={saveSettings} class="inline-button">
-      <IconDeviceFloppy size={16} stroke={1.9} />
-      <span>Save</span>
-    </button>
   </div>
 
   <div class="card">
@@ -338,10 +442,6 @@
       </select>
     </label>
     <p class="muted">This defines the Pipeline model lane configuration.</p>
-    <button on:click={saveSettings} class="inline-button">
-      <IconDeviceFloppy size={16} stroke={1.9} />
-      <span>Save pipeline model</span>
-    </button>
   </div>
 
   <div class="card">
@@ -378,13 +478,9 @@
       </select>
     </label>
     <p class="muted">This defines the Chat model lane configuration.</p>
-    <button on:click={saveSettings} class="inline-button">
-      <IconDeviceFloppy size={16} stroke={1.9} />
-      <span>Save chat model</span>
-    </button>
   </div>
 
-  <div class="card">
+  <div class="card" id="behavior">
     <h2>Behavior defaults</h2>
     <label>
       Summary style
@@ -464,13 +560,9 @@
     <p class="muted">
       Controls the dashboard's Top Rated section. Cutoff range {data.dashboardTopRatedRange.cutoff.min}-{data.dashboardTopRatedRange.cutoff.max}; count range {data.dashboardTopRatedRange.limit.min}-{data.dashboardTopRatedRange.limit.max}.
     </p>
-    <button on:click={saveSettings} class="inline-button">
-      <IconDeviceFloppy size={16} stroke={1.9} />
-      <span>Save</span>
-    </button>
   </div>
 
-  <div class="card span-two">
+  <div class="card span-two" id="fit-score">
     <h2>AI Fit Score Algorithm</h2>
     <p class="muted">
       This global prompt controls how relevance is scored for all articles. Variables:
@@ -484,19 +576,16 @@
       User prompt template
       <textarea rows="12" bind:value={scoreUserPromptTemplate}></textarea>
     </label>
+    <p class="muted">Prompt edits are saved with the global Save changes action.</p>
     <div class="row-actions">
-      <button on:click={saveScorePrompt} class="inline-button">
-        <IconDeviceFloppy size={16} stroke={1.9} />
-        <span>Save prompt</span>
-      </button>
       <button class="ghost inline-button" on:click={resetScorePromptDefaults}>
         <IconRestore size={16} stroke={1.9} />
-        <span>Reset</span>
+        <span>Reset to default</span>
       </button>
     </div>
   </div>
 
-  <div class="card">
+  <div class="card" id="keys">
     <h2>API Keys</h2>
     <div class="row key-rotate-row">
       <button class="ghost inline-button" on:click={() => rotateKeys()}>
@@ -539,14 +628,11 @@
     </button>
   </div>
 
-  <div class="card">
+  <div class="card" id="profile">
     <h2>AI Preference Profile</h2>
     <p class="muted">Version {data.profile.version} · Updated {new Date(data.profile.updated_at).toLocaleString()}</p>
     <textarea rows="8" bind:value={profileText}></textarea>
-    <button on:click={saveProfile} class="inline-button">
-      <IconDeviceFloppy size={16} stroke={1.9} />
-      <span>Save profile</span>
-    </button>
+    <p class="muted">Profile edits are saved with the global Save changes action.</p>
   </div>
 </div>
 
@@ -563,6 +649,47 @@
 </datalist>
 
 <style>
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .header-actions {
+    display: grid;
+    gap: 0.5rem;
+    justify-items: end;
+    min-width: min(420px, 100%);
+  }
+
+  .settings-subnav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.7rem;
+  }
+
+  .settings-subnav a {
+    border: 1px solid var(--surface-border);
+    border-radius: 999px;
+    padding: 0.2rem 0.7rem;
+    font-size: 0.82rem;
+    color: var(--muted-text);
+    background: var(--surface-soft);
+  }
+
+  .save-status {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--primary);
+  }
+
+  .save-status.error {
+    color: var(--danger);
+  }
+
   .grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
@@ -669,6 +796,10 @@
     gap: 0.5rem;
   }
 
+  .header-actions .row-actions {
+    justify-content: flex-end;
+  }
+
   .inline-button {
     display: inline-flex;
     align-items: center;
@@ -737,6 +868,20 @@
   }
 
   @media (max-width: 900px) {
+    .page-header {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .header-actions {
+      width: 100%;
+      justify-items: start;
+    }
+
+    .header-actions .row-actions {
+      justify-content: flex-start;
+    }
+
     .grid {
       grid-template-columns: 1fr;
       gap: 1.25rem;

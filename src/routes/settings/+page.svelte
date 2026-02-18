@@ -101,7 +101,7 @@
     if (data.keyMap.anthropic) void syncModels('anthropic', { silent: true });
   });
 
-  const snapshotFromCurrentForm = () => ({
+  const snapshotObject = () => ({
     laneSummaries,
     laneScoring,
     laneProfileRefresh,
@@ -127,8 +127,34 @@
     profileText
   });
 
-  let savedSnapshot = snapshotFromCurrentForm();
-  $: hasUnsavedChanges = JSON.stringify(snapshotFromCurrentForm()) !== JSON.stringify(savedSnapshot);
+  let savedSnapshot = snapshotObject();
+  let currentSnapshot = snapshotObject();
+  $: currentSnapshot = {
+    laneSummaries,
+    laneScoring,
+    laneProfileRefresh,
+    laneKeyPoints,
+    laneAutoTagging,
+    laneArticleChat,
+    laneGlobalChat,
+    ingestProvider,
+    ingestModel,
+    ingestReasoningEffort,
+    chatProvider,
+    chatModel,
+    chatReasoningEffort,
+    summaryStyle,
+    summaryLength,
+    autoReadDelayMs: Number(autoReadDelayMs ?? 0),
+    articleCardLayout,
+    dashboardTopRatedLayout,
+    dashboardTopRatedCutoff: Number(dashboardTopRatedCutoff ?? 0),
+    dashboardTopRatedLimit: Number(dashboardTopRatedLimit ?? 0),
+    scoreSystemPrompt,
+    scoreUserPromptTemplate,
+    profileText
+  };
+  $: hasUnsavedChanges = JSON.stringify(currentSnapshot) !== JSON.stringify(savedSnapshot);
 
   const applySnapshot = (snapshot) => {
     laneSummaries = snapshot.laneSummaries;
@@ -215,7 +241,7 @@
         }
       }
 
-      savedSnapshot = snapshotFromCurrentForm();
+      savedSnapshot = { ...currentSnapshot };
       saveMessage = 'Settings saved.';
       await invalidate();
     } catch {

@@ -41,6 +41,9 @@ const MAX_DASHBOARD_TOP_RATED_CUTOFF = 5;
 const DEFAULT_DASHBOARD_TOP_RATED_LIMIT = 5;
 const MIN_DASHBOARD_TOP_RATED_LIMIT = 1;
 const MAX_DASHBOARD_TOP_RATED_LIMIT = 20;
+const DEFAULT_INITIAL_FEED_LOOKBACK_DAYS = 45;
+const MIN_INITIAL_FEED_LOOKBACK_DAYS = 0;
+const MAX_INITIAL_FEED_LOOKBACK_DAYS = 3650;
 const FEATURE_LANE_DEFAULTS: Record<AiFeature, AiModelLane> = {
   summaries: 'pipeline',
   scoring: 'pipeline',
@@ -68,7 +71,10 @@ export {
   MAX_DASHBOARD_TOP_RATED_CUTOFF,
   DEFAULT_DASHBOARD_TOP_RATED_LIMIT,
   MIN_DASHBOARD_TOP_RATED_LIMIT,
-  MAX_DASHBOARD_TOP_RATED_LIMIT
+  MAX_DASHBOARD_TOP_RATED_LIMIT,
+  DEFAULT_INITIAL_FEED_LOOKBACK_DAYS,
+  MIN_INITIAL_FEED_LOOKBACK_DAYS,
+  MAX_INITIAL_FEED_LOOKBACK_DAYS
 };
 
 const toReasoningEffort = (value: string | null): ReasoningEffort => {
@@ -133,6 +139,15 @@ export const clampDashboardTopRatedLimit = (value: unknown) => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return DEFAULT_DASHBOARD_TOP_RATED_LIMIT;
   return Math.min(MAX_DASHBOARD_TOP_RATED_LIMIT, Math.max(MIN_DASHBOARD_TOP_RATED_LIMIT, Math.round(parsed)));
+};
+
+export const clampInitialFeedLookbackDays = (value: unknown) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return DEFAULT_INITIAL_FEED_LOOKBACK_DAYS;
+  return Math.min(
+    MAX_INITIAL_FEED_LOOKBACK_DAYS,
+    Math.max(MIN_INITIAL_FEED_LOOKBACK_DAYS, Math.round(parsed))
+  );
 };
 
 const getFirstSetting = async (db: Db, keys: string[]) => {
@@ -282,6 +297,11 @@ export async function getDashboardTopRatedConfig(db: Db) {
   const cutoff = clampDashboardTopRatedCutoff(await getSetting(db, 'dashboard_top_rated_cutoff'));
   const limit = clampDashboardTopRatedLimit(await getSetting(db, 'dashboard_top_rated_limit'));
   return { cutoff, limit };
+}
+
+export async function getInitialFeedLookbackDays(db: Db) {
+  const raw = await getSetting(db, 'initial_feed_lookback_days');
+  return clampInitialFeedLookbackDays(raw);
 }
 
 export async function getDashboardTopRatedLayout(db: Db): Promise<DashboardTopRatedLayout> {

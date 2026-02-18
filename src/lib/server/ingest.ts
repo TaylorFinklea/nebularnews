@@ -4,6 +4,7 @@ import { fetchAndParseFeed, type FeedItem } from './feeds';
 import { extractMainContent, computeWordCount } from './text';
 import { normalizeUrl } from './urls';
 import { extractLeadImageUrlFromHtml, normalizeImageUrl } from './images';
+import { clampInitialFeedLookbackDays, getInitialFeedLookbackDays } from './settings';
 
 const textEncoder = new TextEncoder();
 
@@ -64,25 +65,43 @@ type PollFeedsOptions = {
   maxFeeds?: number;
   maxItemsPerFeed?: number;
   maxItemsTotal?: number;
+  initialFeedLookbackDays?: number;
 };
+
+export function shouldIngestItemForInitialLookback(
+  publishedAt: number | null | undefined,
+  referenceAt: number,
+  lookbackDays: number
+) {
+  if (!publishedAt || !Number.isFinite(publishedAt)) return true;
+  const days = Math.max(0, Math.floor(lookbackDays));
+  if (days <= 0) return true;
+  const cutoff = referenceAt - days * DAY_MS;
+  return publishedAt >= cutoff;
+}
 
 export async function pollFeeds(
   env: App.Platform['env'],
   options: PollFeedsOptions = {}
 ): Promise<FeedPollSummary> {
   const db = env.DB;
+  const pollStartedAt = now();
   const maxFeeds = Math.max(1, Math.min(100, Math.floor(options.maxFeeds ?? MAX_FEEDS_PER_POLL)));
   const maxItemsPerFeed = Math.max(1, Math.min(100, Math.floor(options.maxItemsPerFeed ?? MAX_ITEMS_PER_FEED_PER_POLL)));
   const maxItemsTotal = Math.max(1, Math.min(2000, Math.floor(options.maxItemsTotal ?? MAX_ITEMS_PER_POLL)));
+  const initialFeedLookbackDays = clampInitialFeedLookbackDays(
+    options.initialFeedLookbackDays ?? (await getInitialFeedLookbackDays(db))
+  );
   const dueFeeds = await dbAll<{
     id: string;
     url: string;
     etag: string | null;
     last_modified: string | null;
+    last_polled_at: number | null;
   }>(
     db,
-    'SELECT id, url, etag, last_modified FROM feeds WHERE disabled = 0 AND (next_poll_at IS NULL OR next_poll_at <= ?) ORDER BY next_poll_at ASC LIMIT ?',
-    [now(), maxFeeds]
+    'SELECT id, url, etag, last_modified, last_polled_at FROM feeds WHERE disabled = 0 AND (next_poll_at IS NULL OR next_poll_at <= ?) ORDER BY next_poll_at ASC LIMIT ?',
+    [pollStartedAt, maxFeeds]
   );
   const summary: FeedPollSummary = {
     dueFeeds: dueFeeds.length,
@@ -108,7 +127,13 @@ export async function pollFeeds(
       }
 
       const parsed = result.feed;
-      const itemsForFeed = parsed.items.slice(0, Math.min(maxItemsPerFeed, remainingItemsBudget));
+      const initialPoll = !feed.last_polled_at;
+      const boundedItems = initialPoll
+        ? parsed.items.filter((item) =>
+            shouldIngestItemForInitialLookback(item.publishedAt, pollStartedAt, initialFeedLookbackDays)
+          )
+        : parsed.items;
+      const itemsForFeed = boundedItems.slice(0, Math.min(maxItemsPerFeed, remainingItemsBudget));
       summary.itemsSeen += itemsForFeed.length;
       remainingItemsBudget -= itemsForFeed.length;
       await dbRun(

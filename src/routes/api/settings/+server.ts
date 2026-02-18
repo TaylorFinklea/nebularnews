@@ -4,6 +4,7 @@ import {
   DEFAULT_SCORE_SYSTEM_PROMPT,
   DEFAULT_SCORE_USER_PROMPT_TEMPLATE,
   clampAutoReadDelayMs,
+  clampInitialFeedLookbackDays,
   clampDashboardTopRatedCutoff,
   clampDashboardTopRatedLimit,
   getAutoReadDelayMs,
@@ -13,6 +14,7 @@ import {
   getDashboardTopRatedConfig,
   getConfiguredIngestProviderModel,
   getFeatureModelLanes,
+  getInitialFeedLookbackDays,
   getScorePromptConfig,
   getSetting,
   setSetting
@@ -48,6 +50,7 @@ export const GET = async ({ platform }) => {
     summaryStyle: (await getSetting(db, 'summary_style')) ?? 'concise',
     summaryLength: (await getSetting(db, 'summary_length')) ?? 'short',
     pollInterval: (await getSetting(db, 'poll_interval')) ?? '60',
+    initialFeedLookbackDays: await getInitialFeedLookbackDays(db),
     autoReadDelayMs: await getAutoReadDelayMs(db),
     articleCardLayout: await getArticleCardLayout(db),
     dashboardTopRatedLayout,
@@ -136,6 +139,9 @@ export const POST = async ({ request, platform, locals }) => {
     entries.push(['dashboard_top_rated_layout', body.dashboardTopRatedLayout]);
   }
   if (body?.pollInterval) entries.push(['poll_interval', String(body.pollInterval)]);
+  if (body?.initialFeedLookbackDays !== undefined && body?.initialFeedLookbackDays !== null) {
+    entries.push(['initial_feed_lookback_days', String(clampInitialFeedLookbackDays(body.initialFeedLookbackDays))]);
+  }
   if (body?.autoReadDelayMs !== undefined && body?.autoReadDelayMs !== null) {
     entries.push(['auto_read_delay_ms', String(clampAutoReadDelayMs(body.autoReadDelayMs))]);
   }

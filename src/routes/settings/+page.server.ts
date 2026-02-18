@@ -4,10 +4,13 @@ import {
   DEFAULT_SCORE_USER_PROMPT_TEMPLATE,
   DEFAULT_DASHBOARD_TOP_RATED_CUTOFF,
   DEFAULT_DASHBOARD_TOP_RATED_LIMIT,
+  DEFAULT_INITIAL_FEED_LOOKBACK_DAYS,
   MAX_DASHBOARD_TOP_RATED_CUTOFF,
   MAX_DASHBOARD_TOP_RATED_LIMIT,
+  MAX_INITIAL_FEED_LOOKBACK_DAYS,
   MIN_DASHBOARD_TOP_RATED_CUTOFF,
   MIN_DASHBOARD_TOP_RATED_LIMIT,
+  MIN_INITIAL_FEED_LOOKBACK_DAYS,
   getFeatureModelLanes,
   getDashboardTopRatedConfig,
   MAX_AUTO_READ_DELAY_MS,
@@ -17,6 +20,7 @@ import {
   getDashboardTopRatedLayout,
   getConfiguredChatProviderModel,
   getConfiguredIngestProviderModel,
+  getInitialFeedLookbackDays,
   getScorePromptConfig,
   getSetting
 } from '$lib/server/settings';
@@ -50,6 +54,7 @@ export const load = async ({ platform }) => {
     scoreUserPromptTemplate: scorePrompt.userPromptTemplate,
     summaryStyle: (await getSetting(db, 'summary_style')) ?? 'concise',
     summaryLength: (await getSetting(db, 'summary_length')) ?? 'short',
+    initialFeedLookbackDays: await getInitialFeedLookbackDays(db),
     autoReadDelayMs: await getAutoReadDelayMs(db),
     articleCardLayout: await getArticleCardLayout(db),
     dashboardTopRatedLayout,
@@ -75,6 +80,11 @@ export const load = async ({ platform }) => {
     keyMap,
     profile,
     scorePromptDefaults,
+    initialFeedLookbackRange: {
+      min: MIN_INITIAL_FEED_LOOKBACK_DAYS,
+      max: MAX_INITIAL_FEED_LOOKBACK_DAYS,
+      default: DEFAULT_INITIAL_FEED_LOOKBACK_DAYS
+    },
     autoReadDelayRange: { min: MIN_AUTO_READ_DELAY_MS, max: MAX_AUTO_READ_DELAY_MS },
     dashboardTopRatedRange: {
       cutoff: {

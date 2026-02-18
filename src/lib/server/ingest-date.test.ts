@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizePublishedAt, shouldAutoQueueArticleJobs } from './ingest';
+import { normalizePublishedAt, shouldAutoQueueArticleJobs, shouldIngestItemForInitialLookback } from './ingest';
 
 describe('normalizePublishedAt', () => {
   it('keeps normal published dates', () => {
@@ -34,5 +34,24 @@ describe('shouldAutoQueueArticleJobs', () => {
   it('uses fetched timestamp when published date is missing', () => {
     const fetchedAt = Date.UTC(2026, 1, 13, 14, 30, 0);
     expect(shouldAutoQueueArticleJobs(null, fetchedAt)).toBe(true);
+  });
+});
+
+describe('shouldIngestItemForInitialLookback', () => {
+  it('keeps recent items within lookback window', () => {
+    const referenceAt = Date.UTC(2026, 1, 18, 12, 0, 0);
+    const publishedAt = Date.UTC(2026, 1, 1, 12, 0, 0);
+    expect(shouldIngestItemForInitialLookback(publishedAt, referenceAt, 45)).toBe(true);
+  });
+
+  it('filters items older than lookback window', () => {
+    const referenceAt = Date.UTC(2026, 1, 18, 12, 0, 0);
+    const publishedAt = Date.UTC(2025, 10, 1, 12, 0, 0);
+    expect(shouldIngestItemForInitialLookback(publishedAt, referenceAt, 45)).toBe(false);
+  });
+
+  it('keeps items with missing published date', () => {
+    const referenceAt = Date.UTC(2026, 1, 18, 12, 0, 0);
+    expect(shouldIngestItemForInitialLookback(null, referenceAt, 45)).toBe(true);
   });
 });

@@ -22,6 +22,7 @@
   let scoreUserPromptTemplate = data.settings.scoreUserPromptTemplate;
   let summaryStyle = data.settings.summaryStyle;
   let summaryLength = data.settings.summaryLength;
+  let initialFeedLookbackDays = Number(data.settings.initialFeedLookbackDays ?? data.initialFeedLookbackRange?.default ?? 45);
   let autoReadDelayMs = Number(data.settings.autoReadDelayMs ?? 4000);
   let articleCardLayout = data.settings.articleCardLayout ?? 'split';
   let dashboardTopRatedLayout = data.settings.dashboardTopRatedLayout ?? 'stacked';
@@ -117,6 +118,7 @@
     chatReasoningEffort,
     summaryStyle,
     summaryLength,
+    initialFeedLookbackDays: Number(initialFeedLookbackDays ?? 0),
     autoReadDelayMs: Number(autoReadDelayMs ?? 0),
     articleCardLayout,
     dashboardTopRatedLayout,
@@ -145,6 +147,7 @@
     chatReasoningEffort,
     summaryStyle,
     summaryLength,
+    initialFeedLookbackDays: Number(initialFeedLookbackDays ?? 0),
     autoReadDelayMs: Number(autoReadDelayMs ?? 0),
     articleCardLayout,
     dashboardTopRatedLayout,
@@ -172,6 +175,7 @@
     chatReasoningEffort = snapshot.chatReasoningEffort;
     summaryStyle = snapshot.summaryStyle;
     summaryLength = snapshot.summaryLength;
+    initialFeedLookbackDays = Number(snapshot.initialFeedLookbackDays ?? 0);
     autoReadDelayMs = Number(snapshot.autoReadDelayMs ?? 0);
     articleCardLayout = snapshot.articleCardLayout;
     dashboardTopRatedLayout = snapshot.dashboardTopRatedLayout;
@@ -214,6 +218,7 @@
           chatReasoningEffort,
           summaryStyle,
           summaryLength,
+          initialFeedLookbackDays,
           autoReadDelayMs,
           articleCardLayout,
           dashboardTopRatedLayout,
@@ -525,6 +530,20 @@
         <option value="long">Long</option>
       </select>
     </label>
+    <label>
+      Initial feed backfill window (days)
+      <input
+        type="number"
+        min={data.initialFeedLookbackRange.min}
+        max={data.initialFeedLookbackRange.max}
+        step="1"
+        bind:value={initialFeedLookbackDays}
+      />
+    </label>
+    <p class="muted">
+      Applies to first-time feed pulls and newly added feeds. Default {data.initialFeedLookbackRange.default} days.
+      Set to 0 to include all available history.
+    </p>
     <label>
       Mark article as read after (ms)
       <input

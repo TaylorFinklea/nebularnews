@@ -297,11 +297,11 @@
 <section class="page-header">
   <div>
     <h1>Settings</h1>
-    <p>Configure model routing, provider keys, and summarization defaults.</p>
+    <p>Configure AI behavior, prompts, keys, and display defaults.</p>
     <nav class="settings-subnav" aria-label="Settings sections">
-      <a href="#models">Models</a>
+      <a href="#models">AI settings</a>
       <a href="#behavior">Behavior</a>
-      <a href="#fit-score">Fit score prompt</a>
+      <a href="#fit-score">Prompts</a>
       <a href="#keys">Keys</a>
       <a href="#profile">Profile</a>
     </nav>
@@ -327,9 +327,10 @@
   </div>
 </section>
 
-<div class="grid">
-  <div class="card span-two" id="models">
-    <h2>AI Feature Routing</h2>
+<div class="settings-stack">
+  <div class="card" id="models">
+    <h2>AI settings</h2>
+    <h3>Feature routing</h3>
     <p class="muted">
       Set the model lane per AI feature.
     </p>
@@ -432,78 +433,78 @@
         </div>
       </div>
     </div>
-  </div>
 
-  <div class="card">
-    <h2>Pipeline model (cheaper)</h2>
-    <label>
-      Provider
-      <select bind:value={ingestProvider}>
-        <option value="openai">OpenAI</option>
-        <option value="anthropic">Anthropic</option>
-      </select>
-    </label>
-    <label>
-      Model
-      <input
-        bind:value={ingestModel}
-        placeholder="gpt-5-mini"
-        list={ingestProvider === 'anthropic' ? 'anthropic-model-options' : 'openai-model-options'}
-      />
-    </label>
-    <div class="model-tools">
-      <button class="ghost" on:click={() => syncModels(ingestProvider)} disabled={isLoadingModels(ingestProvider)}>
-        <IconRefresh size={16} stroke={1.9} />
-        <span>{isLoadingModels(ingestProvider) ? 'Loading...' : `Refresh ${ingestProvider}`}</span>
-      </button>
-      <p class="muted">{modelStatus(ingestProvider)}</p>
-    </div>
-    <label>
-      Reasoning level
-      <select bind:value={ingestReasoningEffort}>
-        <option value="minimal">Minimal</option>
-        <option value="low">Low</option>
-        <option value="medium">Medium</option>
-        <option value="high">High</option>
-      </select>
-    </label>
-    <p class="muted">This defines the Pipeline model lane configuration.</p>
-  </div>
+    <div class="model-sections">
+      <section class="model-section" aria-label="Pipeline lane settings">
+        <h3>Pipeline lane (cheaper)</h3>
+        <label>
+          Provider
+          <select bind:value={ingestProvider}>
+            <option value="openai">OpenAI</option>
+            <option value="anthropic">Anthropic</option>
+          </select>
+        </label>
+        <label>
+          Model
+          <input
+            bind:value={ingestModel}
+            placeholder="gpt-5-mini"
+            list={ingestProvider === 'anthropic' ? 'anthropic-model-options' : 'openai-model-options'}
+          />
+        </label>
+        <div class="model-tools">
+          <button class="ghost" on:click={() => syncModels(ingestProvider)} disabled={isLoadingModels(ingestProvider)}>
+            <IconRefresh size={16} stroke={1.9} />
+            <span>{isLoadingModels(ingestProvider) ? 'Loading...' : `Refresh ${ingestProvider}`}</span>
+          </button>
+          <p class="muted">{modelStatus(ingestProvider)}</p>
+        </div>
+        <label>
+          Reasoning level
+          <select bind:value={ingestReasoningEffort}>
+            <option value="minimal">Minimal</option>
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+          </select>
+        </label>
+      </section>
 
-  <div class="card">
-    <h2>Chat model (more capable)</h2>
-    <label>
-      Provider
-      <select bind:value={chatProvider}>
-        <option value="openai">OpenAI</option>
-        <option value="anthropic">Anthropic</option>
-      </select>
-    </label>
-    <label>
-      Model
-      <input
-        bind:value={chatModel}
-        placeholder="gpt-5.2"
-        list={chatProvider === 'anthropic' ? 'anthropic-model-options' : 'openai-model-options'}
-      />
-    </label>
-    <div class="model-tools">
-      <button class="ghost" on:click={() => syncModels(chatProvider)} disabled={isLoadingModels(chatProvider)}>
-        <IconRefresh size={16} stroke={1.9} />
-        <span>{isLoadingModels(chatProvider) ? 'Loading...' : `Refresh ${chatProvider}`}</span>
-      </button>
-      <p class="muted">{modelStatus(chatProvider)}</p>
+      <section class="model-section" aria-label="Chat lane settings">
+        <h3>Chat lane (more capable)</h3>
+        <label>
+          Provider
+          <select bind:value={chatProvider}>
+            <option value="openai">OpenAI</option>
+            <option value="anthropic">Anthropic</option>
+          </select>
+        </label>
+        <label>
+          Model
+          <input
+            bind:value={chatModel}
+            placeholder="gpt-5.2"
+            list={chatProvider === 'anthropic' ? 'anthropic-model-options' : 'openai-model-options'}
+          />
+        </label>
+        <div class="model-tools">
+          <button class="ghost" on:click={() => syncModels(chatProvider)} disabled={isLoadingModels(chatProvider)}>
+            <IconRefresh size={16} stroke={1.9} />
+            <span>{isLoadingModels(chatProvider) ? 'Loading...' : `Refresh ${chatProvider}`}</span>
+          </button>
+          <p class="muted">{modelStatus(chatProvider)}</p>
+        </div>
+        <label>
+          Reasoning level
+          <select bind:value={chatReasoningEffort}>
+            <option value="minimal">Minimal</option>
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+          </select>
+        </label>
+      </section>
     </div>
-    <label>
-      Reasoning level
-      <select bind:value={chatReasoningEffort}>
-        <option value="minimal">Minimal</option>
-        <option value="low">Low</option>
-        <option value="medium">Medium</option>
-        <option value="high">High</option>
-      </select>
-    </label>
-    <p class="muted">This defines the Chat model lane configuration.</p>
   </div>
 
   <div class="card" id="behavior">
@@ -588,29 +589,6 @@
     </p>
   </div>
 
-  <div class="card span-two" id="fit-score">
-    <h2>AI Fit Score Algorithm</h2>
-    <p class="muted">
-      This global prompt controls how relevance is scored for all articles. Variables:
-      <code>{'{{profile}}'}</code>, <code>{'{{title}}'}</code>, <code>{'{{url}}'}</code>, <code>{'{{content}}'}</code>.
-    </p>
-    <label>
-      System prompt
-      <textarea rows="4" bind:value={scoreSystemPrompt}></textarea>
-    </label>
-    <label>
-      User prompt template
-      <textarea rows="12" bind:value={scoreUserPromptTemplate}></textarea>
-    </label>
-    <p class="muted">Prompt edits are saved with the global Save changes action.</p>
-    <div class="row-actions">
-      <button class="ghost inline-button" on:click={resetScorePromptDefaults}>
-        <IconRestore size={16} stroke={1.9} />
-        <span>Reset to default</span>
-      </button>
-    </div>
-  </div>
-
   <div class="card" id="keys">
     <h2>API Keys</h2>
     <div class="row key-rotate-row">
@@ -654,11 +632,40 @@
     </button>
   </div>
 
-  <div class="card" id="profile">
-    <h2>AI Preference Profile</h2>
-    <p class="muted">Version {data.profile.version} · Updated {new Date(data.profile.updated_at).toLocaleString()}</p>
-    <textarea rows="8" bind:value={profileText}></textarea>
-    <p class="muted">Profile edits are saved with the global Save changes action.</p>
+  <div class="card" id="fit-score">
+    <h2>Prompts and profile</h2>
+
+    <section class="card-section">
+      <h3>AI fit score prompt</h3>
+      <p class="muted">
+        This global prompt controls how relevance is scored for all articles. Variables:
+        <code>{'{{profile}}'}</code>, <code>{'{{title}}'}</code>, <code>{'{{url}}'}</code>, <code>{'{{content}}'}</code>.
+      </p>
+      <label>
+        System prompt
+        <textarea rows="4" bind:value={scoreSystemPrompt}></textarea>
+      </label>
+      <label>
+        User prompt template
+        <textarea rows="12" bind:value={scoreUserPromptTemplate}></textarea>
+      </label>
+      <p class="muted">Prompt edits are saved with the global Save changes action.</p>
+      <div class="row-actions">
+        <button class="ghost inline-button" on:click={resetScorePromptDefaults}>
+          <IconRestore size={16} stroke={1.9} />
+          <span>Reset to default</span>
+        </button>
+      </div>
+    </section>
+
+    <div class="divider"></div>
+
+    <section class="card-section" id="profile">
+      <h3>AI preference profile</h3>
+      <p class="muted">Version {data.profile.version} · Updated {new Date(data.profile.updated_at).toLocaleString()}</p>
+      <textarea rows="8" bind:value={profileText}></textarea>
+      <p class="muted">Profile edits are saved with the global Save changes action.</p>
+    </section>
   </div>
 </div>
 
@@ -716,10 +723,10 @@
     color: var(--danger);
   }
 
-  .grid {
+  .settings-stack {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
-    gap: 1.75rem;
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
   }
 
   .card {
@@ -732,6 +739,16 @@
     gap: 1rem;
     align-content: start;
     min-width: 0;
+  }
+
+  .card-section {
+    display: grid;
+    gap: 1rem;
+  }
+
+  h3 {
+    margin: 0;
+    font-size: 1rem;
   }
 
   label {
@@ -812,8 +829,19 @@
     font-size: 0.85rem;
   }
 
-  .span-two {
-    grid-column: 1 / -1;
+  .model-sections {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  .model-section {
+    display: grid;
+    gap: 1rem;
+    border: 1px solid var(--surface-border);
+    border-radius: 14px;
+    padding: 1rem;
+    background: var(--surface-soft);
   }
 
   .row-actions {
@@ -908,17 +936,12 @@
       justify-content: flex-start;
     }
 
-    .grid {
-      grid-template-columns: 1fr;
-      gap: 1.25rem;
-    }
-
     .card {
       padding: 1.25rem;
     }
 
-    .span-two {
-      grid-column: span 1;
+    .model-sections {
+      grid-template-columns: 1fr;
     }
   }
 </style>

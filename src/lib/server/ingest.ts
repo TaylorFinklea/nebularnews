@@ -17,6 +17,10 @@ const sha256 = async (text: string) => {
 const POLL_INTERVAL_MS = 1000 * 60 * 60;
 const MAX_PUBLISHED_FUTURE_MS = 1000 * 60 * 60 * 24;
 const DAY_MS = 1000 * 60 * 60 * 24;
+const MAX_FEEDS_PER_POLL = 25;
+const MAX_ITEMS_PER_FEED_PER_POLL = 15;
+const MAX_ITEMS_PER_POLL = 200;
+const ARTICLE_FETCH_TIMEOUT_MS = 10_000;
 
 const utcDayStart = (timestamp: number) => {
   const day = new Date(timestamp);
@@ -55,8 +59,21 @@ export type FeedPollSummary = {
   errors: FeedPollError[];
 };
 
-export async function pollFeeds(env: App.Platform['env']): Promise<FeedPollSummary> {
+type PollFeedsOptions = {
+  onFeedSettled?: (feedId: string) => Promise<void> | void;
+  maxFeeds?: number;
+  maxItemsPerFeed?: number;
+  maxItemsTotal?: number;
+};
+
+export async function pollFeeds(
+  env: App.Platform['env'],
+  options: PollFeedsOptions = {}
+): Promise<FeedPollSummary> {
   const db = env.DB;
+  const maxFeeds = Math.max(1, Math.min(100, Math.floor(options.maxFeeds ?? MAX_FEEDS_PER_POLL)));
+  const maxItemsPerFeed = Math.max(1, Math.min(100, Math.floor(options.maxItemsPerFeed ?? MAX_ITEMS_PER_FEED_PER_POLL)));
+  const maxItemsTotal = Math.max(1, Math.min(2000, Math.floor(options.maxItemsTotal ?? MAX_ITEMS_PER_POLL)));
   const dueFeeds = await dbAll<{
     id: string;
     url: string;
@@ -64,8 +81,8 @@ export async function pollFeeds(env: App.Platform['env']): Promise<FeedPollSumma
     last_modified: string | null;
   }>(
     db,
-    'SELECT id, url, etag, last_modified FROM feeds WHERE disabled = 0 AND (next_poll_at IS NULL OR next_poll_at <= ?) ORDER BY next_poll_at ASC LIMIT 25',
-    [now()]
+    'SELECT id, url, etag, last_modified FROM feeds WHERE disabled = 0 AND (next_poll_at IS NULL OR next_poll_at <= ?) ORDER BY next_poll_at ASC LIMIT ?',
+    [now(), maxFeeds]
   );
   const summary: FeedPollSummary = {
     dueFeeds: dueFeeds.length,
@@ -73,8 +90,10 @@ export async function pollFeeds(env: App.Platform['env']): Promise<FeedPollSumma
     itemsProcessed: 0,
     errors: []
   };
+  let remainingItemsBudget = maxItemsTotal;
 
   for (const feed of dueFeeds) {
+    if (remainingItemsBudget <= 0) break;
     try {
       const result = await fetchAndParseFeed(feed.url, feed.etag, feed.last_modified);
       const nextPoll = now() + POLL_INTERVAL_MS;
@@ -89,7 +108,9 @@ export async function pollFeeds(env: App.Platform['env']): Promise<FeedPollSumma
       }
 
       const parsed = result.feed;
-      summary.itemsSeen += parsed.items.length;
+      const itemsForFeed = parsed.items.slice(0, Math.min(maxItemsPerFeed, remainingItemsBudget));
+      summary.itemsSeen += itemsForFeed.length;
+      remainingItemsBudget -= itemsForFeed.length;
       await dbRun(
         db,
         'UPDATE feeds SET title = ?, site_url = ?, etag = ?, last_modified = ?, last_polled_at = ?, next_poll_at = ?, error_count = 0 WHERE id = ?',
@@ -104,7 +125,7 @@ export async function pollFeeds(env: App.Platform['env']): Promise<FeedPollSumma
         ]
       );
 
-      for (const item of parsed.items) {
+      for (const item of itemsForFeed) {
         if (await ingestFeedItem(db, feed.id, item)) {
           summary.itemsProcessed += 1;
         }
@@ -121,6 +142,8 @@ export async function pollFeeds(env: App.Platform['env']): Promise<FeedPollSumma
         nextPoll,
         feed.id
       ]);
+    } finally {
+      await options.onFeedSettled?.(feed.id);
     }
   }
 
@@ -137,14 +160,21 @@ async function ingestFeedItem(db: Db, feedId: string, item: FeedItem): Promise<b
   let contentHtml = item.contentHtml ?? null;
   let contentText = item.contentText ?? null;
   let imageUrl = normalizeImageUrl(item.imageUrl, url);
+  const shouldFetchFullArticle = shouldAutoQueueArticleJobs(normalizedPublishedAt, fetchedAt);
 
   if (!imageUrl && contentHtml) {
     imageUrl = extractLeadImageUrlFromHtml(contentHtml, url);
   }
 
-  if (!contentText || contentText.length < 200 || !imageUrl) {
+  // Keep ingestion bounded: only do expensive full-page fetch for current-day content.
+  if (shouldFetchFullArticle && (!contentText || contentText.length < 200 || !imageUrl)) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), ARTICLE_FETCH_TIMEOUT_MS);
     try {
-      const res = await fetch(url, { headers: { 'user-agent': 'NebularNews/0.1 (+article)' } });
+      const res = await fetch(url, {
+        headers: { 'user-agent': 'NebularNews/0.1 (+article)' },
+        signal: controller.signal
+      });
       if (res.ok) {
         const html = await res.text();
         const extracted = extractMainContent(html, url);
@@ -156,6 +186,8 @@ async function ingestFeedItem(db: Db, feedId: string, item: FeedItem): Promise<b
       }
     } catch {
       // ignore fetch failures
+    } finally {
+      clearTimeout(timeout);
     }
   }
 

@@ -24,6 +24,7 @@ const parser = new XMLParser({
   attributeNamePrefix: '',
   textNodeName: '#text'
 });
+const FEED_FETCH_TIMEOUT_MS = 12_000;
 
 const arrify = <T>(value: T | T[] | undefined | null): T[] => {
   if (!value) return [];
@@ -211,7 +212,19 @@ export async function fetchAndParseFeed(url: string, etag?: string | null, lastM
   if (etag) headers['if-none-match'] = etag;
   if (lastModified) headers['if-modified-since'] = lastModified;
 
-  const res = await fetch(url, { headers });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FEED_FETCH_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(url, { headers, signal: controller.signal });
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`Feed fetch timed out after ${FEED_FETCH_TIMEOUT_MS}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
   if (res.status === 304) {
     return { notModified: true } as const;
   }

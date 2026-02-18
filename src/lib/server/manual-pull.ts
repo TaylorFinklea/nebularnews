@@ -3,6 +3,8 @@ import { dbGet, dbRun, now, type Db } from './db';
 import { pollFeeds } from './ingest';
 import { processJobs } from './jobs';
 
+const PULL_RUN_STALE_MS = 1000 * 60 * 20;
+
 export type PullStats = {
   feeds: number;
   articles: number;
@@ -57,6 +59,35 @@ const parseStats = (statsJson: string | null): PullStats | null => {
   } catch {
     return null;
   }
+};
+
+const staleErrorMessage = `Pull run marked failed after ${Math.floor(PULL_RUN_STALE_MS / 60000)} minutes without progress heartbeat`;
+
+const recoverStalePullRuns = async (db: Db) => {
+  const timestamp = now();
+  const staleBefore = timestamp - PULL_RUN_STALE_MS;
+  await dbRun(
+    db,
+    `UPDATE pull_runs
+     SET status = 'failed',
+         completed_at = ?,
+         last_error = ?,
+         updated_at = ?
+     WHERE status IN ('queued', 'running')
+       AND updated_at < ?`,
+    [timestamp, staleErrorMessage, timestamp, staleBefore]
+  );
+};
+
+const touchPullRun = async (db: Db, runId: string) => {
+  await dbRun(
+    db,
+    `UPDATE pull_runs
+     SET updated_at = ?
+     WHERE id = ?
+       AND status = 'running'`,
+    [now(), runId]
+  );
 };
 
 export const getPullRun = async (db: Db, runId: string) =>
@@ -197,6 +228,7 @@ const markPullRunFinished = async (
 };
 
 export const getManualPullState = async (db: Db, runId?: string | null): Promise<ManualPullState> => {
+  await recoverStalePullRuns(db);
   const run = (runId ? await getPullRun(db, runId) : null) ?? (await getLatestPullRun(db));
   if (!run) {
     return {
@@ -227,6 +259,7 @@ export const startManualPull = async (
   db: Db,
   input: { cycles: number; trigger: string; requestId?: string | null }
 ) => {
+  await recoverStalePullRuns(db);
   const active = await getActivePullRun(db);
   if (active) {
     return { started: false, runId: active.id } as const;
@@ -241,6 +274,7 @@ export async function runPullRun(env: App.Platform['env'], runId: string): Promi
   if (!run) throw new Error('Pull run not found');
 
   await markPullRunRunning(db, runId);
+  await touchPullRun(db, runId);
   let runError: string | null = null;
   let stats: PullStats | null = null;
   try {
@@ -251,7 +285,9 @@ export async function runPullRun(env: App.Platform['env'], runId: string): Promi
     const recentErrors: { url: string; message: string }[] = [];
 
     for (let i = 0; i < run.cycles; i += 1) {
-      const poll = await pollFeeds(env);
+      const poll = await pollFeeds(env, {
+        onFeedSettled: () => touchPullRun(db, runId)
+      });
       dueFeeds += poll.dueFeeds;
       itemsSeen += poll.itemsSeen;
       itemsProcessed += poll.itemsProcessed;
@@ -259,7 +295,9 @@ export async function runPullRun(env: App.Platform['env'], runId: string): Promi
         if (recentErrors.length >= 5) break;
         recentErrors.push({ url: err.url, message: err.message });
       }
+      await touchPullRun(db, runId);
       await processJobs(env);
+      await touchPullRun(db, runId);
     }
 
     const feeds = await dbGet<{ count: number }>(db, 'SELECT COUNT(*) as count FROM feeds');

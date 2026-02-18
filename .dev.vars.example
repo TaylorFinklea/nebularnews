@@ -1,3 +1,5 @@
+APP_ENV=development
+
 ADMIN_PASSWORD_HASH=pbkdf2$...
 SESSION_SECRET=replace-with-long-random
 ENCRYPTION_KEY=base64-32-bytes
@@ -12,3 +14,4 @@ DEFAULT_REASONING_EFFORT=medium
 MCP_BEARER_TOKEN=replace-with-long-random-token
 MCP_SERVER_NAME=Nebular News MCP
 MCP_SERVER_VERSION=0.1.0
+MCP_ALLOWED_ORIGINS=

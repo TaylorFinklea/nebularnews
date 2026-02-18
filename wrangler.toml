@@ -7,7 +7,7 @@ directory = ".svelte-kit/cloudflare"
 binding = "ASSETS"
 
 [triggers]
-crons = ["*/5 * * * *", "0 * * * *"]
+crons = ["*/5 * * * *", "0 * * * *", "30 3 * * *"]
 
 [[d1_databases]]
 binding = "DB"
@@ -15,6 +15,7 @@ database_name = "nebularnews"
 database_id = "REPLACE_WITH_D1_DATABASE_ID"
 
 [vars]
+APP_ENV = "development"
 DEFAULT_PROVIDER = "openai"
 DEFAULT_INGEST_MODEL = "gpt-5-mini"
 DEFAULT_CHAT_MODEL = "gpt-5.2"
@@ -23,3 +24,44 @@ DEFAULT_CHAT_REASONING_EFFORT = "medium"
 DEFAULT_REASONING_EFFORT = "medium"
 MCP_SERVER_NAME = "Nebular News MCP"
 MCP_SERVER_VERSION = "0.1.0"
+MCP_ALLOWED_ORIGINS = ""
+
+[env.staging]
+name = "nebular-news-staging"
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "nebularnews-staging"
+database_id = "REPLACE_WITH_STAGING_D1_DATABASE_ID"
+
+[env.staging.vars]
+APP_ENV = "staging"
+DEFAULT_PROVIDER = "openai"
+DEFAULT_INGEST_MODEL = "gpt-5-mini"
+DEFAULT_CHAT_MODEL = "gpt-5.2"
+DEFAULT_INGEST_REASONING_EFFORT = "low"
+DEFAULT_CHAT_REASONING_EFFORT = "medium"
+DEFAULT_REASONING_EFFORT = "medium"
+MCP_SERVER_NAME = "Nebular News MCP"
+MCP_SERVER_VERSION = "0.1.0"
+MCP_ALLOWED_ORIGINS = ""
+
+[env.production]
+name = "nebular-news"
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "nebularnews-prod"
+database_id = "REPLACE_WITH_PROD_D1_DATABASE_ID"
+
+[env.production.vars]
+APP_ENV = "production"
+DEFAULT_PROVIDER = "openai"
+DEFAULT_INGEST_MODEL = "gpt-5-mini"
+DEFAULT_CHAT_MODEL = "gpt-5.2"
+DEFAULT_INGEST_REASONING_EFFORT = "low"
+DEFAULT_CHAT_REASONING_EFFORT = "medium"
+DEFAULT_REASONING_EFFORT = "medium"
+MCP_SERVER_NAME = "Nebular News MCP"
+MCP_SERVER_VERSION = "0.1.0"
+MCP_ALLOWED_ORIGINS = "https://REPLACE_WITH_YOUR_DOMAIN"

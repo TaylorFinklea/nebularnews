@@ -24,6 +24,8 @@ declare namespace App {
       MCP_BEARER_TOKEN?: string;
       MCP_SERVER_NAME?: string;
       MCP_SERVER_VERSION?: string;
+      MCP_ALLOWED_ORIGINS?: string;
+      APP_ENV?: string;
     };
     context: ExecutionContext;
   }

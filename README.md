@@ -17,17 +17,12 @@ wrangler d1 create nebularnews
 wrangler d1 execute nebularnews --file=./schema.sql
 ```
 
-If you are upgrading an existing database, run one scheduled cycle once after deploy to apply runtime migrations:
-
-```bash
-curl "http://localhost:8787/cdn-cgi/handler/scheduled"
-```
-
 3. Configure environment variables
 
 Create a `.dev.vars` with:
 
 ```
+APP_ENV=development
 ADMIN_PASSWORD_HASH=pbkdf2$...
 SESSION_SECRET=replace-with-long-random
 ENCRYPTION_KEY=base64-32-bytes
@@ -40,6 +35,7 @@ DEFAULT_REASONING_EFFORT=medium
 MCP_BEARER_TOKEN=replace-with-long-random-token
 MCP_SERVER_NAME=Nebular News MCP
 MCP_SERVER_VERSION=0.1.0
+MCP_ALLOWED_ORIGINS=
 ```
 
 Generate a password hash:
@@ -67,6 +63,7 @@ Nebular News includes a Streamable HTTP MCP endpoint for external clients (inclu
 - Endpoint: `POST /mcp`
 - Health/discovery: `GET /mcp`
 - Auth: `Authorization: Bearer <MCP_BEARER_TOKEN>` (session cookie also works for local browser testing)
+- Optional CORS allowlist: `MCP_ALLOWED_ORIGINS` (comma-separated). Empty means `*`.
 
 Example probe:
 
@@ -93,9 +90,12 @@ curl -s http://localhost:8787/mcp \
 ## Health, Readiness, Pull Status, and Events
 
 - `GET /api/health` - liveness.
-- `GET /api/ready` - readiness + schema version assertion.
+- `GET /api/ready` - readiness + schema/runtime assertion.
 - `GET /api/pull/status?run_id=<id>` - durable pull-run status.
 - `GET /api/events` - SSE stream with pull/job state snapshots.
+- `GET /api/admin/preflight` - deployment preflight checks (authenticated).
+- `GET /api/admin/ops-summary` - operational snapshot (authenticated).
+- `POST /api/admin/retention/run` - run retention cleanup immediately (authenticated).
 
 `POST /api/pull` now returns a durable `run_id`.
 
@@ -147,24 +147,91 @@ Notes:
 
 ## Deployment
 
-Update `wrangler.toml` with your D1 `database_id`. Then set secrets:
+`wrangler.toml` includes dedicated envs for staging and production:
+- `[env.staging]`
+- `[env.production]`
+
+Update both D1 `database_id` placeholders, then set secrets per environment:
 
 ```
-wrangler secret put ADMIN_PASSWORD_HASH
-wrangler secret put SESSION_SECRET
-wrangler secret put ENCRYPTION_KEY
-wrangler secret put MCP_BEARER_TOKEN
+wrangler secret put ADMIN_PASSWORD_HASH --env staging
+wrangler secret put SESSION_SECRET --env staging
+wrangler secret put ENCRYPTION_KEY --env staging
+wrangler secret put MCP_BEARER_TOKEN --env staging
+
+wrangler secret put ADMIN_PASSWORD_HASH --env production
+wrangler secret put SESSION_SECRET --env production
+wrangler secret put ENCRYPTION_KEY --env production
+wrangler secret put MCP_BEARER_TOKEN --env production
+```
+
+Run deterministic migrations:
+
+```
+npm run migrate:staging
+npm run migrate:prod
 ```
 
 Deploy:
 
 ```
-wrangler deploy
+npm run deploy:staging
+npm run deploy:prod
 ```
+
+Smoke-check after deploy:
+
+```
+curl -fsSL https://<host>/api/health
+curl -fsSL https://<host>/api/ready
+```
+
+## Cloudflare Access (recommended)
+
+For single-user production, put the app behind Cloudflare Access and keep app password login enabled.
+
+Minimum policy:
+- Require identity provider login for app routes.
+- Restrict allowed users/groups to your account.
+- Keep `/mcp` bearer token auth enabled.
+
+## CI/CD
+
+GitHub Actions workflow: `/Users/tfinklea/git/nebularnews/.github/workflows/cloudflare-deploy.yml`
+
+- Push to `main` deploys staging.
+- Manual dispatch can deploy staging or production.
+- Pipeline gates:
+  - `npm run test`
+  - `npm run build`
+  - remote migration
+  - deploy
+  - `/api/health` and `/api/ready` smoke checks
+
+Required GitHub secrets:
+- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_ACCOUNT_ID`
+- `STAGING_BASE_URL`
+- `PRODUCTION_BASE_URL`
+
+## Retention and quotas
+
+- New settings in UI:
+  - `Retention window (days)` (0 disables cleanup)
+  - `Retention mode` (`archive` or `delete`)
+- Scheduled cleanup runs daily at `03:30 UTC`.
+- Use `/api/admin/ops-summary` warnings for backlog/data-growth guardrails.
+
+## Runbooks
+
+- Production runbook: `/Users/tfinklea/git/nebularnews/docs/runbooks/production.md`
+- Incident runbook: `/Users/tfinklea/git/nebularnews/docs/runbooks/incidents.md`
 
 ## Notes
 
 - Feed polling runs every 60 minutes via Cloudflare Cron triggers.
+- Job queue processing runs every 5 minutes.
+- Retention cleanup runs daily at 03:30 UTC.
 - API keys are stored encrypted server‑side using AES‑GCM.
 - You can set separate LLM defaults for pipeline jobs vs chat in Settings.
 - Settings can auto-fetch available model IDs from OpenAI/Anthropic using your saved key.

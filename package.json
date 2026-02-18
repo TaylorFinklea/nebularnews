@@ -11,7 +11,11 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "test:e2e:pull": "playwright test e2e/manual-pull-status.spec.ts",
-    "hash-password": "node scripts/hash-password.mjs"
+    "hash-password": "node scripts/hash-password.mjs",
+    "migrate:staging": "wrangler d1 execute nebularnews-staging --remote --env staging --file=./schema.sql",
+    "migrate:prod": "wrangler d1 execute nebularnews-prod --remote --env production --file=./schema.sql",
+    "deploy:staging": "wrangler deploy --env staging",
+    "deploy:prod": "wrangler deploy --env production"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",

@@ -10,7 +10,7 @@ binding = "ASSETS"
 crons = ["*/5 * * * *", "0 * * * *", "30 3 * * *"]
 
 [[d1_databases]]
-binding = "nebularnews_prod"
+binding = "DB"
 database_name = "nebularnews-prod"
 database_id = "f3adc274-12cf-4024-981e-7abe19366191"
 
@@ -50,7 +50,7 @@ MCP_ALLOWED_ORIGINS = ""
 name = "nebular-news"
 
 [[env.production.d1_databases]]
-binding = "nebularnews_prod"
+binding = "DB"
 database_name = "nebularnews-prod"
 database_id = "f3adc274-12cf-4024-981e-7abe19366191"
 

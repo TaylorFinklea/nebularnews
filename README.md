@@ -186,6 +186,47 @@ curl -fsSL https://<host>/api/health
 curl -fsSL https://<host>/api/ready
 ```
 
+### Troubleshooting: `Invalid runtime configuration`
+
+If production returns:
+
+`Invalid runtime configuration: ADMIN_PASSWORD_HASH is missing or invalid ...`
+
+you need to set the required production secrets and redeploy.
+
+```bash
+cd /Users/tfinklea/git/nebularnews
+
+# Generate valid values
+ADMIN_PASSWORD_HASH="$(npm run --silent hash-password -- 'REPLACE_WITH_YOUR_LOGIN_PASSWORD')"
+SESSION_SECRET="$(node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))")"
+ENCRYPTION_KEY="$(node -e "console.log(require('crypto').randomBytes(32).toString('base64'))")"
+MCP_BEARER_TOKEN="$(node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))")"
+
+# Save as production secrets
+printf '%s' "$ADMIN_PASSWORD_HASH" | npx wrangler secret put ADMIN_PASSWORD_HASH --env production
+printf '%s' "$SESSION_SECRET" | npx wrangler secret put SESSION_SECRET --env production
+printf '%s' "$ENCRYPTION_KEY" | npx wrangler secret put ENCRYPTION_KEY --env production
+printf '%s' "$MCP_BEARER_TOKEN" | npx wrangler secret put MCP_BEARER_TOKEN --env production
+
+# Redeploy
+npm run deploy:prod
+```
+
+Verify:
+
+```bash
+npx wrangler secret list --env production
+curl -i https://<host>/api/health
+curl -i https://<host>/api/ready
+```
+
+Secret requirements:
+- `ADMIN_PASSWORD_HASH`: format `pbkdf2$iterations$salt$hash`
+- `SESSION_SECRET`: at least 32 characters
+- `ENCRYPTION_KEY`: base64 value that decodes to exactly 32 bytes
+- `MCP_BEARER_TOKEN`: required in production
+
 ## Cloudflare Access (recommended)
 
 For single-user production, put the app behind Cloudflare Access and keep app password login enabled.

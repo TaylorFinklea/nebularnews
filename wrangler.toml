@@ -10,21 +10,21 @@ binding = "ASSETS"
 crons = ["*/5 * * * *", "0 * * * *", "30 3 * * *"]
 
 [[d1_databases]]
-binding = "DB"
-database_name = "nebularnews"
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+binding = "nebularnews_prod"
+database_name = "nebularnews-prod"
+database_id = "f3adc274-12cf-4024-981e-7abe19366191"
 
 [vars]
 APP_ENV = "development"
-DEFAULT_PROVIDER = "openai"
-DEFAULT_INGEST_MODEL = "gpt-5-mini"
-DEFAULT_CHAT_MODEL = "gpt-5.2"
+DEFAULT_PROVIDER = "anthropic"
+DEFAULT_INGEST_MODEL = "claude-haiku-4-5-20251001"
+DEFAULT_CHAT_MODEL = "claude-sonnet-4-6"
 DEFAULT_INGEST_REASONING_EFFORT = "low"
 DEFAULT_CHAT_REASONING_EFFORT = "medium"
 DEFAULT_REASONING_EFFORT = "medium"
 MCP_SERVER_NAME = "Nebular News MCP"
 MCP_SERVER_VERSION = "0.1.0"
-MCP_ALLOWED_ORIGINS = ""
+MCP_ALLOWED_ORIGINS = "news.finklea.dev"
 
 [env.staging]
 name = "nebular-news-staging"
@@ -36,9 +36,9 @@ database_id = "REPLACE_WITH_STAGING_D1_DATABASE_ID"
 
 [env.staging.vars]
 APP_ENV = "staging"
-DEFAULT_PROVIDER = "openai"
-DEFAULT_INGEST_MODEL = "gpt-5-mini"
-DEFAULT_CHAT_MODEL = "gpt-5.2"
+DEFAULT_PROVIDER = "anthropic"
+DEFAULT_INGEST_MODEL = "claude-haiku-4-5-20251001"
+DEFAULT_CHAT_MODEL = "claude-sonnet-4-6"
 DEFAULT_INGEST_REASONING_EFFORT = "low"
 DEFAULT_CHAT_REASONING_EFFORT = "medium"
 DEFAULT_REASONING_EFFORT = "medium"
@@ -50,18 +50,18 @@ MCP_ALLOWED_ORIGINS = ""
 name = "nebular-news"
 
 [[env.production.d1_databases]]
-binding = "DB"
+binding = "nebularnews_prod"
 database_name = "nebularnews-prod"
-database_id = "REPLACE_WITH_PROD_D1_DATABASE_ID"
+database_id = "f3adc274-12cf-4024-981e-7abe19366191"
 
 [env.production.vars]
 APP_ENV = "production"
-DEFAULT_PROVIDER = "openai"
-DEFAULT_INGEST_MODEL = "gpt-5-mini"
-DEFAULT_CHAT_MODEL = "gpt-5.2"
+DEFAULT_PROVIDER = "anthropic"
+DEFAULT_INGEST_MODEL = "claude-haiku-4-5-20251001"
+DEFAULT_CHAT_MODEL = "claude-sonnet-4-6"
 DEFAULT_INGEST_REASONING_EFFORT = "low"
 DEFAULT_CHAT_REASONING_EFFORT = "medium"
 DEFAULT_REASONING_EFFORT = "medium"
 MCP_SERVER_NAME = "Nebular News MCP"
 MCP_SERVER_VERSION = "0.1.0"
-MCP_ALLOWED_ORIGINS = "https://REPLACE_WITH_YOUR_DOMAIN"
+MCP_ALLOWED_ORIGINS = "news.finklea.dev"

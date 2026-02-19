@@ -44,6 +44,8 @@ Generate a password hash:
 npm run hash-password -- "your password"
 ```
 
+Note: this generates a Cloudflare-compatible PBKDF2 hash (`100000` iterations max supported in Workers).
+
 Generate an encryption key (32 bytes, base64):
 
 ```
@@ -184,6 +186,12 @@ Smoke-check after deploy:
 ```
 curl -fsSL https://<host>/api/health
 curl -fsSL https://<host>/api/ready
+```
+
+Auth smoke-check:
+
+```bash
+./scripts/smoke-auth-prod.sh https://<host>
 ```
 
 ### Troubleshooting: `Invalid runtime configuration`

@@ -51,22 +51,30 @@ export async function hmacVerify(message: string, signatureB64: string, secret: 
 }
 
 export async function pbkdf2Verify(password: string, hash: string) {
-  const parts = hash.split('$');
-  if (parts.length !== 4 || parts[0] !== 'pbkdf2') return false;
-  const iterations = Number(parts[1]);
-  const salt = fromBase64(parts[2]);
-  const expected = fromBase64(parts[3]);
-  const key = await crypto.subtle.importKey('raw', textEncoder.encode(password), { name: 'PBKDF2' }, false, [
-    'deriveBits'
-  ]);
-  const bits = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', salt, iterations, hash: 'SHA-256' },
-    key,
-    expected.length * 8
-  );
-  const actual = new Uint8Array(bits);
-  if (actual.length !== expected.length) return false;
-  let diff = 0;
-  for (let i = 0; i < actual.length; i += 1) diff |= actual[i] ^ expected[i];
-  return diff === 0;
+  try {
+    const parts = hash.trim().split('$');
+    if (parts.length !== 4 || parts[0] !== 'pbkdf2') return false;
+    const iterations = Number(parts[1]);
+    if (!Number.isInteger(iterations) || iterations <= 0) return false;
+
+    const salt = fromBase64(parts[2].trim());
+    const expected = fromBase64(parts[3].trim());
+    if (salt.length === 0 || expected.length === 0) return false;
+
+    const key = await crypto.subtle.importKey('raw', textEncoder.encode(password), { name: 'PBKDF2' }, false, [
+      'deriveBits'
+    ]);
+    const bits = await crypto.subtle.deriveBits(
+      { name: 'PBKDF2', salt, iterations, hash: 'SHA-256' },
+      key,
+      expected.length * 8
+    );
+    const actual = new Uint8Array(bits);
+    if (actual.length !== expected.length) return false;
+    let diff = 0;
+    for (let i = 0; i < actual.length; i += 1) diff |= actual[i] ^ expected[i];
+    return diff === 0;
+  } catch {
+    return false;
+  }
 }

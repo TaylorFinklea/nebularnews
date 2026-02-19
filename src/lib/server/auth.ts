@@ -47,20 +47,25 @@ export function clearSessionCookie(secure = true) {
 }
 
 export async function getSessionFromRequest(request: Request, secret: string) {
-  const cookieHeader = request.headers.get('cookie');
-  if (!cookieHeader) return null;
-  const cookies = parse(cookieHeader);
-  const value = cookies[SESSION_COOKIE];
-  if (!value) return null;
-  const [payloadB64, signature] = value.split('.');
-  if (!payloadB64 || !signature) return null;
-  const valid = await hmacVerify(payloadB64, signature, secret);
-  if (!valid) return null;
-  const payload = JSON.parse(textDecoder.decode(fromBase64(payloadB64))) as {
-    userId: string;
-    iat: number;
-    exp: number;
-  };
-  if (payload.exp < Date.now()) return null;
-  return { id: payload.userId } as const;
+  try {
+    const cookieHeader = request.headers.get('cookie');
+    if (!cookieHeader) return null;
+    const cookies = parse(cookieHeader);
+    const value = cookies[SESSION_COOKIE];
+    if (!value) return null;
+    const [payloadB64, signature] = value.split('.');
+    if (!payloadB64 || !signature) return null;
+    const valid = await hmacVerify(payloadB64, signature, secret);
+    if (!valid) return null;
+    const payload = JSON.parse(textDecoder.decode(fromBase64(payloadB64))) as {
+      userId: string;
+      iat: number;
+      exp: number;
+    };
+    if (!payload?.userId || typeof payload.exp !== 'number') return null;
+    if (payload.exp < Date.now()) return null;
+    return { id: payload.userId } as const;
+  } catch {
+    return null;
+  }
 }

@@ -6,7 +6,7 @@ if (!password) {
   process.exit(1);
 }
 
-const iterations = 210000;
+const iterations = 100000;
 const salt = crypto.getRandomValues(new Uint8Array(16));
 const enc = new TextEncoder();
 

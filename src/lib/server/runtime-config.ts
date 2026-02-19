@@ -17,6 +17,8 @@ export type RuntimeConfigReport = {
 
 const MIN_SESSION_SECRET_LEN = 32;
 const ENCRYPTION_KEY_BYTES = 32;
+const PBKDF2_MIN_ITERATIONS = 1;
+const PBKDF2_MAX_ITERATIONS = 100000;
 
 let cachedReport: RuntimeConfigReport | null = null;
 let cacheKey = '';
@@ -40,19 +42,28 @@ const decodeBase64 = (value: string) => {
   throw new Error('No base64 decoder available');
 };
 
-const looksLikePbkdf2Hash = (value: string) => {
+const isValidPbkdf2Hash = (value: string) => {
   const parts = value.split('$');
   if (parts.length !== 4 || parts[0] !== 'pbkdf2') return false;
-  return Number.isFinite(Number(parts[1])) && parts[2].length > 0 && parts[3].length > 0;
+  const iterations = Number(parts[1]);
+  if (!Number.isInteger(iterations)) return false;
+  if (iterations < PBKDF2_MIN_ITERATIONS || iterations > PBKDF2_MAX_ITERATIONS) return false;
+  try {
+    const salt = decodeBase64(parts[2]);
+    const hash = decodeBase64(parts[3]);
+    return salt.length > 0 && hash.length > 0;
+  } catch {
+    return false;
+  }
 };
 
 const buildCacheKey = (env: App.Platform['env']) =>
   JSON.stringify({
     appEnv: trim(env.APP_ENV),
-    hasAdminPasswordHash: Boolean(trim(env.ADMIN_PASSWORD_HASH)),
-    sessionSecretLen: trim(env.SESSION_SECRET).length,
-    encryptionKeyLen: trim(env.ENCRYPTION_KEY).length,
-    hasMcpToken: Boolean(trim(env.MCP_BEARER_TOKEN))
+    adminPasswordHash: trim(env.ADMIN_PASSWORD_HASH),
+    sessionSecret: trim(env.SESSION_SECRET),
+    encryptionKey: trim(env.ENCRYPTION_KEY),
+    mcpToken: trim(env.MCP_BEARER_TOKEN)
   });
 
 export const inspectRuntimeConfig = (env: App.Platform['env']): RuntimeConfigReport => {
@@ -75,10 +86,12 @@ export const inspectRuntimeConfig = (env: App.Platform['env']): RuntimeConfigRep
     mcpBearerToken: false
   };
 
-  if (adminPasswordHash && looksLikePbkdf2Hash(adminPasswordHash)) {
+  if (adminPasswordHash && isValidPbkdf2Hash(adminPasswordHash)) {
     secretChecks.adminPasswordHash = true;
   } else {
-    errors.push('ADMIN_PASSWORD_HASH is missing or invalid (expected pbkdf2$iterations$salt$hash).');
+    errors.push(
+      `ADMIN_PASSWORD_HASH is missing or invalid (expected pbkdf2$iterations$salt$hash, iterations ${PBKDF2_MIN_ITERATIONS}-${PBKDF2_MAX_ITERATIONS}, valid base64 salt/hash).`
+    );
   }
 
   if (sessionSecret.length >= MIN_SESSION_SECRET_LEN) {
@@ -124,4 +137,3 @@ export const assertRuntimeConfig = (env: App.Platform['env']) => {
   }
   return report;
 };
-

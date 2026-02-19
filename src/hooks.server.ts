@@ -1,11 +1,11 @@
-import { json, redirect, type Handle } from '@sveltejs/kit';
+import { json, redirect, type Handle, type HandleServerError } from '@sveltejs/kit';
 import { getSessionFromRequest } from '$lib/server/auth';
 import { pollFeeds } from '$lib/server/ingest';
 import { processJobs } from '$lib/server/jobs';
 import { assertSchemaVersion, ensureSchema } from '$lib/server/migrations';
 import { createRequestId } from '$lib/server/api';
 import { assertRuntimeConfig } from '$lib/server/runtime-config';
-import { logError, logInfo, logWarn } from '$lib/server/log';
+import { logError, logInfo, logWarn, summarizeError } from '$lib/server/log';
 import { runRetentionCleanup } from '$lib/server/retention';
 import {
   applySecurityHeaders,
@@ -140,4 +140,19 @@ export const scheduled: ExportedHandlerScheduledHandler = async (event, env, ctx
       });
     })()
   );
+};
+
+export const handleError: HandleServerError = ({ error, event, status, message }) => {
+  logError('request.unhandled_exception', {
+    request_id: event.locals.requestId ?? null,
+    stage: event.platform?.env?.APP_ENV ?? 'development',
+    path: event.url.pathname,
+    method: event.request.method,
+    status,
+    message,
+    error: summarizeError(error)
+  });
+  return {
+    message: 'Internal Error'
+  };
 };

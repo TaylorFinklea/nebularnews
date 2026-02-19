@@ -1,7 +1,8 @@
 import { dbGet } from '$lib/server/db';
 import { getManualPullState } from '$lib/server/manual-pull';
 
-const POLL_MS = 2000;
+const POLL_MS = 5000;
+const STREAM_MAX_MS = 55_000;
 
 const encoder = new TextEncoder();
 
@@ -14,8 +15,10 @@ export const GET = async ({ platform, request }) => {
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       let stopped = false;
+      let inFlight = false;
       const sendSnapshot = async () => {
-        if (stopped) return;
+        if (stopped || inFlight) return;
+        inFlight = true;
         try {
           const pull = await getManualPullState(db);
           const counts = await dbGet<{
@@ -59,6 +62,8 @@ export const GET = async ({ platform, request }) => {
               message: error instanceof Error ? error.message : 'SSE refresh failed'
             })
           );
+        } finally {
+          inFlight = false;
         }
       };
 
@@ -66,11 +71,15 @@ export const GET = async ({ platform, request }) => {
       const timer = setInterval(() => {
         void sendSnapshot();
       }, POLL_MS);
+      const timeout = setTimeout(() => {
+        close();
+      }, STREAM_MAX_MS);
 
       const close = () => {
         if (stopped) return;
         stopped = true;
         clearInterval(timer);
+        clearTimeout(timeout);
         try {
           controller.close();
         } catch {
@@ -90,4 +99,3 @@ export const GET = async ({ platform, request }) => {
     }
   });
 };
-

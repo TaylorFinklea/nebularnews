@@ -64,7 +64,7 @@ const parseStats = (statsJson: string | null): PullStats | null => {
 
 const staleErrorMessage = `Pull run marked failed after ${Math.floor(PULL_RUN_STALE_MS / 60000)} minutes without progress heartbeat`;
 
-const recoverStalePullRuns = async (db: Db) => {
+export const recoverStalePullRuns = async (db: Db) => {
   const timestamp = now();
   const staleBefore = timestamp - PULL_RUN_STALE_MS;
   const result = await dbRun(
@@ -233,7 +233,6 @@ const markPullRunFinished = async (
 };
 
 export const getManualPullState = async (db: Db, runId?: string | null): Promise<ManualPullState> => {
-  await recoverStalePullRuns(db);
   const run = (runId ? await getPullRun(db, runId) : null) ?? (await getLatestPullRun(db));
   if (!run) {
     return {

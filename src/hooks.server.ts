@@ -2,6 +2,7 @@ import { json, redirect, type Handle, type HandleServerError } from '@sveltejs/k
 import { getSessionFromRequest } from '$lib/server/auth';
 import { pollFeeds } from '$lib/server/ingest';
 import { processJobs } from '$lib/server/jobs';
+import { recoverStalePullRuns } from '$lib/server/manual-pull';
 import { assertSchemaVersion, ensureSchema } from '$lib/server/migrations';
 import { createRequestId } from '$lib/server/api';
 import { assertRuntimeConfig } from '$lib/server/runtime-config';
@@ -112,6 +113,7 @@ export const scheduled: ExportedHandlerScheduledHandler = async (event, env, ctx
       await ensureSchema(env.DB);
       if (event.cron === '*/5 * * * *') {
         const startedAt = Date.now();
+        await recoverStalePullRuns(env.DB);
         await processJobs(env);
         logInfo('scheduled.jobs.completed', {
           cron: event.cron,

@@ -9,7 +9,7 @@
   export let data;
 
   const PULL_SESSION_KEY = 'nebular:manual-pull-in-progress';
-  const PULL_STATUS_POLL_MS = 1500;
+  const PULL_STATUS_POLL_MS = 5000;
   const PULL_START_GRACE_MS = 15000;
   const PULL_COMPLETION_SKEW_MS = 5000;
   const LIVE_REFRESH_DEBOUNCE_MS = 700;

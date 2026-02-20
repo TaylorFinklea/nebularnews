@@ -248,8 +248,8 @@ Minimum policy:
 
 GitHub Actions workflow: `/Users/tfinklea/git/nebularnews/.github/workflows/cloudflare-deploy.yml`
 
-- Push to `main` deploys production.
-- Manual dispatch can deploy production or staging.
+- Push to `main` deploys staging.
+- Manual dispatch can deploy staging or production.
 - Pipeline gates:
   - `npm run test`
   - `npm run build`
@@ -260,20 +260,8 @@ GitHub Actions workflow: `/Users/tfinklea/git/nebularnews/.github/workflows/clou
 Required GitHub secrets:
 - `CLOUDFLARE_API_TOKEN`
 - `CLOUDFLARE_ACCOUNT_ID`
+- `STAGING_BASE_URL`
 - `PRODUCTION_BASE_URL`
-- `STAGING_BASE_URL` (only needed for manual staging deploys)
-
-You can sync these from your current shell values with:
-
-```bash
-export CLOUDFLARE_API_TOKEN="..."
-export CLOUDFLARE_ACCOUNT_ID="..."
-export PRODUCTION_BASE_URL="https://news.finklea.dev"
-# optional
-export STAGING_BASE_URL="https://staging.example.com"
-
-npm run sync:gh-secrets
-```
 
 ## Retention and quotas
 

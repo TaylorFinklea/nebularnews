@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build",
+    "build": "vite build && node scripts/patch-cloudflare-worker.mjs",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run",
@@ -14,8 +14,8 @@
     "hash-password": "node scripts/hash-password.mjs",
     "migrate:staging": "wrangler d1 execute nebularnews-staging --remote --env staging --file=./schema.sql",
     "migrate:prod": "wrangler d1 execute nebularnews-prod --remote --env production --file=./schema.sql",
-    "deploy:staging": "wrangler deploy --env staging",
-    "deploy:prod": "wrangler deploy --env production"
+    "deploy:staging": "npm run build && wrangler deploy --env staging",
+    "deploy:prod": "npm run build && wrangler deploy --env production"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",

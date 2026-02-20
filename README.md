@@ -211,11 +211,25 @@ SESSION_SECRET="$(node -e "console.log(require('crypto').randomBytes(48).toStrin
 ENCRYPTION_KEY="$(node -e "console.log(require('crypto').randomBytes(32).toString('base64'))")"
 MCP_BEARER_TOKEN="$(node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))")"
 
-# Save as production secrets
+# Save as Cloudflare Worker production secrets
 printf '%s' "$ADMIN_PASSWORD_HASH" | npx wrangler secret put ADMIN_PASSWORD_HASH --env production
 printf '%s' "$SESSION_SECRET" | npx wrangler secret put SESSION_SECRET --env production
 printf '%s' "$ENCRYPTION_KEY" | npx wrangler secret put ENCRYPTION_KEY --env production
 printf '%s' "$MCP_BEARER_TOKEN" | npx wrangler secret put MCP_BEARER_TOKEN --env production
+
+# Create GitHub environment once (prevents gh 404 on --env production)
+gh api --method PUT repos/TaylorFinklea/nebularnews/environments/production
+
+# Save same app runtime values to GitHub Actions production environment secrets
+gh secret set ADMIN_PASSWORD_HASH --repo TaylorFinklea/nebularnews --env production --body "$ADMIN_PASSWORD_HASH"
+gh secret set SESSION_SECRET --repo TaylorFinklea/nebularnews --env production --body "$SESSION_SECRET"
+gh secret set ENCRYPTION_KEY --repo TaylorFinklea/nebularnews --env production --body "$ENCRYPTION_KEY"
+gh secret set MCP_BEARER_TOKEN --repo TaylorFinklea/nebularnews --env production --body "$MCP_BEARER_TOKEN"
+
+# GitHub deploy workflow secrets (required for Cloudflare deploy from Actions)
+gh secret set CLOUDFLARE_API_TOKEN --repo TaylorFinklea/nebularnews --env production
+gh secret set CLOUDFLARE_ACCOUNT_ID --repo TaylorFinklea/nebularnews --env production
+gh secret set PRODUCTION_BASE_URL --repo TaylorFinklea/nebularnews --env production --body "https://news.finklea.dev"
 
 # Redeploy
 npm run deploy:prod
@@ -248,8 +262,8 @@ Minimum policy:
 
 GitHub Actions workflow: `/Users/tfinklea/git/nebularnews/.github/workflows/cloudflare-deploy.yml`
 
-- Push to `main` deploys staging.
-- Manual dispatch can deploy staging or production.
+- Push to `main` deploys production.
+- Manual dispatch can deploy production or staging.
 - Pipeline gates:
   - `npm run test`
   - `npm run build`
@@ -260,8 +274,17 @@ GitHub Actions workflow: `/Users/tfinklea/git/nebularnews/.github/workflows/clou
 Required GitHub secrets:
 - `CLOUDFLARE_API_TOKEN`
 - `CLOUDFLARE_ACCOUNT_ID`
-- `STAGING_BASE_URL`
 - `PRODUCTION_BASE_URL`
+- `STAGING_BASE_URL` (for manual staging deploys)
+
+If you store secrets with `gh secret set --env production`, create the environment first:
+
+```bash
+gh api --method PUT repos/TaylorFinklea/nebularnews/environments/production
+```
+
+Without that, GitHub returns:
+`failed to fetch public key: HTTP 404 ... /environments/production/secrets/public-key`
 
 ## Retention and quotas
 

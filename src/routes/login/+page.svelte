@@ -1,9 +1,11 @@
 <script>
+  import Card from '$lib/components/Card.svelte';
+  import Button from '$lib/components/Button.svelte';
   export let form;
 </script>
 
 <div class="login-shell">
-  <div class="card">
+  <Card variant="default">
     <h1>Welcome back</h1>
     <p>Enter the admin password to unlock your Nebular News console.</p>
 
@@ -15,9 +17,9 @@
       {#if form?.error}
         <p class="error">{form.error}</p>
       {/if}
-      <button type="submit">Sign in</button>
+      <Button type="submit">Sign in</Button>
     </form>
-  </div>
+  </Card>
 </div>
 
 <style>
@@ -28,13 +30,8 @@
     min-height: calc(100vh - 140px);
   }
 
-  .card {
-    background: var(--surface);
-    padding: 2.5rem;
-    border-radius: 24px;
+  .login-shell :global(.card) {
     width: min(420px, 100%);
-    box-shadow: 0 20px 40px var(--shadow-color);
-    border: 1px solid var(--surface-border);
   }
 
   h1 {
@@ -44,29 +41,22 @@
 
   form {
     display: grid;
-    gap: 1rem;
-    margin-top: 1.5rem;
+    gap: var(--space-4);
+    margin-top: var(--space-4);
   }
 
   input {
     width: 100%;
     padding: 0.7rem 0.8rem;
-    border-radius: 12px;
+    border-radius: var(--radius-md);
     border: 1px solid var(--input-border);
-  }
-
-  button {
-    background: var(--button-bg);
-    color: var(--button-text);
-    border: none;
-    padding: 0.8rem 1rem;
-    border-radius: 999px;
-    font-weight: 600;
-    cursor: pointer;
+    background: var(--input-bg);
+    color: var(--text-color);
+    font-family: inherit;
   }
 
   .error {
     color: var(--danger);
-    font-size: 0.9rem;
+    font-size: var(--text-sm);
   }
 </style>

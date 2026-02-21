@@ -5,6 +5,9 @@
   import { liveEvents, startLiveEvents } from '$lib/client/live-events';
   import { IconClockPlay, IconExternalLink } from '$lib/icons';
   import { resolveArticleImageUrl } from '$lib/article-image';
+  import Card from '$lib/components/Card.svelte';
+  import Button from '$lib/components/Button.svelte';
+  import Pill from '$lib/components/Pill.svelte';
 
   export let data;
 
@@ -34,9 +37,7 @@
     try {
       const raw = sessionStorage.getItem(PULL_SESSION_KEY);
       if (!raw) return { pending: false, startedAt: null, runId: null };
-      if (raw === '1') {
-        return { pending: true, startedAt: Date.now(), runId: null };
-      }
+      if (raw === '1') return { pending: true, startedAt: Date.now(), runId: null };
       const parsed = JSON.parse(raw);
       return {
         pending: Boolean(parsed?.pending),
@@ -50,14 +51,9 @@
 
   const writePullTracker = (value) => {
     try {
-      if (value.pending) {
-        sessionStorage.setItem(PULL_SESSION_KEY, JSON.stringify(value));
-      } else {
-        sessionStorage.removeItem(PULL_SESSION_KEY);
-      }
-    } catch {
-      // Ignore session storage errors.
-    }
+      if (value.pending) sessionStorage.setItem(PULL_SESSION_KEY, JSON.stringify(value));
+      else sessionStorage.removeItem(PULL_SESSION_KEY);
+    } catch { /* ignore */ }
   };
 
   const clearPullTracker = () => {
@@ -84,42 +80,27 @@
       isPulling = true;
       if (!pullMessage) pullMessage = 'Pulling feeds now...';
       const nextStartedAt = pullTracker.startedAt ?? startedAt ?? Date.now();
-      pullTracker = {
-        pending: true,
-        startedAt: nextStartedAt,
-        runId: runId ?? pullTracker.runId
-      };
+      pullTracker = { pending: true, startedAt: nextStartedAt, runId: runId ?? pullTracker.runId };
       writePullTracker(pullTracker);
       return;
     }
 
-    if (!pullTracker.pending) {
-      isPulling = false;
-      return;
-    }
+    if (!pullTracker.pending) { isPulling = false; return; }
 
     const completedMatches = completionMatchesTracker(completedAt, pullTracker.startedAt);
-    const waitingForStart =
-      pullTracker.startedAt !== null && Date.now() - pullTracker.startedAt < PULL_START_GRACE_MS;
+    const waitingForStart = pullTracker.startedAt !== null && Date.now() - pullTracker.startedAt < PULL_START_GRACE_MS;
 
-    if (!completedMatches && waitingForStart) {
-      isPulling = true;
-      return;
-    }
+    if (!completedMatches && waitingForStart) { isPulling = true; return; }
 
     isPulling = false;
     clearPullTracker();
     if (completedMatches) {
-      pullMessage =
-        lastRunStatus === 'failed'
-          ? lastError
-            ? `Pull failed: ${lastError}`
-            : 'Pull failed.'
-          : 'Pull complete. Refreshing dashboard...';
+      pullMessage = lastRunStatus === 'failed'
+        ? (lastError ? `Pull failed: ${lastError}` : 'Pull failed.')
+        : 'Pull complete. Refreshing...';
       await invalidate('app:dashboard');
       return;
     }
-
     pullMessage = 'Pull did not confirm start before timeout. Please try again.';
   };
 
@@ -133,45 +114,30 @@
       const res = await apiFetch(statusUrl);
       if (!res.ok) return;
       const payload = await res.json().catch(() => ({}));
-      const inProgress = Boolean(payload?.in_progress);
-      const startedAt = toFiniteNumber(payload?.started_at);
-      const completedAt = toFiniteNumber(payload?.completed_at);
-      const runId = typeof payload?.run_id === 'string' && payload.run_id.trim() ? payload.run_id.trim() : null;
-      const lastRunStatus =
-        payload?.last_run_status === 'success' || payload?.last_run_status === 'failed'
-          ? payload.last_run_status
-          : null;
-      const lastError = typeof payload?.last_error === 'string' && payload.last_error.length > 0 ? payload.last_error : null;
-      await applyPullState({ inProgress, startedAt, completedAt, runId, lastRunStatus, lastError });
-    } catch {
-      // Ignore transient status errors.
-    } finally {
+      await applyPullState({
+        inProgress: Boolean(payload?.in_progress),
+        startedAt: toFiniteNumber(payload?.started_at),
+        completedAt: toFiniteNumber(payload?.completed_at),
+        runId: typeof payload?.run_id === 'string' && payload.run_id.trim() ? payload.run_id.trim() : null,
+        lastRunStatus: payload?.last_run_status === 'success' || payload?.last_run_status === 'failed' ? payload.last_run_status : null,
+        lastError: typeof payload?.last_error === 'string' && payload.last_error.length > 0 ? payload.last_error : null
+      });
+    } catch { /* ignore */ } finally {
       pullStatusSyncInFlight = false;
     }
   };
 
   onMount(() => {
     pullTracker = readPullTracker();
-    if (pullTracker.pending) {
-      isPulling = true;
-      if (!pullMessage) pullMessage = 'Pulling feeds now...';
-    }
+    if (pullTracker.pending) { isPulling = true; if (!pullMessage) pullMessage = 'Pulling feeds now...'; }
 
     stopLiveEvents = startLiveEvents();
     liveUnsubscribe = liveEvents.subscribe((snapshot) => {
       liveConnected = snapshot.connected;
-      const jobsSignature = snapshot.jobs
-        ? `${snapshot.jobs.pending}:${snapshot.jobs.running}:${snapshot.jobs.failed}:${snapshot.jobs.done}`
-        : 'jobs:none';
-      const pullSignature = snapshot.pull
-        ? `${snapshot.pull.status ?? 'none'}:${snapshot.pull.in_progress ? 1 : 0}:${snapshot.pull.run_id ?? ''}:${snapshot.pull.completed_at ?? ''}`
-        : 'pull:none';
-      const signature = `${jobsSignature}|${pullSignature}`;
-      if (signature !== lastLiveSignature) {
-        lastLiveSignature = signature;
-        scheduleDashboardRefresh();
-      }
-
+      const jobsSig = snapshot.jobs ? `${snapshot.jobs.pending}:${snapshot.jobs.running}:${snapshot.jobs.failed}:${snapshot.jobs.done}` : 'jobs:none';
+      const pullSig = snapshot.pull ? `${snapshot.pull.status ?? 'none'}:${snapshot.pull.in_progress ? 1 : 0}:${snapshot.pull.run_id ?? ''}:${snapshot.pull.completed_at ?? ''}` : 'pull:none';
+      const signature = `${jobsSig}|${pullSig}`;
+      if (signature !== lastLiveSignature) { lastLiveSignature = signature; scheduleDashboardRefresh(); }
       if (snapshot.pull) {
         void applyPullState({
           inProgress: Boolean(snapshot.pull.in_progress),
@@ -192,16 +158,10 @@
   });
 
   onDestroy(() => {
-    if (pullStatusTimer) {
-      clearInterval(pullStatusTimer);
-      pullStatusTimer = null;
-    }
+    if (pullStatusTimer) { clearInterval(pullStatusTimer); pullStatusTimer = null; }
     liveUnsubscribe();
     stopLiveEvents();
-    if (refreshTimer) {
-      clearTimeout(refreshTimer);
-      refreshTimer = null;
-    }
+    if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = null; }
   });
 
   const scoreLabel = (score) => {
@@ -212,7 +172,7 @@
 
   const articleSnippet = (article) => {
     const text = article.summary_text ?? article.excerpt ?? '';
-    return text.length > 220 ? `${text.slice(0, 220)}...` : text;
+    return text.length > 200 ? `${text.slice(0, 200)}...` : text;
   };
 
   const runManualPull = async () => {
@@ -233,10 +193,7 @@
         if (res.status === 409) {
           isPulling = true;
           pullMessage = payload?.error ?? 'Manual pull already in progress';
-          if (payload?.run_id) {
-            pullTracker = { ...pullTracker, runId: payload.run_id };
-            writePullTracker(pullTracker);
-          }
+          if (payload?.run_id) { pullTracker = { ...pullTracker, runId: payload.run_id }; writePullTracker(pullTracker); }
           void syncPullStatus();
           return;
         }
@@ -247,130 +204,126 @@
       }
       if (payload?.started) {
         isPulling = true;
-        pullTracker = {
-          pending: true,
-          startedAt: pullTracker.startedAt ?? Date.now(),
-          runId: payload?.run_id ?? null
-        };
+        pullTracker = { pending: true, startedAt: pullTracker.startedAt ?? Date.now(), runId: payload?.run_id ?? null };
         writePullTracker(pullTracker);
         pullMessage = 'Pull started. Running in background...';
         void syncPullStatus();
         return;
       }
-      pullMessage = `Pull complete (${payload.cycles} cycle${payload.cycles === 1 ? '' : 's'}). Due feeds: ${payload.stats.dueFeeds}, items seen: ${payload.stats.itemsSeen}, items processed: ${payload.stats.itemsProcessed}, articles: ${payload.stats.articles}, pending jobs: ${payload.stats.pendingJobs}, feeds with errors: ${payload.stats.feedsWithErrors}.`;
-      if (payload.stats?.recentErrors?.length) {
-        const first = payload.stats.recentErrors[0];
-        pullMessage += ` First error: ${first.url} -> ${first.message}`;
-      }
+      pullMessage = `Pull complete. ${payload.stats?.articles ?? 0} articles, ${payload.stats?.pendingJobs ?? 0} jobs queued.`;
       isPulling = false;
       clearPullTracker();
       await invalidate('app:dashboard');
     } catch (error) {
-      if (typeof DOMException !== 'undefined' && error instanceof DOMException && error.name === 'AbortError') {
-        return;
-      }
+      if (typeof DOMException !== 'undefined' && error instanceof DOMException && error.name === 'AbortError') return;
       pullMessage = 'Manual pull failed';
       isPulling = false;
       clearPullTracker();
     }
   };
-
 </script>
 
+<!-- Hero -->
 <section class="hero">
-  <div>
-    <h1>Your Nebula at a glance</h1>
-    <p>Track the pulse of your feeds, summaries, and personalization queue.</p>
-    <div class="dev-tools">
-      <button
-        class="icon-button"
-        class:pulling={isPulling}
+  <div class="hero-left">
+    <h1>Your Nebula</h1>
+    <p class="hero-desc">Track the pulse of your feeds, summaries, and personalization queue.</p>
+
+    <div class="pull-section">
+      <Button
+        variant="primary"
+        size="inline"
         on:click={runManualPull}
         disabled={isPulling}
-        title={isPulling ? 'Pulling now' : 'Pull now'}
-        aria-label={isPulling ? 'Pulling now' : 'Pull now'}
+        title={isPulling ? 'Pull in progress' : 'Pull feeds now'}
       >
-        <IconClockPlay size={16} stroke={1.9} />
-        <span class="sr-only">{isPulling ? 'Pulling now' : 'Pull now'}</span>
-      </button>
-      <p class="pull-message" role="status" aria-live="polite">
-        {#if isPulling}
-          Pulling feeds now...
-        {:else if pullMessage}
-          {pullMessage}
-        {/if}
-      </p>
+        <span class="icon-wrap" class:spinning={isPulling}><IconClockPlay size={16} stroke={1.9} /></span>
+        <span>{isPulling ? 'Pulling...' : 'Pull feeds now'}</span>
+      </Button>
+      {#if pullMessage}
+        <p class="pull-msg" role="status" aria-live="polite">{pullMessage}</p>
+      {/if}
+      <span class="live-badge" class:live={liveConnected}>
+        {liveConnected ? '● Live' : '○ Connecting...'}
+      </span>
     </div>
   </div>
-  <div class="stats-wrap">
-    <div class="section-head">
-      <h3>Today’s Pipeline Coverage</h3>
-      <a href="/jobs" class="inline-action">
-        <IconExternalLink size={14} stroke={1.9} />
+
+  <div class="hero-stats">
+    <div class="stats-header">
+      <h3>Today's pipeline</h3>
+      <a href="/jobs" class="view-all">
+        <IconExternalLink size={13} stroke={1.9} />
         <span>Jobs</span>
       </a>
     </div>
-    <div class="stats">
-      <div class="stat">
-        <h2>{data.today.articles}</h2>
-        <span>Today's articles</span>
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-num">{data.today.articles}</div>
+        <div class="stat-lbl">Articles</div>
       </div>
-      <div class="stat">
-        <h2>{data.today.summaries}</h2>
-        <span>With summary</span>
+      <div class="stat-card">
+        <div class="stat-num">{data.today.summaries}</div>
+        <div class="stat-lbl">Summarized</div>
       </div>
-      <div class="stat">
-        <h2>{data.today.scores}</h2>
-        <span>With AI score</span>
+      <div class="stat-card">
+        <div class="stat-num">{data.today.scores}</div>
+        <div class="stat-lbl">Scored</div>
       </div>
-      <div class="stat">
-        <h2>{data.today.pendingJobs}</h2>
-        <span>Pending today jobs</span>
+      <div class="stat-card">
+        <div class="stat-num" class:warn={data.today.pendingJobs > 0}>{data.today.pendingJobs}</div>
+        <div class="stat-lbl">Jobs pending</div>
       </div>
-      <div class="stat">
-        <h2>{data.today.missingSummaries}</h2>
-        <span>Missing summaries</span>
+      <div class="stat-card">
+        <div class="stat-num" class:warn={data.today.missingSummaries > 0}>{data.today.missingSummaries}</div>
+        <div class="stat-lbl">Missing summaries</div>
       </div>
-      <div class="stat">
-        <h2>{data.today.missingScores}</h2>
-        <span>Missing scores</span>
+      <div class="stat-card">
+        <div class="stat-num" class:warn={data.today.missingScores > 0}>{data.today.missingScores}</div>
+        <div class="stat-lbl">Missing scores</div>
       </div>
     </div>
   </div>
 </section>
 
+<!-- Top Rated -->
 <section class="top-rated">
   <div class="section-head">
-    <h3>Top Rated Today</h3>
-    <a href={data.topRatedConfig?.href ?? '/articles'} class="inline-action">
-      <IconExternalLink size={14} stroke={1.9} />
+    <h2>Top Rated Today</h2>
+    <a href={data.topRatedConfig?.href ?? '/articles'} class="view-all">
+      <IconExternalLink size={13} stroke={1.9} />
       <span>Full list</span>
     </a>
   </div>
-  <p class="muted top-rated-cap">Showing up to {data.topRatedConfig?.limit ?? 5} items.</p>
+  <p class="section-cap">Showing up to {data.topRatedConfig?.limit ?? 5} highest-scored items.</p>
+
   {#if data.topRatedArticles.length === 0}
-    <p class="muted">No top-rated items yet today. Run a pull or wait for scoring jobs to finish.</p>
+    <div class="empty-top">
+      <p>No top-rated articles yet today. Run a pull or wait for scoring to finish.</p>
+    </div>
   {:else}
-    <div class="top-list">
+    <div class="top-grid layout-{data.topRatedConfig?.layout ?? 'stacked'}">
       {#each data.topRatedArticles as article}
-        <article class={`top-card layout-${data.topRatedConfig?.layout ?? 'stacked'}`}>
-          <a class="top-card-image-link" href={`/articles/${article.id}`}>
+        <article class="top-card">
+          <a class="card-img-wrap" href={`/articles/${article.id}`}>
             <img
-              class="top-card-image"
+              class="card-img"
               src={resolveArticleImageUrl(article)}
               alt=""
               loading="lazy"
               decoding="async"
             />
           </a>
-          <div class="top-card-head">
-            <a class="title" href={`/articles/${article.id}`}>{article.title ?? 'Untitled article'}</a>
-            <span class="pill">{article.score}/5 · {scoreLabel(article.score)}</span>
-          </div>
-          <p class="excerpt">{articleSnippet(article)}</p>
-          <div class="meta">
-            <span>{article.source_name ?? 'Unknown source'}</span>
-            <span>{new Date(article.published_at ?? article.fetched_at).toLocaleString()}</span>
+          <div class="card-body">
+            <div class="card-top-row">
+              <a class="card-title" href={`/articles/${article.id}`}>{article.title ?? 'Untitled article'}</a>
+              <Pill>{article.score}/5 · {scoreLabel(article.score)}</Pill>
+            </div>
+            <p class="card-excerpt">{articleSnippet(article)}</p>
+            <div class="card-meta">
+              <span>{article.source_name ?? 'Unknown source'}</span>
+              <span>{new Date(article.published_at ?? article.fetched_at).toLocaleString()}</span>
+            </div>
           </div>
         </article>
       {/each}
@@ -379,276 +332,291 @@
 </section>
 
 {#if data.stats.feeds === 0}
-  <section class="next-steps">
-    <h3>Suggested Next Steps</h3>
+  <Card variant="default">
+    <h3>Get started</h3>
     <ul>
-      <li>Add your first feed in Settings -> Feeds.</li>
+      <li>Add your first feed in <a href="/feeds">Feeds</a>.</li>
       <li>Run a manual pull to ingest your first articles.</li>
-      <li>Set provider keys in Settings -> General to enable summaries and scoring.</li>
+      <li>Set provider keys in <a href="/settings">Settings</a> to enable summaries and scoring.</li>
     </ul>
-  </section>
+  </Card>
 {/if}
 
 <style>
+  /* Hero */
   .hero {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    gap: 2rem;
+    gap: var(--space-8);
+    margin-bottom: var(--space-8);
   }
 
-  .stats-wrap {
-    min-width: min(520px, 100%);
+  .hero-left {
+    flex: 0 0 auto;
+    max-width: 360px;
   }
 
   h1 {
     font-family: 'Source Serif 4', serif;
-    font-size: 2.4rem;
-    margin-bottom: 0.5rem;
+    font-size: 2.6rem;
+    margin: 0 0 var(--space-2);
+    line-height: 1.1;
   }
 
-  .stats {
+  .hero-desc {
+    color: var(--muted-text);
+    margin: 0 0 var(--space-5);
+    line-height: 1.5;
+  }
+
+  .pull-section {
     display: grid;
-    grid-template-columns: repeat(2, minmax(150px, 1fr));
-    gap: 1rem;
+    gap: var(--space-2);
   }
 
-  .stat {
-    background: var(--surface-strong);
-    border-radius: 18px;
-    padding: 1rem 1.4rem;
-    box-shadow: 0 12px 30px var(--shadow-color);
-    text-align: center;
-    border: 1px solid var(--surface-border);
+  .icon-wrap {
+    display: inline-flex;
+    align-items: center;
   }
 
-  .stat h2 {
+  .icon-wrap.spinning {
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .pull-msg {
     margin: 0;
-    font-size: 2rem;
+    font-size: var(--text-sm);
+    color: var(--muted-text);
+  }
+
+  .live-badge {
+    font-size: var(--text-xs);
+    color: var(--muted-text);
+  }
+
+  .live-badge.live {
+    color: #91f0cd;
+  }
+
+  /* Stats */
+  .hero-stats {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .stats-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-3);
+  }
+
+  .stats-header h3 {
+    margin: 0;
+    font-size: var(--text-base);
+    font-weight: 600;
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--space-3);
+  }
+
+  .stat-card {
+    background: var(--surface-strong);
+    border: 1px solid var(--surface-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4);
+    text-align: center;
+    box-shadow: var(--shadow-sm);
+  }
+
+  .stat-num {
+    font-size: 1.8rem;
+    font-weight: 700;
     color: var(--primary);
+    line-height: 1;
   }
 
-  .next-steps {
-    margin-top: 3rem;
-    background: var(--surface);
-    border-radius: 20px;
-    padding: 1.5rem;
-    border: 1px solid var(--surface-border);
+  .stat-num.warn {
+    color: #ff9dbc;
   }
 
+  .stat-lbl {
+    font-size: var(--text-sm);
+    color: var(--muted-text);
+    margin-top: var(--space-1);
+  }
+
+  /* Top Rated */
   .top-rated {
-    margin-top: 2.2rem;
     background: var(--surface);
-    border-radius: 20px;
+    border-radius: var(--radius-xl);
     border: 1px solid var(--surface-border);
-    padding: 1.4rem;
+    padding: var(--space-6);
+    margin-bottom: var(--space-6);
   }
 
   .section-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 0.8rem;
+    margin-bottom: var(--space-1);
   }
 
-  .section-head a {
-    color: var(--primary);
-    font-size: 0.9rem;
+  .section-head h2 {
+    margin: 0;
+    font-size: var(--text-lg);
+    font-weight: 700;
   }
 
-  .inline-action {
+  .view-all {
     display: inline-flex;
     align-items: center;
     gap: 0.3rem;
+    color: var(--primary);
+    font-size: var(--text-sm);
   }
 
-  .top-list {
-    margin-top: 0.9rem;
+  .section-cap {
+    margin: 0 0 var(--space-4);
+    font-size: var(--text-sm);
+    color: var(--muted-text);
+  }
+
+  .empty-top {
+    padding: var(--space-6) 0;
+    color: var(--muted-text);
+  }
+
+  .top-grid {
     display: grid;
-    gap: 0.9rem;
-  }
-
-  .top-rated-cap {
-    margin: 0.4rem 0 0;
+    gap: var(--space-4);
   }
 
   .top-card {
     background: var(--surface-strong);
     border: 1px solid var(--surface-border);
-    border-radius: 16px;
-    padding: 1rem;
-    display: grid;
-    gap: 0.55rem;
-  }
-
-  .top-card.layout-split {
-    grid-template-columns: 170px minmax(0, 1fr);
-    grid-template-areas:
-      'image head'
-      'image excerpt'
-      'image meta';
-    align-items: start;
-  }
-
-  .top-card-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.6rem;
-    grid-area: head;
-  }
-
-  .top-card-image-link {
-    display: block;
-    border-radius: 12px;
+    border-radius: var(--radius-lg);
     overflow: hidden;
-    margin-bottom: 0.7rem;
-    grid-area: image;
+    display: grid;
   }
 
-  .top-card.layout-split .top-card-image-link {
-    margin-bottom: 0;
-    height: 114px;
+  .layout-split .top-card {
+    grid-template-columns: 180px 1fr;
   }
 
-  .top-card-image {
+  .layout-stacked .top-card {
+    grid-template-columns: 1fr;
+  }
+
+  .card-img-wrap {
+    display: block;
+    overflow: hidden;
+    background: var(--surface-soft);
+  }
+
+  .layout-split .card-img-wrap {
+    height: 120px;
+  }
+
+  .layout-stacked .card-img-wrap {
+    height: 160px;
+  }
+
+  .card-img {
     width: 100%;
-    aspect-ratio: 16 / 9;
+    height: 100%;
     object-fit: cover;
     display: block;
-    background: var(--surface-soft);
-    height: 100%;
   }
 
-  .top-card.layout-split .top-card-image {
-    aspect-ratio: auto;
+  .card-body {
+    padding: var(--space-4);
+    display: grid;
+    gap: var(--space-2);
+    align-content: start;
   }
 
-  .title {
+  .card-top-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+  }
+
+  .card-title {
     font-weight: 600;
+    color: var(--text-color);
+    text-decoration: none;
+    line-height: 1.35;
   }
 
-  .pill {
-    background: var(--primary-soft);
+  .card-title:hover {
     color: var(--primary);
-    padding: 0.25rem 0.65rem;
-    border-radius: 999px;
-    font-size: 0.8rem;
-    white-space: nowrap;
   }
 
-  .excerpt {
-    margin: 0.65rem 0;
+  .card-excerpt {
+    margin: 0;
+    font-size: var(--text-sm);
     color: var(--muted-text);
-    grid-area: excerpt;
+    line-height: 1.5;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
 
-  .meta {
+  .card-meta {
     display: flex;
     justify-content: space-between;
-    gap: 0.8rem;
-    font-size: 0.82rem;
+    gap: var(--space-3);
+    font-size: var(--text-xs);
     color: var(--muted-text);
-    grid-area: meta;
   }
 
-  .dev-tools {
-    margin-top: 1rem;
-    display: grid;
-    gap: 0.5rem;
-  }
-
-  .dev-tools .icon-button {
-    width: 2.2rem;
-    height: 2.2rem;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: none;
-    border-radius: 999px;
-    padding: 0;
-    background: var(--button-bg);
-    color: var(--button-text);
-    cursor: pointer;
-  }
-
-  .dev-tools .icon-button:disabled {
-    opacity: 0.6;
-    cursor: default;
-  }
-
-  .pull-message {
-    margin: 0;
-    color: var(--muted-text);
-    font-size: 0.9rem;
-  }
-
-  .dev-tools .icon-button.pulling :global(svg) {
-    animation: spin 0.9s linear infinite;
-  }
-
-  @keyframes spin {
-    from {
-      transform: rotate(0deg);
-    }
-    to {
-      transform: rotate(360deg);
-    }
-  }
-
-  ul {
+  /* Get started */
+  :global(.card) ul {
     padding-left: 1.2rem;
+    margin: 0;
   }
 
-  @media (max-width: 800px) {
+  :global(.card) h3 {
+    margin: 0;
+  }
+
+  @media (max-width: 860px) {
     .hero {
       flex-direction: column;
-      align-items: flex-start;
     }
 
-    .stats-wrap {
-      width: 100%;
-      min-width: 0;
+    .hero-left {
+      max-width: none;
     }
 
-    .section-head {
-      flex-direction: column;
-      align-items: flex-start;
+    .stats-grid {
+      grid-template-columns: repeat(2, 1fr);
     }
 
-    .top-card-head {
-      flex-direction: column;
-      align-items: flex-start;
-    }
-
-    .top-card.layout-split {
+    .layout-split .top-card {
       grid-template-columns: 1fr;
-      grid-template-areas:
-        'head'
-        'image'
-        'excerpt'
-        'meta';
     }
 
-    .top-card.layout-split .top-card-image-link {
-      height: auto;
-      margin-bottom: 0.4rem;
-    }
-
-    .top-card.layout-split .top-card-image {
-      aspect-ratio: 16 / 9;
-      height: auto;
-    }
-
-    .meta {
-      flex-direction: column;
-      gap: 0.2rem;
+    .layout-split .card-img-wrap {
+      height: 160px;
     }
   }
 
-  @media (max-width: 520px) {
-    .stats {
-      grid-template-columns: 1fr;
+  @media (max-width: 480px) {
+    .stats-grid {
+      grid-template-columns: 1fr 1fr;
     }
   }
 </style>

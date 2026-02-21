@@ -13,7 +13,6 @@
     IconFileText,
     IconListDetails,
     IconPlus,
-    IconSend,
     IconSparkles,
     IconStars,
     IconTag,
@@ -21,6 +20,10 @@
     IconThumbUp,
     IconX
   } from '$lib/icons';
+  import Card from '$lib/components/Card.svelte';
+  import Button from '$lib/components/Button.svelte';
+  import Pill from '$lib/components/Pill.svelte';
+  import ChatBox from '$lib/components/ChatBox.svelte';
   export let data;
 
   let rating = 3;
@@ -49,46 +52,29 @@
 
   const decodeHtmlEntities = (value) =>
     value
-      .replace(/&nbsp;/gi, ' ')
-      .replace(/&amp;/gi, '&')
-      .replace(/&lt;/gi, '<')
-      .replace(/&gt;/gi, '>')
-      .replace(/&quot;/gi, '"')
-      .replace(/&#39;/gi, "'")
+      .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>').replace(/&quot;/gi, '"').replace(/&#39;/gi, "'")
       .replace(/&#x27;/gi, "'");
 
   const htmlToMarkdownish = (html) => {
     if (!html) return '';
     return decodeHtmlEntities(
       String(html)
-        .replace(/<script[\s\S]*?<\/script>/gi, '')
-        .replace(/<style[\s\S]*?<\/style>/gi, '')
-        .replace(/<br\s*\/?>/gi, '\n')
-        .replace(/<(h[1-6])[^>]*>/gi, '\n\n')
-        .replace(/<\/h[1-6]>/gi, '\n\n')
-        .replace(/<li[^>]*>/gi, '\n- ')
-        .replace(/<\/li>/gi, '')
+        .replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '')
+        .replace(/<br\s*\/?>/gi, '\n').replace(/<(h[1-6])[^>]*>/gi, '\n\n').replace(/<\/h[1-6]>/gi, '\n\n')
+        .replace(/<li[^>]*>/gi, '\n- ').replace(/<\/li>/gi, '')
         .replace(/<\/(p|div|section|article|blockquote|ul|ol|pre|table|tr)>/gi, '\n\n')
-        .replace(/<[^>]+>/g, '')
-        .replace(/\r\n?/g, '\n')
-        .replace(/[ \t]+\n/g, '\n')
-        .replace(/\n{3,}/g, '\n\n')
-        .trim()
+        .replace(/<[^>]+>/g, '').replace(/\r\n?/g, '\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
     );
   };
 
   const splitLongParagraph = (text) => {
     const compact = text.trim();
     if (compact.length < 520) return [compact];
-    const sentences = compact
-      .match(/[^.!?]+[.!?]+(?=\s|$)|[^.!?]+$/g)
-      ?.map((sentence) => sentence.trim())
-      .filter(Boolean);
+    const sentences = compact.match(/[^.!?]+[.!?]+(?=\s|$)|[^.!?]+$/g)?.map((s) => s.trim()).filter(Boolean);
     if (!sentences || sentences.length < 4) return [compact];
     const groups = [];
-    for (let i = 0; i < sentences.length; i += 3) {
-      groups.push(sentences.slice(i, i + 3).join(' '));
-    }
+    for (let i = 0; i < sentences.length; i += 3) groups.push(sentences.slice(i, i + 3).join(' '));
     return groups;
   };
 
@@ -96,49 +82,23 @@
     if (!text) return [];
     const normalized = String(text).replace(/\r\n?/g, '\n').replace(/\t/g, ' ').trim();
     if (!normalized) return [];
-
-    return normalized
-      .split(/\n{2,}/)
-      .map((chunk) => chunk.trim())
-      .filter(Boolean)
-      .map((chunk) => {
-        const lines = chunk
-          .split('\n')
-          .map((line) => line.trim())
-          .filter(Boolean);
-        if (lines.length === 0) return null;
-
-        if (lines.length === 1 && /^#{1,6}\s+/.test(lines[0])) {
-          const headingText = lines[0].replace(/^#{1,6}\s+/, '').trim();
-          if (!headingText) return null;
-          return {
-            type: 'heading',
-            text: headingText
-          };
-        }
-
-        const bulletLines = lines.filter((line) => /^(?:[-*•]\s+|\d+[.)]\s+)/.test(line));
-        if (bulletLines.length >= Math.max(2, Math.ceil(lines.length * 0.6))) {
-          return {
-            type: 'list',
-            items: bulletLines.map((line) => line.replace(/^(?:[-*•]\s+|\d+[.)]\s+)/, '').trim()).filter(Boolean)
-          };
-        }
-
-        const paragraph = lines.join(' ');
-        const chunks = splitLongParagraph(paragraph);
-        if (chunks.length === 1) {
-          return {
-            type: 'paragraph',
-            text: chunks[0]
-          };
-        }
-        return {
-          type: 'paragraph_group',
-          paragraphs: chunks
-        };
-      })
-      .filter(Boolean);
+    return normalized.split(/\n{2,}/).map((chunk) => chunk.trim()).filter(Boolean).map((chunk) => {
+      const lines = chunk.split('\n').map((l) => l.trim()).filter(Boolean);
+      if (lines.length === 0) return null;
+      if (lines.length === 1 && /^#{1,6}\s+/.test(lines[0])) {
+        const headingText = lines[0].replace(/^#{1,6}\s+/, '').trim();
+        if (!headingText) return null;
+        return { type: 'heading', text: headingText };
+      }
+      const bulletLines = lines.filter((line) => /^(?:[-*•]\s+|\d+[.)]\s+)/.test(line));
+      if (bulletLines.length >= Math.max(2, Math.ceil(lines.length * 0.6))) {
+        return { type: 'list', items: bulletLines.map((l) => l.replace(/^(?:[-*•]\s+|\d+[.)]\s+)/, '').trim()).filter(Boolean) };
+      }
+      const paragraph = lines.join(' ');
+      const chunks = splitLongParagraph(paragraph);
+      if (chunks.length === 1) return { type: 'paragraph', text: chunks[0] };
+      return { type: 'paragraph_group', paragraphs: chunks };
+    }).filter(Boolean);
   };
 
   $: fullTextSource = (() => {
@@ -177,10 +137,7 @@
   };
 
   const sendMessage = async () => {
-    if (!data.chatReadiness?.canChat) {
-      chatError = data.chatReadiness?.reasons?.[0] ?? 'Chat is not ready yet.';
-      return;
-    }
+    if (!data.chatReadiness?.canChat) { chatError = data.chatReadiness?.reasons?.[0] ?? 'Chat is not ready yet.'; return; }
     if (!message) return;
     sending = true;
     chatError = '';
@@ -192,27 +149,19 @@
           body: JSON.stringify({ scope: 'article', articleId: data.article.id, title: data.article.title })
         });
         const created = await threadRes.json().catch(() => ({}));
-        if (!threadRes.ok || !created?.id) {
-          chatError = created?.error ?? 'Failed to start article chat';
-          return;
-        }
+        if (!threadRes.ok || !created?.id) { chatError = created?.error ?? 'Failed to start article chat'; return; }
         threadId = created.id;
       }
-
       const userText = message;
       chatLog = [...chatLog, { role: 'user', content: userText }];
       message = '';
-
       const res = await apiFetch(`/api/chat/threads/${threadId}/messages`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ message: userText })
       });
       const response = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        chatError = response?.error ?? 'Chat request failed';
-        return;
-      }
+      if (!res.ok) { chatError = response?.error ?? 'Chat request failed'; return; }
       chatLog = [...chatLog, { role: 'assistant', content: response.response }];
     } catch {
       chatError = 'Chat request failed';
@@ -247,10 +196,7 @@
   };
 
   const addTags = async () => {
-    const names = tagInput
-      .split(',')
-      .map((entry) => entry.trim())
-      .filter(Boolean);
+    const names = tagInput.split(',').map((e) => e.trim()).filter(Boolean);
     if (names.length === 0) return;
     tagBusy = true;
     tagError = '';
@@ -261,10 +207,7 @@
         body: JSON.stringify({ addTagNames: names, source: 'manual' })
       });
       const payload = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        tagError = payload?.error ?? 'Failed to add tags';
-        return;
-      }
+      if (!res.ok) { tagError = payload?.error ?? 'Failed to add tags'; return; }
       tagInput = '';
     } finally {
       tagBusy = false;
@@ -282,9 +225,7 @@
         body: JSON.stringify({ removeTagIds: [tagId] })
       });
       const payload = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        tagError = payload?.error ?? 'Failed to remove tag';
-      }
+      if (!res.ok) { tagError = payload?.error ?? 'Failed to remove tag'; }
     } finally {
       tagBusy = false;
       await invalidateAll();
@@ -294,315 +235,284 @@
   onMount(() => {
     if (data.article && !data.article.is_read) {
       autoReadTimer = setTimeout(() => {
-        if (!data.article?.is_read) {
-          void setReadState(true);
-        }
+        if (!data.article?.is_read) void setReadState(true);
       }, AUTO_MARK_READ_DELAY_MS);
     }
-    return () => {
-      if (autoReadTimer) clearTimeout(autoReadTimer);
-    };
+    return () => { if (autoReadTimer) clearTimeout(autoReadTimer); };
   });
 </script>
 
 {#if !data.article}
   <p>Article not found.</p>
 {:else}
-  <section class="page-header">
-    <div>
-      <a
-        class="ghost back-link icon-link"
-        href={backHref}
-        title="Back to articles"
-        aria-label="Back to articles"
-        data-sveltekit-reload="true"
-      >
-        <IconArrowLeft size={16} stroke={1.9} />
-        <span>Back to list</span>
-      </a>
-      <h1>{data.article.title ?? 'Untitled article'}</h1>
-      <p class="meta">
-        Source: {data.preferredSource?.sourceName ?? 'Unknown source'}
-        {#if data.preferredSource?.feedbackCount}
-          · rep {data.preferredSource.reputation.toFixed(2)} ({data.preferredSource.feedbackCount} votes)
+  <!-- Back + title -->
+  <div class="article-header">
+    <a class="back-link" href={backHref} data-sveltekit-reload="true">
+      <IconArrowLeft size={16} stroke={1.9} />
+      <span>Back to list</span>
+    </a>
+    <div class="header-row">
+      <div class="header-meta">
+        <h1>{data.article.title ?? 'Untitled article'}</h1>
+        <div class="meta-row">
+          <span>{data.preferredSource?.sourceName ?? 'Unknown source'}</span>
+          {#if data.preferredSource?.feedbackCount}
+            <span>· rep {data.preferredSource.reputation.toFixed(2)} ({data.preferredSource.feedbackCount} votes)</span>
+          {/if}
+          {#if data.article.author}
+            <span>· {data.article.author}</span>
+          {/if}
+        </div>
+      </div>
+      <div class="header-actions">
+        {#if data.article.canonical_url}
+          <a
+            class="open-btn"
+            href={data.article.canonical_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Open original article"
+          >
+            <IconExternalLink size={15} stroke={1.9} />
+            <span>Open article</span>
+          </a>
         {/if}
-      </p>
-      <p class="meta">Author: {data.article.author ?? 'Unknown author'}</p>
-      {#if data.article.canonical_url}
-        <a
-          class="source-link-button icon-link"
-          href={data.article.canonical_url}
-          target="_blank"
-          rel="noopener noreferrer"
-          title="Open original article"
-        >
-          <IconExternalLink size={15} stroke={1.9} />
-          <span>Open article</span>
-        </a>
-      {/if}
-    </div>
-  </section>
-
-  <div class="article-hero-wrap">
-    <img class="article-hero-image" src={articleImageUrl} alt="" decoding="async" />
-  </div>
-
-  <div class="grid">
-    <div class="card">
-      <h2>Read Status</h2>
-      <div class="read-row">
-        <span class={`status-pill ${data.article.is_read ? 'ok' : 'warn'}`}>
-          {data.article.is_read ? 'Read' : 'Unread'}
-        </span>
-        <button
-          class="ghost icon-button"
+        <Button
+          variant="ghost"
+          size="icon"
           on:click={() => setReadState(!data.article.is_read)}
           disabled={readStateBusy}
           title={data.article.is_read ? 'Mark unread' : 'Mark read'}
-          aria-label={data.article.is_read ? 'Mark unread' : 'Mark read'}
         >
           {#if data.article.is_read}
             <IconEyeOff size={16} stroke={1.9} />
-            <span class="sr-only">Mark unread</span>
           {:else}
             <IconEye size={16} stroke={1.9} />
-            <span class="sr-only">Mark read</span>
           {/if}
-        </button>
+        </Button>
+        <Pill variant={data.article.is_read ? 'muted' : 'default'}>
+          {data.article.is_read ? 'Read' : 'Unread'}
+        </Pill>
       </div>
     </div>
+  </div>
 
-    <div class="card">
-      <h2>Tags</h2>
-      {#if data.tags?.length}
-        <div class="tag-row">
-          {#each data.tags as tag}
-            <button
-              class="tag-pill removable"
-              on:click={() => removeTag(tag.id)}
-              disabled={tagBusy}
-              title={`Remove tag ${tag.name}`}
-              aria-label={`Remove tag ${tag.name}`}
-            >
-              <span>{tag.name}</span>
-              {#if tag.source === 'ai'}
-                <span class="tag-source">AI</span>
-              {/if}
-              <IconX size={12} stroke={2} />
-              <span class="sr-only">Remove {tag.name}</span>
-            </button>
-          {/each}
-        </div>
-      {:else}
-        <p class="muted">No tags yet.</p>
-      {/if}
-      <div class="row">
-        <input
-          list="article-tag-options"
-          placeholder="Add tag (or comma-separated tags)"
-          bind:value={tagInput}
-          disabled={tagBusy}
-        />
-        <button class="ghost icon-button" on:click={addTags} disabled={tagBusy} title="Add tags" aria-label="Add tags">
-          <IconPlus size={16} stroke={1.9} />
-          <span class="sr-only">Add tags</span>
-        </button>
-      </div>
-      <button class="ghost inline-button" on:click={() => rerunJobs(['auto_tag'])} disabled={rerunBusy}>
-        <IconTag size={16} stroke={1.9} />
-        <span>AI tags</span>
-      </button>
-      <p class="muted">Tip: type a new tag name to create it.</p>
-      {#if tagError}
-        <p class="muted">{tagError}</p>
-      {/if}
-    </div>
+  <!-- Hero image -->
+  <div class="article-hero">
+    <img class="hero-img" src={articleImageUrl} alt="" decoding="async" />
+  </div>
 
-    <div class="card">
-      <h2>Summary</h2>
-      <p>{data.summary?.summary_text ?? 'Summary pending.'}</p>
-      {#if data.summary?.provider && data.summary?.model}
-        <p class="muted">Latest summary model: {data.summary.provider}/{data.summary.model}</p>
-      {/if}
-      <button class="ghost inline-button" on:click={() => rerunJobs(['summarize'])} disabled={rerunBusy}>
-        <IconFileText size={16} stroke={1.9} />
-        <span>Rebuild summary</span>
-      </button>
-    </div>
-
-    <div class="card">
-      <h2>Key Points</h2>
-      {#if data.keyPoints?.key_points_json}
-        <ul>
-          {#each JSON.parse(data.keyPoints.key_points_json) as point}
-            <li>{point}</li>
-          {/each}
-        </ul>
-      {:else}
-        <p class="muted">No key points generated yet.</p>
-      {/if}
-      {#if data.keyPoints?.provider && data.keyPoints?.model}
-        <p class="muted">Latest key points model: {data.keyPoints.provider}/{data.keyPoints.model}</p>
-      {/if}
-      <button class="ghost inline-button" on:click={() => rerunJobs(['key_points'])} disabled={rerunBusy}>
-        <IconListDetails size={16} stroke={1.9} />
-        <span>Key points</span>
-      </button>
-    </div>
-
-    <div class="card">
-      <h2>AI Fit Score</h2>
+  <!-- Two-column layout -->
+  <div class="article-layout">
+    <!-- LEFT: content -->
+    <div class="content-col">
       {#if data.score}
-        <div class="score">{data.score.score} / 5 · {data.score.label}</div>
-        <p>{data.score.reason_text}</p>
-        {#if data.score.evidence_json}
-          <ul>
-            {#each JSON.parse(data.score.evidence_json) as evidence}
-              <li>{evidence}</li>
+        <div class="score-banner">
+          <div class="score-val">
+            <IconStars size={18} stroke={1.9} />
+            <span>{data.score.score} / 5</span>
+            <strong>· {data.score.label}</strong>
+          </div>
+          <p class="score-reason">{data.score.reason_text}</p>
+          {#if data.score.evidence_json}
+            <ul class="score-evidence">
+              {#each JSON.parse(data.score.evidence_json) as evidence}
+                <li>{evidence}</li>
+              {/each}
+            </ul>
+          {/if}
+        </div>
+      {/if}
+
+      <Card>
+        <div class="card-title-row">
+          <h2>Summary</h2>
+          <Button variant="ghost" size="icon" on:click={() => rerunJobs(['summarize'])} disabled={rerunBusy} title="Rebuild summary">
+            <IconFileText size={15} stroke={1.9} />
+          </Button>
+        </div>
+        <p>{data.summary?.summary_text ?? 'Summary pending.'}</p>
+        {#if data.summary?.provider && data.summary?.model}
+          <p class="muted">Model: {data.summary.provider}/{data.summary.model}</p>
+        {/if}
+      </Card>
+
+      {#if data.keyPoints?.key_points_json}
+        <Card>
+          <div class="card-title-row">
+            <h2>Key Points</h2>
+            <Button variant="ghost" size="icon" on:click={() => rerunJobs(['key_points'])} disabled={rerunBusy} title="Rebuild key points">
+              <IconListDetails size={15} stroke={1.9} />
+            </Button>
+          </div>
+          <ul class="key-list">
+            {#each JSON.parse(data.keyPoints.key_points_json) as point}
+              <li>{point}</li>
             {/each}
           </ul>
-        {/if}
-      {:else}
-        <p>Score pending.</p>
+        </Card>
       {/if}
-      <button class="ghost inline-button" on:click={() => rerunJobs(['score'])} disabled={rerunBusy}>
-        <IconStars size={16} stroke={1.9} />
-        <span>Re-score</span>
-      </button>
-    </div>
 
-    <div class="card">
-      <h2>Feed Vote</h2>
-      <p class="muted">
-        Use thumbs to tune source reputation. This does not edit the AI relevance score.
-      </p>
-      <div class="reaction-row">
-        <button
-          class:active={data.reaction?.value === 1}
-          on:click={() => setReaction(1)}
-          title="Thumbs up feed"
-          aria-label="Thumbs up feed"
-        >
-          <IconThumbUp size={16} stroke={1.9} />
-          <span class="sr-only">Thumbs up feed</span>
-        </button>
-        <button
-          class:active={data.reaction?.value === -1}
-          on:click={() => setReaction(-1)}
-          title="Thumbs down feed"
-          aria-label="Thumbs down feed"
-        >
-          <IconThumbDown size={16} stroke={1.9} />
-          <span class="sr-only">Thumbs down feed</span>
-        </button>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>Feedback</h2>
-      <label>
-        Rating (1-5)
-        <input type="number" min="1" max="5" bind:value={rating} />
-      </label>
-      <textarea rows="4" placeholder="What did the AI miss?" bind:value={comment}></textarea>
-      <button on:click={submitFeedback} class="inline-button">
-        <IconCheck size={16} stroke={1.9} />
-        <span>Save feedback</span>
-      </button>
-    </div>
-
-    <div class="card">
-      <h2>Source Ranking</h2>
-      {#if data.sources?.length}
-        <ul>
-          {#each data.sources as source}
-            <li>
-              <strong>{source.sourceName}</strong>
-              <span>rep {source.reputation.toFixed(2)} ({source.feedbackCount} votes)</span>
-            </li>
-          {/each}
-        </ul>
-      {:else}
-        <p>No feed source metadata yet.</p>
-      {/if}
-    </div>
-
-    <div class="card">
-      <h2>Chat with this article</h2>
-      <div class="readiness">
-        <span class={`status-pill ${data.chatReadiness?.canChat ? 'ok' : 'warn'}`}>
-          {data.chatReadiness?.canChat ? 'Ready' : 'Needs setup'}
-        </span>
-        <div class="readiness-meta">
-          <div>Lane: {data.chatReadiness?.selectedLane ?? 'unknown'}</div>
-          <div>Context: {data.chatReadiness?.hasArticleContext ? 'ok' : 'missing'}</div>
-          <div>Model: {data.chatReadiness?.hasModelConfig ? 'ok' : 'missing'}</div>
-          <div>API key: {data.chatReadiness?.hasAnyProviderKey ? 'ok' : 'missing'}</div>
+      <Card>
+        <h2>Full text</h2>
+        <div class="article-text">
+          {#if articleBlocks.length === 0}
+            <p class="muted">Full text pending.</p>
+          {:else}
+            {#each articleBlocks as block}
+              {#if block.type === 'list'}
+                <ul class="article-list">
+                  {#each block.items as item}<li>{item}</li>{/each}
+                </ul>
+              {:else if block.type === 'heading'}
+                <h3 class="article-heading">{block.text}</h3>
+              {:else if block.type === 'paragraph_group'}
+                {#each block.paragraphs as paragraph}
+                  <p class="article-paragraph">{paragraph}</p>
+                {/each}
+              {:else}
+                <p class="article-paragraph">{block.text}</p>
+              {/if}
+            {/each}
+          {/if}
         </div>
-        {#if data.chatReadiness?.modelCandidates?.length}
-          <div class="muted">
-            Models:
-            {#each data.chatReadiness.modelCandidates as candidate, index}
-              {candidate.provider}/{candidate.model}{index < data.chatReadiness.modelCandidates.length - 1 ? ' · ' : ''}
+      </Card>
+    </div>
+
+    <!-- RIGHT: sidebar -->
+    <div class="sidebar-col">
+      <!-- Feed vote -->
+      <Card>
+        <h3>Feed vote</h3>
+        <p class="muted small">Tune source reputation without affecting AI score.</p>
+        <div class="reaction-row">
+          <button
+            class="reaction-btn"
+            class:active={data.reaction?.value === 1}
+            on:click={() => setReaction(1)}
+            title="Thumbs up feed"
+            aria-label="Thumbs up this feed"
+          >
+            <IconThumbUp size={16} stroke={1.9} />
+          </button>
+          <button
+            class="reaction-btn"
+            class:active={data.reaction?.value === -1}
+            on:click={() => setReaction(-1)}
+            title="Thumbs down feed"
+            aria-label="Thumbs down this feed"
+          >
+            <IconThumbDown size={16} stroke={1.9} />
+          </button>
+        </div>
+      </Card>
+
+      <!-- Tags -->
+      <Card>
+        <div class="card-title-row">
+          <h3>Tags</h3>
+          <Button variant="ghost" size="icon" on:click={() => rerunJobs(['auto_tag'])} disabled={rerunBusy || tagBusy} title="Run AI tagging">
+            <IconTag size={15} stroke={1.9} />
+          </Button>
+        </div>
+        {#if data.tags?.length}
+          <div class="tag-row">
+            {#each data.tags as tag}
+              <button
+                class="tag-chip"
+                on:click={() => removeTag(tag.id)}
+                disabled={tagBusy}
+                title={`Remove ${tag.name}`}
+              >
+                <span>{tag.name}</span>
+                {#if tag.source === 'ai'}<span class="tag-ai">AI</span>{/if}
+                <IconX size={11} stroke={2} />
+              </button>
             {/each}
           </div>
-        {/if}
-        {#if data.chatReadiness?.reasons?.length}
-          <div class="muted">{data.chatReadiness.reasons.join(' ')}</div>
-        {/if}
-      </div>
-      <div class="chat-box">
-        {#each chatLog as entry}
-          <div class={`bubble ${entry.role}`}>{entry.content}</div>
-        {/each}
-      </div>
-      <div class="row">
-        <input
-          placeholder={data.chatReadiness?.canChat ? 'Ask about this article' : 'Complete chat setup first'}
-          bind:value={message}
-          disabled={!data.chatReadiness?.canChat}
-        />
-        <button
-          on:click={sendMessage}
-          disabled={sending || !data.chatReadiness?.canChat}
-          class="icon-button"
-          title="Send message"
-          aria-label="Send message"
-        >
-          <IconSend size={16} stroke={1.9} />
-          <span class="sr-only">Send message</span>
-        </button>
-      </div>
-      {#if chatError}
-        <p class="muted">{chatError}</p>
-      {/if}
-    </div>
-
-    <div class="card">
-      <h2>Full text</h2>
-      <div class="article-text">
-        {#if articleBlocks.length === 0}
-          <p class="muted">Full text pending.</p>
         {:else}
-          {#each articleBlocks as block}
-            {#if block.type === 'list'}
-              <ul class="article-list">
-                {#each block.items as item}
-                  <li>{item}</li>
-                {/each}
-              </ul>
-            {:else if block.type === 'heading'}
-              <h3 class="article-heading">{block.text}</h3>
-            {:else if block.type === 'paragraph_group'}
-              {#each block.paragraphs as paragraph}
-                <p class="article-paragraph">{paragraph}</p>
-              {/each}
-            {:else}
-              <p class="article-paragraph">{block.text}</p>
-            {/if}
-          {/each}
+          <p class="muted small">No tags yet.</p>
         {/if}
-      </div>
+        <div class="input-row">
+          <input
+            list="article-tag-options"
+            placeholder="Add tags (comma-separated)"
+            bind:value={tagInput}
+            disabled={tagBusy}
+          />
+          <Button variant="ghost" size="icon" on:click={addTags} disabled={tagBusy} title="Add tags">
+            <IconPlus size={15} stroke={1.9} />
+          </Button>
+        </div>
+        {#if tagError}<p class="muted small err">{tagError}</p>{/if}
+      </Card>
+
+      <!-- AI Score -->
+      <Card>
+        <div class="card-title-row">
+          <h3>AI Fit Score</h3>
+          <Button variant="ghost" size="icon" on:click={() => rerunJobs(['score'])} disabled={rerunBusy} title="Re-score article">
+            <IconStars size={15} stroke={1.9} />
+          </Button>
+        </div>
+        {#if data.score}
+          <div class="score-display">
+            <span class="score-num">{data.score.score}</span>
+            <span class="score-denom">/ 5</span>
+            <Pill>{data.score.label}</Pill>
+          </div>
+        {:else}
+          <p class="muted small">Score pending.</p>
+        {/if}
+      </Card>
+
+      <!-- Chat -->
+      <Card>
+        <div class="card-title-row">
+          <h3>Chat with article</h3>
+          <Pill variant={data.chatReadiness?.canChat ? 'success' : 'warning'}>
+            {data.chatReadiness?.canChat ? 'Ready' : 'Needs setup'}
+          </Pill>
+        </div>
+        <ChatBox
+          {chatLog}
+          bind:message
+          {sending}
+          disabled={!data.chatReadiness?.canChat}
+          placeholder={data.chatReadiness?.canChat ? 'Ask about this article' : 'Complete chat setup first'}
+          error={chatError}
+          on:send={sendMessage}
+        />
+      </Card>
+
+      <!-- Feedback -->
+      <Card>
+        <h3>Feedback</h3>
+        <label class="form-label">
+          Rating (1–5)
+          <input type="number" min="1" max="5" bind:value={rating} />
+        </label>
+        <textarea rows="3" placeholder="What did the AI miss?" bind:value={comment}></textarea>
+        <Button size="inline" on:click={submitFeedback}>
+          <IconCheck size={15} stroke={1.9} />
+          <span>Save feedback</span>
+        </Button>
+      </Card>
+
+      <!-- Sources -->
+      {#if data.sources?.length}
+        <Card variant="soft">
+          <h3>Source ranking</h3>
+          <ul class="source-list">
+            {#each data.sources as source}
+              <li>
+                <strong>{source.sourceName}</strong>
+                <span class="muted">rep {source.reputation.toFixed(2)} ({source.feedbackCount} votes)</span>
+              </li>
+            {/each}
+          </ul>
+        </Card>
+      {/if}
     </div>
   </div>
 {/if}
@@ -614,262 +524,281 @@
 </datalist>
 
 <style>
-  .grid {
-    display: grid;
-    gap: 1.5rem;
-  }
-
-  .card {
-    background: var(--surface-strong);
-    padding: 1.5rem;
-    border-radius: 20px;
-    box-shadow: 0 12px 24px var(--shadow-color);
-    border: 1px solid var(--surface-border);
-  }
-
-  .meta {
-    color: var(--muted-text);
-  }
-
-  .source-link-button {
-    margin-top: 0.7rem;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    background: var(--button-bg);
-    color: var(--button-text);
-    border-radius: 999px;
-    padding: 0.48rem 0.95rem;
-    font-size: 0.88rem;
-    font-weight: 600;
-  }
-
-  .score {
-    font-weight: 600;
-    color: var(--primary);
-  }
-
-  .article-hero-wrap {
-    margin: 0 0 1.2rem;
-    border-radius: 18px;
-    overflow: hidden;
-    border: 1px solid var(--surface-border);
-    background: var(--surface-soft);
-  }
-
-  .article-hero-image {
-    width: 100%;
-    aspect-ratio: 16 / 9;
-    object-fit: cover;
-    display: block;
-  }
-
-  .card ul {
-    margin-top: 0.8rem;
-    padding-left: 1.1rem;
-  }
-
-  .card li {
-    margin: 0.35rem 0;
-  }
-
-  .card li span {
-    margin-left: 0.4rem;
-    font-size: 0.85rem;
-    color: var(--muted-text);
-  }
-
-  input,
-  textarea {
-    width: 100%;
-    margin-top: 0.5rem;
-    padding: 0.7rem;
-    border-radius: 12px;
-    border: 1px solid var(--input-border);
-  }
-
-  button {
-    margin-top: 0.7rem;
-    background: var(--button-bg);
-    color: var(--button-text);
-    border: none;
-    padding: 0.6rem 1rem;
-    border-radius: 999px;
-    cursor: pointer;
-  }
-
-  .reaction-row {
-    display: flex;
-    gap: 0.6rem;
-  }
-
-  .reaction-row button {
-    margin-top: 0;
-    background: var(--surface-soft);
-    color: var(--text-color);
-    border: 1px solid var(--input-border);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 2.1rem;
-    height: 2.1rem;
-    padding: 0;
-  }
-
-  .reaction-row button.active {
-    border-color: var(--ghost-border);
-    background: var(--primary-soft);
-    color: var(--primary);
-  }
-
-  .tag-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.45rem;
-  }
-
-  .tag-pill {
-    border: 1px solid var(--input-border);
-    background: var(--surface-soft);
-    color: var(--text-color);
-    border-radius: 999px;
-    padding: 0.3rem 0.6rem;
-    font-size: 0.82rem;
-    display: inline-flex;
-    gap: 0.4rem;
-    align-items: center;
-  }
-
-  .tag-pill.removable {
-    margin-top: 0;
-    cursor: pointer;
-  }
-
-  .inline-button {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    width: fit-content;
-  }
-
-  .icon-button {
-    width: 2.15rem;
-    height: 2.15rem;
-    padding: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .icon-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
+  /* Header */
+  .article-header {
+    margin-bottom: var(--space-4);
   }
 
   .back-link {
-    margin-bottom: 0.8rem;
-    width: fit-content;
-  }
-
-  .tag-source {
-    font-size: 0.72rem;
-    color: var(--muted-text);
-    border: 1px solid var(--surface-border);
-    border-radius: 999px;
-    padding: 0.05rem 0.35rem;
-  }
-
-  .ghost {
-    background: transparent;
-    border: 1px solid var(--ghost-border);
-    color: var(--ghost-color);
-  }
-
-  .chat-box {
-    background: var(--surface-soft);
-    border-radius: 16px;
-    padding: 1rem;
-    display: grid;
-    gap: 0.6rem;
-    max-height: 260px;
-    overflow-y: auto;
-  }
-
-  .readiness {
-    margin-bottom: 0.8rem;
-    display: grid;
+    display: inline-flex;
+    align-items: center;
     gap: 0.35rem;
+    color: var(--muted-text);
+    font-size: var(--text-sm);
+    margin-bottom: var(--space-3);
+    transition: color var(--transition-fast);
   }
 
-  .status-pill {
-    justify-self: start;
-    padding: 0.2rem 0.55rem;
-    border-radius: 999px;
-    font-size: 0.8rem;
-    font-weight: 600;
+  .back-link:hover { color: var(--primary); }
+
+  .header-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-4);
+    flex-wrap: wrap;
   }
 
-  .status-pill.ok {
-    background: rgba(114, 236, 200, 0.18);
-    color: #91f0cd;
+  .header-meta {
+    flex: 1 1 0;
+    min-width: 0;
   }
 
-  .status-pill.warn {
-    background: rgba(255, 110, 150, 0.2);
-    color: #ff9dbc;
+  h1 {
+    font-family: 'Source Serif 4', serif;
+    font-size: var(--text-3xl);
+    margin: 0 0 var(--space-2);
+    line-height: 1.2;
   }
 
-  .read-row {
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    font-size: var(--text-sm);
+    color: var(--muted-text);
+  }
+
+  .header-actions {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 0.8rem;
-    flex-wrap: wrap;
+    gap: var(--space-2);
+    flex-shrink: 0;
   }
 
-  .readiness-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.7rem;
-    font-size: 0.85rem;
-    color: var(--muted-text);
-  }
-
-  .bubble {
-    padding: 0.6rem 0.8rem;
-    border-radius: 14px;
-    max-width: 80%;
-  }
-
-  .bubble.user {
-    justify-self: end;
+  .open-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
     background: var(--button-bg);
     color: var(--button-text);
+    border-radius: var(--radius-full);
+    padding: 0.48rem 0.95rem;
+    font-size: var(--text-sm);
+    font-weight: 600;
+    text-decoration: none;
   }
 
-  .bubble.assistant {
-    justify-self: start;
-    background: var(--surface-strong);
+  /* Hero image */
+  .article-hero {
+    margin-bottom: var(--space-6);
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+    border: 1px solid var(--surface-border);
+    background: var(--surface-soft);
+    max-height: 340px;
   }
 
-  .row {
-    display: flex;
-    gap: 0.6rem;
-    margin-top: 0.8rem;
+  .hero-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    aspect-ratio: 21/9;
   }
 
-  .article-text {
+  /* Two-column layout */
+  .article-layout {
     display: grid;
-    gap: 0.85rem;
-    max-width: 78ch;
-    line-height: 1.7;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: var(--space-6);
+    align-items: start;
+  }
+
+  .content-col, .sidebar-col {
+    display: grid;
+    gap: var(--space-5);
+  }
+
+  /* Score banner */
+  .score-banner {
+    background: var(--primary-soft);
+    border: 1px solid var(--ghost-border);
+    border-radius: var(--radius-xl);
+    padding: var(--space-5);
+    display: grid;
+    gap: var(--space-2);
+  }
+
+  .score-val {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: var(--text-lg);
+    color: var(--primary);
+    font-weight: 700;
+  }
+
+  .score-reason {
+    margin: 0;
+    font-size: var(--text-sm);
     color: var(--text-color);
   }
 
-  .article-paragraph {
+  .score-evidence {
     margin: 0;
+    padding-left: 1.1rem;
+    display: grid;
+    gap: 0.25rem;
   }
+
+  .score-evidence li {
+    font-size: var(--text-sm);
+    color: var(--muted-text);
+  }
+
+  /* Card internals */
+  h2 {
+    margin: 0;
+    font-size: var(--text-lg);
+  }
+
+  h3 {
+    margin: 0;
+    font-size: var(--text-base);
+    font-weight: 600;
+  }
+
+  .card-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+  }
+
+  .muted { color: var(--muted-text); margin: 0; }
+  .small { font-size: var(--text-sm); }
+  .err { color: var(--danger); }
+
+  /* Reaction buttons */
+  .reaction-row {
+    display: flex;
+    gap: var(--space-2);
+  }
+
+  .reaction-btn {
+    background: var(--surface-soft);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-full);
+    width: 2.2rem;
+    height: 2.2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--text-color);
+    transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+  }
+
+  .reaction-btn.active {
+    background: var(--primary-soft);
+    border-color: var(--ghost-border);
+    color: var(--primary);
+  }
+
+  /* Tags */
+  .tag-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  .tag-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    background: var(--surface-soft);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-full);
+    padding: 0.25rem 0.6rem;
+    font-size: var(--text-sm);
+    cursor: pointer;
+    color: var(--text-color);
+    transition: background var(--transition-fast);
+  }
+
+  .tag-chip:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 15%, transparent); border-color: var(--danger); }
+  .tag-chip:disabled { opacity: 0.6; cursor: default; }
+
+  .tag-ai {
+    font-size: 0.68rem;
+    color: var(--muted-text);
+    border: 1px solid var(--surface-border);
+    border-radius: var(--radius-full);
+    padding: 0 0.3rem;
+  }
+
+  .input-row {
+    display: flex;
+    gap: var(--space-2);
+  }
+
+  input:not([type='number']),
+  textarea {
+    width: 100%;
+    padding: 0.62rem 0.72rem;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--input-border);
+    background: var(--input-bg);
+    color: var(--text-color);
+    font-family: inherit;
+  }
+
+  input[type='number'] {
+    padding: 0.5rem 0.7rem;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--input-border);
+    background: var(--input-bg);
+    color: var(--text-color);
+    font-family: inherit;
+    width: 100%;
+  }
+
+  .form-label {
+    display: grid;
+    gap: 0.35rem;
+    font-size: var(--text-sm);
+  }
+
+  /* Score in sidebar */
+  .score-display {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+  }
+
+  .score-num {
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--primary);
+    line-height: 1;
+  }
+
+  .score-denom {
+    font-size: var(--text-base);
+    color: var(--muted-text);
+  }
+
+  /* Article text */
+  .article-text {
+    display: grid;
+    gap: 0.85rem;
+    line-height: 1.75;
+    color: var(--text-color);
+  }
+
+  .article-paragraph { margin: 0; }
 
   .article-list {
     margin: 0;
@@ -880,8 +809,42 @@
 
   .article-heading {
     margin: 0.25rem 0 0;
-    font-size: 1rem;
+    font-size: 1.05rem;
     font-weight: 700;
-    color: var(--text-color);
+  }
+
+  .key-list {
+    margin: 0;
+    padding-left: 1.1rem;
+    display: grid;
+    gap: 0.4rem;
+    font-size: var(--text-sm);
+    line-height: 1.55;
+  }
+
+  /* Source list */
+  .source-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: var(--space-2);
+    font-size: var(--text-sm);
+  }
+
+  .source-list strong { display: block; }
+
+  @media (max-width: 900px) {
+    .article-layout {
+      grid-template-columns: 1fr;
+    }
+
+    .sidebar-col {
+      order: -1;
+    }
+
+    h1 {
+      font-size: var(--text-2xl);
+    }
   }
 </style>

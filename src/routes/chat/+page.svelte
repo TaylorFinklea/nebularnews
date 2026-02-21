@@ -1,6 +1,10 @@
 <script>
   import { apiFetch } from '$lib/client/api-fetch';
-  import { IconExternalLink, IconSend } from '$lib/icons';
+  import { IconExternalLink } from '$lib/icons';
+  import PageHeader from '$lib/components/PageHeader.svelte';
+  import Card from '$lib/components/Card.svelte';
+  import ChatBox from '$lib/components/ChatBox.svelte';
+
   let threadId = null;
   let message = '';
   let chatLog = [];
@@ -51,39 +55,21 @@
   };
 </script>
 
-<section class="page-header">
-  <div>
-    <h1>Global Chat</h1>
-    <p>Ask questions across your entire archive of articles.</p>
-  </div>
-</section>
+<PageHeader title="Global Chat" description="Ask questions across your entire archive of articles." />
 
 <div class="grid">
-  <div class="card">
-    <div class="chat-box">
-      {#each chatLog as entry}
-        <div class={`bubble ${entry.role}`}>{entry.content}</div>
-      {/each}
-    </div>
-    <div class="row">
-      <input placeholder="Ask about recent stories" bind:value={message} />
-      <button
-        class="icon-button"
-        on:click={sendMessage}
-        disabled={sending}
-        title="Send message"
-        aria-label="Send message"
-      >
-        <IconSend size={16} stroke={1.9} />
-        <span class="sr-only">Send message</span>
-      </button>
-    </div>
-    {#if chatError}
-      <p class="muted">{chatError}</p>
-    {/if}
-  </div>
+  <Card>
+    <ChatBox
+      {chatLog}
+      bind:message
+      {sending}
+      placeholder="Ask about recent stories"
+      error={chatError}
+      on:send={sendMessage}
+    />
+  </Card>
 
-  <div class="card">
+  <Card>
     <h2>Sources used</h2>
     {#if sources.length === 0}
       <p class="muted">No sources yet. Ask a question to pull context.</p>
@@ -102,79 +88,14 @@
         {/each}
       </ul>
     {/if}
-  </div>
+  </Card>
 </div>
 
 <style>
   .grid {
     display: grid;
     grid-template-columns: 2fr 1fr;
-    gap: 1.5rem;
-  }
-
-  .card {
-    background: var(--surface-strong);
-    padding: 1.5rem;
-    border-radius: 20px;
-    box-shadow: 0 12px 24px var(--shadow-color);
-    border: 1px solid var(--surface-border);
-  }
-
-  .chat-box {
-    background: var(--surface-soft);
-    border-radius: 16px;
-    padding: 1rem;
-    display: grid;
-    gap: 0.6rem;
-    min-height: 260px;
-  }
-
-  .bubble {
-    padding: 0.6rem 0.8rem;
-    border-radius: 14px;
-    max-width: 80%;
-  }
-
-  .bubble.user {
-    justify-self: end;
-    background: var(--button-bg);
-    color: var(--button-text);
-  }
-
-  .bubble.assistant {
-    justify-self: start;
-    background: var(--surface-strong);
-  }
-
-  .row {
-    display: flex;
-    gap: 0.6rem;
-    margin-top: 0.8rem;
-  }
-
-  input {
-    width: 100%;
-    padding: 0.7rem;
-    border-radius: 12px;
-    border: 1px solid var(--input-border);
-  }
-
-  button {
-    background: var(--button-bg);
-    color: var(--button-text);
-    border: none;
-    padding: 0.6rem 1rem;
-    border-radius: 999px;
-    cursor: pointer;
-  }
-
-  .icon-button {
-    width: 2.2rem;
-    height: 2.2rem;
-    padding: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
+    gap: var(--space-6);
   }
 
   ul {
@@ -182,12 +103,7 @@
     padding: 0;
     margin: 0;
     display: grid;
-    gap: 0.8rem;
-  }
-
-  .meta {
-    font-size: 0.85rem;
-    color: var(--muted-text);
+    gap: var(--space-3);
   }
 
   .source-link {

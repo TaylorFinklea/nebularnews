@@ -3,11 +3,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ArticlesPage from './+page.svelte';
-import { invalidateAll } from '$app/navigation';
-
-vi.mock('$app/navigation', () => ({
-  invalidateAll: vi.fn(async () => undefined)
-}));
 
 const baseArticle = {
   id: 'article-1',
@@ -60,7 +55,16 @@ describe('Articles page reactivity', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     fetchMock = vi.fn(async () => ({
-      ok: true
+      ok: true,
+      status: 200,
+      json: async () => ({
+        ok: true,
+        data: {
+          article_id: 'article-1',
+          is_read: 1,
+          reaction: { value: 1 }
+        }
+      })
     }));
     vi.stubGlobal('fetch', fetchMock);
   });
@@ -82,7 +86,6 @@ describe('Articles page reactivity', () => {
       '/api/articles/article-1/reaction',
       expect.objectContaining({ method: 'POST' })
     );
-    await waitFor(() => expect(invalidateAll).toHaveBeenCalledTimes(1));
   });
 
   it('updates read state immediately after marking read', async () => {
@@ -98,7 +101,6 @@ describe('Articles page reactivity', () => {
       '/api/articles/article-1/read',
       expect.objectContaining({ method: 'POST' })
     );
-    await waitFor(() => expect(invalidateAll).toHaveBeenCalledTimes(1));
   });
 
   it('updates unread filter view immediately after marking read', async () => {
@@ -116,14 +118,18 @@ describe('Articles page reactivity', () => {
       '/api/articles/article-1/read',
       expect.objectContaining({ method: 'POST' })
     );
-    await waitFor(() => expect(invalidateAll).toHaveBeenCalledTimes(1));
   });
 
   it('reverts optimistic state and shows toast on API failure', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => ({
-        ok: false
+        ok: false,
+        status: 500,
+        json: async () => ({
+          ok: false,
+          error: { code: 'internal_error', message: 'Unable to save feed reaction' }
+        })
       }))
     );
 
@@ -135,7 +141,6 @@ describe('Articles page reactivity', () => {
 
     await waitFor(() => expect(upButton.classList.contains('active')).toBe(false));
     expect(screen.getByRole('status').textContent ?? '').toContain('Unable to save feed reaction');
-    expect(invalidateAll).toHaveBeenCalledTimes(0);
   });
 
   it('dedupes repeated clicks while a request is pending', async () => {
@@ -144,7 +149,7 @@ describe('Articles page reactivity', () => {
       'fetch',
       vi.fn(
         () =>
-          new Promise<{ ok: boolean }>((resolve) => {
+          new Promise<{ ok: boolean; status: number; json: () => Promise<unknown> }>((resolve) => {
             resolveFetch = resolve;
           })
       )
@@ -158,7 +163,14 @@ describe('Articles page reactivity', () => {
 
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(upButton.hasAttribute('disabled')).toBe(true);
-    resolveFetch?.({ ok: true });
-    await waitFor(() => expect(invalidateAll).toHaveBeenCalledTimes(1));
+    resolveFetch?.({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        ok: true,
+        data: { reaction: { value: 1 } }
+      })
+    });
+    await waitFor(() => expect(upButton.hasAttribute('disabled')).toBe(false));
   });
 });

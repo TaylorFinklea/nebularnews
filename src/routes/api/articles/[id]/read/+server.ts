@@ -1,10 +1,13 @@
-import { json } from '@sveltejs/kit';
 import { dbRun, now } from '$lib/server/db';
+import { apiOkWithAliases } from '$lib/server/api';
+import { logInfo } from '$lib/server/log';
 
-export const POST = async ({ params, request, platform }) => {
+export const POST = async (event) => {
+  const { params, request, platform } = event;
   const articleId = params.id;
   const body = await request.json().catch(() => ({}));
   const isRead = Boolean(body?.isRead);
+  const mutatedAt = now();
 
   await dbRun(
     platform.env.DB,
@@ -13,8 +16,22 @@ export const POST = async ({ params, request, platform }) => {
      ON CONFLICT(article_id) DO UPDATE SET
        is_read = excluded.is_read,
        updated_at = excluded.updated_at`,
-    [articleId, isRead ? 1 : 0, now()]
+    [articleId, isRead ? 1 : 0, mutatedAt]
   );
 
-  return json({ ok: true, articleId, isRead });
+  logInfo('article.read.updated', {
+    request_id: event.locals.requestId,
+    article_id: articleId,
+    is_read: isRead ? 1 : 0
+  });
+
+  const data = {
+    article_id: articleId,
+    is_read: isRead ? 1 : 0,
+    mutated_at: mutatedAt
+  };
+  return apiOkWithAliases(event, data, {
+    articleId,
+    isRead
+  });
 };

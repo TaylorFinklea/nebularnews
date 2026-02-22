@@ -1,4 +1,3 @@
-import { json } from '@sveltejs/kit';
 import { parse as parseCookie } from 'cookie';
 import {
   cancelAllPendingJobs,
@@ -16,6 +15,8 @@ import {
   runQueueCycles
 } from '$lib/server/jobs-admin';
 import { clampTimezoneOffsetMinutes } from '$lib/server/time';
+import { apiError, apiOkWithAliases } from '$lib/server/api';
+import { logInfo } from '$lib/server/log';
 
 const validActions = new Set([
   'run_queue',
@@ -28,19 +29,29 @@ const validActions = new Set([
   'queue_today_missing'
 ]);
 
-export const GET = async ({ url, platform }) => {
+export const GET = async (event) => {
+  const { url, platform } = event;
   const status = normalizeJobFilter(url.searchParams.get('status'));
   const limit = Number(url.searchParams.get('limit') ?? 100);
   const jobs = await listJobs(platform.env.DB, { status, limit });
   const counts = await getJobCounts(platform.env.DB);
-  return json({ jobs, counts, status });
+  return apiOkWithAliases(
+    event,
+    {
+      jobs,
+      counts,
+      status
+    },
+    { jobs, counts, status }
+  );
 };
 
-export const POST = async ({ request, platform }) => {
+export const POST = async (event) => {
+  const { request, platform } = event;
   const body = await request.json().catch(() => ({}));
   const action = typeof body?.action === 'string' ? body.action : '';
   if (!validActions.has(action)) {
-    return json({ error: 'Invalid action' }, { status: 400 });
+    return apiError(event, 400, 'validation_error', 'Invalid action');
   }
 
   const jobId = typeof body?.jobId === 'string' ? body.jobId.trim() : '';
@@ -57,66 +68,88 @@ export const POST = async ({ request, platform }) => {
     const cycles = clampQueueCycles(body?.cycles ?? 1);
     const forceDue = body?.forceDue !== false;
     const result = await runQueueCycles(platform.env, cycles, { forceDue });
-    return json({ ok: true, action, cycles: result.cycles, counts: result.counts });
+    logInfo('jobs.admin.action', {
+      request_id: event.locals.requestId,
+      action,
+      cycles: result.cycles,
+      counts: result.counts
+    });
+    return apiOkWithAliases(
+      event,
+      {
+        action,
+        cycles: result.cycles,
+        counts: result.counts,
+        metrics: result.metrics
+      },
+      {
+        action,
+        cycles: result.cycles,
+        counts: result.counts,
+        metrics: result.metrics
+      }
+    );
   }
 
   if (action === 'retry_failed') {
     const updated = await retryFailedJobs(db);
-    return json({ ok: true, action, updated, counts: await getJobCounts(db) });
+    const counts = await getJobCounts(db);
+    return apiOkWithAliases(event, { action, updated, counts }, { action, updated, counts });
   }
 
   if (action === 'cancel_pending_all') {
     const updated = await cancelAllPendingJobs(db);
-    return json({ ok: true, action, updated, counts: await getJobCounts(db) });
+    const counts = await getJobCounts(db);
+    return apiOkWithAliases(event, { action, updated, counts }, { action, updated, counts });
   }
 
   if (action === 'clear_finished') {
     const deleted = await clearFinishedJobs(db);
-    return json({ ok: true, action, deleted, counts: await getJobCounts(db) });
+    const counts = await getJobCounts(db);
+    return apiOkWithAliases(event, { action, deleted, counts }, { action, deleted, counts });
   }
 
   if (action === 'queue_today_missing') {
     const queued = await queueMissingTodayArticleJobs(db, { tzOffsetMinutes });
-    return json({
-      ok: true,
-      action,
-      queued,
-      counts: await getJobCounts(db)
-    });
+    const counts = await getJobCounts(db);
+    return apiOkWithAliases(event, { action, queued, counts }, { action, queued, counts });
   }
 
   if (!jobId) {
-    return json({ error: 'Missing jobId' }, { status: 400 });
+    return apiError(event, 400, 'validation_error', 'Missing jobId');
   }
 
   if (action === 'run_now') {
     const updated = await markJobPendingNow(db, jobId);
     if (!updated) {
       const status = await getJobStatus(db, jobId);
-      if (!status) return json({ error: 'Job not found' }, { status: 404 });
-      if (status === 'running') return json({ error: 'Job is currently running' }, { status: 409 });
-      return json({ error: 'No changes made' }, { status: 409 });
+      if (!status) return apiError(event, 404, 'not_found', 'Job not found');
+      if (status === 'running') return apiError(event, 409, 'conflict', 'Job is currently running');
+      return apiError(event, 409, 'conflict', 'No changes made');
     }
-    return json({ ok: true, action, updated, counts: await getJobCounts(db) });
+    const counts = await getJobCounts(db);
+    return apiOkWithAliases(event, { action, updated, counts }, { action, updated, counts });
   }
 
   if (action === 'cancel') {
     const updated = await cancelPendingJob(db, jobId);
     if (!updated) {
       const status = await getJobStatus(db, jobId);
-      if (!status) return json({ error: 'Job not found' }, { status: 404 });
-      if (status === 'running') return json({ error: 'Cannot cancel a running job' }, { status: 409 });
-      return json({ error: `Job is ${status}, only pending jobs can be cancelled` }, { status: 409 });
+      if (!status) return apiError(event, 404, 'not_found', 'Job not found');
+      if (status === 'running') return apiError(event, 409, 'conflict', 'Cannot cancel a running job');
+      return apiError(event, 409, 'conflict', `Job is ${status}, only pending jobs can be cancelled`);
     }
-    return json({ ok: true, action, updated, counts: await getJobCounts(db) });
+    const counts = await getJobCounts(db);
+    return apiOkWithAliases(event, { action, updated, counts }, { action, updated, counts });
   }
 
   const deleted = await deleteJob(db, jobId);
   if (!deleted) {
     const status = await getJobStatus(db, jobId);
-    if (!status) return json({ error: 'Job not found' }, { status: 404 });
-    if (status === 'running') return json({ error: 'Cannot delete a running job' }, { status: 409 });
-    return json({ error: 'No changes made' }, { status: 409 });
+    if (!status) return apiError(event, 404, 'not_found', 'Job not found');
+    if (status === 'running') return apiError(event, 409, 'conflict', 'Cannot delete a running job');
+    return apiError(event, 409, 'conflict', 'No changes made');
   }
-  return json({ ok: true, action, deleted, counts: await getJobCounts(db) });
+  const counts = await getJobCounts(db);
+  return apiOkWithAliases(event, { action, deleted, counts }, { action, deleted, counts });
 };

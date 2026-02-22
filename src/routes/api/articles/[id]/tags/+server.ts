@@ -1,4 +1,3 @@
-import { json } from '@sveltejs/kit';
 import { dbGet } from '$lib/server/db';
 import {
   attachTagToArticle,
@@ -8,6 +7,8 @@ import {
   resolveTagsByTokens,
   type TagSource
 } from '$lib/server/tags';
+import { apiError, apiOkWithAliases } from '$lib/server/api';
+import { logInfo } from '$lib/server/log';
 
 const normalizeSource = (value: unknown): TagSource => {
   if (value === 'ai' || value === 'system' || value === 'manual') return value;
@@ -26,16 +27,24 @@ const normalizeTokenList = (value: unknown) =>
     ? value.map((entry) => String(entry ?? '').trim()).filter(Boolean)
     : [];
 
-export const GET = async ({ params, platform }) => {
+export const GET = async (event) => {
+  const { params, platform } = event;
   const article = await dbGet<{ id: string }>(platform.env.DB, 'SELECT id FROM articles WHERE id = ? LIMIT 1', [params.id]);
-  if (!article) return json({ error: 'Article not found' }, { status: 404 });
+  if (!article) return apiError(event, 404, 'not_found', 'Article not found');
   const tags = await listTagsForArticle(platform.env.DB, params.id);
-  return json({ tags });
+  return apiOkWithAliases(
+    event,
+    {
+      tags
+    },
+    { tags }
+  );
 };
 
-export const POST = async ({ params, request, platform }) => {
+export const POST = async (event) => {
+  const { params, request, platform } = event;
   const article = await dbGet<{ id: string }>(platform.env.DB, 'SELECT id FROM articles WHERE id = ? LIMIT 1', [params.id]);
-  if (!article) return json({ error: 'Article not found' }, { status: 404 });
+  if (!article) return apiError(event, 404, 'not_found', 'Article not found');
 
   const body = await request.json().catch(() => ({}));
   const source = normalizeSource(body?.source);
@@ -80,12 +89,28 @@ export const POST = async ({ params, request, platform }) => {
   }
 
   const tags = await listTagsForArticle(platform.env.DB, params.id);
-  return json({
-    ok: true,
-    tags,
-    counts: {
+  const counts = {
       added: addIds.size,
       removed: removeIds.size
-    }
+    };
+
+  logInfo('article.tags.updated', {
+    request_id: event.locals.requestId,
+    article_id: params.id,
+    added: counts.added,
+    removed: counts.removed
   });
+
+  return apiOkWithAliases(
+    event,
+    {
+      article_id: params.id,
+      tags,
+      counts
+    },
+    {
+      tags,
+      counts
+    }
+  );
 };

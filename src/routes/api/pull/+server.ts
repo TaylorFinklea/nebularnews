@@ -1,13 +1,24 @@
-import { json } from '@sveltejs/kit';
 import { getManualPullState, runPullRun, startManualPull } from '$lib/server/manual-pull';
 import { recordAuditEvent } from '$lib/server/audit';
+import { apiError, apiOkWithAliases } from '$lib/server/api';
 
-export const GET = async ({ platform, url }) => {
+export const GET = async (event) => {
+  const { platform, url } = event;
   const runId = url.searchParams.get('run_id')?.trim() || null;
   const state = await getManualPullState(platform.env.DB, runId);
-  return json({
+  const data = {
     run_id: state.runId,
     status: state.status,
+    in_progress: state.inProgress,
+    started_at: state.startedAt,
+    completed_at: state.completedAt,
+    last_run_status: state.lastRunStatus,
+    last_error: state.lastError,
+    stats: state.stats
+  };
+  return apiOkWithAliases(event, data, {
+    run_id: data.run_id,
+    status: data.status,
     inProgress: state.inProgress,
     startedAt: state.startedAt,
     completedAt: state.completedAt,
@@ -17,7 +28,8 @@ export const GET = async ({ platform, url }) => {
   });
 };
 
-export const POST = async ({ request, platform, locals }) => {
+export const POST = async (event) => {
+  const { request, platform, locals } = event;
   const body = await request.json().catch(() => ({}));
   const requestedCycles = Number(body?.cycles ?? 1);
   const cycles = Number.isFinite(requestedCycles)
@@ -31,13 +43,9 @@ export const POST = async ({ request, platform, locals }) => {
       requestId: locals.requestId
     });
     if (!started.started) {
-      return json(
-        {
-          error: 'Manual pull already in progress',
-          run_id: started.runId
-        },
-        { status: 409 }
-      );
+      return apiError(event, 409, 'conflict', 'Manual pull already in progress', {
+        run_id: started.runId
+      });
     }
 
     await recordAuditEvent(platform.env.DB, {
@@ -55,12 +63,24 @@ export const POST = async ({ request, platform, locals }) => {
       })
     );
 
-    return json({ ok: true, cycles, started: true, run_id: started.runId });
+    return apiOkWithAliases(
+      event,
+      {
+        cycles,
+        started: true,
+        run_id: started.runId
+      },
+      {
+        cycles,
+        started: true,
+        run_id: started.runId
+      }
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Manual pull failed';
     if (message.includes('already in progress')) {
-      return json({ error: message }, { status: 409 });
+      return apiError(event, 409, 'conflict', message);
     }
-    return json({ error: message }, { status: 500 });
+    return apiError(event, 500, 'internal_error', message);
   }
 };

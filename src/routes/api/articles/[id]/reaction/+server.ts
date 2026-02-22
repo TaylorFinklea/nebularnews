@@ -1,16 +1,18 @@
-import { json } from '@sveltejs/kit';
 import { nanoid } from 'nanoid';
 import { dbRun, now } from '$lib/server/db';
 import { getPreferredSourceForArticle, isFeedLinkedToArticle } from '$lib/server/sources';
+import { apiError, apiOkWithAliases } from '$lib/server/api';
+import { logInfo } from '$lib/server/log';
 
-export const POST = async ({ params, request, platform }) => {
+export const POST = async (event) => {
+  const { params, request, platform } = event;
   const articleId = params.id;
   const body = await request.json().catch(() => ({}));
   const value = Number(body?.value);
   const feedIdInput = typeof body?.feedId === 'string' ? body.feedId.trim() : '';
 
   if (![1, -1].includes(value)) {
-    return json({ error: 'Invalid value' }, { status: 400 });
+    return apiError(event, 400, 'validation_error', 'Invalid reaction value');
   }
 
   let feedId: string | null = null;
@@ -21,7 +23,7 @@ export const POST = async ({ params, request, platform }) => {
   }
 
   if (!feedId) {
-    return json({ error: 'No source feed found for article' }, { status: 400 });
+    return apiError(event, 400, 'bad_request', 'No source feed found for article');
   }
 
   const timestamp = now();
@@ -36,5 +38,32 @@ export const POST = async ({ params, request, platform }) => {
     [nanoid(), articleId, feedId, value, timestamp]
   );
 
-  return json({ ok: true, reaction: { articleId, feedId, value, createdAt: timestamp } });
+  logInfo('article.reaction.updated', {
+    request_id: event.locals.requestId,
+    article_id: articleId,
+    feed_id: feedId,
+    value
+  });
+
+  const reaction = {
+    article_id: articleId,
+    feed_id: feedId,
+    value,
+    created_at: timestamp
+  };
+
+  return apiOkWithAliases(
+    event,
+    {
+      reaction
+    },
+    {
+      reaction: {
+        articleId,
+        feedId,
+        value,
+        createdAt: timestamp
+      }
+    }
+  );
 };

@@ -49,6 +49,24 @@ export const apiOk = <T>(event: RequestEvent, data: T, init?: ResponseInit) => {
   );
 };
 
+export const apiOkWithAliases = <T extends Record<string, unknown>, A extends Record<string, unknown>>(
+  event: RequestEvent,
+  data: T,
+  aliases: A,
+  init?: ResponseInit
+) => {
+  const requestId = requestIdFromEvent(event);
+  return json(
+    {
+      ok: true,
+      data,
+      request_id: requestId,
+      ...aliases
+    },
+    init
+  );
+};
+
 export const apiError = (
   event: RequestEvent,
   status: number,
@@ -70,4 +88,3 @@ export const apiError = (
     { status }
   );
 };
-

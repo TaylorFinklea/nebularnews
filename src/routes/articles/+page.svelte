@@ -1,7 +1,7 @@
 <script>
-  import { invalidateAll } from '$app/navigation';
   import { onDestroy } from 'svelte';
   import { apiFetch } from '$lib/client/api-fetch';
+  import { runOptimisticMutation } from '$lib/client/mutations';
   import {
     IconEye,
     IconEyeOff,
@@ -64,6 +64,7 @@
   let uiMessageTimer = null;
   let lastDataSyncKey = '';
   let lastServerArticlesKey = '';
+  let optimisticMutationsEnabled = data.optimisticMutationsEnabled !== false;
 
   const syncFilterStateFromData = () => {
     const nextState = {
@@ -90,6 +91,7 @@
   };
 
   $: syncFilterStateFromData();
+  $: optimisticMutationsEnabled = data.optimisticMutationsEnabled !== false;
 
   const showUiMessage = (message) => {
     uiMessage = message;
@@ -202,14 +204,17 @@
 
   const imageFailed = (articleId) => Boolean(imageErrors[articleId]);
 
-  const refreshInBackground = async () => {
-    try {
-      await invalidateAll();
-      return true;
-    } catch {
-      // Ignore transient refresh failures; the next refresh cycle can retry.
-      return false;
-    }
+  const updateServerArticle = (articleId, patch) => {
+    let changed = false;
+    serverArticles = serverArticles.map((article) => {
+      if (article.id !== articleId) return article;
+      changed = true;
+      return normalizeArticle({
+        ...article,
+        ...patch
+      });
+    });
+    return changed;
   };
 
   const reactToArticle = async (articleId, value, feedId) => {
@@ -217,25 +222,48 @@
     const currentArticle = findMergedArticle(articleId);
     if (!currentArticle) return;
     const previous = reactionNumber(currentArticle.reaction_value);
-    setOptimisticPatch(articleId, { reaction_value: value });
     setPending(articleId, true);
-    try {
-      const res = await apiFetch(`/api/articles/${articleId}/reaction`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ value, feedId })
-      });
-      if (!res.ok) {
-        throw new Error('reaction_failed');
+    if (!optimisticMutationsEnabled) {
+      try {
+        const res = await apiFetch(`/api/articles/${articleId}/reaction`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ value, feedId })
+        });
+        if (!res.ok) throw new Error('reaction_failed');
+        updateServerArticle(articleId, { reaction_value: value });
+      } catch {
+        setOptimisticPatch(articleId, { reaction_value: previous });
+        clearOptimisticFields(articleId, ['reaction_value']);
+        showUiMessage('Unable to save feed reaction. Reverted to previous state.');
+      } finally {
+        setPending(articleId, false);
       }
-      void refreshInBackground();
-    } catch {
-      setOptimisticPatch(articleId, { reaction_value: previous });
-      clearOptimisticFields(articleId, ['reaction_value']);
-      showUiMessage('Unable to save feed reaction. Reverted to previous state.');
-    } finally {
-      setPending(articleId, false);
+      return;
     }
+    const mutation = await runOptimisticMutation({
+      key: `article:${articleId}:reaction`,
+      fallbackErrorMessage: 'Unable to save feed reaction',
+      applyOptimistic: () => setOptimisticPatch(articleId, { reaction_value: value }),
+      revertOptimistic: () => {
+        setOptimisticPatch(articleId, { reaction_value: previous });
+        clearOptimisticFields(articleId, ['reaction_value']);
+      },
+      request: () =>
+        apiFetch(`/api/articles/${articleId}/reaction`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ value, feedId })
+        })
+    });
+    if (mutation.ok) {
+      const reactionValue = Number(mutation.data?.reaction?.value ?? value);
+      updateServerArticle(articleId, { reaction_value: reactionValue });
+      clearOptimisticFields(articleId, ['reaction_value']);
+    } else if (!mutation.skipped) {
+      showUiMessage(`${mutation.error?.message ?? 'Unable to save feed reaction'}. Reverted to previous state.`);
+    }
+    setPending(articleId, false);
   };
 
   const setReadState = async (articleId, isRead) => {
@@ -243,25 +271,48 @@
     const currentArticle = findMergedArticle(articleId);
     if (!currentArticle) return;
     const previous = normalizeReadValue(currentArticle.is_read);
-    setOptimisticPatch(articleId, { is_read: isRead ? 1 : 0 });
     setPending(articleId, true);
-    try {
-      const res = await apiFetch(`/api/articles/${articleId}/read`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ isRead })
-      });
-      if (!res.ok) {
-        throw new Error('read_state_failed');
+    if (!optimisticMutationsEnabled) {
+      try {
+        const res = await apiFetch(`/api/articles/${articleId}/read`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ isRead })
+        });
+        if (!res.ok) throw new Error('read_state_failed');
+        updateServerArticle(articleId, { is_read: isRead ? 1 : 0 });
+      } catch {
+        setOptimisticPatch(articleId, { is_read: previous });
+        clearOptimisticFields(articleId, ['is_read']);
+        showUiMessage('Unable to save read state. Reverted to previous state.');
+      } finally {
+        setPending(articleId, false);
       }
-      void refreshInBackground();
-    } catch {
-      setOptimisticPatch(articleId, { is_read: previous });
-      clearOptimisticFields(articleId, ['is_read']);
-      showUiMessage('Unable to save read state. Reverted to previous state.');
-    } finally {
-      setPending(articleId, false);
+      return;
     }
+    const mutation = await runOptimisticMutation({
+      key: `article:${articleId}:read`,
+      fallbackErrorMessage: 'Unable to save read state',
+      applyOptimistic: () => setOptimisticPatch(articleId, { is_read: isRead ? 1 : 0 }),
+      revertOptimistic: () => {
+        setOptimisticPatch(articleId, { is_read: previous });
+        clearOptimisticFields(articleId, ['is_read']);
+      },
+      request: () =>
+        apiFetch(`/api/articles/${articleId}/read`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ isRead })
+        })
+    });
+    if (mutation.ok) {
+      const serverValue = normalizeReadValue(mutation.data?.is_read ?? (isRead ? 1 : 0));
+      updateServerArticle(articleId, { is_read: serverValue });
+      clearOptimisticFields(articleId, ['is_read']);
+    } else if (!mutation.skipped) {
+      showUiMessage(`${mutation.error?.message ?? 'Unable to save read state'}. Reverted to previous state.`);
+    }
+    setPending(articleId, false);
   };
 
   const publishDateKey = (article) => {
@@ -410,7 +461,7 @@
     <span class="sr-only">Apply filters</span>
   </button>
   {#if selectedTagIds.length > 0}
-    <a class="clear-link icon-link" href="/articles" title="Clear tag filters" data-sveltekit-reload="true">
+    <a class="clear-link icon-link" href="/articles" title="Clear tag filters">
       <IconFilterX size={14} stroke={1.9} />
       <span>Clear</span>
     </a>
@@ -425,13 +476,13 @@
   {#if (data.pagination?.totalPages ?? 1) > 1}
     <nav class="pagination" aria-label="Article pages">
       {#if data.pagination?.hasPrev}
-        <a class="ghost page-link" href={pageHref((data.pagination?.page ?? 1) - 1)} data-sveltekit-reload="true">Prev</a>
+        <a class="ghost page-link" href={pageHref((data.pagination?.page ?? 1) - 1)}>Prev</a>
       {:else}
         <span class="ghost page-link disabled" aria-disabled="true">Prev</span>
       {/if}
       <span class="page-current">Page {data.pagination?.page ?? 1} / {data.pagination?.totalPages ?? 1}</span>
       {#if data.pagination?.hasNext}
-        <a class="ghost page-link" href={pageHref((data.pagination?.page ?? 1) + 1)} data-sveltekit-reload="true">Next</a>
+        <a class="ghost page-link" href={pageHref((data.pagination?.page ?? 1) + 1)}>Next</a>
       {:else}
         <span class="ghost page-link disabled" aria-disabled="true">Next</span>
       {/if}
@@ -457,7 +508,6 @@
           href={articleHref(article.id)}
           title="Open article"
           aria-label="Open article"
-          data-sveltekit-reload="true"
         >
           {#if imageFailed(article.id)}
             <div class="image-fallback" aria-hidden="true">No image</div>
@@ -475,7 +525,7 @@
         <div class="card-main">
           <div class="card-head">
             <h2>
-              <a class="title-link" href={articleHref(article.id)} data-sveltekit-reload="true">
+              <a class="title-link" href={articleHref(article.id)}>
                 {article.title ?? 'Untitled article'}
               </a>
             </h2>
@@ -560,13 +610,13 @@
   <div class="pagination-bottom">
     <nav class="pagination" aria-label="Article pages bottom">
       {#if data.pagination?.hasPrev}
-        <a class="ghost page-link" href={pageHref((data.pagination?.page ?? 1) - 1)} data-sveltekit-reload="true">Prev</a>
+        <a class="ghost page-link" href={pageHref((data.pagination?.page ?? 1) - 1)}>Prev</a>
       {:else}
         <span class="ghost page-link disabled" aria-disabled="true">Prev</span>
       {/if}
       <span class="page-current">Page {data.pagination?.page ?? 1} / {data.pagination?.totalPages ?? 1}</span>
       {#if data.pagination?.hasNext}
-        <a class="ghost page-link" href={pageHref((data.pagination?.page ?? 1) + 1)} data-sveltekit-reload="true">Next</a>
+        <a class="ghost page-link" href={pageHref((data.pagination?.page ?? 1) + 1)}>Next</a>
       {:else}
         <span class="ghost page-link disabled" aria-disabled="true">Next</span>
       {/if}

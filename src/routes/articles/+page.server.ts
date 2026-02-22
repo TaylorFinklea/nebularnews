@@ -9,6 +9,7 @@ import {
 } from '$lib/server/article-query';
 import { getArticleCardLayout } from '$lib/server/settings';
 import { listTags, resolveTagsByTokens } from '$lib/server/tags';
+import { isOptimisticMutationsEnabled } from '$lib/server/flags';
 
 const PAGE_SIZE = 40;
 const VIEW_VALUES = ['list', 'grouped'] as const;
@@ -121,6 +122,7 @@ export const load = async ({ platform, url }) => {
     view,
     layout,
     selectedReactions,
+    optimisticMutationsEnabled: isOptimisticMutationsEnabled(platform.env),
     availableTags,
     selectedTagIds,
     pagination: {

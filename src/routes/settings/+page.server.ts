@@ -6,14 +6,17 @@ import {
   DEFAULT_DASHBOARD_TOP_RATED_LIMIT,
   DEFAULT_INITIAL_FEED_LOOKBACK_DAYS,
   DEFAULT_RETENTION_DAYS,
+  DEFAULT_JOB_PROCESSOR_BATCH_SIZE,
   MAX_DASHBOARD_TOP_RATED_CUTOFF,
   MAX_DASHBOARD_TOP_RATED_LIMIT,
   MAX_INITIAL_FEED_LOOKBACK_DAYS,
   MAX_RETENTION_DAYS,
+  MAX_JOB_PROCESSOR_BATCH_SIZE,
   MIN_DASHBOARD_TOP_RATED_CUTOFF,
   MIN_DASHBOARD_TOP_RATED_LIMIT,
   MIN_INITIAL_FEED_LOOKBACK_DAYS,
   MIN_RETENTION_DAYS,
+  MIN_JOB_PROCESSOR_BATCH_SIZE,
   getFeatureModelLanes,
   getDashboardTopRatedConfig,
   MAX_AUTO_READ_DELAY_MS,
@@ -24,6 +27,7 @@ import {
   getConfiguredChatProviderModel,
   getConfiguredIngestProviderModel,
   getInitialFeedLookbackDays,
+  getJobProcessorBatchSize,
   getRetentionConfig,
   getScorePromptConfig,
   getSetting
@@ -63,6 +67,7 @@ export const load = async ({ platform }) => {
     retentionDays: retention.days,
     retentionMode: retention.mode,
     autoReadDelayMs: await getAutoReadDelayMs(db),
+    jobProcessorBatchSize: await getJobProcessorBatchSize(db),
     articleCardLayout: await getArticleCardLayout(db),
     dashboardTopRatedLayout,
     dashboardTopRatedCutoff: dashboardTopRated.cutoff,
@@ -98,6 +103,11 @@ export const load = async ({ platform }) => {
       default: DEFAULT_RETENTION_DAYS
     },
     autoReadDelayRange: { min: MIN_AUTO_READ_DELAY_MS, max: MAX_AUTO_READ_DELAY_MS },
+    jobProcessorBatchRange: {
+      min: MIN_JOB_PROCESSOR_BATCH_SIZE,
+      max: MAX_JOB_PROCESSOR_BATCH_SIZE,
+      default: DEFAULT_JOB_PROCESSOR_BATCH_SIZE
+    },
     dashboardTopRatedRange: {
       cutoff: {
         min: MIN_DASHBOARD_TOP_RATED_CUTOFF,

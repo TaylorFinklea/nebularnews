@@ -4,6 +4,17 @@ import { getPreferredSourceForArticle, listSourcesForArticle } from '$lib/server
 import { getAutoReadDelayMs, getFeatureModelLane, getFeatureProviderModel } from '$lib/server/settings';
 import { listTags, listTagsForArticle } from '$lib/server/tags';
 
+const parseStringList = (value: string | null | undefined) => {
+  if (!value) return [] as string[];
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [] as string[];
+    return parsed.map((item) => String(item ?? '').trim()).filter(Boolean);
+  } catch {
+    return [] as string[];
+  }
+};
+
 export const load = async ({ params, platform }) => {
   const db = platform.env.DB;
   const article = await dbGet(
@@ -41,17 +52,35 @@ export const load = async ({ params, platform }) => {
     }
   }
 
-  const summary = await dbGet(
+  const summary = await dbGet<{
+    summary_text: string | null;
+    provider: string | null;
+    model: string | null;
+    created_at: number | null;
+    prompt_version: string | null;
+  }>(
     db,
     'SELECT summary_text, provider, model, created_at, prompt_version FROM article_summaries WHERE article_id = ? ORDER BY created_at DESC LIMIT 1',
     [params.id]
   );
 
-  const keyPoints = await dbGet(
+  const keyPointsRow = await dbGet<{
+    key_points_json: string | null;
+    provider: string | null;
+    model: string | null;
+    created_at: number | null;
+    prompt_version: string | null;
+  }>(
     db,
     'SELECT key_points_json, provider, model, created_at, prompt_version FROM article_key_points WHERE article_id = ? ORDER BY created_at DESC LIMIT 1',
     [params.id]
   );
+  const keyPoints = keyPointsRow
+    ? {
+        ...keyPointsRow,
+        points: parseStringList(keyPointsRow.key_points_json)
+      }
+    : null;
 
   const scoreOverride = await dbGet<{ score: number; comment: string | null; updated_at: number }>(
     db,
@@ -69,11 +98,13 @@ export const load = async ({ params, platform }) => {
         label: 'User corrected',
         reason_text: scoreOverride.comment ?? 'User-set rating override',
         evidence_json: null,
+        evidence: [] as string[],
         source: 'user'
       }
     : aiScore
       ? {
           ...aiScore,
+          evidence: parseStringList(aiScore.evidence_json),
           source: 'ai'
         }
       : null;

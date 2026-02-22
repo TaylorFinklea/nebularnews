@@ -4,6 +4,8 @@
   import { onMount } from 'svelte';
   import { resolveArticleImageUrl } from '$lib/article-image';
   import { apiFetch } from '$lib/client/api-fetch';
+  import { readApiData, readApiErrorMessage } from '$lib/client/api-result';
+  import { runOptimisticMutation } from '$lib/client/mutations';
   import {
     IconArrowLeft,
     IconCheck,
@@ -41,6 +43,10 @@
   let articleBlocks = [];
   let backHref = '/articles';
   let articleImageUrl = '';
+  let articleState = data.article ? { ...data.article } : null;
+  let reactionState = data.reaction ? { ...data.reaction } : null;
+  let tagsState = Array.isArray(data.tags) ? [...data.tags] : [];
+  let lastHydratedStateKey = '';
 
   const sanitizeBackHref = (value) => {
     if (!value || typeof value !== 'string') return '/articles';
@@ -141,19 +147,34 @@
       .filter(Boolean);
   };
 
+  const hydrateLocalState = () => {
+    const nextKey = JSON.stringify({
+      article: data.article,
+      reaction: data.reaction,
+      tags: data.tags
+    });
+    if (nextKey === lastHydratedStateKey) return;
+    lastHydratedStateKey = nextKey;
+    articleState = data.article ? { ...data.article } : null;
+    reactionState = data.reaction ? { ...data.reaction } : null;
+    tagsState = Array.isArray(data.tags) ? [...data.tags] : [];
+  };
+
+  $: hydrateLocalState();
+
   $: fullTextSource = (() => {
-    const htmlFirst = htmlToMarkdownish(data.article?.content_html ?? '');
+    const htmlFirst = htmlToMarkdownish(articleState?.content_html ?? '');
     if (htmlFirst && htmlFirst.length >= 80) return htmlFirst;
-    return data.article?.content_text ?? '';
+    return articleState?.content_text ?? '';
   })();
 
   $: backHref = sanitizeBackHref($page.url.searchParams.get('from'));
   $: articleImageUrl = resolveArticleImageUrl({
-    id: data.article?.id ?? null,
-    title: data.article?.title ?? null,
+    id: articleState?.id ?? null,
+    title: articleState?.title ?? null,
     source_name: data.preferredSource?.sourceName ?? null,
-    image_url: data.article?.image_url ?? null,
-    tags: data.tags ?? []
+    image_url: articleState?.image_url ?? null,
+    tags: tagsState ?? []
   });
   $: articleBlocks = parseArticleBlocks(fullTextSource);
 
@@ -164,15 +185,6 @@
       body: JSON.stringify({ rating, comment, feedId: data.preferredSource?.feedId ?? null })
     });
     comment = '';
-    await invalidateAll();
-  };
-
-  const setReaction = async (value) => {
-    await apiFetch(`/api/articles/${data.article.id}/reaction`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ value, feedId: data.preferredSource?.feedId ?? null })
-    });
     await invalidateAll();
   };
 
@@ -193,7 +205,7 @@
         });
         const created = await threadRes.json().catch(() => ({}));
         if (!threadRes.ok || !created?.id) {
-          chatError = created?.error ?? 'Failed to start article chat';
+          chatError = readApiErrorMessage(created, 'Failed to start article chat');
           return;
         }
         threadId = created.id;
@@ -210,10 +222,11 @@
       });
       const response = await res.json().catch(() => ({}));
       if (!res.ok) {
-        chatError = response?.error ?? 'Chat request failed';
+        chatError = readApiErrorMessage(response, 'Chat request failed');
         return;
       }
-      chatLog = [...chatLog, { role: 'assistant', content: response.response }];
+      const responsePayload = readApiData(response) ?? response;
+      chatLog = [...chatLog, { role: 'assistant', content: responsePayload.response }];
     } catch {
       chatError = 'Chat request failed';
     } finally {
@@ -235,14 +248,28 @@
   const setReadState = async (isRead) => {
     readStateBusy = true;
     try {
-      await apiFetch(`/api/articles/${data.article.id}/read`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ isRead })
+      const previous = articleState?.is_read ? 1 : 0;
+      const result = await runOptimisticMutation({
+        key: `article:${data.article.id}:detail-read`,
+        fallbackErrorMessage: 'Failed to update read state',
+        applyOptimistic: () => {
+          articleState = articleState ? { ...articleState, is_read: isRead ? 1 : 0 } : articleState;
+        },
+        revertOptimistic: () => {
+          articleState = articleState ? { ...articleState, is_read: previous } : articleState;
+        },
+        request: () =>
+          apiFetch(`/api/articles/${data.article.id}/read`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ isRead })
+          })
       });
+      if (!result.ok && !result.skipped) {
+        chatError = result.error?.message ?? 'Failed to update read state';
+      }
     } finally {
       readStateBusy = false;
-      await invalidateAll();
     }
   };
 
@@ -262,13 +289,14 @@
       });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) {
-        tagError = payload?.error ?? 'Failed to add tags';
+        tagError = readApiErrorMessage(payload, 'Failed to add tags');
         return;
       }
+      const payloadData = readApiData(payload) ?? payload;
+      tagsState = Array.isArray(payloadData.tags) ? payloadData.tags : tagsState;
       tagInput = '';
     } finally {
       tagBusy = false;
-      await invalidateAll();
     }
   };
 
@@ -283,18 +311,46 @@
       });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) {
-        tagError = payload?.error ?? 'Failed to remove tag';
+        tagError = readApiErrorMessage(payload, 'Failed to remove tag');
+        return;
       }
+      const payloadData = readApiData(payload) ?? payload;
+      tagsState = Array.isArray(payloadData.tags) ? payloadData.tags : tagsState;
     } finally {
       tagBusy = false;
-      await invalidateAll();
     }
   };
 
+  const setReaction = async (value) => {
+    const previous = Number(reactionState?.value ?? 0);
+    const result = await runOptimisticMutation({
+      key: `article:${data.article.id}:detail-reaction`,
+      fallbackErrorMessage: 'Failed to update feed vote',
+      applyOptimistic: () => {
+        reactionState = { ...(reactionState ?? {}), value };
+      },
+      revertOptimistic: () => {
+        reactionState = previous ? { ...(reactionState ?? {}), value: previous } : null;
+      },
+      request: () =>
+        apiFetch(`/api/articles/${data.article.id}/reaction`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ value, feedId: data.preferredSource?.feedId ?? null })
+        })
+    });
+    if (!result.ok && !result.skipped) {
+      chatError = result.error?.message ?? 'Failed to update feed vote';
+      return;
+    }
+    const nextValue = Number(result.data?.reaction?.value ?? value);
+    reactionState = { ...(reactionState ?? {}), value: nextValue };
+  };
+
   onMount(() => {
-    if (data.article && !data.article.is_read) {
+    if (articleState && !articleState.is_read) {
       autoReadTimer = setTimeout(() => {
-        if (!data.article?.is_read) {
+        if (!articleState?.is_read) {
           void setReadState(true);
         }
       }, AUTO_MARK_READ_DELAY_MS);
@@ -315,23 +371,22 @@
         href={backHref}
         title="Back to articles"
         aria-label="Back to articles"
-        data-sveltekit-reload="true"
       >
         <IconArrowLeft size={16} stroke={1.9} />
         <span>Back to list</span>
       </a>
-      <h1>{data.article.title ?? 'Untitled article'}</h1>
+      <h1>{articleState?.title ?? 'Untitled article'}</h1>
       <p class="meta">
         Source: {data.preferredSource?.sourceName ?? 'Unknown source'}
         {#if data.preferredSource?.feedbackCount}
           · rep {data.preferredSource.reputation.toFixed(2)} ({data.preferredSource.feedbackCount} votes)
         {/if}
       </p>
-      <p class="meta">Author: {data.article.author ?? 'Unknown author'}</p>
-      {#if data.article.canonical_url}
+      <p class="meta">Author: {articleState?.author ?? 'Unknown author'}</p>
+      {#if articleState?.canonical_url}
         <a
           class="source-link-button icon-link"
-          href={data.article.canonical_url}
+          href={articleState.canonical_url}
           target="_blank"
           rel="noopener noreferrer"
           title="Open original article"
@@ -351,17 +406,17 @@
     <div class="card">
       <h2>Read Status</h2>
       <div class="read-row">
-        <span class={`status-pill ${data.article.is_read ? 'ok' : 'warn'}`}>
-          {data.article.is_read ? 'Read' : 'Unread'}
+        <span class={`status-pill ${articleState?.is_read ? 'ok' : 'warn'}`}>
+          {articleState?.is_read ? 'Read' : 'Unread'}
         </span>
         <button
           class="ghost icon-button"
-          on:click={() => setReadState(!data.article.is_read)}
+          on:click={() => setReadState(!articleState?.is_read)}
           disabled={readStateBusy}
-          title={data.article.is_read ? 'Mark unread' : 'Mark read'}
-          aria-label={data.article.is_read ? 'Mark unread' : 'Mark read'}
+          title={articleState?.is_read ? 'Mark unread' : 'Mark read'}
+          aria-label={articleState?.is_read ? 'Mark unread' : 'Mark read'}
         >
-          {#if data.article.is_read}
+          {#if articleState?.is_read}
             <IconEyeOff size={16} stroke={1.9} />
             <span class="sr-only">Mark unread</span>
           {:else}
@@ -374,9 +429,9 @@
 
     <div class="card">
       <h2>Tags</h2>
-      {#if data.tags?.length}
+      {#if tagsState?.length}
         <div class="tag-row">
-          {#each data.tags as tag}
+          {#each tagsState as tag}
             <button
               class="tag-pill removable"
               on:click={() => removeTag(tag.id)}
@@ -432,9 +487,9 @@
 
     <div class="card">
       <h2>Key Points</h2>
-      {#if data.keyPoints?.key_points_json}
+      {#if data.keyPoints?.points?.length}
         <ul>
-          {#each JSON.parse(data.keyPoints.key_points_json) as point}
+          {#each data.keyPoints.points as point}
             <li>{point}</li>
           {/each}
         </ul>
@@ -455,9 +510,9 @@
       {#if data.score}
         <div class="score">{data.score.score} / 5 · {data.score.label}</div>
         <p>{data.score.reason_text}</p>
-        {#if data.score.evidence_json}
+        {#if data.score.evidence?.length}
           <ul>
-            {#each JSON.parse(data.score.evidence_json) as evidence}
+            {#each data.score.evidence as evidence}
               <li>{evidence}</li>
             {/each}
           </ul>
@@ -478,7 +533,7 @@
       </p>
       <div class="reaction-row">
         <button
-          class:active={data.reaction?.value === 1}
+          class:active={reactionState?.value === 1}
           on:click={() => setReaction(1)}
           title="Thumbs up feed"
           aria-label="Thumbs up feed"
@@ -487,7 +542,7 @@
           <span class="sr-only">Thumbs up feed</span>
         </button>
         <button
-          class:active={data.reaction?.value === -1}
+          class:active={reactionState?.value === -1}
           on:click={() => setReaction(-1)}
           title="Thumbs down feed"
           aria-label="Thumbs down feed"

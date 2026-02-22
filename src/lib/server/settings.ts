@@ -49,6 +49,9 @@ const DEFAULT_RETENTION_DAYS = 0;
 const MIN_RETENTION_DAYS = 0;
 const MAX_RETENTION_DAYS = 3650;
 const DEFAULT_RETENTION_MODE: RetentionMode = 'archive';
+const DEFAULT_JOB_PROCESSOR_BATCH_SIZE = 12;
+const MIN_JOB_PROCESSOR_BATCH_SIZE = 1;
+const MAX_JOB_PROCESSOR_BATCH_SIZE = 100;
 const FEATURE_LANE_DEFAULTS: Record<AiFeature, AiModelLane> = {
   summaries: 'pipeline',
   scoring: 'pipeline',
@@ -82,7 +85,10 @@ export {
   MAX_INITIAL_FEED_LOOKBACK_DAYS,
   DEFAULT_RETENTION_DAYS,
   MIN_RETENTION_DAYS,
-  MAX_RETENTION_DAYS
+  MAX_RETENTION_DAYS,
+  DEFAULT_JOB_PROCESSOR_BATCH_SIZE,
+  MIN_JOB_PROCESSOR_BATCH_SIZE,
+  MAX_JOB_PROCESSOR_BATCH_SIZE
 };
 
 const toReasoningEffort = (value: string | null): ReasoningEffort => {
@@ -167,6 +173,15 @@ export const clampRetentionDays = (value: unknown) => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return DEFAULT_RETENTION_DAYS;
   return Math.min(MAX_RETENTION_DAYS, Math.max(MIN_RETENTION_DAYS, Math.round(parsed)));
+};
+
+export const clampJobProcessorBatchSize = (value: unknown) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return DEFAULT_JOB_PROCESSOR_BATCH_SIZE;
+  return Math.min(
+    MAX_JOB_PROCESSOR_BATCH_SIZE,
+    Math.max(MIN_JOB_PROCESSOR_BATCH_SIZE, Math.round(parsed))
+  );
 };
 
 const getFirstSetting = async (db: Db, keys: string[]) => {
@@ -327,6 +342,11 @@ export async function getRetentionConfig(db: Db) {
   const days = clampRetentionDays(await getSetting(db, 'retention_days'));
   const mode = toRetentionMode(await getSetting(db, 'retention_mode'));
   return { days, mode };
+}
+
+export async function getJobProcessorBatchSize(db: Db) {
+  const raw = await getSetting(db, 'job_processor_batch_size');
+  return clampJobProcessorBatchSize(raw);
 }
 
 export async function getDashboardTopRatedLayout(db: Db): Promise<DashboardTopRatedLayout> {

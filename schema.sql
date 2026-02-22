@@ -270,7 +270,10 @@ CREATE INDEX IF NOT EXISTS idx_jobs_priority ON jobs(status, priority, run_after
 CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_unique ON jobs(type, article_id);
 CREATE INDEX IF NOT EXISTS idx_article_sources_article ON article_sources(article_id);
 CREATE INDEX IF NOT EXISTS idx_article_scores_article ON article_scores(article_id);
+CREATE INDEX IF NOT EXISTS idx_article_scores_article_created ON article_scores(article_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_article_summaries_article_created ON article_summaries(article_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_article_key_points_article ON article_key_points(article_id);
+CREATE INDEX IF NOT EXISTS idx_article_key_points_article_created ON article_key_points(article_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_article_feedback_article ON article_feedback(article_id);
 CREATE INDEX IF NOT EXISTS idx_article_feedback_feed ON article_feedback(feed_id);
 CREATE INDEX IF NOT EXISTS idx_article_reactions_feed ON article_reactions(feed_id);
@@ -286,3 +289,6 @@ CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at);
 
 INSERT OR IGNORE INTO schema_migrations (version, name, applied_at)
 VALUES (2, 'v2_prod_hardening', unixepoch() * 1000);
+
+INSERT OR IGNORE INTO schema_migrations (version, name, applied_at)
+VALUES (3, 'v3_query_indexes', unixepoch() * 1000);

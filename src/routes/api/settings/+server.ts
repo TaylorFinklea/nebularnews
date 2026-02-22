@@ -4,6 +4,7 @@ import {
   DEFAULT_SCORE_SYSTEM_PROMPT,
   DEFAULT_SCORE_USER_PROMPT_TEMPLATE,
   clampAutoReadDelayMs,
+  clampJobProcessorBatchSize,
   clampInitialFeedLookbackDays,
   clampRetentionDays,
   clampDashboardTopRatedCutoff,
@@ -14,6 +15,7 @@ import {
   getConfiguredChatProviderModel,
   getDashboardTopRatedConfig,
   getConfiguredIngestProviderModel,
+  getJobProcessorBatchSize,
   getFeatureModelLanes,
   getInitialFeedLookbackDays,
   getRetentionConfig,
@@ -57,6 +59,7 @@ export const GET = async ({ platform }) => {
     retentionDays: retention.days,
     retentionMode: retention.mode,
     autoReadDelayMs: await getAutoReadDelayMs(db),
+    jobProcessorBatchSize: await getJobProcessorBatchSize(db),
     articleCardLayout: await getArticleCardLayout(db),
     dashboardTopRatedLayout,
     dashboardTopRatedCutoff: dashboardTopRated.cutoff,
@@ -156,6 +159,9 @@ export const POST = async ({ request, platform, locals }) => {
   }
   if (body?.autoReadDelayMs !== undefined && body?.autoReadDelayMs !== null) {
     entries.push(['auto_read_delay_ms', String(clampAutoReadDelayMs(body.autoReadDelayMs))]);
+  }
+  if (body?.jobProcessorBatchSize !== undefined && body?.jobProcessorBatchSize !== null) {
+    entries.push(['job_processor_batch_size', String(clampJobProcessorBatchSize(body.jobProcessorBatchSize))]);
   }
   if (body?.dashboardTopRatedCutoff !== undefined && body?.dashboardTopRatedCutoff !== null) {
     entries.push(['dashboard_top_rated_cutoff', String(clampDashboardTopRatedCutoff(body.dashboardTopRatedCutoff))]);

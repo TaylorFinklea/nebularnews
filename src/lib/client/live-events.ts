@@ -1,4 +1,9 @@
 import { writable } from 'svelte/store';
+import type {
+  ArticleMutatedEventPayload,
+  JobsCountsEventPayload,
+  PullStatusEventPayload
+} from '$lib/types/events';
 
 export type LivePullState = {
   run_id: string | null;
@@ -22,6 +27,7 @@ export type LiveEventSnapshot = {
   lastEventAt: number | null;
   pull: LivePullState | null;
   jobs: LiveJobState | null;
+  lastArticleMutation: ArticleMutatedEventPayload | null;
   error: string | null;
 };
 
@@ -30,6 +36,7 @@ const initialState: LiveEventSnapshot = {
   lastEventAt: null,
   pull: null,
   jobs: null,
+  lastArticleMutation: null,
   error: null
 };
 
@@ -78,6 +85,69 @@ const connect = () => {
       connected: true,
       error: null
     }));
+  });
+
+  next.addEventListener('pull.status', (event) => {
+    try {
+      const payload = JSON.parse((event as MessageEvent<string>).data) as {
+        pull?: PullStatusEventPayload;
+      };
+      if (!payload.pull) return;
+      liveEvents.update((state) => ({
+        ...state,
+        connected: true,
+        lastEventAt: Date.now(),
+        pull: payload.pull,
+        error: null
+      }));
+    } catch {
+      liveEvents.update((state) => ({
+        ...state,
+        error: 'Failed to parse pull status event'
+      }));
+    }
+  });
+
+  next.addEventListener('jobs.counts', (event) => {
+    try {
+      const payload = JSON.parse((event as MessageEvent<string>).data) as {
+        jobs?: JobsCountsEventPayload;
+      };
+      if (!payload.jobs) return;
+      liveEvents.update((state) => ({
+        ...state,
+        connected: true,
+        lastEventAt: Date.now(),
+        jobs: payload.jobs,
+        error: null
+      }));
+    } catch {
+      liveEvents.update((state) => ({
+        ...state,
+        error: 'Failed to parse jobs counts event'
+      }));
+    }
+  });
+
+  next.addEventListener('article.mutated', (event) => {
+    try {
+      const payload = JSON.parse((event as MessageEvent<string>).data) as {
+        article?: ArticleMutatedEventPayload;
+      };
+      if (!payload.article) return;
+      liveEvents.update((state) => ({
+        ...state,
+        connected: true,
+        lastEventAt: Date.now(),
+        lastArticleMutation: payload.article,
+        error: null
+      }));
+    } catch {
+      liveEvents.update((state) => ({
+        ...state,
+        error: 'Failed to parse article mutation event'
+      }));
+    }
   });
 
   next.addEventListener('state', (event) => {
@@ -133,4 +203,3 @@ export const startLiveEvents = () => {
     }
   };
 };
-

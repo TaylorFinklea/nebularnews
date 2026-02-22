@@ -130,12 +130,14 @@ export async function runQueueCycles(env: App.Platform['env'], cycles: number, o
   if (options?.forceDue) {
     await dbRun(env.DB, "UPDATE jobs SET run_after = ?, updated_at = ? WHERE status = 'pending'", [now(), now()]);
   }
+  const cycleMetrics = [];
   for (let i = 0; i < runCount; i += 1) {
-    await processJobs(env);
+    cycleMetrics.push(await processJobs(env));
   }
   return {
     cycles: runCount,
-    counts: await getJobCounts(env.DB)
+    counts: await getJobCounts(env.DB),
+    metrics: cycleMetrics
   };
 }
 

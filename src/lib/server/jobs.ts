@@ -3,6 +3,7 @@ import { dbAll, dbGet, dbRun, now, type Db } from './db';
 import { generateArticleKeyPoints, generateArticleTags, refreshPreferenceProfile, scoreArticle, summarizeArticle } from './llm';
 import {
   getFeatureProviderModel,
+  getJobProcessorBatchSize,
   getProviderKey,
   getScorePromptConfig,
   getSummaryConfig
@@ -10,10 +11,14 @@ import {
 import { ensurePreferenceProfile } from './profile';
 import { attachTagToArticle, ensureTagByName } from './tags';
 import { logInfo } from './log';
+import { isJobBatchV2Enabled } from './flags';
 
 const MAX_JOB_ATTEMPTS = 3;
 const JOB_LEASE_MS = 1000 * 60 * 3;
 const MAX_BACKOFF_MS = 1000 * 60 * 60;
+const LEGACY_BATCH_SIZE = 5;
+const PROCESS_TIME_BUDGET_MS = 20_000;
+const MAX_BATCH_ROUNDS = 20;
 type JobRunMetadata = { provider: string; model: string } | null;
 
 const getAffectedRows = (result: unknown) => {
@@ -32,11 +37,14 @@ export async function processJobs(env: App.Platform['env']) {
   const db = env.DB;
   const processorId = nanoid();
   const timestamp = now();
-  const startedAt = Date.now();
+  const startedWallClock = Date.now();
   let claimed = 0;
   let done = 0;
   let failed = 0;
   let retried = 0;
+  let selected = 0;
+  let rounds = 0;
+  const batchSize = isJobBatchV2Enabled(env) ? await getJobProcessorBatchSize(db) : LEGACY_BATCH_SIZE;
 
   // Reclaim stale running jobs whose lease has expired.
   await dbRun(
@@ -53,25 +61,14 @@ export async function processJobs(env: App.Platform['env']) {
     [timestamp, timestamp]
   );
 
-  const jobs = await dbAll<{
+  const processSingleJob = async (job: {
     id: string;
     type: string;
     article_id: string | null;
     attempts: number;
     priority: number;
     run_after: number;
-  }>(
-    db,
-    `SELECT id, type, article_id, attempts, priority, run_after
-     FROM jobs
-     WHERE status = 'pending'
-       AND run_after <= ?
-     ORDER BY priority ASC, run_after ASC
-     LIMIT 5`,
-    [timestamp]
-  );
-
-  for (const job of jobs) {
+  }) => {
     const lockTimestamp = now();
     const claimResult = await dbRun(
       db,
@@ -86,7 +83,7 @@ export async function processJobs(env: App.Platform['env']) {
          AND run_after <= ?`,
       [processorId, lockTimestamp, lockTimestamp + JOB_LEASE_MS, lockTimestamp, job.id, lockTimestamp]
     );
-    if (getAffectedRows(claimResult) === 0) continue;
+    if (getAffectedRows(claimResult) === 0) return;
     claimed += 1;
 
     const attempt = job.attempts + 1;
@@ -181,17 +178,67 @@ export async function processJobs(env: App.Platform['env']) {
         retried += 1;
       }
     }
+  };
+
+  while (Date.now() - startedWallClock < PROCESS_TIME_BUDGET_MS && rounds < MAX_BATCH_ROUNDS) {
+    rounds += 1;
+    const selectionTimestamp = now();
+    const jobs = await dbAll<{
+      id: string;
+      type: string;
+      article_id: string | null;
+      attempts: number;
+      priority: number;
+      run_after: number;
+    }>(
+      db,
+      `SELECT id, type, article_id, attempts, priority, run_after
+       FROM jobs
+       WHERE status = 'pending'
+         AND run_after <= ?
+       ORDER BY priority ASC, run_after ASC
+       LIMIT ?`,
+      [selectionTimestamp, batchSize]
+    );
+    if (jobs.length === 0) break;
+    selected += jobs.length;
+
+    for (const job of jobs) {
+      await processSingleJob(job);
+      if (Date.now() - startedWallClock >= PROCESS_TIME_BUDGET_MS) {
+        break;
+      }
+    }
+
+    if (jobs.length < batchSize) {
+      break;
+    }
   }
 
+  const durationMs = Date.now() - startedWallClock;
   logInfo('jobs.process.completed', {
     processor_id: processorId,
-    selected: jobs.length,
+    selected,
+    rounds,
+    batch_size: batchSize,
     claimed,
     done,
     failed,
     retried,
-    duration_ms: Date.now() - startedAt
+    duration_ms: durationMs
   });
+
+  return {
+    processorId,
+    selected,
+    rounds,
+    batchSize,
+    claimed,
+    done,
+    failed,
+    retried,
+    durationMs
+  };
 }
 
 async function runSummarizeJob(

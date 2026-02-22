@@ -1,7 +1,7 @@
 <script>
-  import { invalidate } from '$app/navigation';
   import { onDestroy, onMount } from 'svelte';
   import { apiFetch } from '$lib/client/api-fetch';
+  import { readApiData, readApiErrorMessage } from '$lib/client/api-result';
   import { liveEvents, startLiveEvents } from '$lib/client/live-events';
   import {
     IconBan,
@@ -15,7 +15,8 @@
   export let data;
 
   const filters = ['pending', 'running', 'failed', 'done', 'cancelled', 'all'];
-  const LIVE_REFRESH_DEBOUNCE_MS = 600;
+  const VISIBLE_REFRESH_MS = 9000;
+  const HIDDEN_REFRESH_MS = 30000;
   let busyKey = '';
   let message = '';
   let liveCounts = null;
@@ -23,10 +24,16 @@
   let liveUnsubscribe = () => {};
   let stopLiveEvents = () => {};
   let refreshTimer = null;
-  let lastLiveSignature = '';
+  let jobs = data.jobs ?? [];
+  let countsState = data.counts ?? {};
+  let statusState = data.status ?? 'pending';
+
+  $: jobs = data.jobs ?? jobs;
+  $: countsState = data.counts ?? countsState;
+  $: statusState = data.status ?? statusState;
 
   $: displayCounts = {
-    ...data.counts,
+    ...countsState,
     ...(liveCounts
       ? {
           pending: liveCounts.pending,
@@ -37,12 +44,29 @@
       : {})
   };
 
-  const scheduleJobsRefresh = () => {
-    if (refreshTimer) return;
-    refreshTimer = setTimeout(async () => {
+  const scheduleRefresh = (delayMs) => {
+    if (refreshTimer) clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(() => {
       refreshTimer = null;
-      await invalidate('app:jobs');
-    }, LIVE_REFRESH_DEBOUNCE_MS);
+      void refreshJobs();
+    }, delayMs);
+  };
+
+  const refreshJobs = async () => {
+    try {
+      const res = await apiFetch(`/api/jobs?status=${encodeURIComponent(statusState)}&limit=150`);
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) return;
+      const dataPayload = readApiData(payload) ?? payload;
+      jobs = Array.isArray(dataPayload.jobs) ? dataPayload.jobs : jobs;
+      countsState = dataPayload.counts ?? countsState;
+    } catch {
+      // Keep current visible state on transient refresh errors.
+    } finally {
+      if (!liveConnected) {
+        scheduleRefresh(document.hidden ? HIDDEN_REFRESH_MS : VISIBLE_REFRESH_MS);
+      }
+    }
   };
 
   onMount(() => {
@@ -51,12 +75,21 @@
       liveConnected = snapshot.connected;
       if (!snapshot.jobs) return;
       liveCounts = snapshot.jobs;
-
-      const signature = `${snapshot.jobs.pending}:${snapshot.jobs.running}:${snapshot.jobs.failed}:${snapshot.jobs.done}`;
-      if (signature === lastLiveSignature) return;
-      lastLiveSignature = signature;
-      scheduleJobsRefresh();
+      if (!liveConnected) {
+        scheduleRefresh(VISIBLE_REFRESH_MS);
+      }
     });
+
+    const onVisibilityChange = () => {
+      if (liveConnected) return;
+      scheduleRefresh(document.hidden ? HIDDEN_REFRESH_MS : VISIBLE_REFRESH_MS);
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    scheduleRefresh(VISIBLE_REFRESH_MS);
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
   });
 
   onDestroy(() => {
@@ -94,20 +127,21 @@
         })
       });
       const payload = await res.json().catch(() => ({}));
+      const dataPayload = readApiData(payload) ?? payload;
       if (!res.ok) {
-        message = payload?.error ?? `${label} failed`;
+        message = readApiErrorMessage(payload, `${label} failed`);
         return;
       }
 
-      const touched = payload?.updated ?? payload?.deleted;
+      const touched = dataPayload?.updated ?? dataPayload?.deleted;
       if (action === 'run_queue') {
-        message = `Queue ran ${payload.cycles} cycle${payload.cycles === 1 ? '' : 's'}. Pending: ${payload.counts.pending}, running: ${payload.counts.running}, failed: ${payload.counts.failed}.`;
+        message = `Queue ran ${dataPayload.cycles} cycle${dataPayload.cycles === 1 ? '' : 's'}. Pending: ${dataPayload.counts?.pending ?? 0}, running: ${dataPayload.counts?.running ?? 0}, failed: ${dataPayload.counts?.failed ?? 0}.`;
       } else if (action === 'queue_today_missing') {
-        const summarizeQueued = payload?.queued?.summarizeQueued ?? 0;
-        const scoreQueued = payload?.queued?.scoreQueued ?? 0;
-        const autoTagQueued = payload?.queued?.autoTagQueued ?? 0;
+        const summarizeQueued = dataPayload?.queued?.summarizeQueued ?? 0;
+        const scoreQueued = dataPayload?.queued?.scoreQueued ?? 0;
+        const autoTagQueued = dataPayload?.queued?.autoTagQueued ?? 0;
         if (summarizeQueued === 0 && scoreQueued === 0 && autoTagQueued === 0) {
-          const label = payload?.queued?.dayStart ? new Date(payload.queued.dayStart).toLocaleDateString() : 'today';
+          const label = dataPayload?.queued?.dayStart ? new Date(dataPayload.queued.dayStart).toLocaleDateString() : 'today';
           message = `No missing summarize/score/auto-tag jobs found for ${label}.`;
         } else {
           message = `Queued today's missing jobs: ${summarizeQueued} summarize, ${scoreQueued} score, ${autoTagQueued} auto-tag.`;
@@ -117,7 +151,10 @@
       } else {
         message = `${label} completed.`;
       }
-      await invalidate('app:jobs');
+      if (dataPayload?.counts) {
+        countsState = dataPayload.counts;
+      }
+      await refreshJobs();
     } catch {
       message = `${label} failed`;
     } finally {
@@ -162,7 +199,7 @@
     <span>Done</span>
   </div>
   <div class="stat">
-    <strong>{data.counts.cancelled}</strong>
+    <strong>{countsState.cancelled ?? data.counts.cancelled}</strong>
     <span>Cancelled</span>
   </div>
 </div>
@@ -226,7 +263,7 @@
 
 <div class="filters">
   {#each filters as filter}
-    <a href={filter === 'all' ? '/jobs?status=all' : `/jobs?status=${filter}`} class:active={data.status === filter}>
+    <a href={filter === 'all' ? '/jobs?status=all' : `/jobs?status=${filter}`} class:active={statusState === filter}>
       {filter}
     </a>
   {/each}
@@ -247,12 +284,12 @@
       </tr>
     </thead>
     <tbody>
-      {#if data.jobs.length === 0}
+      {#if jobs.length === 0}
         <tr>
           <td colspan="8" class="muted">No jobs for this filter.</td>
         </tr>
       {:else}
-        {#each data.jobs as job}
+        {#each jobs as job}
           <tr>
             <td>{job.type}</td>
             <td>

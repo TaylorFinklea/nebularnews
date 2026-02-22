@@ -2,6 +2,7 @@
   import { invalidate } from '$app/navigation';
   import { onDestroy, onMount } from 'svelte';
   import { apiFetch } from '$lib/client/api-fetch';
+  import { readApiData, readApiErrorMessage } from '$lib/client/api-result';
   import { liveEvents, startLiveEvents } from '$lib/client/live-events';
   import { IconClockPlay, IconExternalLink } from '$lib/icons';
   import { resolveArticleImageUrl } from '$lib/article-image';
@@ -9,10 +10,10 @@
   export let data;
 
   const PULL_SESSION_KEY = 'nebular:manual-pull-in-progress';
-  const PULL_STATUS_POLL_MS = 5000;
+  const PULL_STATUS_POLL_VISIBLE_MS = 5000;
+  const PULL_STATUS_POLL_HIDDEN_MS = 15000;
   const PULL_START_GRACE_MS = 15000;
   const PULL_COMPLETION_SKEW_MS = 5000;
-  const LIVE_REFRESH_DEBOUNCE_MS = 700;
 
   let isPulling = false;
   let pullMessage = '';
@@ -21,9 +22,13 @@
   let pullTracker = { pending: false, startedAt: null, runId: null };
   let stopLiveEvents = () => {};
   let liveUnsubscribe = () => {};
-  let refreshTimer = null;
-  let lastLiveSignature = '';
   let liveConnected = false;
+  let livePendingJobs = null;
+
+  $: todayStats = {
+    ...data.today,
+    pendingJobs: livePendingJobs ?? data.today.pendingJobs
+  };
 
   const toFiniteNumber = (value) => {
     const numeric = Number(value);
@@ -69,14 +74,6 @@
     if (completedAt === null) return false;
     if (startedAt === null) return true;
     return completedAt + PULL_COMPLETION_SKEW_MS >= startedAt;
-  };
-
-  const scheduleDashboardRefresh = () => {
-    if (refreshTimer) return;
-    refreshTimer = setTimeout(async () => {
-      refreshTimer = null;
-      await invalidate('app:dashboard');
-    }, LIVE_REFRESH_DEBOUNCE_MS);
   };
 
   const applyPullState = async ({ inProgress, startedAt, completedAt, runId, lastRunStatus, lastError }) => {
@@ -133,21 +130,53 @@
       const res = await apiFetch(statusUrl);
       if (!res.ok) return;
       const payload = await res.json().catch(() => ({}));
-      const inProgress = Boolean(payload?.in_progress);
-      const startedAt = toFiniteNumber(payload?.started_at);
-      const completedAt = toFiniteNumber(payload?.completed_at);
-      const runId = typeof payload?.run_id === 'string' && payload.run_id.trim() ? payload.run_id.trim() : null;
+      const dataPayload = readApiData(payload) ?? payload;
+      const inProgress = Boolean(dataPayload?.in_progress ?? dataPayload?.inProgress);
+      const startedAt = toFiniteNumber(dataPayload?.started_at ?? dataPayload?.startedAt);
+      const completedAt = toFiniteNumber(dataPayload?.completed_at ?? dataPayload?.completedAt);
+      const runId =
+        typeof dataPayload?.run_id === 'string' && dataPayload.run_id.trim()
+          ? dataPayload.run_id.trim()
+          : typeof dataPayload?.runId === 'string' && dataPayload.runId.trim()
+            ? dataPayload.runId.trim()
+            : null;
       const lastRunStatus =
-        payload?.last_run_status === 'success' || payload?.last_run_status === 'failed'
-          ? payload.last_run_status
+        dataPayload?.last_run_status === 'success' || dataPayload?.last_run_status === 'failed'
+          ? dataPayload.last_run_status
+          : dataPayload?.lastRunStatus === 'success' || dataPayload?.lastRunStatus === 'failed'
+            ? dataPayload.lastRunStatus
           : null;
-      const lastError = typeof payload?.last_error === 'string' && payload.last_error.length > 0 ? payload.last_error : null;
+      const lastError =
+        typeof dataPayload?.last_error === 'string' && dataPayload.last_error.length > 0
+          ? dataPayload.last_error
+          : typeof dataPayload?.lastError === 'string' && dataPayload.lastError.length > 0
+            ? dataPayload.lastError
+            : null;
       await applyPullState({ inProgress, startedAt, completedAt, runId, lastRunStatus, lastError });
     } catch {
       // Ignore transient status errors.
     } finally {
       pullStatusSyncInFlight = false;
     }
+  };
+
+  const nextPullStatusDelay = () => (document.hidden ? PULL_STATUS_POLL_HIDDEN_MS : PULL_STATUS_POLL_VISIBLE_MS);
+
+  const schedulePullStatusSync = () => {
+    if (pullStatusTimer) clearTimeout(pullStatusTimer);
+    pullStatusTimer = setTimeout(async () => {
+      pullStatusTimer = null;
+      if (!isPulling && liveConnected) {
+        schedulePullStatusSync();
+        return;
+      }
+      await syncPullStatus();
+      schedulePullStatusSync();
+    }, nextPullStatusDelay());
+  };
+
+  const handleVisibilityChange = () => {
+    schedulePullStatusSync();
   };
 
   onMount(() => {
@@ -160,16 +189,8 @@
     stopLiveEvents = startLiveEvents();
     liveUnsubscribe = liveEvents.subscribe((snapshot) => {
       liveConnected = snapshot.connected;
-      const jobsSignature = snapshot.jobs
-        ? `${snapshot.jobs.pending}:${snapshot.jobs.running}:${snapshot.jobs.failed}:${snapshot.jobs.done}`
-        : 'jobs:none';
-      const pullSignature = snapshot.pull
-        ? `${snapshot.pull.status ?? 'none'}:${snapshot.pull.in_progress ? 1 : 0}:${snapshot.pull.run_id ?? ''}:${snapshot.pull.completed_at ?? ''}`
-        : 'pull:none';
-      const signature = `${jobsSignature}|${pullSignature}`;
-      if (signature !== lastLiveSignature) {
-        lastLiveSignature = signature;
-        scheduleDashboardRefresh();
+      if (snapshot.jobs) {
+        livePendingJobs = snapshot.jobs.pending;
       }
 
       if (snapshot.pull) {
@@ -185,23 +206,18 @@
     });
 
     void syncPullStatus();
-    pullStatusTimer = setInterval(() => {
-      if (!isPulling && liveConnected) return;
-      void syncPullStatus();
-    }, PULL_STATUS_POLL_MS);
+    schedulePullStatusSync();
+    document.addEventListener('visibilitychange', handleVisibilityChange);
   });
 
   onDestroy(() => {
     if (pullStatusTimer) {
-      clearInterval(pullStatusTimer);
+      clearTimeout(pullStatusTimer);
       pullStatusTimer = null;
     }
     liveUnsubscribe();
     stopLiveEvents();
-    if (refreshTimer) {
-      clearTimeout(refreshTimer);
-      refreshTimer = null;
-    }
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
   });
 
   const scoreLabel = (score) => {
@@ -229,37 +245,42 @@
         body: JSON.stringify({ cycles })
       });
       const payload = await res.json().catch(() => ({}));
+      const dataPayload = readApiData(payload) ?? payload;
       if (!res.ok) {
         if (res.status === 409) {
           isPulling = true;
-          pullMessage = payload?.error ?? 'Manual pull already in progress';
-          if (payload?.run_id) {
-            pullTracker = { ...pullTracker, runId: payload.run_id };
+          pullMessage = readApiErrorMessage(payload, 'Manual pull already in progress');
+          const existingRunId =
+            typeof dataPayload?.run_id === 'string' && dataPayload.run_id.trim()
+              ? dataPayload.run_id
+              : null;
+          if (existingRunId) {
+            pullTracker = { ...pullTracker, runId: existingRunId };
             writePullTracker(pullTracker);
           }
           void syncPullStatus();
           return;
         }
-        pullMessage = payload?.error ?? 'Manual pull failed';
+        pullMessage = readApiErrorMessage(payload, 'Manual pull failed');
         isPulling = false;
         clearPullTracker();
         return;
       }
-      if (payload?.started) {
+      if (dataPayload?.started) {
         isPulling = true;
         pullTracker = {
           pending: true,
           startedAt: pullTracker.startedAt ?? Date.now(),
-          runId: payload?.run_id ?? null
+          runId: dataPayload?.run_id ?? null
         };
         writePullTracker(pullTracker);
         pullMessage = 'Pull started. Running in background...';
         void syncPullStatus();
         return;
       }
-      pullMessage = `Pull complete (${payload.cycles} cycle${payload.cycles === 1 ? '' : 's'}). Due feeds: ${payload.stats.dueFeeds}, items seen: ${payload.stats.itemsSeen}, items processed: ${payload.stats.itemsProcessed}, articles: ${payload.stats.articles}, pending jobs: ${payload.stats.pendingJobs}, feeds with errors: ${payload.stats.feedsWithErrors}.`;
-      if (payload.stats?.recentErrors?.length) {
-        const first = payload.stats.recentErrors[0];
+      pullMessage = `Pull complete (${dataPayload.cycles} cycle${dataPayload.cycles === 1 ? '' : 's'}). Due feeds: ${dataPayload.stats?.dueFeeds ?? 0}, items seen: ${dataPayload.stats?.itemsSeen ?? 0}, items processed: ${dataPayload.stats?.itemsProcessed ?? 0}, articles: ${dataPayload.stats?.articles ?? 0}, pending jobs: ${dataPayload.stats?.pendingJobs ?? 0}, feeds with errors: ${dataPayload.stats?.feedsWithErrors ?? 0}.`;
+      if (dataPayload.stats?.recentErrors?.length) {
+        const first = dataPayload.stats.recentErrors[0];
         pullMessage += ` First error: ${first.url} -> ${first.message}`;
       }
       isPulling = false;
@@ -312,27 +333,27 @@
     </div>
     <div class="stats">
       <div class="stat">
-        <h2>{data.today.articles}</h2>
+        <h2>{todayStats.articles}</h2>
         <span>Today's articles</span>
       </div>
       <div class="stat">
-        <h2>{data.today.summaries}</h2>
+        <h2>{todayStats.summaries}</h2>
         <span>With summary</span>
       </div>
       <div class="stat">
-        <h2>{data.today.scores}</h2>
+        <h2>{todayStats.scores}</h2>
         <span>With AI score</span>
       </div>
       <div class="stat">
-        <h2>{data.today.pendingJobs}</h2>
+        <h2>{todayStats.pendingJobs}</h2>
         <span>Pending today jobs</span>
       </div>
       <div class="stat">
-        <h2>{data.today.missingSummaries}</h2>
+        <h2>{todayStats.missingSummaries}</h2>
         <span>Missing summaries</span>
       </div>
       <div class="stat">
-        <h2>{data.today.missingScores}</h2>
+        <h2>{todayStats.missingScores}</h2>
         <span>Missing scores</span>
       </div>
     </div>

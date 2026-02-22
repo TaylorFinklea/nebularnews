@@ -4,6 +4,7 @@ import { getDashboardTopRatedConfig, getDashboardTopRatedLayout } from '$lib/ser
 import { getPreferredSourcesForArticles } from '$lib/server/sources';
 import { parse as parseCookie } from 'cookie';
 import { clampTimezoneOffsetMinutes, dayRangeForTimezoneOffset } from '$lib/server/time';
+import { logInfo } from '$lib/server/log';
 
 const effectiveScoreExpr = `COALESCE(
   (SELECT score FROM article_score_overrides WHERE article_id = a.id LIMIT 1),
@@ -11,6 +12,7 @@ const effectiveScoreExpr = `COALESCE(
 )`;
 
 export const load = async ({ platform, request, depends }) => {
+  const startedAt = Date.now();
   depends('app:dashboard');
   const db = platform.env.DB;
   const dashboardTopRated = await getDashboardTopRatedConfig(db);
@@ -133,7 +135,7 @@ export const load = async ({ platform, request, depends }) => {
     .map((score) => `score=${score}`)
     .join('&');
 
-  return {
+  const payload = {
     isDev: dev,
     stats: {
       feeds: feeds?.count ?? 0,
@@ -157,4 +159,13 @@ export const load = async ({ platform, request, depends }) => {
     },
     topRatedArticles
   };
+
+  logInfo('dashboard.load.completed', {
+    duration_ms: Date.now() - startedAt,
+    today_articles: payload.today.articles,
+    today_pending_jobs: payload.today.pendingJobs,
+    top_rated_count: payload.topRatedArticles.length
+  });
+
+  return payload;
 };

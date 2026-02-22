@@ -4,7 +4,7 @@ let schemaReady = false;
 let schemaInitPromise: Promise<void> | null = null;
 
 const MAX_PUBLISHED_FUTURE_MS = 1000 * 60 * 60 * 24;
-export const EXPECTED_SCHEMA_VERSION = 2;
+export const EXPECTED_SCHEMA_VERSION = 3;
 
 const runSafe = async (db: Db, sql: string, params: unknown[] = []) => {
   try {
@@ -280,6 +280,21 @@ const applyV2 = async (db: Db) => {
   await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at)');
 };
 
+const applyV3 = async (db: Db) => {
+  await runSafe(
+    db,
+    'CREATE INDEX IF NOT EXISTS idx_article_summaries_article_created ON article_summaries(article_id, created_at DESC)'
+  );
+  await runSafe(
+    db,
+    'CREATE INDEX IF NOT EXISTS idx_article_scores_article_created ON article_scores(article_id, created_at DESC)'
+  );
+  await runSafe(
+    db,
+    'CREATE INDEX IF NOT EXISTS idx_article_key_points_article_created ON article_key_points(article_id, created_at DESC)'
+  );
+};
+
 export async function ensureSchema(db: Db) {
   if (schemaReady) return;
   if (schemaInitPromise) return schemaInitPromise;
@@ -294,6 +309,10 @@ export async function ensureSchema(db: Db) {
     if (currentVersion < 2) {
       await applyV2(db);
       await markVersionApplied(db, 2, 'v2_prod_hardening');
+    }
+    if (currentVersion < 3) {
+      await applyV3(db);
+      await markVersionApplied(db, 3, 'v3_query_indexes');
     }
     schemaReady = true;
   })();

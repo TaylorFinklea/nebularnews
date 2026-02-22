@@ -1,15 +1,41 @@
 <script>
+  import { invalidateAll } from '$app/navigation';
   import { onDestroy } from 'svelte';
-  import ArticleCard from '$lib/components/articles/ArticleCard.svelte';
-  import ArticleDateGroupHeading from '$lib/components/articles/ArticleDateGroupHeading.svelte';
-  import ArticleFilters from '$lib/components/articles/ArticleFilters.svelte';
-  import ArticlePagination from '$lib/components/articles/ArticlePagination.svelte';
-  import { createArticlesState } from '$lib/client/articles/articles-state';
-
+  import { apiFetch } from '$lib/client/api-fetch';
+  import {
+    IconAdjustments,
+    IconEye,
+    IconEyeOff,
+    IconFilterX,
+    IconSearch,
+    IconThumbDown,
+    IconThumbUp
+  } from '$lib/icons';
+  import { resolveArticleImageUrl } from '$lib/article-image';
+  import PageHeader from '$lib/components/PageHeader.svelte';
+  import Button from '$lib/components/Button.svelte';
+  import Pill from '$lib/components/Pill.svelte';
+  import Pagination from '$lib/components/Pagination.svelte';
+  import { showToast } from '$lib/client/toast';
   export let data;
 
+  const TOAST_TIMEOUT_MS = 4000;
   const DEFAULT_SCORE_FILTER = ['5', '4', '3', '2', '1', 'unscored'];
   const DEFAULT_REACTION_FILTER = ['up', 'down', 'none'];
+
+  const scoreLabel = (score) => {
+    if (!score) return 'Unscored';
+    if (score >= 5) return 'Perfect fit';
+    if (score >= 4) return 'Strong fit';
+    if (score >= 3) return 'Okay fit';
+    if (score >= 2) return 'Weak fit';
+    return 'Not a fit';
+  };
+
+  const toInt = (value, fallback = 0) => { const n = Number(value); return Number.isFinite(n) ? n : fallback; };
+  const normalizeReadValue = (value) => (toInt(value, 0) === 1 ? 1 : 0);
+  const reactionNumber = (value) => { const n = Number(value); if (n === 1) return 1; if (n === -1) return -1; return null; };
+  const normalizeArticle = (article) => ({ ...article, is_read: normalizeReadValue(article?.is_read), reaction_value: reactionNumber(article?.reaction_value), tags: Array.isArray(article?.tags) ? article.tags : [] });
 
   let query = data.q ?? '';
   let selectedScores = [...(data.selectedScores ?? DEFAULT_SCORE_FILTER)];
@@ -19,71 +45,136 @@
   let cardLayout = data.layout ?? 'split';
   let selectedReactions = [...(data.selectedReactions ?? DEFAULT_REACTION_FILTER)];
   let selectedTagIds = [...(data.selectedTagIds ?? [])];
+  let imageErrors = {};
+  let serverArticles = [];
+  let mergedArticles = [];
   let visibleArticles = [];
+  let optimisticById = {};
+  let pendingById = {};
+  let uiMessageTimer = null;
   let lastDataSyncKey = '';
-
-  const optimisticMutationsEnabled = data.optimisticMutationsEnabled !== false;
-  const articlesState = createArticlesState(data.articles ?? []);
+  let lastServerArticlesKey = '';
+  let filtersOpen = false;
+  let statusMessage = '';
 
   const syncFilterStateFromData = () => {
-    const nextState = {
-      q: data.q ?? '',
-      selectedScores: data.selectedScores ?? DEFAULT_SCORE_FILTER,
-      readFilter: data.readFilter ?? 'all',
-      sort: data.sort ?? 'newest',
-      view: data.view ?? 'list',
-      layout: data.layout ?? 'split',
-      selectedReactions: data.selectedReactions ?? DEFAULT_REACTION_FILTER,
-      selectedTagIds: data.selectedTagIds ?? []
-    };
+    const nextState = { q: data.q ?? '', selectedScores: data.selectedScores ?? DEFAULT_SCORE_FILTER, readFilter: data.readFilter ?? 'all', sort: data.sort ?? 'newest', view: data.view ?? 'list', layout: data.layout ?? 'split', selectedReactions: data.selectedReactions ?? DEFAULT_REACTION_FILTER, selectedTagIds: data.selectedTagIds ?? [] };
     const nextKey = JSON.stringify(nextState);
     if (nextKey === lastDataSyncKey) return;
     lastDataSyncKey = nextKey;
-    query = nextState.q;
-    selectedScores = [...nextState.selectedScores];
-    readFilter = nextState.readFilter;
-    sort = nextState.sort;
-    view = nextState.view;
-    cardLayout = nextState.layout;
-    selectedReactions = [...nextState.selectedReactions];
-    selectedTagIds = [...nextState.selectedTagIds];
+    query = nextState.q; selectedScores = [...nextState.selectedScores]; readFilter = nextState.readFilter;
+    sort = nextState.sort; view = nextState.view; cardLayout = nextState.layout;
+    selectedReactions = [...nextState.selectedReactions]; selectedTagIds = [...nextState.selectedTagIds];
   };
 
   $: syncFilterStateFromData();
-  $: articlesState.syncFromServer(data.articles ?? []);
+
+  onDestroy(() => { if (uiMessageTimer) clearTimeout(uiMessageTimer); });
+
+  const setPending = (articleId, isPending) => {
+    if (isPending) { pendingById = { ...pendingById, [articleId]: true }; return; }
+    if (!pendingById[articleId]) return;
+    const next = { ...pendingById }; delete next[articleId]; pendingById = next;
+  };
+
+  const isPending = (articleId) => Boolean(pendingById[articleId]);
+
+  const setOptimisticPatch = (articleId, patch) => {
+    optimisticById = { ...optimisticById, [articleId]: { ...(optimisticById[articleId] ?? {}), ...patch } };
+  };
+
+  const clearOptimisticFields = (articleId, fields) => {
+    const current = optimisticById[articleId];
+    if (!current) return;
+    const next = { ...current };
+    for (const field of fields) delete next[field];
+    if (Object.keys(next).length === 0) { const n = { ...optimisticById }; delete n[articleId]; optimisticById = n; return; }
+    optimisticById = { ...optimisticById, [articleId]: next };
+  };
+
   $: {
-    // Depend on store updates so optimistic/pending state is reflected immediately.
-    $articlesState;
-    visibleArticles = articlesState.getVisibleArticles({
-      selectedScores,
-      selectedReactions,
-      selectedTagIds,
-      readFilter
-    });
+    const nextServerArticles = (data.articles ?? []).map(normalizeArticle);
+    const nextKey = JSON.stringify(nextServerArticles);
+    if (nextKey !== lastServerArticlesKey) { lastServerArticlesKey = nextKey; serverArticles = nextServerArticles; }
   }
 
+  $: mergedArticles = serverArticles.map((a) => ({ ...a, ...(optimisticById[a.id] ?? {}) }));
+
+  const isArticleRead = (article) => normalizeReadValue(article?.is_read) === 1;
+  const scoreToken = (score) => { const n = toInt(score, NaN); if (Number.isNaN(n) || n < 1 || n > 5) return 'unscored'; return String(n); };
+  const articleHasSelectedTags = (article) => { if (selectedTagIds.length === 0) return true; const tagIds = new Set((article.tags ?? []).map((t) => String(t?.id ?? t))); return selectedTagIds.every((id) => tagIds.has(String(id))); };
+  const reactionFilterValue = (rv) => { const n = reactionNumber(rv); if (n === 1) return 'up'; if (n === -1) return 'down'; return 'none'; };
+  const matchesClientFilters = (article) => {
+    if (!selectedScores.includes(scoreToken(article.score))) return false;
+    if (readFilter === 'read' && !isArticleRead(article)) return false;
+    if (readFilter === 'unread' && isArticleRead(article)) return false;
+    if (selectedReactions.length === 0) return false;
+    if (!selectedReactions.includes(reactionFilterValue(article.reaction_value))) return false;
+    if (!articleHasSelectedTags(article)) return false;
+    return true;
+  };
+
+  $: visibleArticles = mergedArticles.filter(matchesClientFilters);
+  const findMergedArticle = (id) => mergedArticles.find((a) => a.id === id) ?? null;
+  const markImageError = (id) => { imageErrors = { ...imageErrors, [id]: true }; };
+  const imageFailed = (id) => Boolean(imageErrors[id]);
+  const refreshInBackground = async () => { try { await invalidateAll(); return true; } catch { return false; } };
+
+  const reactToArticle = async (articleId, value, feedId) => {
+    if (isPending(articleId)) return;
+    const current = findMergedArticle(articleId);
+    if (!current) return;
+    const previous = reactionNumber(current.reaction_value);
+    setOptimisticPatch(articleId, { reaction_value: value });
+    setPending(articleId, true);
+    try {
+      const res = await apiFetch(`/api/articles/${articleId}/reaction`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ value, feedId }) });
+      if (!res.ok) throw new Error('reaction_failed');
+      void refreshInBackground();
+    } catch {
+      setOptimisticPatch(articleId, { reaction_value: previous });
+      clearOptimisticFields(articleId, ['reaction_value']);
+      statusMessage = 'Unable to save feed reaction. Reverted.';
+      showToast('Unable to save feed reaction. Reverted.', 'error');
+    } finally {
+      setPending(articleId, false);
+    }
+  };
+
+  const setReadState = async (articleId, isRead) => {
+    if (isPending(articleId)) return;
+    const current = findMergedArticle(articleId);
+    if (!current) return;
+    const previous = normalizeReadValue(current.is_read);
+    setOptimisticPatch(articleId, { is_read: isRead ? 1 : 0 });
+    setPending(articleId, true);
+    try {
+      const res = await apiFetch(`/api/articles/${articleId}/read`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ isRead }) });
+      if (!res.ok) throw new Error('read_state_failed');
+      void refreshInBackground();
+    } catch {
+      setOptimisticPatch(articleId, { is_read: previous });
+      clearOptimisticFields(articleId, ['is_read']);
+      showToast('Unable to save read state. Reverted.', 'error');
+    } finally {
+      setPending(articleId, false);
+    }
+  };
+
   const publishDateKey = (article) => {
-    const sourceDate = article.published_at ?? article.fetched_at;
-    if (!sourceDate) return 'undated';
-    const parsed = new Date(sourceDate);
-    if (Number.isNaN(parsed.getTime())) return 'undated';
-    const year = parsed.getFullYear();
-    const month = String(parsed.getMonth() + 1).padStart(2, '0');
-    const day = String(parsed.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    const src = article.published_at ?? article.fetched_at;
+    if (!src) return 'undated';
+    const p = new Date(src);
+    if (Number.isNaN(p.getTime())) return 'undated';
+    return `${p.getFullYear()}-${String(p.getMonth() + 1).padStart(2, '0')}-${String(p.getDate()).padStart(2, '0')}`;
   };
 
   const publishDateLabel = (article) => {
-    const sourceDate = article.published_at ?? article.fetched_at;
-    if (!sourceDate) return 'No publish date';
-    const parsed = new Date(sourceDate);
-    if (Number.isNaN(parsed.getTime())) return 'No publish date';
-    return parsed.toLocaleDateString(undefined, {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
+    const src = article.published_at ?? article.fetched_at;
+    if (!src) return 'No publish date';
+    const p = new Date(src);
+    if (Number.isNaN(p.getTime())) return 'No publish date';
+    return p.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
   };
 
   const pageHref = (nextPage) => {
@@ -105,129 +196,715 @@
     return `/articles/${articleId}?from=${encodeURIComponent(from)}`;
   };
 
-  const handleReact = async (event) => {
-    const detail = event.detail;
-    await articlesState.reactToArticle(detail.articleId, detail.value, detail.feedId, {
-      optimisticEnabled: optimisticMutationsEnabled
-    });
-  };
-
-  const handleToggleRead = async (event) => {
-    const detail = event.detail;
-    await articlesState.setReadState(detail.articleId, detail.isRead, {
-      optimisticEnabled: optimisticMutationsEnabled
-    });
-  };
-
-  const handleImageError = (event) => {
-    const detail = event.detail;
-    articlesState.markImageError(detail.articleId);
-  };
-
-  onDestroy(() => {
-    articlesState.destroy();
-  });
+  $: hasActiveFilters = (data.q || (data.selectedScores?.length ?? 0) < 6 || data.readFilter !== 'all' || (data.selectedReactions?.length ?? 0) < 3 || (data.selectedTagIds?.length ?? 0) > 0);
+  $: activeFilterCount = [
+    data.q ? 1 : 0,
+    (data.selectedScores?.length ?? 6) < 6 ? 1 : 0,
+    data.readFilter && data.readFilter !== 'all' ? 1 : 0,
+    (data.selectedReactions?.length ?? 3) < 3 ? 1 : 0,
+    (data.selectedTagIds?.length ?? 0) > 0 ? 1 : 0
+  ].reduce((a, b) => a + b, 0);
 </script>
 
-<section class="page-header">
-  <div>
-    <h1>Articles</h1>
-    <p>Review summaries and tune the relevance score.</p>
-  </div>
-</section>
+<div role="status" aria-live="polite" class="sr-only">{statusMessage}</div>
 
-{#if $articlesState.uiMessage}
-  <p class="status-toast" role="status" aria-live="polite">{$articlesState.uiMessage}</p>
-{/if}
+<PageHeader title="Articles" description="Review summaries and tune the relevance score.">
+  <svelte:fragment slot="actions">
+    <div class="header-actions">
+      <span class="article-count">{data.pagination?.total ?? 0} articles</span>
+    </div>
+  </svelte:fragment>
+</PageHeader>
 
-<ArticleFilters
-  bind:query
-  bind:selectedScores
-  bind:readFilter
-  bind:sort
-  bind:view
-  bind:selectedReactions
-  bind:selectedTagIds
-  availableTags={data.availableTags ?? []}
-  clearHref="/articles"
-/>
+<!-- Collapsible filters -->
+<div class="filter-bar">
+  <button class="filter-toggle" on:click={() => (filtersOpen = !filtersOpen)} aria-expanded={filtersOpen}>
+    <IconAdjustments size={16} stroke={1.9} />
+    <span>Filters</span>
+    {#if activeFilterCount > 0}
+      <span class="filter-badge">{activeFilterCount}</span>
+    {/if}
+    <span class="toggle-arrow" class:open={filtersOpen}>▾</span>
+  </button>
 
-<div class="pagination-meta">
-  <span>
-    Showing {data.pagination?.start ?? 0}-{data.pagination?.end ?? 0}
-    of {data.pagination?.total ?? 0}
-  </span>
-  {#if (data.pagination?.totalPages ?? 1) > 1}
-    <ArticlePagination pagination={data.pagination} {pageHref} ariaLabel="Article pages" />
+  {#if hasActiveFilters}
+    <a class="clear-all" href="/articles" data-sveltekit-reload="true">
+      <IconFilterX size={14} stroke={1.9} />
+      <span>Clear all</span>
+    </a>
   {/if}
 </div>
 
+{#if filtersOpen}
+  <form class="filters-panel" method="get">
+    <div class="filter-row">
+      <div class="filter-group">
+        <label class="filter-label" for="q-input">Search</label>
+        <div class="search-row">
+          <input id="q-input" name="q" placeholder="Search headlines and summaries" bind:value={query} />
+          <Button type="submit" size="icon" title="Apply filters">
+            <IconSearch size={15} stroke={1.9} />
+          </Button>
+        </div>
+      </div>
+
+      <div class="filter-group">
+        <label class="filter-label" for="sort-select">Sort</label>
+        <select id="sort-select" name="sort" bind:value={sort}>
+          <option value="newest">Newest first</option>
+          <option value="oldest">Oldest first</option>
+          <option value="score_desc">Score high → low</option>
+          <option value="score_asc">Score low → high</option>
+          <option value="unread_first">Unread first</option>
+          <option value="title_az">Title A–Z</option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <label class="filter-label" for="read-select">Read status</label>
+        <select id="read-select" name="read" bind:value={readFilter}>
+          <option value="all">All articles</option>
+          <option value="unread">Unread only</option>
+          <option value="read">Read only</option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <span class="filter-label">View</span>
+        <div class="radio-row">
+          <label class="radio-opt"><input type="radio" name="view" value="list" bind:group={view} /><span>List</span></label>
+          <label class="radio-opt"><input type="radio" name="view" value="grouped" bind:group={view} /><span>By date</span></label>
+        </div>
+      </div>
+    </div>
+
+    <div class="filter-row">
+      <div class="filter-group">
+        <span class="filter-label">AI Score</span>
+        <div class="check-row">
+          {#each [['5','Perfect'], ['4','Strong'], ['3','Okay'], ['2','Weak'], ['1','Poor'], ['unscored','Unscored']] as [val, lbl]}
+            <label class="check-opt">
+              <input type="checkbox" name="score" value={val} bind:group={selectedScores} />
+              <span>{lbl}</span>
+            </label>
+          {/each}
+          <button type="button" class="select-all-btn" on:click={() => (selectedScores = [...DEFAULT_SCORE_FILTER])}>All</button>
+        </div>
+      </div>
+
+      <div class="filter-group">
+        <span class="filter-label">Reactions</span>
+        <div class="check-row">
+          <label class="check-opt"><input type="checkbox" name="reaction" value="up" bind:group={selectedReactions} /><span>👍 Up</span></label>
+          <label class="check-opt"><input type="checkbox" name="reaction" value="none" bind:group={selectedReactions} /><span>— None</span></label>
+          <label class="check-opt"><input type="checkbox" name="reaction" value="down" bind:group={selectedReactions} /><span>👎 Down</span></label>
+          <button type="button" class="select-all-btn" on:click={() => (selectedReactions = [...DEFAULT_REACTION_FILTER])}>All</button>
+        </div>
+      </div>
+
+      {#if (data.availableTags ?? []).length > 0}
+        <div class="filter-group filter-group-tags">
+          <label class="filter-label" for="tags-select">Tags</label>
+          <select id="tags-select" name="tags" multiple bind:value={selectedTagIds} size="4">
+            {#each data.availableTags ?? [] as tag}
+              <option value={tag.id}>{tag.name} ({tag.article_count})</option>
+            {/each}
+          </select>
+        </div>
+      {/if}
+
+      <div class="filter-submit">
+        <Button type="submit" size="inline">
+          <IconSearch size={15} stroke={1.9} />
+          <span>Apply filters</span>
+        </Button>
+      </div>
+    </div>
+  </form>
+{/if}
+
+<!-- Pagination top -->
+<Pagination
+  pagination={data.pagination}
+  hrefBuilder={pageHref}
+/>
+
+<!-- Articles list -->
 <div class="articles">
   {#if visibleArticles.length === 0}
-    <p class="muted">No articles yet. Add feeds to start pulling stories.</p>
+    <div class="empty-state">
+      <p>No articles yet. Add feeds to start pulling stories.</p>
+      {#if hasActiveFilters}
+        <a href="/articles" data-sveltekit-reload="true">Clear all filters</a>
+      {/if}
+    </div>
   {:else}
     {#each visibleArticles as article, index (article.id)}
+      {@const pending = Boolean(pendingById[article.id])}
       {#if view === 'grouped'}
         {@const currentDateKey = publishDateKey(article)}
         {@const previousDateKey = index > 0 ? publishDateKey(visibleArticles[index - 1]) : null}
         {#if currentDateKey !== previousDateKey}
-          <ArticleDateGroupHeading label={publishDateLabel(article)} />
+          <h2 class="date-heading">{publishDateLabel(article)}</h2>
         {/if}
       {/if}
-      <ArticleCard
-        {article}
-        {cardLayout}
-        pending={Boolean($articlesState.pendingById[article.id])}
-        imageFailed={Boolean($articlesState.imageErrors[article.id])}
-        href={articleHref(article.id)}
-        on:react={handleReact}
-        on:toggleRead={handleToggleRead}
-        on:imageError={handleImageError}
-      />
+      <article class="card layout-{cardLayout}" id="article-{article.id}">
+        <a
+          class="card-img-link"
+          href={articleHref(article.id)}
+          tabindex="-1"
+          aria-hidden="true"
+          data-sveltekit-reload="true"
+        >
+          {#if imageFailed(article.id)}
+            <div class="img-fallback"></div>
+          {:else}
+            <img
+              class="card-img"
+              src={resolveArticleImageUrl(article)}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              on:error={() => markImageError(article.id)}
+            />
+          {/if}
+        </a>
+        <div class="card-main">
+          <div class="card-head">
+            <h3>
+              <a class="title-link" href={articleHref(article.id)} data-sveltekit-reload="true">
+                {article.title ?? 'Untitled article'}
+              </a>
+            </h3>
+            <div class="pills">
+              <Pill variant={isArticleRead(article) ? 'muted' : 'default'}>
+                {isArticleRead(article) ? 'Read' : 'Unread'}
+              </Pill>
+              {#if article.score}
+                <Pill>{article.score}/5</Pill>
+              {/if}
+            </div>
+          </div>
+          <div class="card-meta">
+            <span>{article.source_name ?? 'Unknown source'}{#if article.source_feedback_count} · rep {article.source_reputation.toFixed(2)}{/if}</span>
+            <span>{article.published_at ? new Date(article.published_at).toLocaleString() : ''}</span>
+          </div>
+          {#if article.author}
+            <div class="byline">By {article.author}</div>
+          {/if}
+          {#if article.tags?.length}
+            <div class="tag-row">
+              {#each article.tags as tag}
+                <span class="tag-chip">{tag.name}</span>
+              {/each}
+            </div>
+          {/if}
+          <p class="excerpt">{article.summary_text ?? article.excerpt ?? ''}</p>
+        </div>
+        <div class="card-actions" class:pending={pending}>
+          <div class="reactions">
+            <button
+              type="button"
+              class="reaction-btn"
+              class:active={reactionNumber(article.reaction_value) === 1}
+              on:click={() => reactToArticle(article.id, 1, article.source_feed_id)}
+              title="Thumbs up feed"
+              aria-label="Thumbs up feed"
+              disabled={pending}
+            >
+              <IconThumbUp size={15} stroke={1.9} />
+            </button>
+            <button
+              type="button"
+              class="reaction-btn"
+              class:active={reactionNumber(article.reaction_value) === -1}
+              on:click={() => reactToArticle(article.id, -1, article.source_feed_id)}
+              title="Thumbs down feed"
+              aria-label="Thumbs down feed"
+              disabled={pending}
+            >
+              <IconThumbDown size={15} stroke={1.9} />
+            </button>
+          </div>
+          <button
+            type="button"
+            class="read-btn"
+            on:click={() => setReadState(article.id, !isArticleRead(article))}
+            title={isArticleRead(article) ? 'Mark unread' : 'Mark read'}
+            aria-label={isArticleRead(article) ? 'Mark unread' : 'Mark read'}
+            disabled={pending}
+          >
+            {#if isArticleRead(article)}
+              <IconEyeOff size={15} stroke={1.9} />
+            {:else}
+              <IconEye size={15} stroke={1.9} />
+            {/if}
+          </button>
+        </div>
+      </article>
     {/each}
   {/if}
 </div>
 
-{#if (data.pagination?.totalPages ?? 1) > 1}
-  <div class="pagination-bottom">
-    <ArticlePagination pagination={data.pagination} {pageHref} ariaLabel="Article pages bottom" />
-  </div>
-{/if}
+<!-- Pagination bottom -->
+<Pagination
+  pagination={data.pagination}
+  hrefBuilder={pageHref}
+/>
 
 <style>
-  .status-toast {
-    margin: 0 0 1rem;
-    padding: 0.65rem 0.9rem;
-    border-radius: 12px;
-    border: 1px solid var(--input-border);
-    background: var(--surface-soft);
-    color: var(--text-color);
-    font-size: 0.86rem;
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
   }
 
-  .articles {
-    display: grid;
-    gap: 1.5rem;
-  }
-
-  .pagination-meta {
-    margin-bottom: 1rem;
+  /* Filter bar */
+  .filter-bar {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 0.8rem;
+    gap: var(--space-3);
+    margin-bottom: var(--space-3);
+  }
+
+  .filter-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: var(--surface-strong);
+    border: 1px solid var(--surface-border);
+    border-radius: var(--radius-full);
+    padding: 0.45rem 0.9rem;
+    font-family: inherit;
+    font-size: var(--text-sm);
+    font-weight: 600;
+    cursor: pointer;
+    color: var(--text-color);
+    transition: background var(--transition-fast), border-color var(--transition-fast);
+  }
+
+  .filter-toggle:hover {
+    background: var(--primary-soft);
+    border-color: var(--ghost-border);
+  }
+
+  .filter-badge {
+    background: var(--primary);
+    color: var(--button-text);
+    border-radius: var(--radius-full);
+    padding: 0 0.45rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    line-height: 1.6;
+  }
+
+  .toggle-arrow {
+    transition: transform var(--transition-fast);
+    font-size: 0.8rem;
     color: var(--muted-text);
-    font-size: 0.88rem;
+  }
+
+  .toggle-arrow.open {
+    transform: rotate(180deg);
+  }
+
+  .clear-all {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: var(--text-sm);
+    color: var(--muted-text);
+  }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .article-count {
+    font-size: var(--text-sm);
+    color: var(--muted-text);
+  }
+
+  /* Filters panel */
+  .filters-panel {
+    background: var(--surface-strong);
+    border: 1px solid var(--surface-border);
+    border-radius: var(--radius-xl);
+    padding: var(--space-5);
+    margin-bottom: var(--space-5);
+    display: grid;
+    gap: var(--space-5);
+  }
+
+  .filter-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-5);
+    align-items: flex-start;
+  }
+
+  .filter-group {
+    display: grid;
+    gap: var(--space-2);
+    min-width: 180px;
+  }
+
+  .filter-group-tags {
+    min-width: 200px;
+  }
+
+  .filter-label {
+    font-size: var(--text-xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted-text);
+  }
+
+  .search-row {
+    display: flex;
+    gap: var(--space-2);
+  }
+
+  .search-row input {
+    min-width: 240px;
+    flex: 1;
+  }
+
+  input:not([type='checkbox']):not([type='radio']),
+  select {
+    padding: 0.55rem 0.75rem;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--input-border);
+    background: var(--input-bg);
+    color: var(--text-color);
+    font-family: inherit;
+    font-size: var(--text-sm);
+  }
+
+  select[multiple] {
+    min-height: 110px;
+  }
+
+  .check-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-items: center;
+  }
+
+  .check-opt {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: var(--text-sm);
+    cursor: pointer;
+    padding: 0.2rem 0.5rem;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--input-border);
+    background: var(--surface-soft);
+  }
+
+  .check-opt input { accent-color: var(--primary); margin: 0; }
+
+  .radio-row {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .radio-opt {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: var(--text-sm);
+    cursor: pointer;
+    padding: 0.2rem 0.5rem;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--input-border);
+    background: var(--surface-soft);
+  }
+
+  .radio-opt input { accent-color: var(--primary); margin: 0; }
+
+  .select-all-btn {
+    background: transparent;
+    border: 1px solid var(--ghost-border);
+    color: var(--ghost-color);
+    border-radius: var(--radius-full);
+    padding: 0.18rem 0.55rem;
+    font-size: var(--text-xs);
+    cursor: pointer;
+    font-family: inherit;
+  }
+
+  .filter-submit {
+    display: flex;
+    align-items: flex-end;
+    padding-bottom: 0.05rem;
+  }
+
+  /* Articles */
+  .articles {
+    display: grid;
+    gap: var(--space-5);
+    margin-bottom: var(--space-5);
+  }
+
+  .card {
+    background: var(--surface-strong);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-md);
+    border: 1px solid var(--surface-border);
+    display: grid;
+    gap: var(--space-4);
+    align-items: start;
+    transition: box-shadow var(--transition-fast);
+    overflow: hidden;
+  }
+
+  .card:hover {
+    box-shadow: var(--shadow-lg, 0 20px 40px var(--shadow-color));
+  }
+
+  .card.layout-split {
+    grid-template-columns: 180px minmax(0, 1fr);
+    grid-template-rows: 1fr auto;
+    grid-template-areas:
+      'image main'
+      'actions actions';
+  }
+
+  .card.layout-stacked {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      'image'
+      'main'
+      'actions';
+    padding: 0;
+  }
+
+  .card.layout-stacked .card-main {
+    padding: var(--space-5);
+    padding-bottom: 0;
+  }
+
+  .card.layout-stacked .card-actions {
+    padding: var(--space-3) var(--space-5);
+  }
+
+  .card.layout-split {
+    padding: 0;
+  }
+
+  .card.layout-split .card-main {
+    padding: var(--space-5) var(--space-5) 0 0;
+  }
+
+  .card.layout-split .card-actions {
+    padding: var(--space-3) var(--space-5);
+  }
+
+  .card-img-link {
+    grid-area: image;
+    display: block;
+    background: linear-gradient(145deg, rgba(83, 118, 255, 0.18), rgba(69, 36, 199, 0.1));
+  }
+
+  .card.layout-split .card-img-link {
+    height: 100%;
+  }
+
+  .card.layout-stacked .card-img-link {
+    height: 200px;
+  }
+
+  .card-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .img-fallback {
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(145deg, rgba(83, 118, 255, 0.18), rgba(69, 36, 199, 0.1));
+  }
+
+  .card-main {
+    grid-area: main;
+    display: grid;
+    gap: var(--space-2);
+    min-width: 0;
+    align-content: start;
+  }
+
+  .card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: var(--space-3);
+  }
+
+  h3 {
+    margin: 0;
+    font-size: 1rem;
+    line-height: 1.35;
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .title-link {
+    color: var(--text-color);
+    text-decoration: none;
+    transition: color var(--transition-fast);
+  }
+
+  .title-link:hover { color: var(--primary); }
+
+  .pills {
+    display: flex;
+    gap: var(--space-1);
+    flex-shrink: 0;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .card-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: var(--text-xs);
+    color: var(--muted-text);
+    gap: var(--space-3);
     flex-wrap: wrap;
   }
 
-  .pagination-bottom {
-    margin-top: 1rem;
-    display: flex;
-    justify-content: center;
+  .byline {
+    font-size: var(--text-xs);
+    color: var(--muted-text);
   }
 
-  .muted {
+  .tag-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+
+  .tag-chip {
+    border: 1px solid var(--input-border);
+    background: var(--surface-soft);
+    border-radius: var(--radius-full);
+    padding: 0.15rem 0.5rem;
+    font-size: 0.75rem;
     color: var(--muted-text);
+  }
+
+  .excerpt {
+    margin: 0;
+    color: var(--muted-text);
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    font-size: var(--text-sm);
+    line-height: 1.5;
+  }
+
+  .card-actions {
+    grid-area: actions;
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    border-top: 1px solid var(--surface-border);
+    flex-wrap: wrap;
+  }
+
+  .card-actions.pending { opacity: 0.85; }
+
+  .reactions {
+    display: inline-flex;
+    gap: var(--space-1);
+  }
+
+  .reaction-btn, .read-btn {
+    border: 1px solid var(--input-border);
+    background: var(--surface-soft);
+    border-radius: var(--radius-full);
+    width: 2rem;
+    height: 2rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--text-color);
+    transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+  }
+
+  .reaction-btn:disabled, .read-btn:disabled { opacity: 0.6; cursor: wait; }
+
+  .reaction-btn.active {
+    background: var(--primary-soft);
+    border-color: var(--ghost-border);
+    color: var(--primary);
+  }
+
+  .read-btn {
+    border-color: var(--ghost-border);
+    color: var(--ghost-color);
+    margin-left: auto;
+  }
+
+  .read-btn:hover:not(:disabled) { background: var(--primary-soft); }
+
+  /* Date grouping */
+  .date-heading {
+    margin: 0;
+    font-size: var(--text-sm);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted-text);
+    padding-bottom: var(--space-2);
+    border-bottom: 1px solid var(--surface-border);
+  }
+
+  /* Empty */
+  .empty-state {
+    padding: var(--space-12) 0;
+    text-align: center;
+    color: var(--muted-text);
+    display: grid;
+    gap: var(--space-3);
+  }
+
+  @media (max-width: 700px) {
+    .card.layout-split,
+    .card.layout-stacked {
+      grid-template-columns: 1fr;
+      grid-template-areas:
+        'image'
+        'main'
+        'actions';
+    }
+
+    .card.layout-split .card-img-link {
+      height: 160px;
+    }
+
+    .card.layout-split .card-main {
+      padding: var(--space-4) var(--space-4) 0;
+    }
+
+    .card.layout-split .card-actions {
+      padding: var(--space-3) var(--space-4);
+    }
   }
 </style>

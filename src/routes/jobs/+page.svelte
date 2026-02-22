@@ -1,7 +1,7 @@
 <script>
+  import { invalidate } from '$app/navigation';
   import { onDestroy, onMount } from 'svelte';
   import { apiFetch } from '$lib/client/api-fetch';
-  import { readApiData, readApiErrorMessage } from '$lib/client/api-result';
   import { liveEvents, startLiveEvents } from '$lib/client/live-events';
   import {
     IconBan,
@@ -11,62 +11,37 @@
     IconRepeat,
     IconTrash
   } from '$lib/icons';
+  import PageHeader from '$lib/components/PageHeader.svelte';
+  import Card from '$lib/components/Card.svelte';
+  import Button from '$lib/components/Button.svelte';
+  import Pill from '$lib/components/Pill.svelte';
+  import { showToast } from '$lib/client/toast';
 
   export let data;
 
   const filters = ['pending', 'running', 'failed', 'done', 'cancelled', 'all'];
-  const VISIBLE_REFRESH_MS = 9000;
-  const HIDDEN_REFRESH_MS = 30000;
+  const LIVE_REFRESH_DEBOUNCE_MS = 600;
   let busyKey = '';
-  let message = '';
   let liveCounts = null;
   let liveConnected = false;
   let liveUnsubscribe = () => {};
   let stopLiveEvents = () => {};
   let refreshTimer = null;
-  let jobs = data.jobs ?? [];
-  let countsState = data.counts ?? {};
-  let statusState = data.status ?? 'pending';
-
-  $: jobs = data.jobs ?? jobs;
-  $: countsState = data.counts ?? countsState;
-  $: statusState = data.status ?? statusState;
+  let lastLiveSignature = '';
 
   $: displayCounts = {
-    ...countsState,
+    ...data.counts,
     ...(liveCounts
-      ? {
-          pending: liveCounts.pending,
-          running: liveCounts.running,
-          failed: liveCounts.failed,
-          done: liveCounts.done
-        }
+      ? { pending: liveCounts.pending, running: liveCounts.running, failed: liveCounts.failed, done: liveCounts.done }
       : {})
   };
 
-  const scheduleRefresh = (delayMs) => {
-    if (refreshTimer) clearTimeout(refreshTimer);
-    refreshTimer = setTimeout(() => {
+  const scheduleJobsRefresh = () => {
+    if (refreshTimer) return;
+    refreshTimer = setTimeout(async () => {
       refreshTimer = null;
-      void refreshJobs();
-    }, delayMs);
-  };
-
-  const refreshJobs = async () => {
-    try {
-      const res = await apiFetch(`/api/jobs?status=${encodeURIComponent(statusState)}&limit=150`);
-      const payload = await res.json().catch(() => ({}));
-      if (!res.ok) return;
-      const dataPayload = readApiData(payload) ?? payload;
-      jobs = Array.isArray(dataPayload.jobs) ? dataPayload.jobs : jobs;
-      countsState = dataPayload.counts ?? countsState;
-    } catch {
-      // Keep current visible state on transient refresh errors.
-    } finally {
-      if (!liveConnected) {
-        scheduleRefresh(document.hidden ? HIDDEN_REFRESH_MS : VISIBLE_REFRESH_MS);
-      }
-    }
+      await invalidate('app:jobs');
+    }, LIVE_REFRESH_DEBOUNCE_MS);
   };
 
   onMount(() => {
@@ -75,30 +50,17 @@
       liveConnected = snapshot.connected;
       if (!snapshot.jobs) return;
       liveCounts = snapshot.jobs;
-      if (!liveConnected) {
-        scheduleRefresh(VISIBLE_REFRESH_MS);
-      }
+      const signature = `${snapshot.jobs.pending}:${snapshot.jobs.running}:${snapshot.jobs.failed}:${snapshot.jobs.done}`;
+      if (signature === lastLiveSignature) return;
+      lastLiveSignature = signature;
+      scheduleJobsRefresh();
     });
-
-    const onVisibilityChange = () => {
-      if (liveConnected) return;
-      scheduleRefresh(document.hidden ? HIDDEN_REFRESH_MS : VISIBLE_REFRESH_MS);
-    };
-    document.addEventListener('visibilitychange', onVisibilityChange);
-    scheduleRefresh(VISIBLE_REFRESH_MS);
-
-    return () => {
-      document.removeEventListener('visibilitychange', onVisibilityChange);
-    };
   });
 
   onDestroy(() => {
     liveUnsubscribe();
     stopLiveEvents();
-    if (refreshTimer) {
-      clearTimeout(refreshTimer);
-      refreshTimer = null;
-    }
+    if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = null; }
   });
 
   const formatUtcOffset = (offsetMinutes) => {
@@ -113,7 +75,6 @@
   const runAction = async (action, options = {}) => {
     const { jobId = null, label = action, cycles = 1 } = options;
     busyKey = `${action}:${jobId ?? 'all'}`;
-    message = '';
     try {
       const res = await apiFetch('/api/jobs', {
         method: 'POST',
@@ -127,365 +88,353 @@
         })
       });
       const payload = await res.json().catch(() => ({}));
-      const dataPayload = readApiData(payload) ?? payload;
       if (!res.ok) {
-        message = readApiErrorMessage(payload, `${label} failed`);
+        showToast(payload?.error ?? `${label} failed`, 'error');
         return;
       }
 
-      const touched = dataPayload?.updated ?? dataPayload?.deleted;
+      let msg = `${label} completed.`;
+      const touched = payload?.updated ?? payload?.deleted;
       if (action === 'run_queue') {
-        message = `Queue ran ${dataPayload.cycles} cycle${dataPayload.cycles === 1 ? '' : 's'}. Pending: ${dataPayload.counts?.pending ?? 0}, running: ${dataPayload.counts?.running ?? 0}, failed: ${dataPayload.counts?.failed ?? 0}.`;
+        msg = `Queue ran ${payload.cycles} cycle${payload.cycles === 1 ? '' : 's'}. Pending: ${payload.counts.pending}, running: ${payload.counts.running}, failed: ${payload.counts.failed}.`;
       } else if (action === 'queue_today_missing') {
-        const summarizeQueued = dataPayload?.queued?.summarizeQueued ?? 0;
-        const scoreQueued = dataPayload?.queued?.scoreQueued ?? 0;
-        const autoTagQueued = dataPayload?.queued?.autoTagQueued ?? 0;
-        if (summarizeQueued === 0 && scoreQueued === 0 && autoTagQueued === 0) {
-          const label = dataPayload?.queued?.dayStart ? new Date(dataPayload.queued.dayStart).toLocaleDateString() : 'today';
-          message = `No missing summarize/score/auto-tag jobs found for ${label}.`;
-        } else {
-          message = `Queued today's missing jobs: ${summarizeQueued} summarize, ${scoreQueued} score, ${autoTagQueued} auto-tag.`;
-        }
+        const s = payload?.queued?.summarizeQueued ?? 0;
+        const sc = payload?.queued?.scoreQueued ?? 0;
+        const at = payload?.queued?.autoTagQueued ?? 0;
+        msg = (s === 0 && sc === 0 && at === 0)
+          ? `No missing jobs found for today.`
+          : `Queued: ${s} summarize, ${sc} score, ${at} auto-tag.`;
       } else if (typeof touched === 'number') {
-        message = `${label} updated ${touched} job${touched === 1 ? '' : 's'}.`;
-      } else {
-        message = `${label} completed.`;
+        msg = `${label} updated ${touched} job${touched === 1 ? '' : 's'}.`;
       }
-      if (dataPayload?.counts) {
-        countsState = dataPayload.counts;
-      }
-      await refreshJobs();
+      showToast(msg, 'success');
+      await invalidate('app:jobs');
     } catch {
-      message = `${label} failed`;
+      showToast(`${label} failed`, 'error');
     } finally {
       busyKey = '';
     }
   };
 
   const isBusy = (action, jobId = null) => busyKey === `${action}:${jobId ?? 'all'}`;
+
+  const statusVariant = (status) => {
+    if (status === 'pending') return 'default';
+    if (status === 'running') return 'running';
+    if (status === 'failed') return 'warning';
+    if (status === 'done') return 'success';
+    if (status === 'cancelled') return 'cancelled';
+    return 'muted';
+  };
 </script>
 
-<section class="page-header">
-  <div>
-    <h1>Job Queue</h1>
-    <p>Inspect and control pending, failed, and completed jobs.</p>
-    <p class="muted live-status">{liveConnected ? 'Live updates connected' : 'Live updates reconnecting...'}</p>
-  </div>
-</section>
+<PageHeader title="Job Queue" description="Inspect and control pending, failed, and completed jobs.">
+  <svelte:fragment slot="subnav">
+    <span class="live-status" class:connected={liveConnected}>
+      {liveConnected ? '● Live' : '○ Reconnecting...'}
+    </span>
+  </svelte:fragment>
+</PageHeader>
 
+<!-- Stats row -->
+<div class="stats-row">
+  <Card variant="soft">
+    <div class="stat-val">{displayCounts.pending}</div>
+    <div class="stat-label">Pending</div>
+  </Card>
+  <Card variant="soft">
+    <div class="stat-val running">{displayCounts.running}</div>
+    <div class="stat-label">Running</div>
+  </Card>
+  <Card variant="soft">
+    <div class="stat-val failed">{displayCounts.failed}</div>
+    <div class="stat-label">Failed</div>
+  </Card>
+  <Card variant="soft">
+    <div class="stat-val done">{displayCounts.done}</div>
+    <div class="stat-label">Done</div>
+  </Card>
+  <Card variant="soft">
+    <div class="stat-val">{data.counts.cancelled}</div>
+    <div class="stat-label">Cancelled</div>
+  </Card>
+</div>
+
+<!-- Today missing -->
 <div class="today-missing">
   <strong>Today missing:</strong>
   <span>{data.today.missingSummaries} summaries</span>
   <span>{data.today.missingScores} scores</span>
   <span>{data.today.missingAutoTags} auto-tags</span>
-  <span>({formatUtcOffset(data.today.tzOffsetMinutes)})</span>
+  <span class="tz">({formatUtcOffset(data.today.tzOffsetMinutes)})</span>
 </div>
 
-<div class="stats">
-  <div class="stat">
-    <strong>{displayCounts.pending}</strong>
-    <span>Pending</span>
-  </div>
-  <div class="stat">
-    <strong>{displayCounts.running}</strong>
-    <span>Running</span>
-  </div>
-  <div class="stat">
-    <strong>{displayCounts.failed}</strong>
-    <span>Failed</span>
-  </div>
-  <div class="stat">
-    <strong>{displayCounts.done}</strong>
-    <span>Done</span>
-  </div>
-  <div class="stat">
-    <strong>{countsState.cancelled ?? data.counts.cancelled}</strong>
-    <span>Cancelled</span>
-  </div>
-</div>
-
+<!-- Controls -->
 <div class="controls">
-  <button
-    class="icon-button"
+  <Button
+    variant="primary"
+    size="inline"
     disabled={isBusy('run_queue')}
     on:click={() => runAction('run_queue', { label: 'Run queue', cycles: 2 })}
     title="Run queue now"
-    aria-label="Run queue now"
   >
-    <IconPlayerPlay size={20} stroke={2.2} />
-    <span class="sr-only">Run queue now</span>
-  </button>
-  <button
-    class="icon-button"
+    <IconPlayerPlay size={16} stroke={2} />
+    <span>Run queue</span>
+  </Button>
+  <Button
+    variant="primary"
+    size="inline"
     disabled={isBusy('queue_today_missing')}
     on:click={() => runAction('queue_today_missing', { label: 'Queue today missing' })}
     title="Queue missing today jobs"
-    aria-label="Queue missing today jobs"
   >
-    <IconPlaylistAdd size={20} stroke={2.2} />
-    <span class="sr-only">Queue missing today jobs</span>
-  </button>
-  <button
-    class="ghost icon-button"
+    <IconPlaylistAdd size={16} stroke={2} />
+    <span>Queue missing</span>
+  </Button>
+  <Button
+    variant="ghost"
+    size="inline"
     disabled={isBusy('retry_failed')}
     on:click={() => runAction('retry_failed', { label: 'Retry failed' })}
     title="Retry failed jobs"
-    aria-label="Retry failed jobs"
   >
-    <IconRepeat size={20} stroke={2.2} />
-    <span class="sr-only">Retry failed jobs</span>
-  </button>
-  <button
-    class="ghost icon-button"
+    <IconRepeat size={16} stroke={2} />
+    <span>Retry failed</span>
+  </Button>
+  <Button
+    variant="ghost"
+    size="inline"
     disabled={isBusy('cancel_pending_all')}
     on:click={() => runAction('cancel_pending_all', { label: 'Cancel pending' })}
-    title="Cancel pending jobs"
-    aria-label="Cancel pending jobs"
+    title="Cancel all pending jobs"
   >
-    <IconBan size={20} stroke={2.2} />
-    <span class="sr-only">Cancel pending jobs</span>
-  </button>
-  <button
-    class="ghost icon-button"
+    <IconBan size={16} stroke={2} />
+    <span>Cancel pending</span>
+  </Button>
+  <Button
+    variant="ghost"
+    size="inline"
     disabled={isBusy('clear_finished')}
     on:click={() => runAction('clear_finished', { label: 'Clear finished' })}
     title="Clear finished jobs"
-    aria-label="Clear finished jobs"
   >
-    <IconTrash size={20} stroke={2.2} />
-    <span class="sr-only">Clear finished jobs</span>
-  </button>
+    <IconTrash size={16} stroke={2} />
+    <span>Clear finished</span>
+  </Button>
 </div>
 
-{#if message}
-  <p class="message">{message}</p>
-{/if}
-
-<div class="filters">
+<!-- Filter tabs -->
+<div class="filter-tabs">
   {#each filters as filter}
-    <a href={filter === 'all' ? '/jobs?status=all' : `/jobs?status=${filter}`} class:active={statusState === filter}>
+    <a
+      href={filter === 'all' ? '/jobs?status=all' : `/jobs?status=${filter}`}
+      class="filter-tab"
+      class:active={data.status === filter}
+    >
       {filter}
+      {#if filter !== 'all' && displayCounts[filter] != null}
+        <span class="filter-count">{displayCounts[filter]}</span>
+      {/if}
     </a>
   {/each}
 </div>
 
-<div class="table-wrap">
-  <table>
-    <thead>
-      <tr>
-        <th>Type</th>
-        <th>Article</th>
-        <th>Status</th>
-        <th>Model</th>
-        <th>Attempts</th>
-        <th>Run after</th>
-        <th>Error</th>
-        <th>Actions</th>
-      </tr>
-    </thead>
-    <tbody>
-      {#if jobs.length === 0}
+<!-- Jobs table -->
+<Card>
+  <div class="table-wrap">
+    <table>
+      <thead>
         <tr>
-          <td colspan="8" class="muted">No jobs for this filter.</td>
+          <th>Type</th>
+          <th>Article</th>
+          <th>Status</th>
+          <th>Model</th>
+          <th>Attempts</th>
+          <th>Run after</th>
+          <th>Error</th>
+          <th>Actions</th>
         </tr>
-      {:else}
-        {#each jobs as job}
+      </thead>
+      <tbody>
+        {#if data.jobs.length === 0}
           <tr>
-            <td>{job.type}</td>
-            <td>
-              {#if job.article_id}
-                <a href={`/articles/${job.article_id}`}>{job.article_title ?? job.article_id}</a>
-              {:else}
-                <span class="muted">System</span>
-              {/if}
-            </td>
-            <td>
-              <span class={`status ${job.status}`}>{job.status}</span>
-            </td>
-            <td>
-              {#if job.provider && job.model}
-                <span>{job.provider}/{job.model}</span>
-              {:else}
-                <span class="muted">—</span>
-              {/if}
-            </td>
-            <td>{job.attempts}</td>
-            <td>{new Date(job.run_after).toLocaleString()}</td>
-            <td class="error">{job.last_error ?? '—'}</td>
-            <td>
-              <div class="actions">
-                {#if job.status !== 'running'}
-                  <button
-                    class="ghost icon-button"
-                    disabled={isBusy('run_now', job.id)}
-                    on:click={() => runAction('run_now', { jobId: job.id, label: 'Run now' })}
-                    title="Run job now"
-                    aria-label="Run job now"
-                  >
-                    <IconClockPlay size={17} stroke={2.05} />
-                    <span class="sr-only">Run job now</span>
-                  </button>
-                {/if}
-                {#if job.status === 'pending'}
-                  <button
-                    class="ghost icon-button"
-                    disabled={isBusy('cancel', job.id)}
-                    on:click={() => runAction('cancel', { jobId: job.id, label: 'Cancel' })}
-                    title="Cancel job"
-                    aria-label="Cancel job"
-                  >
-                    <IconBan size={17} stroke={2.05} />
-                    <span class="sr-only">Cancel job</span>
-                  </button>
-                {/if}
-                {#if job.status !== 'running'}
-                  <button
-                    class="ghost icon-button"
-                    disabled={isBusy('delete', job.id)}
-                    on:click={() => runAction('delete', { jobId: job.id, label: 'Delete' })}
-                    title="Delete job"
-                    aria-label="Delete job"
-                  >
-                    <IconTrash size={17} stroke={2.05} />
-                    <span class="sr-only">Delete job</span>
-                  </button>
-                {/if}
-              </div>
-            </td>
+            <td colspan="8" class="empty-cell">No jobs for this filter.</td>
           </tr>
-        {/each}
-      {/if}
-    </tbody>
-  </table>
-</div>
+        {:else}
+          {#each data.jobs as job}
+            <tr>
+              <td class="mono">{job.type}</td>
+              <td>
+                {#if job.article_id}
+                  <a href={`/articles/${job.article_id}`}>{job.article_title ?? job.article_id}</a>
+                {:else}
+                  <span class="muted">System</span>
+                {/if}
+              </td>
+              <td>
+                <Pill variant={statusVariant(job.status)}>{job.status}</Pill>
+              </td>
+              <td class="mono">
+                {#if job.provider && job.model}
+                  {job.provider}/{job.model}
+                {:else}
+                  <span class="muted">—</span>
+                {/if}
+              </td>
+              <td>{job.attempts}</td>
+              <td class="nowrap">{new Date(job.run_after).toLocaleString()}</td>
+              <td class="error-cell">{job.last_error ?? '—'}</td>
+              <td>
+                <div class="row-actions">
+                  {#if job.status !== 'running'}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      disabled={isBusy('run_now', job.id)}
+                      on:click={() => runAction('run_now', { jobId: job.id, label: 'Run now' })}
+                      title="Run job now"
+                    >
+                      <IconClockPlay size={15} stroke={2} />
+                    </Button>
+                  {/if}
+                  {#if job.status === 'pending'}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      disabled={isBusy('cancel', job.id)}
+                      on:click={() => runAction('cancel', { jobId: job.id, label: 'Cancel' })}
+                      title="Cancel job"
+                    >
+                      <IconBan size={15} stroke={2} />
+                    </Button>
+                  {/if}
+                  {#if job.status !== 'running'}
+                    <Button
+                      variant="danger"
+                      size="icon"
+                      disabled={isBusy('delete', job.id)}
+                      on:click={() => runAction('delete', { jobId: job.id, label: 'Delete' })}
+                      title="Delete job"
+                    >
+                      <IconTrash size={15} stroke={2} />
+                    </Button>
+                  {/if}
+                </div>
+              </td>
+            </tr>
+          {/each}
+        {/if}
+      </tbody>
+    </table>
+  </div>
+</Card>
 
 <style>
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+  }
+
+  .stats-row :global(.card) {
+    gap: var(--space-1);
+    padding: var(--space-4);
+    text-align: center;
+  }
+
+  .stat-val {
+    font-size: var(--text-2xl);
+    font-weight: 700;
+    color: var(--primary);
+    line-height: 1;
+  }
+
+  .stat-val.running { color: #72c3ff; }
+  .stat-val.failed  { color: #ff9dbc; }
+  .stat-val.done    { color: #91f0cd; }
+
+  .stat-label {
+    font-size: var(--text-sm);
+    color: var(--muted-text);
+    font-weight: 500;
+  }
+
   .today-missing {
-    margin-top: 0.8rem;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 0.65rem;
     color: var(--muted-text);
-    font-size: 0.9rem;
+    font-size: var(--text-sm);
+    margin-bottom: var(--space-4);
   }
 
-  .stats {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-    gap: 0.8rem;
-    margin-top: 1rem;
+  .today-missing strong {
+    color: var(--text-color);
   }
 
-  .stat {
-    background: var(--surface);
-    border-radius: 16px;
-    padding: 0.8rem;
-    box-shadow: 0 10px 22px var(--shadow-color);
-    border: 1px solid var(--surface-border);
-  }
-
-  .stat strong {
-    font-size: 1.4rem;
-    display: block;
-  }
-
-  .stat span {
-    color: var(--muted-text);
-    font-size: 0.9rem;
+  .tz {
+    opacity: 0.7;
   }
 
   .controls {
-    margin-top: 1rem;
     display: flex;
     flex-wrap: wrap;
-    gap: 0.6rem;
+    gap: var(--space-2);
+    margin-bottom: var(--space-4);
   }
 
-  .controls button {
-    border: none;
-    border-radius: 999px;
-    padding: 0.55rem 0.9rem;
-    background: var(--button-bg);
-    color: var(--button-text);
-    cursor: pointer;
+  .filter-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+    margin-bottom: var(--space-4);
   }
 
-  .icon-button {
-    width: 2.2rem;
-    height: 2.2rem;
-    padding: 0;
+  .filter-tab {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-  }
-
-  .icon-button :global(svg) {
-    width: 1.15rem;
-    height: 1.15rem;
-    display: block;
-  }
-
-  .controls .icon-button {
-    width: 2.7rem;
-    height: 2.7rem;
-  }
-
-  .controls .icon-button :global(svg) {
-    width: 1.32rem;
-    height: 1.32rem;
-  }
-
-  .controls .ghost,
-  .actions .ghost {
-    background: transparent;
-    color: var(--ghost-color);
-    border: 1px solid var(--ghost-border);
-  }
-
-  .controls button:disabled,
-  .actions button:disabled {
-    opacity: 0.6;
-    cursor: default;
-  }
-
-  .message {
-    margin-top: 0.8rem;
-    color: var(--muted-text);
-  }
-
-  .live-status {
-    margin-top: 0.35rem;
-  }
-
-  .filters {
-    margin-top: 1.2rem;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem;
-  }
-
-  .filters a {
-    padding: 0.3rem 0.7rem;
-    border-radius: 999px;
+    gap: 0.35rem;
+    padding: 0.3rem 0.75rem;
+    border-radius: var(--radius-full);
     background: var(--surface-soft);
     border: 1px solid var(--surface-border);
     text-transform: capitalize;
-    font-size: 0.85rem;
+    font-size: var(--text-sm);
+    color: var(--muted-text);
+    transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
   }
 
-  .filters a.active {
+  .filter-tab.active {
     background: var(--primary-soft);
     border-color: var(--ghost-border);
+    color: var(--primary);
+    font-weight: 600;
+  }
+
+  .filter-count {
+    background: var(--surface-strong);
+    border-radius: var(--radius-full);
+    padding: 0 0.35rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+  }
+
+  .live-status {
+    font-size: var(--text-sm);
+    color: var(--muted-text);
+    margin-top: var(--space-1);
+    display: block;
+  }
+
+  .live-status.connected {
+    color: #91f0cd;
   }
 
   .table-wrap {
-    margin-top: 1rem;
     overflow-x: auto;
-    background: var(--surface-strong);
-    border-radius: 18px;
-    box-shadow: 0 10px 24px var(--shadow-color);
-    border: 1px solid var(--surface-border);
+    margin: calc(var(--space-4) * -1);
   }
 
   table {
@@ -494,84 +443,52 @@
     min-width: 980px;
   }
 
-  th,
-  td {
+  th, td {
     text-align: left;
-    padding: 0.7rem 0.8rem;
+    padding: 0.7rem var(--space-4);
     border-bottom: 1px solid var(--surface-border);
-    vertical-align: top;
+    vertical-align: middle;
+  }
+
+  tr:last-child td {
+    border-bottom: none;
   }
 
   th {
-    font-size: 0.85rem;
+    font-size: var(--text-xs);
     color: var(--muted-text);
     text-transform: uppercase;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+    background: var(--surface-soft);
   }
 
-  .error {
-    max-width: 360px;
-    color: var(--text-color);
+  .mono { font-family: monospace; font-size: var(--text-sm); }
+  .nowrap { white-space: nowrap; font-size: var(--text-sm); color: var(--muted-text); }
+  .muted { color: var(--muted-text); }
+
+  .error-cell {
+    max-width: 300px;
     white-space: pre-wrap;
     word-break: break-word;
+    font-size: var(--text-sm);
+    color: var(--muted-text);
   }
 
-  .actions {
+  .empty-cell {
+    color: var(--muted-text);
+    text-align: center;
+    padding: var(--space-8);
+  }
+
+  .row-actions {
     display: flex;
-    gap: 0.35rem;
-    flex-wrap: wrap;
+    gap: 0.3rem;
   }
 
-  .actions button {
-    padding: 0;
-    border-radius: 999px;
-    cursor: pointer;
-    width: 2.15rem;
-    height: 2.15rem;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .actions button :global(svg) {
-    width: 1.04rem;
-    height: 1.04rem;
-  }
-
-  .status {
-    display: inline-block;
-    padding: 0.15rem 0.55rem;
-    border-radius: 999px;
-    text-transform: capitalize;
-    font-size: 0.8rem;
-  }
-
-  .status.pending {
-    background: var(--primary-soft);
-    color: var(--primary);
-  }
-
-  .status.running {
-    background: rgba(88, 174, 255, 0.2);
-    color: #72c3ff;
-  }
-
-  .status.failed {
-    background: rgba(255, 110, 150, 0.2);
-    color: #ff9dbc;
-  }
-
-  .status.done {
-    background: rgba(114, 236, 200, 0.18);
-    color: #91f0cd;
-  }
-
-  .status.cancelled {
-    background: rgba(130, 142, 190, 0.2);
-    color: var(--muted-text);
-  }
-
-  .muted {
-    color: var(--muted-text);
+  @media (max-width: 800px) {
+    .stats-row {
+      grid-template-columns: repeat(3, 1fr);
+    }
   }
 </style>

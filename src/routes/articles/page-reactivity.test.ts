@@ -4,6 +4,10 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/sv
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ArticlesPage from './+page.svelte';
 
+vi.mock('$app/navigation', () => ({
+  invalidateAll: vi.fn(async () => undefined)
+}));
+
 const baseArticle = {
   id: 'article-1',
   canonical_url: 'https://example.com/story',

@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build && node scripts/patch-cloudflare-worker.mjs",
+    "check:guardrails": "node scripts/check-no-global-reload.mjs",
+    "check:worker-scheduled": "node scripts/check-scheduled-export.mjs",
+    "build": "npm run check:guardrails && vite build && node scripts/patch-cloudflare-worker.mjs && npm run check:worker-scheduled",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run",

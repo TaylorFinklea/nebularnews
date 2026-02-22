@@ -26,6 +26,9 @@ declare namespace App {
       MCP_SERVER_VERSION?: string;
       MCP_ALLOWED_ORIGINS?: string;
       APP_ENV?: string;
+      EVENTS_V2_ENABLED?: string;
+      OPTIMISTIC_MUTATIONS_ENABLED?: string;
+      JOB_BATCH_V2_ENABLED?: string;
     };
     context: ExecutionContext;
   }

@@ -1,7 +1,11 @@
 <script>
   import { invalidate } from '$app/navigation';
   import { apiFetch } from '$lib/client/api-fetch';
-  import { IconDownload, IconPlus, IconTrash, IconUpload } from '$lib/icons';
+  import { IconDownload, IconPlus, IconRss, IconTrash, IconUpload } from '$lib/icons';
+  import PageHeader from '$lib/components/PageHeader.svelte';
+  import Card from '$lib/components/Card.svelte';
+  import Button from '$lib/components/Button.svelte';
+  import { showToast } from '$lib/client/toast';
   export let data;
 
   let newUrl = '';
@@ -9,96 +13,111 @@
 
   const addFeed = async () => {
     if (!newUrl) return;
-    await apiFetch('/api/feeds', {
+    const res = await apiFetch('/api/feeds', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ url: newUrl })
     });
-    newUrl = '';
+    if (res.ok) {
+      showToast('Feed added.', 'success');
+      newUrl = '';
+    } else {
+      const payload = await res.json().catch(() => ({}));
+      showToast(payload?.error ?? 'Failed to add feed.', 'error');
+    }
     await invalidate();
   };
 
   const removeFeed = async (id) => {
     await apiFetch(`/api/feeds/${id}`, { method: 'DELETE' });
+    showToast('Feed removed.', 'success');
     await invalidate();
   };
 
   const importOpml = async () => {
     if (!opmlText) return;
-    await apiFetch('/api/feeds/import', {
+    const res = await apiFetch('/api/feeds/import', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ opml: opmlText })
     });
-    opmlText = '';
+    if (res.ok) {
+      showToast('OPML imported.', 'success');
+      opmlText = '';
+    } else {
+      showToast('OPML import failed.', 'error');
+    }
     await invalidate();
   };
 </script>
 
-<section class="page-header">
-  <div>
-    <h1>Feeds</h1>
-    <p>Curate the signals that power your Nebular News.</p>
-  </div>
-  <a class="icon-button button" href="/api/feeds/export" title="Export OPML" aria-label="Export OPML">
-    <IconDownload size={16} stroke={1.9} />
-    <span class="sr-only">Export OPML</span>
-  </a>
-</section>
+<PageHeader title="Feeds" description="Curate the signals that power your Nebular News.">
+  <svelte:fragment slot="actions">
+    <a class="btn-export" href="/api/feeds/export" title="Export OPML" aria-label="Export OPML">
+      <IconDownload size={16} stroke={1.9} />
+      <span>Export OPML</span>
+    </a>
+  </svelte:fragment>
+</PageHeader>
 
 <div class="grid">
-  <div class="card">
+  <Card>
     <h2>Add a feed</h2>
-    <div class="row">
+    <div class="input-row">
       <input placeholder="https://example.com/rss" bind:value={newUrl} />
-      <button class="icon-button" on:click={addFeed} title="Add feed" aria-label="Add feed">
+      <Button variant="primary" size="icon" on:click={addFeed} title="Add feed">
         <IconPlus size={16} stroke={1.9} />
-        <span class="sr-only">Add feed</span>
-      </button>
+      </Button>
     </div>
+
     <h3>Import OPML</h3>
-    <textarea rows="6" placeholder="Paste OPML here" bind:value={opmlText}></textarea>
-    <button on:click={importOpml} class="inline-button">
+    <textarea rows="5" placeholder="Paste OPML here" bind:value={opmlText}></textarea>
+    <Button variant="primary" size="inline" on:click={importOpml}>
       <IconUpload size={16} stroke={1.9} />
       <span>Import</span>
-    </button>
-  </div>
+    </Button>
+  </Card>
 
-  <div class="card">
+  <Card>
     <h2>Lowest Rated Feeds</h2>
     <p class="muted">Only feeds with thumbs feedback appear here.</p>
     {#if data.lowestRatedFeeds.length === 0}
       <p class="muted">No rated feeds yet.</p>
     {:else}
-      <ul class="ranked-list">
+      <ul>
         {#each data.lowestRatedFeeds as feed}
           <li>
-            <div>
+            <div class="feed-info">
               <strong>{feed.title ?? feed.url}</strong>
               <div class="meta">{feed.url}</div>
               <div class="meta">
                 Reputation: {Number(feed.reputation ?? 0).toFixed(2)} ({feed.feedback_count} votes)
               </div>
             </div>
-            <button class="ghost icon-button" on:click={() => removeFeed(feed.id)} title="Remove feed" aria-label="Remove feed">
+            <Button variant="ghost" size="icon" on:click={() => removeFeed(feed.id)} title="Remove feed">
               <IconTrash size={16} stroke={1.9} />
-              <span class="sr-only">Remove feed</span>
-            </button>
+            </Button>
           </li>
         {/each}
       </ul>
     {/if}
-  </div>
+  </Card>
 
-  <div class="card">
-    <h2>Current feeds</h2>
+  <Card>
+    <div class="feed-list-head">
+      <h2>Current feeds</h2>
+      <span class="count">{data.feeds.length}</span>
+    </div>
     {#if data.feeds.length === 0}
-      <p class="muted">No feeds yet. Add your first RSS feed to get started.</p>
+      <div class="empty-state">
+        <IconRss size={36} stroke={1.5} />
+        <p>No feeds yet. Add your first RSS feed above.</p>
+      </div>
     {:else}
       <ul>
         {#each data.feeds as feed}
           <li>
-            <div>
+            <div class="feed-info">
               <strong>{feed.title ?? feed.url}</strong>
               <div class="meta">{feed.url}</div>
               <div class="meta">
@@ -110,87 +129,50 @@
                 {/if}
               </div>
             </div>
-            <button class="ghost icon-button" on:click={() => removeFeed(feed.id)} title="Remove feed" aria-label="Remove feed">
+            <Button variant="ghost" size="icon" on:click={() => removeFeed(feed.id)} title="Remove feed">
               <IconTrash size={16} stroke={1.9} />
-              <span class="sr-only">Remove feed</span>
-            </button>
+            </Button>
           </li>
         {/each}
       </ul>
     {/if}
-  </div>
+  </Card>
 </div>
 
 <style>
-  .page-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 2rem;
-  }
-
-  .button {
-    background: var(--button-bg);
-    color: var(--button-text);
-  }
-
   .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 1.5rem;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: var(--space-6);
   }
 
-  .card {
-    background: var(--surface);
-    padding: 1.5rem;
-    border-radius: 20px;
-    box-shadow: 0 12px 30px var(--shadow-color);
-    border: 1px solid var(--surface-border);
+  h2 {
+    margin: 0;
+    font-size: var(--text-lg);
   }
 
-  .row {
+  h3 {
+    margin: var(--space-2) 0 0;
+    font-size: var(--text-base);
+    color: var(--muted-text);
+    font-weight: 600;
+  }
+
+  .input-row {
     display: flex;
-    gap: 0.6rem;
+    gap: var(--space-2);
   }
 
   input,
   textarea {
     width: 100%;
-    padding: 0.7rem;
-    border-radius: 12px;
+    padding: 0.65rem 0.8rem;
+    border-radius: var(--radius-md);
     border: 1px solid var(--input-border);
-  }
-
-  button {
-    background: var(--button-bg);
-    color: var(--button-text);
-    border: none;
-    padding: 0.7rem 1rem;
-    border-radius: 999px;
-    cursor: pointer;
-  }
-
-  .ghost {
-    background: transparent;
-    color: var(--ghost-color);
-    border: 1px solid var(--ghost-border);
-  }
-
-  .icon-button {
-    width: 2.2rem;
-    height: 2.2rem;
-    padding: 0;
-    border-radius: 999px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .inline-button {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    width: fit-content;
+    background: var(--input-bg);
+    color: var(--text-color);
+    font-family: inherit;
+    resize: vertical;
   }
 
   ul {
@@ -198,38 +180,84 @@
     padding: 0;
     margin: 0;
     display: grid;
-    gap: 1rem;
+    gap: var(--space-3);
   }
 
   li {
     display: flex;
     justify-content: space-between;
-    align-items: center;
-    gap: 1rem;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding-bottom: var(--space-3);
+    border-bottom: 1px solid var(--surface-border);
   }
 
-  .ranked-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    display: grid;
-    gap: 0.8rem;
+  li:last-child {
+    padding-bottom: 0;
+    border-bottom: none;
+  }
+
+  .feed-info {
+    min-width: 0;
+  }
+
+  .feed-info strong {
+    display: block;
+    word-break: break-word;
   }
 
   .meta {
-    font-size: 0.85rem;
+    font-size: var(--text-sm);
     color: var(--muted-text);
+    word-break: break-all;
+    margin-top: 0.15rem;
   }
 
   .muted {
     color: var(--muted-text);
+    margin: 0;
   }
 
-  @media (max-width: 600px) {
-    .page-header {
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 1rem;
-    }
+  .feed-list-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .count {
+    background: var(--surface-soft);
+    border: 1px solid var(--surface-border);
+    border-radius: var(--radius-full);
+    padding: 0.1rem 0.55rem;
+    font-size: var(--text-sm);
+    color: var(--muted-text);
+    font-weight: 600;
+  }
+
+  .empty-state {
+    display: grid;
+    place-items: center;
+    gap: var(--space-3);
+    padding: var(--space-8) 0;
+    color: var(--muted-text);
+    text-align: center;
+  }
+
+  .btn-export {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    background: var(--button-bg);
+    color: var(--button-text);
+    border-radius: var(--radius-full);
+    padding: 0.5rem 1rem;
+    font-size: var(--text-sm);
+    font-weight: 600;
+    text-decoration: none;
+    transition: opacity var(--transition-fast);
+  }
+
+  .btn-export:hover {
+    opacity: 0.85;
   }
 </style>

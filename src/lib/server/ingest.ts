@@ -4,7 +4,12 @@ import { fetchAndParseFeed, type FeedItem } from './feeds';
 import { extractMainContent, computeWordCount } from './text';
 import { normalizeUrl } from './urls';
 import { extractLeadImageUrlFromHtml, normalizeImageUrl } from './images';
-import { clampInitialFeedLookbackDays, getInitialFeedLookbackDays } from './settings';
+import {
+  clampInitialFeedLookbackDays,
+  getInitialFeedLookbackDays,
+  getMaxFeedsPerPoll,
+  getMaxItemsPerPoll
+} from './settings';
 
 const textEncoder = new TextEncoder();
 
@@ -18,10 +23,11 @@ const sha256 = async (text: string) => {
 const POLL_INTERVAL_MS = 1000 * 60 * 60;
 const MAX_PUBLISHED_FUTURE_MS = 1000 * 60 * 60 * 24;
 const DAY_MS = 1000 * 60 * 60 * 24;
-const MAX_FEEDS_PER_POLL = 25;
+const MAX_FEEDS_PER_POLL = 12;
 const MAX_ITEMS_PER_FEED_PER_POLL = 15;
-const MAX_ITEMS_PER_POLL = 200;
+const MAX_ITEMS_PER_POLL = 120;
 const ARTICLE_FETCH_TIMEOUT_MS = 10_000;
+const IMAGE_BACKFILL_COOLDOWN_MS = 1000 * 60 * 60 * 6;
 
 const utcDayStart = (timestamp: number) => {
   const day = new Date(timestamp);
@@ -55,6 +61,9 @@ export type FeedPollError = {
 
 export type FeedPollSummary = {
   dueFeeds: number;
+  feedsPolled: number;
+  feedsSkippedDueToBudget: number;
+  itemBudgetRemaining: number;
   itemsSeen: number;
   itemsProcessed: number;
   errors: FeedPollError[];
@@ -86,9 +95,14 @@ export async function pollFeeds(
 ): Promise<FeedPollSummary> {
   const db = env.DB;
   const pollStartedAt = now();
-  const maxFeeds = Math.max(1, Math.min(100, Math.floor(options.maxFeeds ?? MAX_FEEDS_PER_POLL)));
+  const configuredMaxFeeds = await getMaxFeedsPerPoll(db, env);
+  const configuredMaxItemsTotal = await getMaxItemsPerPoll(db, env);
+  const maxFeeds = Math.max(1, Math.min(100, Math.floor(options.maxFeeds ?? configuredMaxFeeds ?? MAX_FEEDS_PER_POLL)));
   const maxItemsPerFeed = Math.max(1, Math.min(100, Math.floor(options.maxItemsPerFeed ?? MAX_ITEMS_PER_FEED_PER_POLL)));
-  const maxItemsTotal = Math.max(1, Math.min(2000, Math.floor(options.maxItemsTotal ?? MAX_ITEMS_PER_POLL)));
+  const maxItemsTotal = Math.max(
+    1,
+    Math.min(2000, Math.floor(options.maxItemsTotal ?? configuredMaxItemsTotal ?? MAX_ITEMS_PER_POLL))
+  );
   const initialFeedLookbackDays = clampInitialFeedLookbackDays(
     options.initialFeedLookbackDays ?? (await getInitialFeedLookbackDays(db))
   );
@@ -105,6 +119,9 @@ export async function pollFeeds(
   );
   const summary: FeedPollSummary = {
     dueFeeds: dueFeeds.length,
+    feedsPolled: 0,
+    feedsSkippedDueToBudget: 0,
+    itemBudgetRemaining: 0,
     itemsSeen: 0,
     itemsProcessed: 0,
     errors: []
@@ -113,6 +130,7 @@ export async function pollFeeds(
 
   for (const feed of dueFeeds) {
     if (remainingItemsBudget <= 0) break;
+    summary.feedsPolled += 1;
     try {
       const result = await fetchAndParseFeed(feed.url, feed.etag, feed.last_modified);
       const nextPoll = now() + POLL_INTERVAL_MS;
@@ -172,7 +190,48 @@ export async function pollFeeds(
     }
   }
 
+  summary.feedsSkippedDueToBudget = Math.max(0, summary.dueFeeds - summary.feedsPolled);
+  summary.itemBudgetRemaining = Math.max(0, remainingItemsBudget);
+
   return summary;
+}
+
+const resolveImageBackfillRunAfter = (imageCheckedAt: number | null | undefined, referenceAt: number) => {
+  const checkedAt = Number(imageCheckedAt ?? 0);
+  if (!Number.isFinite(checkedAt) || checkedAt <= 0) return referenceAt;
+  return Math.max(referenceAt, checkedAt + IMAGE_BACKFILL_COOLDOWN_MS);
+};
+
+async function queueImageBackfillJob(
+  db: Db,
+  articleId: string,
+  options: { imageCheckedAt?: number | null; referenceAt: number }
+) {
+  const runAfter = resolveImageBackfillRunAfter(options.imageCheckedAt, options.referenceAt);
+  const timestamp = options.referenceAt;
+
+  await dbRun(
+    db,
+    `INSERT INTO jobs (id, type, article_id, status, attempts, priority, run_after, last_error, provider, model, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(type, article_id) DO UPDATE SET
+       status = CASE WHEN jobs.status = 'running' THEN jobs.status ELSE excluded.status END,
+       attempts = CASE WHEN jobs.status = 'running' THEN jobs.attempts ELSE 0 END,
+       priority = excluded.priority,
+       run_after = CASE
+         WHEN jobs.status = 'running' THEN jobs.run_after
+         WHEN jobs.run_after IS NULL THEN excluded.run_after
+         ELSE MIN(jobs.run_after, excluded.run_after)
+       END,
+       last_error = CASE WHEN jobs.status = 'running' THEN jobs.last_error ELSE NULL END,
+       provider = NULL,
+       model = NULL,
+       locked_by = CASE WHEN jobs.status = 'running' THEN jobs.locked_by ELSE NULL END,
+       locked_at = CASE WHEN jobs.status = 'running' THEN jobs.locked_at ELSE NULL END,
+       lease_expires_at = CASE WHEN jobs.status = 'running' THEN jobs.lease_expires_at ELSE NULL END,
+       updated_at = excluded.updated_at`,
+    [nanoid(), 'image_backfill', articleId, 'pending', 0, 120, runAfter, null, null, null, timestamp, timestamp]
+  );
 }
 
 async function ingestFeedItem(db: Db, feedId: string, item: FeedItem): Promise<boolean> {
@@ -219,9 +278,13 @@ async function ingestFeedItem(db: Db, feedId: string, item: FeedItem): Promise<b
   const safeText = contentText ?? item.title ?? url;
   const contentHash = await sha256(safeText);
 
-  const existing = await dbGet<{ id: string }>(
+  const existing = await dbGet<{
+    id: string;
+    image_url: string | null;
+    image_checked_at: number | null;
+  }>(
     db,
-    'SELECT id FROM articles WHERE canonical_url = ? OR content_hash = ? LIMIT 1',
+    'SELECT id, image_url, image_checked_at FROM articles WHERE canonical_url = ? OR content_hash = ? LIMIT 1',
     [url, contentHash]
   );
 
@@ -233,7 +296,11 @@ async function ingestFeedItem(db: Db, feedId: string, item: FeedItem): Promise<b
 
     const result = await dbRun(
       db,
-      'INSERT OR IGNORE INTO articles (id, canonical_url, guid, title, author, published_at, fetched_at, content_html, content_text, excerpt, word_count, content_hash, image_url, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      `INSERT OR IGNORE INTO articles (
+         id, canonical_url, guid, title, author, published_at, fetched_at,
+         content_html, content_text, excerpt, word_count, content_hash,
+         image_url, image_status, image_checked_at, status
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         articleId,
         url,
@@ -248,6 +315,8 @@ async function ingestFeedItem(db: Db, feedId: string, item: FeedItem): Promise<b
         wordCount,
         contentHash,
         imageUrl,
+        imageUrl ? 'found' : 'pending',
+        imageUrl ? fetchedAt : null,
         'ingested'
       ]
     );
@@ -285,7 +354,23 @@ async function ingestFeedItem(db: Db, feedId: string, item: FeedItem): Promise<b
       }
     }
   } else if (imageUrl) {
-    await dbRun(db, 'UPDATE articles SET image_url = COALESCE(image_url, ?) WHERE id = ?', [imageUrl, articleId]);
+    await dbRun(
+      db,
+      `UPDATE articles
+       SET image_url = COALESCE(image_url, ?),
+           image_status = 'found',
+           image_checked_at = ?
+       WHERE id = ?`,
+      [imageUrl, fetchedAt, articleId]
+    );
+  }
+
+  const knownImageUrl = imageUrl ?? existing?.image_url ?? null;
+  if (!knownImageUrl && url) {
+    await queueImageBackfillJob(db, articleId, {
+      imageCheckedAt: existing?.image_checked_at ?? null,
+      referenceAt: fetchedAt
+    });
   }
 
   await dbRun(

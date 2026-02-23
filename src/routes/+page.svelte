@@ -13,18 +13,31 @@
 
   const PULL_SESSION_KEY = 'nebular:manual-pull-in-progress';
   const PULL_STATUS_POLL_MS = 5000;
+  const LIVE_STATS_FALLBACK_POLL_MS = 60000;
   const PULL_START_GRACE_MS = 15000;
   const PULL_COMPLETION_SKEW_MS = 5000;
-  const LIVE_REFRESH_DEBOUNCE_MS = 700;
+  const DEFAULT_DASHBOARD_REFRESH_MIN_MS = 30000;
+  const DASHBOARD_REFRESH_MIN_MS = Math.max(
+    10000,
+    Number(data.liveConfig?.refreshMinMs ?? DEFAULT_DASHBOARD_REFRESH_MIN_MS)
+  );
+  const DASHBOARD_INVALIDATE_MIN_MS = Math.max(60000, DASHBOARD_REFRESH_MIN_MS);
 
   let isPulling = false;
   let pullMessage = '';
+  let today = { ...(data.today ?? {}) };
+  let lastServerTodaySignature = JSON.stringify(data.today ?? {});
   let pullStatusTimer = null;
+  let liveSummaryTimer = null;
   let pullStatusSyncInFlight = false;
+  let summaryRefreshInFlight = false;
   let pullTracker = { pending: false, startedAt: null, runId: null };
   let stopLiveEvents = () => {};
   let liveUnsubscribe = () => {};
-  let refreshTimer = null;
+  let summaryRefreshTimer = null;
+  let invalidateTimer = null;
+  let lastSummaryRefreshAt = 0;
+  let lastInvalidateAt = 0;
   let lastLiveSignature = '';
   let liveConnected = false;
 
@@ -61,18 +74,62 @@
     writePullTracker(pullTracker);
   };
 
+  $: {
+    const serverTodaySignature = JSON.stringify(data.today ?? {});
+    if (serverTodaySignature !== lastServerTodaySignature) {
+      today = { ...(data.today ?? {}) };
+      lastServerTodaySignature = serverTodaySignature;
+    }
+  }
+
   const completionMatchesTracker = (completedAt, startedAt) => {
     if (completedAt === null) return false;
     if (startedAt === null) return true;
     return completedAt + PULL_COMPLETION_SKEW_MS >= startedAt;
   };
 
-  const scheduleDashboardRefresh = () => {
-    if (refreshTimer) return;
-    refreshTimer = setTimeout(async () => {
-      refreshTimer = null;
+  const refreshLiveSummary = async (force = false) => {
+    if (summaryRefreshInFlight) return;
+    if (!force && lastSummaryRefreshAt && Date.now() - lastSummaryRefreshAt < DASHBOARD_REFRESH_MIN_MS) return;
+
+    summaryRefreshInFlight = true;
+    try {
+      const res = await apiFetch('/api/dashboard/live-summary');
+      if (!res.ok) return;
+      const payload = await res.json().catch(() => ({}));
+      const liveSummary = payload?.data ?? payload;
+      if (liveSummary?.today) {
+        today = { ...today, ...liveSummary.today };
+        lastSummaryRefreshAt = Date.now();
+      }
+    } catch {
+      // Ignore transient live-summary fetch errors.
+    } finally {
+      summaryRefreshInFlight = false;
+    }
+  };
+
+  const scheduleDashboardRefresh = (force = false) => {
+    if (summaryRefreshTimer) return;
+    const delayMs = force
+      ? 0
+      : Math.max(0, DASHBOARD_REFRESH_MIN_MS - (Date.now() - lastSummaryRefreshAt));
+    summaryRefreshTimer = setTimeout(() => {
+      summaryRefreshTimer = null;
+      void refreshLiveSummary(true);
+    }, delayMs);
+  };
+
+  const scheduleDashboardInvalidate = (force = false) => {
+    if (invalidateTimer) return;
+    const delayMs = force
+      ? 0
+      : Math.max(0, DASHBOARD_INVALIDATE_MIN_MS - (Date.now() - lastInvalidateAt));
+    invalidateTimer = setTimeout(async () => {
+      invalidateTimer = null;
       await invalidate('app:dashboard');
-    }, LIVE_REFRESH_DEBOUNCE_MS);
+      lastInvalidateAt = Date.now();
+    }, delayMs);
   };
 
   const applyPullState = async ({ inProgress, startedAt, completedAt, runId, lastRunStatus, lastError }) => {
@@ -98,7 +155,8 @@
       pullMessage = lastRunStatus === 'failed'
         ? (lastError ? `Pull failed: ${lastError}` : 'Pull failed.')
         : 'Pull complete. Refreshing...';
-      await invalidate('app:dashboard');
+      await refreshLiveSummary(true);
+      scheduleDashboardInvalidate(true);
       return;
     }
     pullMessage = 'Pull did not confirm start before timeout. Please try again.';
@@ -137,7 +195,11 @@
       const jobsSig = snapshot.jobs ? `${snapshot.jobs.pending}:${snapshot.jobs.running}:${snapshot.jobs.failed}:${snapshot.jobs.done}` : 'jobs:none';
       const pullSig = snapshot.pull ? `${snapshot.pull.status ?? 'none'}:${snapshot.pull.in_progress ? 1 : 0}:${snapshot.pull.run_id ?? ''}:${snapshot.pull.completed_at ?? ''}` : 'pull:none';
       const signature = `${jobsSig}|${pullSig}`;
-      if (signature !== lastLiveSignature) { lastLiveSignature = signature; scheduleDashboardRefresh(); }
+      if (signature !== lastLiveSignature) {
+        lastLiveSignature = signature;
+        scheduleDashboardRefresh();
+        scheduleDashboardInvalidate();
+      }
       if (snapshot.pull) {
         void applyPullState({
           inProgress: Boolean(snapshot.pull.in_progress),
@@ -151,17 +213,24 @@
     });
 
     void syncPullStatus();
+    void refreshLiveSummary(true);
     pullStatusTimer = setInterval(() => {
       if (!isPulling && liveConnected) return;
       void syncPullStatus();
     }, PULL_STATUS_POLL_MS);
+    liveSummaryTimer = setInterval(() => {
+      if (liveConnected) return;
+      void refreshLiveSummary();
+    }, LIVE_STATS_FALLBACK_POLL_MS);
   });
 
   onDestroy(() => {
     if (pullStatusTimer) { clearInterval(pullStatusTimer); pullStatusTimer = null; }
+    if (liveSummaryTimer) { clearInterval(liveSummaryTimer); liveSummaryTimer = null; }
     liveUnsubscribe();
     stopLiveEvents();
-    if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = null; }
+    if (summaryRefreshTimer) { clearTimeout(summaryRefreshTimer); summaryRefreshTimer = null; }
+    if (invalidateTimer) { clearTimeout(invalidateTimer); invalidateTimer = null; }
   });
 
   const scoreLabel = (score) => {
@@ -213,7 +282,8 @@
       pullMessage = `Pull complete. ${payload.stats?.articles ?? 0} articles, ${payload.stats?.pendingJobs ?? 0} jobs queued.`;
       isPulling = false;
       clearPullTracker();
-      await invalidate('app:dashboard');
+      await refreshLiveSummary(true);
+      scheduleDashboardInvalidate(true);
     } catch (error) {
       if (typeof DOMException !== 'undefined' && error instanceof DOMException && error.name === 'AbortError') return;
       pullMessage = 'Manual pull failed';
@@ -259,27 +329,27 @@
     </div>
     <div class="stats-grid">
       <div class="stat-card">
-        <div class="stat-num">{data.today.articles}</div>
+        <div class="stat-num">{today.articles}</div>
         <div class="stat-lbl">Articles</div>
       </div>
       <div class="stat-card">
-        <div class="stat-num">{data.today.summaries}</div>
+        <div class="stat-num">{today.summaries}</div>
         <div class="stat-lbl">Summarized</div>
       </div>
       <div class="stat-card">
-        <div class="stat-num">{data.today.scores}</div>
+        <div class="stat-num">{today.scores}</div>
         <div class="stat-lbl">Scored</div>
       </div>
       <div class="stat-card">
-        <div class="stat-num" class:warn={data.today.pendingJobs > 0}>{data.today.pendingJobs}</div>
+        <div class="stat-num" class:warn={today.pendingJobs > 0}>{today.pendingJobs}</div>
         <div class="stat-lbl">Jobs pending</div>
       </div>
       <div class="stat-card">
-        <div class="stat-num" class:warn={data.today.missingSummaries > 0}>{data.today.missingSummaries}</div>
+        <div class="stat-num" class:warn={today.missingSummaries > 0}>{today.missingSummaries}</div>
         <div class="stat-lbl">Missing summaries</div>
       </div>
       <div class="stat-card">
-        <div class="stat-num" class:warn={data.today.missingScores > 0}>{data.today.missingScores}</div>
+        <div class="stat-num" class:warn={today.missingScores > 0}>{today.missingScores}</div>
         <div class="stat-lbl">Missing scores</div>
       </div>
     </div>

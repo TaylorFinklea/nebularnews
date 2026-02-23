@@ -27,6 +27,16 @@
   let summaryStyle = data.settings.summaryStyle;
   let summaryLength = data.settings.summaryLength;
   let initialFeedLookbackDays = Number(data.settings.initialFeedLookbackDays ?? data.initialFeedLookbackRange?.default ?? 45);
+  let maxFeedsPerPoll = Number(
+    data.settings.maxFeedsPerPoll ?? data.feedPollingRange?.maxFeedsPerPoll?.default ?? 12
+  );
+  let maxItemsPerPoll = Number(
+    data.settings.maxItemsPerPoll ?? data.feedPollingRange?.maxItemsPerPoll?.default ?? 120
+  );
+  let eventsPollMs = Number(data.settings.eventsPollMs ?? data.feedPollingRange?.eventsPollMs?.default ?? 15000);
+  let dashboardRefreshMinMs = Number(
+    data.settings.dashboardRefreshMinMs ?? data.feedPollingRange?.dashboardRefreshMinMs?.default ?? 30000
+  );
   let retentionDays = Number(data.settings.retentionDays ?? data.retentionRange?.default ?? 0);
   let retentionMode = data.settings.retentionMode ?? 'archive';
   let autoReadDelayMs = Number(data.settings.autoReadDelayMs ?? 4000);
@@ -106,6 +116,10 @@
     ingestProvider, ingestModel, ingestReasoningEffort, chatProvider, chatModel, chatReasoningEffort,
     summaryStyle, summaryLength,
     initialFeedLookbackDays: Number(initialFeedLookbackDays ?? 0),
+    maxFeedsPerPoll: Number(maxFeedsPerPoll ?? 0),
+    maxItemsPerPoll: Number(maxItemsPerPoll ?? 0),
+    eventsPollMs: Number(eventsPollMs ?? 0),
+    dashboardRefreshMinMs: Number(dashboardRefreshMinMs ?? 0),
     retentionDays: Number(retentionDays ?? 0), retentionMode,
     autoReadDelayMs: Number(autoReadDelayMs ?? 0), articleCardLayout,
     dashboardTopRatedLayout, dashboardTopRatedCutoff: Number(dashboardTopRatedCutoff ?? 0),
@@ -127,6 +141,10 @@
     chatProvider = snapshot.chatProvider; chatModel = snapshot.chatModel;
     chatReasoningEffort = snapshot.chatReasoningEffort; summaryStyle = snapshot.summaryStyle;
     summaryLength = snapshot.summaryLength; initialFeedLookbackDays = Number(snapshot.initialFeedLookbackDays ?? 0);
+    maxFeedsPerPoll = Number(snapshot.maxFeedsPerPoll ?? 0);
+    maxItemsPerPoll = Number(snapshot.maxItemsPerPoll ?? 0);
+    eventsPollMs = Number(snapshot.eventsPollMs ?? 0);
+    dashboardRefreshMinMs = Number(snapshot.dashboardRefreshMinMs ?? 0);
     retentionDays = Number(snapshot.retentionDays ?? 0); retentionMode = snapshot.retentionMode;
     autoReadDelayMs = Number(snapshot.autoReadDelayMs ?? 0); articleCardLayout = snapshot.articleCardLayout;
     dashboardTopRatedLayout = snapshot.dashboardTopRatedLayout;
@@ -151,7 +169,8 @@
         body: JSON.stringify({
           featureLanes: { summaries: laneSummaries, scoring: laneScoring, profileRefresh: laneProfileRefresh, keyPoints: laneKeyPoints, autoTagging: laneAutoTagging, articleChat: laneArticleChat, globalChat: laneGlobalChat },
           ingestProvider, ingestModel, ingestReasoningEffort, chatProvider, chatModel, chatReasoningEffort,
-          summaryStyle, summaryLength, initialFeedLookbackDays, retentionDays, retentionMode,
+          summaryStyle, summaryLength, initialFeedLookbackDays, maxFeedsPerPoll, maxItemsPerPoll,
+          eventsPollMs, dashboardRefreshMinMs, retentionDays, retentionMode,
           autoReadDelayMs, articleCardLayout, dashboardTopRatedLayout, dashboardTopRatedCutoff, dashboardTopRatedLimit,
           scoreSystemPrompt, scoreUserPromptTemplate
         })
@@ -368,6 +387,52 @@
       <input type="number" min={data.initialFeedLookbackRange.min} max={data.initialFeedLookbackRange.max} step="1" bind:value={initialFeedLookbackDays} />
       <span class="hint">Default {data.initialFeedLookbackRange.default} days. 0 = include all history.</span>
     </label>
+
+    <div class="two-col">
+      <label>
+        Max feeds per poll
+        <input
+          type="number"
+          min={data.feedPollingRange.maxFeedsPerPoll.min}
+          max={data.feedPollingRange.maxFeedsPerPoll.max}
+          step="1"
+          bind:value={maxFeedsPerPoll}
+        />
+      </label>
+      <label>
+        Max items per poll
+        <input
+          type="number"
+          min={data.feedPollingRange.maxItemsPerPoll.min}
+          max={data.feedPollingRange.maxItemsPerPoll.max}
+          step="1"
+          bind:value={maxItemsPerPoll}
+        />
+      </label>
+    </div>
+
+    <div class="two-col">
+      <label>
+        Events poll interval (ms)
+        <input
+          type="number"
+          min={data.feedPollingRange.eventsPollMs.min}
+          max={data.feedPollingRange.eventsPollMs.max}
+          step="1000"
+          bind:value={eventsPollMs}
+        />
+      </label>
+      <label>
+        Dashboard refresh floor (ms)
+        <input
+          type="number"
+          min={data.feedPollingRange.dashboardRefreshMinMs.min}
+          max={data.feedPollingRange.dashboardRefreshMinMs.max}
+          step="1000"
+          bind:value={dashboardRefreshMinMs}
+        />
+      </label>
+    </div>
 
     <label>
       Retention window (days)

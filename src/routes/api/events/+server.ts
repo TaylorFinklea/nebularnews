@@ -1,8 +1,10 @@
 import { dbGet } from '$lib/server/db';
 import { getManualPullState } from '$lib/server/manual-pull';
 import { isEventsV2Enabled } from '$lib/server/flags';
+import { getEventsPollMs } from '$lib/server/settings';
+import { logInfo } from '$lib/server/log';
 
-const POLL_MS = 5000;
+const DEFAULT_POLL_MS = 15000;
 const STREAM_MAX_MS = 55_000;
 
 const encoder = new TextEncoder();
@@ -14,14 +16,19 @@ const sseEvent = (event: string, data: unknown) => {
 export const GET = async ({ platform, request }) => {
   const db = platform.env.DB;
   const eventsV2Enabled = isEventsV2Enabled(platform.env);
+  const pollMs = Math.max(5000, await getEventsPollMs(db, platform.env).catch(() => DEFAULT_POLL_MS));
+  const throttled = pollMs > 5000;
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       let stopped = false;
       let inFlight = false;
       let lastMutationAt = 0;
+      let tickCount = 0;
+      let totalTickDurationMs = 0;
       const sendSnapshot = async () => {
         if (stopped || inFlight) return;
         inFlight = true;
+        const tickStartedAt = Date.now();
         try {
           const ts = Date.now();
           const pull = await getManualPullState(db);
@@ -60,6 +67,7 @@ export const GET = async ({ platform, request }) => {
               sseEvent('pull.status', {
                 type: 'pull.status',
                 ts,
+                throttled,
                 pull: pullPayload
               })
             );
@@ -67,6 +75,7 @@ export const GET = async ({ platform, request }) => {
               sseEvent('jobs.counts', {
                 type: 'jobs.counts',
                 ts,
+                throttled,
                 jobs: jobsPayload
               })
             );
@@ -92,6 +101,7 @@ export const GET = async ({ platform, request }) => {
                 sseEvent('article.mutated', {
                   type: 'article.mutated',
                   ts,
+                  throttled,
                   article: {
                     article_id: latestMutation.article_id,
                     fields: ['read', 'reaction', 'tags'],
@@ -105,6 +115,7 @@ export const GET = async ({ platform, request }) => {
           controller.enqueue(
             sseEvent('state', {
               ts,
+              throttled,
               pull: pullPayload,
               jobs: jobsPayload
             })
@@ -116,6 +127,8 @@ export const GET = async ({ platform, request }) => {
             })
           );
         } finally {
+          tickCount += 1;
+          totalTickDurationMs += Date.now() - tickStartedAt;
           inFlight = false;
         }
       };
@@ -123,7 +136,7 @@ export const GET = async ({ platform, request }) => {
       void sendSnapshot();
       const timer = setInterval(() => {
         void sendSnapshot();
-      }, POLL_MS);
+      }, pollMs);
       const timeout = setTimeout(() => {
         close();
       }, STREAM_MAX_MS);
@@ -137,6 +150,13 @@ export const GET = async ({ platform, request }) => {
           controller.close();
         } catch {
           // Ignore stream close races.
+        }
+        if (tickCount > 0) {
+          logInfo('events.stream.closed', {
+            poll_ms: pollMs,
+            ticks: tickCount,
+            avg_tick_ms: Math.round(totalTickDurationMs / tickCount)
+          });
         }
       };
 

@@ -23,7 +23,6 @@ export type ArticleMutatedEventPayload = {
 };
 
 export type NebularEventV2 =
-  | { type: 'pull.status'; pull: PullStatusEventPayload; ts: number }
-  | { type: 'jobs.counts'; jobs: JobsCountsEventPayload; ts: number }
-  | { type: 'article.mutated'; article: ArticleMutatedEventPayload; ts: number };
-
+  | { type: 'pull.status'; pull: PullStatusEventPayload; ts: number; throttled: boolean }
+  | { type: 'jobs.counts'; jobs: JobsCountsEventPayload; ts: number; throttled: boolean }
+  | { type: 'article.mutated'; article: ArticleMutatedEventPayload; ts: number; throttled: boolean };

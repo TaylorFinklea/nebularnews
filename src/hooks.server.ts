@@ -134,8 +134,7 @@ export const scheduled: ExportedHandlerScheduledHandler = async (event, env, ctx
 
       const startedAt = Date.now();
       const poll = await pollFeeds(env);
-      await processJobs(env);
-      logInfo('scheduled.ingest.completed', {
+      logInfo('scheduled.poll.completed', {
         cron: event.cron,
         duration_ms: Date.now() - startedAt,
         poll

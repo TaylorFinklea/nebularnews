@@ -33,6 +33,8 @@ CREATE TABLE IF NOT EXISTS articles (
   word_count INTEGER,
   content_hash TEXT UNIQUE,
   image_url TEXT,
+  image_status TEXT,
+  image_checked_at INTEGER,
   status TEXT
 );
 
@@ -264,6 +266,7 @@ CREATE TABLE IF NOT EXISTS audit_log (
 
 CREATE INDEX IF NOT EXISTS idx_feeds_next_poll ON feeds(next_poll_at);
 CREATE INDEX IF NOT EXISTS idx_articles_published ON articles(published_at);
+CREATE INDEX IF NOT EXISTS idx_articles_image_status ON articles(image_status, image_checked_at);
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status, run_after);
 CREATE INDEX IF NOT EXISTS idx_jobs_lease ON jobs(status, lease_expires_at);
 CREATE INDEX IF NOT EXISTS idx_jobs_priority ON jobs(status, priority, run_after);
@@ -292,3 +295,6 @@ VALUES (2, 'v2_prod_hardening', unixepoch() * 1000);
 
 INSERT OR IGNORE INTO schema_migrations (version, name, applied_at)
 VALUES (3, 'v3_query_indexes', unixepoch() * 1000);
+
+INSERT OR IGNORE INTO schema_migrations (version, name, applied_at)
+VALUES (4, 'v4_reliability_budgets', unixepoch() * 1000);

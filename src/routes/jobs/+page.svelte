@@ -101,9 +101,10 @@
         const s = payload?.queued?.summarizeQueued ?? 0;
         const sc = payload?.queued?.scoreQueued ?? 0;
         const at = payload?.queued?.autoTagQueued ?? 0;
-        msg = (s === 0 && sc === 0 && at === 0)
+        const ib = payload?.queued?.imageBackfillQueued ?? 0;
+        msg = (s === 0 && sc === 0 && at === 0 && ib === 0)
           ? `No missing jobs found for today.`
-          : `Queued: ${s} summarize, ${sc} score, ${at} auto-tag.`;
+          : `Queued: ${s} summarize, ${sc} score, ${at} auto-tag, ${ib} image backfill.`;
       } else if (typeof touched === 'number') {
         msg = `${label} updated ${touched} job${touched === 1 ? '' : 's'}.`;
       }

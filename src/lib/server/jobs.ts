@@ -1,6 +1,7 @@
 import { nanoid } from 'nanoid';
 import { dbAll, dbGet, dbRun, now, type Db } from './db';
 import { generateArticleKeyPoints, generateArticleTags, refreshPreferenceProfile, scoreArticle, summarizeArticle } from './llm';
+import { extractLeadImageUrlFromHtml } from './images';
 import {
   getFeatureProviderModel,
   getJobProcessorBatchSize,
@@ -18,7 +19,10 @@ const JOB_LEASE_MS = 1000 * 60 * 3;
 const MAX_BACKOFF_MS = 1000 * 60 * 60;
 const LEGACY_BATCH_SIZE = 5;
 const PROCESS_TIME_BUDGET_MS = 20_000;
+const PROD_PROCESS_TIME_BUDGET_MS = 12_000;
 const MAX_BATCH_ROUNDS = 20;
+const IMAGE_FETCH_TIMEOUT_MS = 8000;
+const IMAGE_BACKFILL_RETRY_INTERVAL_MS = 1000 * 60 * 60 * 6;
 type JobRunMetadata = { provider: string; model: string } | null;
 
 const getAffectedRows = (result: unknown) => {
@@ -45,6 +49,7 @@ export async function processJobs(env: App.Platform['env']) {
   let selected = 0;
   let rounds = 0;
   const batchSize = isJobBatchV2Enabled(env) ? await getJobProcessorBatchSize(db) : LEGACY_BATCH_SIZE;
+  const processTimeBudgetMs = env.APP_ENV === 'production' ? PROD_PROCESS_TIME_BUDGET_MS : PROCESS_TIME_BUDGET_MS;
 
   // Reclaim stale running jobs whose lease has expired.
   await dbRun(
@@ -103,6 +108,8 @@ export async function processJobs(env: App.Platform['env']) {
       } else if (job.type === 'summarize_chat' && job.article_id) {
         // Backward compatibility for older queued jobs; follows current Summaries lane setting.
         runMetadata = await runSummarizeJob(db, env, job.article_id);
+      } else if (job.type === 'image_backfill' && job.article_id) {
+        runMetadata = await runImageBackfillJob(db, job.article_id);
       } else if (job.type === 'key_points' && job.article_id) {
         runMetadata = await runKeyPointsJob(db, env, job.article_id);
       } else if (job.type === 'auto_tag' && job.article_id) {
@@ -180,7 +187,7 @@ export async function processJobs(env: App.Platform['env']) {
     }
   };
 
-  while (Date.now() - startedWallClock < PROCESS_TIME_BUDGET_MS && rounds < MAX_BATCH_ROUNDS) {
+  while (Date.now() - startedWallClock < processTimeBudgetMs && rounds < MAX_BATCH_ROUNDS) {
     rounds += 1;
     const selectionTimestamp = now();
     const jobs = await dbAll<{
@@ -205,7 +212,7 @@ export async function processJobs(env: App.Platform['env']) {
 
     for (const job of jobs) {
       await processSingleJob(job);
-      if (Date.now() - startedWallClock >= PROCESS_TIME_BUDGET_MS) {
+      if (Date.now() - startedWallClock >= processTimeBudgetMs) {
         break;
       }
     }
@@ -216,15 +223,21 @@ export async function processJobs(env: App.Platform['env']) {
   }
 
   const durationMs = Date.now() - startedWallClock;
+  const pendingAfterRun = await dbGet<{ count: number }>(db, "SELECT COUNT(*) as count FROM jobs WHERE status = 'pending'");
+  const pendingRemaining = Number(pendingAfterRun?.count ?? 0);
+  const budgetExceeded = durationMs >= processTimeBudgetMs;
   logInfo('jobs.process.completed', {
     processor_id: processorId,
     selected,
     rounds,
     batch_size: batchSize,
+    time_budget_ms: processTimeBudgetMs,
+    budget_exceeded: budgetExceeded,
     claimed,
     done,
     failed,
     retried,
+    pending_remaining: pendingRemaining,
     duration_ms: durationMs
   });
 
@@ -233,12 +246,73 @@ export async function processJobs(env: App.Platform['env']) {
     selected,
     rounds,
     batchSize,
+    processTimeBudgetMs,
+    budgetExceeded,
     claimed,
     done,
     failed,
     retried,
+    pendingRemaining,
     durationMs
   };
+}
+
+async function runImageBackfillJob(db: Db, articleId: string): Promise<JobRunMetadata> {
+  const article = await dbGet<{
+    canonical_url: string | null;
+    image_url: string | null;
+    image_checked_at: number | null;
+    image_status: string | null;
+  }>(
+    db,
+    'SELECT canonical_url, image_url, image_checked_at, image_status FROM articles WHERE id = ?',
+    [articleId]
+  );
+  if (!article?.canonical_url) return null;
+  if (article.image_url) {
+    await dbRun(db, "UPDATE articles SET image_status = 'found', image_checked_at = ? WHERE id = ?", [now(), articleId]);
+    return null;
+  }
+
+  const checkedAt = Number(article.image_checked_at ?? 0);
+  if (
+    Number.isFinite(checkedAt) &&
+    checkedAt > 0 &&
+    article.image_status === 'missing' &&
+    checkedAt + IMAGE_BACKFILL_RETRY_INTERVAL_MS > now()
+  ) {
+    return null;
+  }
+
+  let imageUrl: string | null = null;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), IMAGE_FETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(article.canonical_url, {
+      headers: { 'user-agent': 'NebularNews/0.1 (+image-backfill)' },
+      signal: controller.signal
+    });
+    if (res.ok) {
+      const html = await res.text();
+      imageUrl = extractLeadImageUrlFromHtml(html, article.canonical_url);
+    }
+  } catch {
+    // Best-effort job: ignore fetch failures and mark as missing for later retry.
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  if (imageUrl) {
+    await dbRun(
+      db,
+      "UPDATE articles SET image_url = ?, image_status = 'found', image_checked_at = ? WHERE id = ?",
+      [imageUrl, now(), articleId]
+    );
+  } else {
+    await dbRun(db, "UPDATE articles SET image_status = 'missing', image_checked_at = ? WHERE id = ?", [now(), articleId]);
+  }
+
+  return null;
 }
 
 async function runSummarizeJob(

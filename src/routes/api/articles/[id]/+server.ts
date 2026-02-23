@@ -1,6 +1,5 @@
 import { json } from '@sveltejs/kit';
-import { dbAll, dbGet, dbRun } from '$lib/server/db';
-import { extractLeadImageUrlFromHtml } from '$lib/server/images';
+import { dbAll, dbGet } from '$lib/server/db';
 import { getPreferredSourceForArticle, listSourcesForArticle } from '$lib/server/sources';
 import { listTagsForArticle } from '$lib/server/tags';
 
@@ -26,28 +25,6 @@ export const GET = async ({ params, platform }) => {
     [id]
   );
   if (!article) return json({ error: 'Not found' }, { status: 404 });
-  if (!article.image_url && article.content_html) {
-    let extractedImage = extractLeadImageUrlFromHtml(article.content_html, article.canonical_url ?? null);
-    if (!extractedImage && article.canonical_url) {
-      try {
-        const res = await fetch(article.canonical_url, { headers: { 'user-agent': 'NebularNews/0.1 (+article-image)' } });
-        if (res.ok) {
-          const html = await res.text();
-          extractedImage = extractLeadImageUrlFromHtml(html, article.canonical_url);
-        }
-      } catch {
-        // Best-effort image fallback; ignore remote fetch failures.
-      }
-    }
-    if (extractedImage) {
-      article.image_url = extractedImage;
-      await dbRun(
-        platform.env.DB,
-        'UPDATE articles SET image_url = ? WHERE id = ? AND (image_url IS NULL OR image_url = \'\')',
-        [extractedImage, id]
-      );
-    }
-  }
 
   const summary = await dbGet(
     platform.env.DB,

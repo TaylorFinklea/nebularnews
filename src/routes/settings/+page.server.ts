@@ -4,17 +4,29 @@ import {
   DEFAULT_SCORE_USER_PROMPT_TEMPLATE,
   DEFAULT_DASHBOARD_TOP_RATED_CUTOFF,
   DEFAULT_DASHBOARD_TOP_RATED_LIMIT,
+  DEFAULT_DASHBOARD_REFRESH_MIN_MS,
+  DEFAULT_EVENTS_POLL_MS,
   DEFAULT_INITIAL_FEED_LOOKBACK_DAYS,
+  DEFAULT_MAX_FEEDS_PER_POLL,
+  DEFAULT_MAX_ITEMS_PER_POLL,
   DEFAULT_RETENTION_DAYS,
   DEFAULT_JOB_PROCESSOR_BATCH_SIZE,
   MAX_DASHBOARD_TOP_RATED_CUTOFF,
   MAX_DASHBOARD_TOP_RATED_LIMIT,
+  MAX_DASHBOARD_REFRESH_MIN_MS,
+  MAX_EVENTS_POLL_MS,
   MAX_INITIAL_FEED_LOOKBACK_DAYS,
+  MAX_MAX_FEEDS_PER_POLL,
+  MAX_MAX_ITEMS_PER_POLL,
   MAX_RETENTION_DAYS,
   MAX_JOB_PROCESSOR_BATCH_SIZE,
   MIN_DASHBOARD_TOP_RATED_CUTOFF,
   MIN_DASHBOARD_TOP_RATED_LIMIT,
+  MIN_DASHBOARD_REFRESH_MIN_MS,
+  MIN_EVENTS_POLL_MS,
   MIN_INITIAL_FEED_LOOKBACK_DAYS,
+  MIN_MAX_FEEDS_PER_POLL,
+  MIN_MAX_ITEMS_PER_POLL,
   MIN_RETENTION_DAYS,
   MIN_JOB_PROCESSOR_BATCH_SIZE,
   getFeatureModelLanes,
@@ -25,9 +37,13 @@ import {
   getArticleCardLayout,
   getDashboardTopRatedLayout,
   getConfiguredChatProviderModel,
+  getDashboardRefreshMinMs,
   getConfiguredIngestProviderModel,
+  getEventsPollMs,
   getInitialFeedLookbackDays,
   getJobProcessorBatchSize,
+  getMaxFeedsPerPoll,
+  getMaxItemsPerPoll,
   getRetentionConfig,
   getScorePromptConfig,
   getSetting
@@ -64,6 +80,10 @@ export const load = async ({ platform }) => {
     summaryStyle: (await getSetting(db, 'summary_style')) ?? 'concise',
     summaryLength: (await getSetting(db, 'summary_length')) ?? 'short',
     initialFeedLookbackDays: await getInitialFeedLookbackDays(db),
+    maxFeedsPerPoll: await getMaxFeedsPerPoll(db, platform.env),
+    maxItemsPerPoll: await getMaxItemsPerPoll(db, platform.env),
+    eventsPollMs: await getEventsPollMs(db, platform.env),
+    dashboardRefreshMinMs: await getDashboardRefreshMinMs(db, platform.env),
     retentionDays: retention.days,
     retentionMode: retention.mode,
     autoReadDelayMs: await getAutoReadDelayMs(db),
@@ -96,6 +116,28 @@ export const load = async ({ platform }) => {
       min: MIN_INITIAL_FEED_LOOKBACK_DAYS,
       max: MAX_INITIAL_FEED_LOOKBACK_DAYS,
       default: DEFAULT_INITIAL_FEED_LOOKBACK_DAYS
+    },
+    feedPollingRange: {
+      maxFeedsPerPoll: {
+        min: MIN_MAX_FEEDS_PER_POLL,
+        max: MAX_MAX_FEEDS_PER_POLL,
+        default: DEFAULT_MAX_FEEDS_PER_POLL
+      },
+      maxItemsPerPoll: {
+        min: MIN_MAX_ITEMS_PER_POLL,
+        max: MAX_MAX_ITEMS_PER_POLL,
+        default: DEFAULT_MAX_ITEMS_PER_POLL
+      },
+      eventsPollMs: {
+        min: MIN_EVENTS_POLL_MS,
+        max: MAX_EVENTS_POLL_MS,
+        default: DEFAULT_EVENTS_POLL_MS
+      },
+      dashboardRefreshMinMs: {
+        min: MIN_DASHBOARD_REFRESH_MIN_MS,
+        max: MAX_DASHBOARD_REFRESH_MIN_MS,
+        default: DEFAULT_DASHBOARD_REFRESH_MIN_MS
+      }
     },
     retentionRange: {
       min: MIN_RETENTION_DAYS,

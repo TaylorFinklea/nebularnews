@@ -1,5 +1,4 @@
 import { dbAll, dbGet, type Db } from './db';
-import { extractLeadImageUrlFromHtml } from './images';
 import { getPreferredSourcesForArticles } from './sources';
 import { listTagsForArticles } from './tags';
 
@@ -127,7 +126,6 @@ export const listArticlesWithFilters = async (db: Db, input: ArticleQueryInput) 
     id: string;
     canonical_url: string | null;
     image_url: string | null;
-    content_html: string | null;
     title: string | null;
     author: string | null;
     published_at: number | null;
@@ -145,7 +143,6 @@ export const listArticlesWithFilters = async (db: Db, input: ArticleQueryInput) 
       a.id,
       a.canonical_url,
       a.image_url,
-      a.content_html,
       a.title,
       a.author,
       a.published_at,
@@ -174,12 +171,9 @@ export const listArticlesWithFilters = async (db: Db, input: ArticleQueryInput) 
 
   const articles = rows.map((row) => {
     const source = sourceByArticle.get(row.id);
-    const extractedImage =
-      !row.image_url && row.content_html ? extractLeadImageUrlFromHtml(row.content_html, row.canonical_url ?? null) : null;
-    const { content_html: _contentHtml, ...rest } = row;
     return {
-      ...rest,
-      image_url: row.image_url ?? extractedImage ?? null,
+      ...row,
+      image_url: row.image_url ?? null,
       tags: tagsByArticle.get(row.id) ?? [],
       source: source
         ? {
@@ -204,4 +198,3 @@ export const listArticlesWithFilters = async (db: Db, input: ArticleQueryInput) 
     articles
   };
 };
-

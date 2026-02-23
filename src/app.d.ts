@@ -29,6 +29,10 @@ declare namespace App {
       EVENTS_V2_ENABLED?: string;
       OPTIMISTIC_MUTATIONS_ENABLED?: string;
       JOB_BATCH_V2_ENABLED?: string;
+      MAX_FEEDS_PER_POLL?: string;
+      MAX_ITEMS_PER_POLL?: string;
+      EVENTS_POLL_MS?: string;
+      DASHBOARD_REFRESH_MIN_MS?: string;
     };
     context: ExecutionContext;
   }

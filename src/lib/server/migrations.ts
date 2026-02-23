@@ -4,7 +4,7 @@ let schemaReady = false;
 let schemaInitPromise: Promise<void> | null = null;
 
 const MAX_PUBLISHED_FUTURE_MS = 1000 * 60 * 60 * 24;
-export const EXPECTED_SCHEMA_VERSION = 3;
+export const EXPECTED_SCHEMA_VERSION = 4;
 
 const runSafe = async (db: Db, sql: string, params: unknown[] = []) => {
   try {
@@ -295,6 +295,14 @@ const applyV3 = async (db: Db) => {
   );
 };
 
+const applyV4 = async (db: Db) => {
+  await runSafe(db, 'ALTER TABLE articles ADD COLUMN image_status TEXT');
+  await runSafe(db, 'ALTER TABLE articles ADD COLUMN image_checked_at INTEGER');
+  await runSafe(db, "UPDATE articles SET image_status = 'found' WHERE image_url IS NOT NULL AND image_status IS NULL");
+  await runSafe(db, "UPDATE articles SET image_status = 'pending' WHERE image_url IS NULL AND image_status IS NULL");
+  await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_articles_image_status ON articles(image_status, image_checked_at)');
+};
+
 export async function ensureSchema(db: Db) {
   if (schemaReady) return;
   if (schemaInitPromise) return schemaInitPromise;
@@ -313,6 +321,10 @@ export async function ensureSchema(db: Db) {
     if (currentVersion < 3) {
       await applyV3(db);
       await markVersionApplied(db, 3, 'v3_query_indexes');
+    }
+    if (currentVersion < 4) {
+      await applyV4(db);
+      await markVersionApplied(db, 4, 'v4_reliability_budgets');
     }
     schemaReady = true;
   })();
@@ -364,6 +376,15 @@ const assertRequiredV2Objects = async (db: Db) => {
   }
 };
 
+const assertRequiredV4Objects = async (db: Db) => {
+  const requiredArticleColumns = ['image_status', 'image_checked_at'];
+  for (const columnName of requiredArticleColumns) {
+    if (!(await columnExists(db, 'articles', columnName))) {
+      throw new Error(`Missing required articles column: ${columnName}`);
+    }
+  }
+};
+
 export async function assertSchemaVersion(db: Db, expected = EXPECTED_SCHEMA_VERSION) {
   const version = await getSchemaVersion(db);
   if (version < expected) {
@@ -373,6 +394,9 @@ export async function assertSchemaVersion(db: Db, expected = EXPECTED_SCHEMA_VER
   }
   if (expected >= 2) {
     await assertRequiredV2Objects(db);
+  }
+  if (expected >= 4) {
+    await assertRequiredV4Objects(db);
   }
   return version;
 }

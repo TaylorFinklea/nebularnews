@@ -7,6 +7,10 @@ import {
   clampJobProcessorBatchSize,
   clampInitialFeedLookbackDays,
   clampRetentionDays,
+  clampMaxFeedsPerPoll,
+  clampMaxItemsPerPoll,
+  clampEventsPollMs,
+  clampDashboardRefreshMinMs,
   clampDashboardTopRatedCutoff,
   clampDashboardTopRatedLimit,
   getAutoReadDelayMs,
@@ -18,6 +22,10 @@ import {
   getJobProcessorBatchSize,
   getFeatureModelLanes,
   getInitialFeedLookbackDays,
+  getMaxFeedsPerPoll,
+  getMaxItemsPerPoll,
+  getEventsPollMs,
+  getDashboardRefreshMinMs,
   getRetentionConfig,
   getScorePromptConfig,
   getSetting,
@@ -56,6 +64,10 @@ export const GET = async ({ platform }) => {
     summaryLength: (await getSetting(db, 'summary_length')) ?? 'short',
     pollInterval: (await getSetting(db, 'poll_interval')) ?? '60',
     initialFeedLookbackDays: await getInitialFeedLookbackDays(db),
+    maxFeedsPerPoll: await getMaxFeedsPerPoll(db, platform.env),
+    maxItemsPerPoll: await getMaxItemsPerPoll(db, platform.env),
+    eventsPollMs: await getEventsPollMs(db, platform.env),
+    dashboardRefreshMinMs: await getDashboardRefreshMinMs(db, platform.env),
     retentionDays: retention.days,
     retentionMode: retention.mode,
     autoReadDelayMs: await getAutoReadDelayMs(db),
@@ -150,6 +162,18 @@ export const POST = async ({ request, platform, locals }) => {
   if (body?.pollInterval) entries.push(['poll_interval', String(body.pollInterval)]);
   if (body?.initialFeedLookbackDays !== undefined && body?.initialFeedLookbackDays !== null) {
     entries.push(['initial_feed_lookback_days', String(clampInitialFeedLookbackDays(body.initialFeedLookbackDays))]);
+  }
+  if (body?.maxFeedsPerPoll !== undefined && body?.maxFeedsPerPoll !== null) {
+    entries.push(['max_feeds_per_poll', String(clampMaxFeedsPerPoll(body.maxFeedsPerPoll))]);
+  }
+  if (body?.maxItemsPerPoll !== undefined && body?.maxItemsPerPoll !== null) {
+    entries.push(['max_items_per_poll', String(clampMaxItemsPerPoll(body.maxItemsPerPoll))]);
+  }
+  if (body?.eventsPollMs !== undefined && body?.eventsPollMs !== null) {
+    entries.push(['events_poll_ms', String(clampEventsPollMs(body.eventsPollMs))]);
+  }
+  if (body?.dashboardRefreshMinMs !== undefined && body?.dashboardRefreshMinMs !== null) {
+    entries.push(['dashboard_refresh_min_ms', String(clampDashboardRefreshMinMs(body.dashboardRefreshMinMs))]);
   }
   if (body?.retentionDays !== undefined && body?.retentionDays !== null) {
     entries.push(['retention_days', String(clampRetentionDays(body.retentionDays))]);

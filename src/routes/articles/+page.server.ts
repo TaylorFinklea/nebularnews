@@ -42,7 +42,8 @@ const normalizeSort = (value: string | null): SortValue => {
   return SORT_VALUES.includes(normalized as SortValue) ? (normalized as SortValue) : 'newest';
 };
 
-export const load = async ({ platform, url }) => {
+export const load = async ({ platform, url, setHeaders }) => {
+  const startedAt = Date.now();
   const defaultCardLayout = await getArticleCardLayout(platform.env.DB);
   const query = url.searchParams.get('q')?.trim() ?? '';
   const requestedPage = Math.max(1, Number(url.searchParams.get('page') ?? 1) || 1);
@@ -113,7 +114,7 @@ export const load = async ({ platform, url }) => {
 
   const availableTags = await listTags(platform.env.DB, { limit: 150 });
 
-  return {
+  const payload = {
     articles: result.articles,
     q: query,
     selectedScores,
@@ -136,4 +137,10 @@ export const load = async ({ platform, url }) => {
       end: Math.min(page * PAGE_SIZE, total)
     }
   };
+
+  setHeaders({
+    'server-timing': `articles_list;dur=${Date.now() - startedAt}`
+  });
+
+  return payload;
 };

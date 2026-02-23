@@ -226,13 +226,37 @@ export async function queueMissingTodayArticleJobs(
     [runAfter, timestamp, timestamp, dayStart, dayEnd]
   );
 
+  const imageBackfillResult = await dbRun(
+    db,
+    `INSERT INTO jobs (id, type, article_id, status, attempts, priority, run_after, last_error, provider, model, created_at, updated_at)
+     SELECT lower(hex(randomblob(16))), 'image_backfill', a.id, 'pending', 0, 120, ?, NULL, NULL, NULL, ?, ?
+     FROM articles a
+     WHERE COALESCE(a.published_at, a.fetched_at) >= ?
+       AND COALESCE(a.published_at, a.fetched_at) < ?
+       AND (a.image_url IS NULL OR a.image_url = '')
+     ON CONFLICT(type, article_id) DO UPDATE SET
+       status = excluded.status,
+       attempts = 0,
+       priority = excluded.priority,
+       run_after = excluded.run_after,
+       last_error = NULL,
+       provider = NULL,
+       model = NULL,
+       locked_by = NULL,
+       locked_at = NULL,
+       lease_expires_at = NULL,
+       updated_at = excluded.updated_at`,
+    [runAfter, timestamp, timestamp, dayStart, dayEnd]
+  );
+
   return {
     dayStart,
     dayEnd,
     tzOffsetMinutes: range.tzOffsetMinutes,
     summarizeQueued: getAffectedRows(summarizeResult),
     scoreQueued: getAffectedRows(scoreResult),
-    autoTagQueued: getAffectedRows(autoTagResult)
+    autoTagQueued: getAffectedRows(autoTagResult),
+    imageBackfillQueued: getAffectedRows(imageBackfillResult)
   };
 }
 

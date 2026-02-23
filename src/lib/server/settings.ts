@@ -45,6 +45,18 @@ const MAX_DASHBOARD_TOP_RATED_LIMIT = 20;
 const DEFAULT_INITIAL_FEED_LOOKBACK_DAYS = 45;
 const MIN_INITIAL_FEED_LOOKBACK_DAYS = 0;
 const MAX_INITIAL_FEED_LOOKBACK_DAYS = 3650;
+const DEFAULT_MAX_FEEDS_PER_POLL = 12;
+const MIN_MAX_FEEDS_PER_POLL = 1;
+const MAX_MAX_FEEDS_PER_POLL = 100;
+const DEFAULT_MAX_ITEMS_PER_POLL = 120;
+const MIN_MAX_ITEMS_PER_POLL = 10;
+const MAX_MAX_ITEMS_PER_POLL = 2000;
+const DEFAULT_EVENTS_POLL_MS = 15000;
+const MIN_EVENTS_POLL_MS = 5000;
+const MAX_EVENTS_POLL_MS = 60000;
+const DEFAULT_DASHBOARD_REFRESH_MIN_MS = 30000;
+const MIN_DASHBOARD_REFRESH_MIN_MS = 10000;
+const MAX_DASHBOARD_REFRESH_MIN_MS = 120000;
 const DEFAULT_RETENTION_DAYS = 0;
 const MIN_RETENTION_DAYS = 0;
 const MAX_RETENTION_DAYS = 3650;
@@ -83,6 +95,18 @@ export {
   DEFAULT_INITIAL_FEED_LOOKBACK_DAYS,
   MIN_INITIAL_FEED_LOOKBACK_DAYS,
   MAX_INITIAL_FEED_LOOKBACK_DAYS,
+  DEFAULT_MAX_FEEDS_PER_POLL,
+  MIN_MAX_FEEDS_PER_POLL,
+  MAX_MAX_FEEDS_PER_POLL,
+  DEFAULT_MAX_ITEMS_PER_POLL,
+  MIN_MAX_ITEMS_PER_POLL,
+  MAX_MAX_ITEMS_PER_POLL,
+  DEFAULT_EVENTS_POLL_MS,
+  MIN_EVENTS_POLL_MS,
+  MAX_EVENTS_POLL_MS,
+  DEFAULT_DASHBOARD_REFRESH_MIN_MS,
+  MIN_DASHBOARD_REFRESH_MIN_MS,
+  MAX_DASHBOARD_REFRESH_MIN_MS,
   DEFAULT_RETENTION_DAYS,
   MIN_RETENTION_DAYS,
   MAX_RETENTION_DAYS,
@@ -173,6 +197,33 @@ export const clampRetentionDays = (value: unknown) => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return DEFAULT_RETENTION_DAYS;
   return Math.min(MAX_RETENTION_DAYS, Math.max(MIN_RETENTION_DAYS, Math.round(parsed)));
+};
+
+export const clampMaxFeedsPerPoll = (value: unknown) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return DEFAULT_MAX_FEEDS_PER_POLL;
+  return Math.min(MAX_MAX_FEEDS_PER_POLL, Math.max(MIN_MAX_FEEDS_PER_POLL, Math.round(parsed)));
+};
+
+export const clampMaxItemsPerPoll = (value: unknown) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return DEFAULT_MAX_ITEMS_PER_POLL;
+  return Math.min(MAX_MAX_ITEMS_PER_POLL, Math.max(MIN_MAX_ITEMS_PER_POLL, Math.round(parsed)));
+};
+
+export const clampEventsPollMs = (value: unknown) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return DEFAULT_EVENTS_POLL_MS;
+  return Math.min(MAX_EVENTS_POLL_MS, Math.max(MIN_EVENTS_POLL_MS, Math.round(parsed)));
+};
+
+export const clampDashboardRefreshMinMs = (value: unknown) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return DEFAULT_DASHBOARD_REFRESH_MIN_MS;
+  return Math.min(
+    MAX_DASHBOARD_REFRESH_MIN_MS,
+    Math.max(MIN_DASHBOARD_REFRESH_MIN_MS, Math.round(parsed))
+  );
 };
 
 export const clampJobProcessorBatchSize = (value: unknown) => {
@@ -336,6 +387,26 @@ export async function getDashboardTopRatedConfig(db: Db) {
 export async function getInitialFeedLookbackDays(db: Db) {
   const raw = await getSetting(db, 'initial_feed_lookback_days');
   return clampInitialFeedLookbackDays(raw);
+}
+
+export async function getMaxFeedsPerPoll(db: Db, env?: App.Platform['env']) {
+  const raw = (await getSetting(db, 'max_feeds_per_poll')) ?? env?.MAX_FEEDS_PER_POLL ?? null;
+  return clampMaxFeedsPerPoll(raw);
+}
+
+export async function getMaxItemsPerPoll(db: Db, env?: App.Platform['env']) {
+  const raw = (await getSetting(db, 'max_items_per_poll')) ?? env?.MAX_ITEMS_PER_POLL ?? null;
+  return clampMaxItemsPerPoll(raw);
+}
+
+export async function getEventsPollMs(db: Db, env?: App.Platform['env']) {
+  const raw = (await getSetting(db, 'events_poll_ms')) ?? env?.EVENTS_POLL_MS ?? null;
+  return clampEventsPollMs(raw);
+}
+
+export async function getDashboardRefreshMinMs(db: Db, env?: App.Platform['env']) {
+  const raw = (await getSetting(db, 'dashboard_refresh_min_ms')) ?? env?.DASHBOARD_REFRESH_MIN_MS ?? null;
+  return clampDashboardRefreshMinMs(raw);
 }
 
 export async function getRetentionConfig(db: Db) {

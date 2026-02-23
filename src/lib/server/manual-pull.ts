@@ -233,6 +233,8 @@ const markPullRunFinished = async (
 };
 
 export const getManualPullState = async (db: Db, runId?: string | null): Promise<ManualPullState> => {
+  // Keep pull status deterministic even when scheduled recovery is delayed.
+  await recoverStalePullRuns(db);
   const run = (runId ? await getPullRun(db, runId) : null) ?? (await getLatestPullRun(db));
   if (!run) {
     return {

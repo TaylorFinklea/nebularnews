@@ -4,16 +4,23 @@ import { resolve } from 'node:path';
 const workerPath = resolve('.svelte-kit/cloudflare/_worker.js');
 const source = await readFile(workerPath, 'utf8');
 
-const hasScheduledExport =
-  source.includes('kitScheduled as scheduled') ||
-  source.includes('hooks.server.js";\nexport {\n  worker_default as default,\n  scheduled') ||
-  source.includes(' as scheduled');
+const hasScheduledHandlerOnDefault =
+  source.includes('scheduled: kitScheduled') ||
+  source.includes('scheduled: scheduled');
 
-if (!hasScheduledExport) {
+const hasScheduledNamedExport = source.includes('as scheduled');
+
+if (!hasScheduledHandlerOnDefault) {
   console.error(
-    'Missing scheduled handler export in .svelte-kit/cloudflare/_worker.js. Cron triggers will not run.'
+    'Missing scheduled handler on worker default export in .svelte-kit/cloudflare/_worker.js. Cron triggers will not run.'
   );
   process.exit(1);
 }
 
-console.log('Verified scheduled handler export in Cloudflare worker bundle.');
+if (!hasScheduledNamedExport) {
+  console.warn(
+    'Scheduled handler is wired on default export but no named scheduled export was found (this is acceptable).'
+  );
+}
+
+console.log('Verified scheduled handler wiring in Cloudflare worker bundle.');

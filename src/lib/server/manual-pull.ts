@@ -15,6 +15,8 @@ export type PullStats = {
   itemsSeen: number;
   itemsProcessed: number;
   recentErrors: { url: string; message: string }[];
+  processedCycles?: number;
+  targetCycles?: number;
 };
 
 export type PullRunStatus = 'queued' | 'running' | 'success' | 'failed';
@@ -62,7 +64,44 @@ const parseStats = (statsJson: string | null): PullStats | null => {
   }
 };
 
+const emptyPullStats = (targetCycles: number): PullStats => ({
+  feeds: 0,
+  articles: 0,
+  pendingJobs: 0,
+  feedsWithErrors: 0,
+  dueFeeds: 0,
+  itemsSeen: 0,
+  itemsProcessed: 0,
+  recentErrors: [],
+  processedCycles: 0,
+  targetCycles
+});
+
+const normalizeStats = (statsJson: string | null, targetCycles: number) => {
+  const parsed = parseStats(statsJson);
+  if (!parsed) return emptyPullStats(targetCycles);
+  return {
+    ...emptyPullStats(targetCycles),
+    ...parsed,
+    processedCycles: Math.max(0, Math.min(targetCycles, Number(parsed.processedCycles ?? 0))),
+    targetCycles
+  };
+};
+
+const mergeRecentErrors = (
+  current: { url: string; message: string }[],
+  next: { url: string; message: string }[]
+) => {
+  const merged = [...current];
+  for (const error of next) {
+    if (merged.length >= 5) break;
+    merged.push({ url: error.url, message: error.message });
+  }
+  return merged;
+};
+
 const staleErrorMessage = `Pull run marked failed after ${Math.floor(PULL_RUN_STALE_MS / 60000)} minutes without progress heartbeat`;
+const DEFAULT_PULL_SLICE_BUDGET_MS = 8_000;
 
 export const recoverStalePullRuns = async (db: Db) => {
   const timestamp = now();
@@ -92,6 +131,33 @@ const touchPullRun = async (db: Db, runId: string) => {
      WHERE id = ?
        AND status = 'running'`,
     [now(), runId]
+  );
+};
+
+const collectSnapshotCounts = async (db: Db) => {
+  const [feeds, articles, pendingJobs, feedsWithErrors] = await Promise.all([
+    dbGet<{ count: number }>(db, 'SELECT COUNT(*) as count FROM feeds'),
+    dbGet<{ count: number }>(db, 'SELECT COUNT(*) as count FROM articles'),
+    dbGet<{ count: number }>(db, "SELECT COUNT(*) as count FROM jobs WHERE status = 'pending'"),
+    dbGet<{ count: number }>(db, 'SELECT COUNT(*) as count FROM feeds WHERE error_count > 0')
+  ]);
+  return {
+    feeds: Number(feeds?.count ?? 0),
+    articles: Number(articles?.count ?? 0),
+    pendingJobs: Number(pendingJobs?.count ?? 0),
+    feedsWithErrors: Number(feedsWithErrors?.count ?? 0)
+  };
+};
+
+const persistPullRunProgress = async (db: Db, runId: string, stats: PullStats) => {
+  await dbRun(
+    db,
+    `UPDATE pull_runs
+     SET stats_json = ?,
+         updated_at = ?
+     WHERE id = ?
+       AND status = 'running'`,
+    [JSON.stringify(stats), now(), runId]
   );
 };
 
@@ -233,8 +299,6 @@ const markPullRunFinished = async (
 };
 
 export const getManualPullState = async (db: Db, runId?: string | null): Promise<ManualPullState> => {
-  // Keep pull status deterministic even when scheduled recovery is delayed.
-  await recoverStalePullRuns(db);
   const run = (runId ? await getPullRun(db, runId) : null) ?? (await getLatestPullRun(db));
   if (!run) {
     return {
@@ -265,7 +329,6 @@ export const startManualPull = async (
   db: Db,
   input: { cycles: number; trigger: string; requestId?: string | null }
 ) => {
-  await recoverStalePullRuns(db);
   const active = await getActivePullRun(db);
   if (active) {
     return { started: false, runId: active.id } as const;
@@ -273,6 +336,168 @@ export const startManualPull = async (
   const run = await createPullRun(db, input);
   return { started: true, runId: run.id } as const;
 };
+
+export type PullRunSliceResult = {
+  processed: boolean;
+  runId: string | null;
+  status: PullRunStatus | null;
+  processedCycles: number;
+  targetCycles: number;
+  durationMs: number;
+  error?: string | null;
+};
+
+const processSinglePullRunSlice = async (env: App.Platform['env']): Promise<PullRunSliceResult> => {
+  const db = env.DB;
+  const startedAt = Date.now();
+  const activeRun = await getActivePullRun(db);
+  if (!activeRun) {
+    return {
+      processed: false,
+      runId: null,
+      status: null,
+      processedCycles: 0,
+      targetCycles: 0,
+      durationMs: Date.now() - startedAt
+    };
+  }
+
+  if (activeRun.status === 'queued') {
+    await markPullRunRunning(db, activeRun.id);
+    await dbRun(db, 'UPDATE feeds SET next_poll_at = ? WHERE disabled = 0', [now()]);
+    await touchPullRun(db, activeRun.id);
+  }
+
+  const run = (await getPullRun(db, activeRun.id)) ?? activeRun;
+  const targetCycles = Math.max(1, Number(run.cycles ?? 1));
+  const stats = normalizeStats(run.stats_json, targetCycles);
+  const processedCycles = Number(stats.processedCycles ?? 0);
+  if (processedCycles >= targetCycles) {
+    const snapshot = await collectSnapshotCounts(db);
+    const finalStats = {
+      ...stats,
+      ...snapshot,
+      processedCycles,
+      targetCycles
+    };
+    await markPullRunFinished(db, run.id, { status: 'success', stats: finalStats });
+    return {
+      processed: true,
+      runId: run.id,
+      status: 'success',
+      processedCycles,
+      targetCycles,
+      durationMs: Date.now() - startedAt
+    };
+  }
+
+  try {
+    const poll = await pollFeeds(env, {
+      onFeedSettled: () => touchPullRun(db, run.id)
+    });
+    const nextProcessedCycles = processedCycles + 1;
+    const snapshot = await collectSnapshotCounts(db);
+    const nextStats: PullStats = {
+      ...stats,
+      ...snapshot,
+      dueFeeds: Number(stats.dueFeeds ?? 0) + Number(poll.dueFeeds ?? 0),
+      itemsSeen: Number(stats.itemsSeen ?? 0) + Number(poll.itemsSeen ?? 0),
+      itemsProcessed: Number(stats.itemsProcessed ?? 0) + Number(poll.itemsProcessed ?? 0),
+      recentErrors: mergeRecentErrors(
+        Array.isArray(stats.recentErrors) ? stats.recentErrors : [],
+        poll.errors.map((error) => ({ url: error.url, message: error.message }))
+      ),
+      processedCycles: nextProcessedCycles,
+      targetCycles
+    };
+
+    if (nextProcessedCycles >= targetCycles) {
+      await markPullRunFinished(db, run.id, { status: 'success', stats: nextStats });
+      return {
+        processed: true,
+        runId: run.id,
+        status: 'success',
+        processedCycles: nextProcessedCycles,
+        targetCycles,
+        durationMs: Date.now() - startedAt
+      };
+    }
+
+    await persistPullRunProgress(db, run.id, nextStats);
+    return {
+      processed: true,
+      runId: run.id,
+      status: 'running',
+      processedCycles: nextProcessedCycles,
+      targetCycles,
+      durationMs: Date.now() - startedAt
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Pull run slice failed';
+    const snapshot = await collectSnapshotCounts(db);
+    const failedStats: PullStats = {
+      ...stats,
+      ...snapshot,
+      targetCycles,
+      processedCycles
+    };
+    await markPullRunFinished(db, run.id, { status: 'failed', error: message, stats: failedStats });
+    logError('pull.run.slice_failed', {
+      run_id: run.id,
+      processed_cycles: processedCycles,
+      target_cycles: targetCycles,
+      error: message
+    });
+    return {
+      processed: true,
+      runId: run.id,
+      status: 'failed',
+      processedCycles,
+      targetCycles,
+      durationMs: Date.now() - startedAt,
+      error: message
+    };
+  }
+};
+
+export async function processPullRuns(
+  env: App.Platform['env'],
+  options: {
+    timeBudgetMs?: number;
+    maxSlices?: number;
+  } = {}
+) {
+  const startedAt = Date.now();
+  const timeBudgetMs = Math.max(500, options.timeBudgetMs ?? DEFAULT_PULL_SLICE_BUDGET_MS);
+  const maxSlices = Math.max(1, Math.min(10, options.maxSlices ?? 1));
+  const slices: PullRunSliceResult[] = [];
+
+  while (slices.length < maxSlices && Date.now() - startedAt < timeBudgetMs) {
+    const slice = await processSinglePullRunSlice(env);
+    if (!slice.processed) break;
+    slices.push(slice);
+    if (slice.status === 'running' || slice.status === 'failed') break;
+  }
+
+  const durationMs = Date.now() - startedAt;
+  if (slices.length > 0) {
+    const latest = slices[slices.length - 1];
+    logInfo('pull.run.slices.completed', {
+      run_id: latest.runId,
+      slices: slices.length,
+      status: latest.status,
+      processed_cycles: latest.processedCycles,
+      target_cycles: latest.targetCycles,
+      duration_ms: durationMs
+    });
+  }
+
+  return {
+    slices,
+    processed: slices.length > 0,
+    durationMs
+  };
+}
 
 export async function runPullRun(env: App.Platform['env'], runId: string): Promise<PullStats> {
   const db = env.DB;

@@ -2,7 +2,7 @@ import { json, redirect, type Handle, type HandleServerError } from '@sveltejs/k
 import { getSessionFromRequest } from '$lib/server/auth';
 import { pollFeeds } from '$lib/server/ingest';
 import { processJobs } from '$lib/server/jobs';
-import { recoverStalePullRuns } from '$lib/server/manual-pull';
+import { processPullRuns, recoverStalePullRuns } from '$lib/server/manual-pull';
 import { assertSchemaVersion, ensureSchema } from '$lib/server/migrations';
 import { createRequestId } from '$lib/server/api';
 import { assertRuntimeConfig } from '$lib/server/runtime-config';
@@ -27,6 +27,8 @@ const publicPaths = [
   '/mcp'
 ];
 let runtimeWarningLogged = false;
+const SCHEMA_ASSERT_CACHE_MS = 1000 * 60 * 5;
+let schemaAssertedAt = 0;
 
 export const handle: Handle = async ({ event, resolve }) => {
   const { pathname } = event.url;
@@ -81,8 +83,13 @@ export const handle: Handle = async ({ event, resolve }) => {
 
   if (!isPublic && pathname !== '/api/health' && pathname !== '/api/ready') {
     try {
-      await assertSchemaVersion(event.platform.env.DB);
+      const nowTs = Date.now();
+      if (!schemaAssertedAt || nowTs - schemaAssertedAt > SCHEMA_ASSERT_CACHE_MS) {
+        await assertSchemaVersion(event.platform.env.DB);
+        schemaAssertedAt = nowTs;
+      }
     } catch (error) {
+      schemaAssertedAt = 0;
       const message = error instanceof Error ? error.message : 'Database schema is not ready';
       if (pathname.startsWith('/api')) {
         return finalizeWithCsrf(json({ error: message }, { status: 503 }));
@@ -114,10 +121,15 @@ export const scheduled: ExportedHandlerScheduledHandler = async (event, env, ctx
       if (event.cron === '*/5 * * * *') {
         const startedAt = Date.now();
         await recoverStalePullRuns(env.DB);
-        await processJobs(env);
+        const pull = await processPullRuns(env, { maxSlices: 1, timeBudgetMs: 8000 });
+        if (!pull.processed) {
+          await processJobs(env);
+        }
         logInfo('scheduled.jobs.completed', {
           cron: event.cron,
-          duration_ms: Date.now() - startedAt
+          duration_ms: Date.now() - startedAt,
+          pull_processed: pull.processed,
+          pull_slices: pull.slices.length
         });
         return;
       }

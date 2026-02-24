@@ -6,7 +6,6 @@ import {
   resolveDashboardDayRange
 } from '$lib/server/dashboard';
 import {
-  getDashboardRefreshMinMs,
   getDashboardTopRatedConfig,
   getDashboardTopRatedLayout
 } from '$lib/server/settings';
@@ -21,7 +20,6 @@ export const load = async ({ platform, request, depends, setHeaders, locals }) =
   const db = platform.env.DB;
   const dashboardTopRated = await getDashboardTopRatedConfig(db);
   const dashboardTopRatedLayout = await getDashboardTopRatedLayout(db);
-  const dashboardRefreshMinMs = await getDashboardRefreshMinMs(db);
   const scoreCutoff = dashboardTopRated.cutoff;
   const topRatedLimit = dashboardTopRated.limit;
   const range = resolveDashboardDayRange(request.headers.get('cookie'));
@@ -62,9 +60,6 @@ export const load = async ({ platform, request, depends, setHeaders, locals }) =
     isDev: dev,
     stats,
     today,
-    liveConfig: {
-      refreshMinMs: dashboardRefreshMinMs
-    },
     degraded,
     degradedReason,
     topRatedConfig: {
@@ -77,6 +72,7 @@ export const load = async ({ platform, request, depends, setHeaders, locals }) =
   };
 
   logInfo('dashboard.load.completed', {
+    request_id: locals.requestId ?? null,
     duration_ms: durationMs,
     degraded,
     degraded_reason: degradedReason,

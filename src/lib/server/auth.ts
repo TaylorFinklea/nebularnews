@@ -1,5 +1,6 @@
-import { parse, serialize } from 'cookie';
+import { serialize } from 'cookie';
 import { hmacSign, hmacVerify, pbkdf2Verify } from './crypto';
+import { getCookieValue } from './cookies';
 
 export const SESSION_COOKIE = 'nn_session';
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 14;
@@ -50,8 +51,7 @@ export async function getSessionFromRequest(request: Request, secret: string) {
   try {
     const cookieHeader = request.headers.get('cookie');
     if (!cookieHeader) return null;
-    const cookies = parse(cookieHeader);
-    const value = cookies[SESSION_COOKIE];
+    const value = getCookieValue(cookieHeader, SESSION_COOKIE);
     if (!value) return null;
     const [payloadB64, signature] = value.split('.');
     if (!payloadB64 || !signature) return null;

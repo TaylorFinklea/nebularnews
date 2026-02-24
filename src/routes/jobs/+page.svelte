@@ -45,6 +45,10 @@
   };
 
   onMount(() => {
+    if (!data.liveEventsEnabled) {
+      liveConnected = false;
+      return;
+    }
     stopLiveEvents = startLiveEvents();
     liveUnsubscribe = liveEvents.subscribe((snapshot) => {
       liveConnected = snapshot.connected;
@@ -132,7 +136,13 @@
 <PageHeader title="Job Queue" description="Inspect and control pending, failed, and completed jobs.">
   <svelte:fragment slot="subnav">
     <span class="live-status" class:connected={liveConnected}>
-      {liveConnected ? '● Live' : '○ Reconnecting...'}
+      {#if !data.liveEventsEnabled}
+        ◌ Live updates off
+      {:else if liveConnected}
+        ● Live
+      {:else}
+        ○ Reconnecting...
+      {/if}
     </span>
   </svelte:fragment>
 </PageHeader>

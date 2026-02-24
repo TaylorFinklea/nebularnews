@@ -1,4 +1,4 @@
-import { getManualPullState, runPullRun, startManualPull } from '$lib/server/manual-pull';
+import { getManualPullState, startManualPull } from '$lib/server/manual-pull';
 import { recordAuditEvent } from '$lib/server/audit';
 import { apiError, apiOkWithAliases } from '$lib/server/api';
 
@@ -55,13 +55,6 @@ export const POST = async (event) => {
       requestId: locals.requestId,
       metadata: { cycles }
     });
-
-    const runPromise = runPullRun(platform.env, started.runId);
-    platform.context.waitUntil(
-      runPromise.catch((error) => {
-        console.error('Background manual pull failed', error);
-      })
-    );
 
     return apiOkWithAliases(
       event,

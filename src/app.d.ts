@@ -33,6 +33,7 @@ declare namespace App {
       MAX_ITEMS_PER_POLL?: string;
       EVENTS_POLL_MS?: string;
       DASHBOARD_REFRESH_MIN_MS?: string;
+      JOB_PROCESSOR_BATCH_SIZE?: string;
     };
     context: ExecutionContext;
   }

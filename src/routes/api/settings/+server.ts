@@ -71,7 +71,7 @@ export const GET = async ({ platform }) => {
     retentionDays: retention.days,
     retentionMode: retention.mode,
     autoReadDelayMs: await getAutoReadDelayMs(db),
-    jobProcessorBatchSize: await getJobProcessorBatchSize(db),
+    jobProcessorBatchSize: await getJobProcessorBatchSize(db, platform.env),
     articleCardLayout: await getArticleCardLayout(db),
     dashboardTopRatedLayout,
     dashboardTopRatedCutoff: dashboardTopRated.cutoff,

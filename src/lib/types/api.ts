@@ -36,3 +36,32 @@ export type MutationResult<T> = {
   };
 };
 
+export type LiveHeartbeatPayload = {
+  pull: {
+    run_id: string | null;
+    status: string | null;
+    in_progress: boolean;
+    started_at: number | null;
+    completed_at: number | null;
+    last_run_status: 'success' | 'failed' | null;
+    last_error: string | null;
+  };
+  jobs: {
+    pending: number;
+    running: number;
+    failed: number;
+    done: number;
+  };
+  today: {
+    articles: number;
+    summaries: number;
+    scores: number;
+    pendingJobs: number;
+    missingSummaries: number;
+    missingScores: number;
+    tzOffsetMinutes: number;
+  };
+  refreshed_at: number;
+  degraded: boolean;
+  degraded_reason: string | null;
+};

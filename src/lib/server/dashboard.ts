@@ -1,5 +1,5 @@
-import { parse as parseCookie } from 'cookie';
 import { dbAll, dbGet, type Db } from './db';
+import { getCookieValue } from './cookies';
 import { getPreferredSourcesForArticles } from './sources';
 import { clampTimezoneOffsetMinutes, dayRangeForTimezoneOffset } from './time';
 
@@ -40,8 +40,8 @@ export type DashboardTopRatedArticle = {
 };
 
 export const resolveDashboardDayRange = (cookieHeader: string | null, referenceAt = Date.now()): DashboardDayRange => {
-  const cookies = parseCookie(cookieHeader ?? '');
-  const tzOffsetMinutes = clampTimezoneOffsetMinutes(cookies.nebular_tz_offset_min, 0);
+  const tzCookie = getCookieValue(cookieHeader, 'nebular_tz_offset_min');
+  const tzOffsetMinutes = clampTimezoneOffsetMinutes(tzCookie, 0);
   const { dayStart, dayEnd } = dayRangeForTimezoneOffset(referenceAt, tzOffsetMinutes);
   return {
     dayStart,

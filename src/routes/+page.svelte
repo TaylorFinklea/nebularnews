@@ -2,7 +2,6 @@
   import { invalidate } from '$app/navigation';
   import { onDestroy, onMount } from 'svelte';
   import { apiFetch } from '$lib/client/api-fetch';
-  import { liveEvents, startLiveEvents } from '$lib/client/live-events';
   import { IconClockPlay, IconExternalLink } from '$lib/icons';
   import { resolveArticleImageUrl } from '$lib/article-image';
   import Card from '$lib/components/Card.svelte';
@@ -12,34 +11,20 @@
   export let data;
 
   const PULL_SESSION_KEY = 'nebular:manual-pull-in-progress';
-  const PULL_STATUS_POLL_MS = 5000;
-  const LIVE_STATS_FALLBACK_POLL_MS = 60000;
+  const HEARTBEAT_VISIBLE_POLL_MS = 30000;
+  const HEARTBEAT_HIDDEN_POLL_MS = 90000;
   const PULL_START_GRACE_MS = 15000;
   const PULL_COMPLETION_SKEW_MS = 5000;
-  const DEFAULT_DASHBOARD_REFRESH_MIN_MS = 30000;
-  const DASHBOARD_REFRESH_MIN_MS = Math.max(
-    10000,
-    Number(data.liveConfig?.refreshMinMs ?? DEFAULT_DASHBOARD_REFRESH_MIN_MS)
-  );
-  const DASHBOARD_INVALIDATE_MIN_MS = Math.max(60000, DASHBOARD_REFRESH_MIN_MS);
 
   let isPulling = false;
   let pullMessage = '';
   let today = { ...(data.today ?? {}) };
   let lastServerTodaySignature = JSON.stringify(data.today ?? {});
-  let pullStatusTimer = null;
-  let liveSummaryTimer = null;
-  let pullStatusSyncInFlight = false;
-  let summaryRefreshInFlight = false;
+  let syncInFlight = false;
   let pullTracker = { pending: false, startedAt: null, runId: null };
-  let stopLiveEvents = () => {};
-  let liveUnsubscribe = () => {};
-  let summaryRefreshTimer = null;
-  let invalidateTimer = null;
-  let lastSummaryRefreshAt = 0;
-  let lastInvalidateAt = 0;
-  let lastLiveSignature = '';
+  let heartbeatTimer = null;
   let liveConnected = false;
+  let heartbeatDegraded = false;
 
   const toFiniteNumber = (value) => {
     const numeric = Number(value);
@@ -66,7 +51,9 @@
     try {
       if (value.pending) sessionStorage.setItem(PULL_SESSION_KEY, JSON.stringify(value));
       else sessionStorage.removeItem(PULL_SESSION_KEY);
-    } catch { /* ignore */ }
+    } catch {
+      // Ignore sessionStorage write failures.
+    }
   };
 
   const clearPullTracker = () => {
@@ -88,50 +75,6 @@
     return completedAt + PULL_COMPLETION_SKEW_MS >= startedAt;
   };
 
-  const refreshLiveSummary = async (force = false) => {
-    if (summaryRefreshInFlight) return;
-    if (!force && lastSummaryRefreshAt && Date.now() - lastSummaryRefreshAt < DASHBOARD_REFRESH_MIN_MS) return;
-
-    summaryRefreshInFlight = true;
-    try {
-      const res = await apiFetch('/api/dashboard/live-summary');
-      if (!res.ok) return;
-      const payload = await res.json().catch(() => ({}));
-      const liveSummary = payload?.data ?? payload;
-      if (liveSummary?.today) {
-        today = { ...today, ...liveSummary.today };
-        lastSummaryRefreshAt = Date.now();
-      }
-    } catch {
-      // Ignore transient live-summary fetch errors.
-    } finally {
-      summaryRefreshInFlight = false;
-    }
-  };
-
-  const scheduleDashboardRefresh = (force = false) => {
-    if (summaryRefreshTimer) return;
-    const delayMs = force
-      ? 0
-      : Math.max(0, DASHBOARD_REFRESH_MIN_MS - (Date.now() - lastSummaryRefreshAt));
-    summaryRefreshTimer = setTimeout(() => {
-      summaryRefreshTimer = null;
-      void refreshLiveSummary(true);
-    }, delayMs);
-  };
-
-  const scheduleDashboardInvalidate = (force = false) => {
-    if (invalidateTimer) return;
-    const delayMs = force
-      ? 0
-      : Math.max(0, DASHBOARD_INVALIDATE_MIN_MS - (Date.now() - lastInvalidateAt));
-    invalidateTimer = setTimeout(async () => {
-      invalidateTimer = null;
-      await invalidate('app:dashboard');
-      lastInvalidateAt = Date.now();
-    }, delayMs);
-  };
-
   const applyPullState = async ({ inProgress, startedAt, completedAt, runId, lastRunStatus, lastError }) => {
     if (inProgress) {
       isPulling = true;
@@ -142,12 +85,18 @@
       return;
     }
 
-    if (!pullTracker.pending) { isPulling = false; return; }
+    if (!pullTracker.pending) {
+      isPulling = false;
+      return;
+    }
 
     const completedMatches = completionMatchesTracker(completedAt, pullTracker.startedAt);
     const waitingForStart = pullTracker.startedAt !== null && Date.now() - pullTracker.startedAt < PULL_START_GRACE_MS;
 
-    if (!completedMatches && waitingForStart) { isPulling = true; return; }
+    if (!completedMatches && waitingForStart) {
+      isPulling = true;
+      return;
+    }
 
     isPulling = false;
     clearPullTracker();
@@ -155,82 +104,92 @@
       pullMessage = lastRunStatus === 'failed'
         ? (lastError ? `Pull failed: ${lastError}` : 'Pull failed.')
         : 'Pull complete. Refreshing...';
-      await refreshLiveSummary(true);
-      scheduleDashboardInvalidate(true);
+      await invalidate('app:dashboard');
       return;
     }
     pullMessage = 'Pull did not confirm start before timeout. Please try again.';
   };
 
-  const syncPullStatus = async () => {
-    if (pullStatusSyncInFlight) return;
-    pullStatusSyncInFlight = true;
+  const syncHeartbeat = async () => {
+    if (syncInFlight) return;
+    syncInFlight = true;
     try {
-      const statusUrl = pullTracker.runId
-        ? `/api/pull/status?run_id=${encodeURIComponent(pullTracker.runId)}`
-        : '/api/pull/status';
-      const res = await apiFetch(statusUrl);
-      if (!res.ok) return;
+      const res = await apiFetch('/api/live/heartbeat');
+      if (!res.ok) {
+        liveConnected = false;
+        return;
+      }
+
       const payload = await res.json().catch(() => ({}));
+      const heartbeat = payload?.data ?? payload;
+      liveConnected = true;
+      heartbeatDegraded = Boolean(heartbeat?.degraded);
+
+      if (heartbeat?.today && typeof heartbeat.today === 'object') {
+        today = { ...today, ...heartbeat.today };
+      }
+
+      const pull = heartbeat?.pull ?? {};
       await applyPullState({
-        inProgress: Boolean(payload?.in_progress),
-        startedAt: toFiniteNumber(payload?.started_at),
-        completedAt: toFiniteNumber(payload?.completed_at),
-        runId: typeof payload?.run_id === 'string' && payload.run_id.trim() ? payload.run_id.trim() : null,
-        lastRunStatus: payload?.last_run_status === 'success' || payload?.last_run_status === 'failed' ? payload.last_run_status : null,
-        lastError: typeof payload?.last_error === 'string' && payload.last_error.length > 0 ? payload.last_error : null
+        inProgress: Boolean(pull?.in_progress),
+        startedAt: toFiniteNumber(pull?.started_at),
+        completedAt: toFiniteNumber(pull?.completed_at),
+        runId: typeof pull?.run_id === 'string' && pull.run_id.trim() ? pull.run_id.trim() : null,
+        lastRunStatus: pull?.last_run_status === 'success' || pull?.last_run_status === 'failed' ? pull.last_run_status : null,
+        lastError: typeof pull?.last_error === 'string' && pull.last_error.length > 0 ? pull.last_error : null
       });
-    } catch { /* ignore */ } finally {
-      pullStatusSyncInFlight = false;
+    } catch {
+      liveConnected = false;
+    } finally {
+      syncInFlight = false;
     }
+  };
+
+  const nextHeartbeatInterval = () => {
+    if (typeof document === 'undefined') return HEARTBEAT_VISIBLE_POLL_MS;
+    return document.visibilityState === 'hidden'
+      ? HEARTBEAT_HIDDEN_POLL_MS
+      : HEARTBEAT_VISIBLE_POLL_MS;
+  };
+
+  const clearHeartbeatTimer = () => {
+    if (!heartbeatTimer) return;
+    clearTimeout(heartbeatTimer);
+    heartbeatTimer = null;
+  };
+
+  const scheduleHeartbeat = (immediate = false) => {
+    clearHeartbeatTimer();
+    heartbeatTimer = setTimeout(async () => {
+      heartbeatTimer = null;
+      await syncHeartbeat();
+      scheduleHeartbeat(false);
+    }, immediate ? 0 : nextHeartbeatInterval());
+  };
+
+  const handleVisibilityChange = () => {
+    scheduleHeartbeat(true);
   };
 
   onMount(() => {
     pullTracker = readPullTracker();
-    if (pullTracker.pending) { isPulling = true; if (!pullMessage) pullMessage = 'Pulling feeds now...'; }
+    if (pullTracker.pending) {
+      isPulling = true;
+      if (!pullMessage) pullMessage = 'Pulling feeds now...';
+    }
 
-    stopLiveEvents = startLiveEvents();
-    liveUnsubscribe = liveEvents.subscribe((snapshot) => {
-      liveConnected = snapshot.connected;
-      const jobsSig = snapshot.jobs ? `${snapshot.jobs.pending}:${snapshot.jobs.running}:${snapshot.jobs.failed}:${snapshot.jobs.done}` : 'jobs:none';
-      const pullSig = snapshot.pull ? `${snapshot.pull.status ?? 'none'}:${snapshot.pull.in_progress ? 1 : 0}:${snapshot.pull.run_id ?? ''}:${snapshot.pull.completed_at ?? ''}` : 'pull:none';
-      const signature = `${jobsSig}|${pullSig}`;
-      if (signature !== lastLiveSignature) {
-        lastLiveSignature = signature;
-        scheduleDashboardRefresh();
-        scheduleDashboardInvalidate();
-      }
-      if (snapshot.pull) {
-        void applyPullState({
-          inProgress: Boolean(snapshot.pull.in_progress),
-          startedAt: toFiniteNumber(snapshot.pull.started_at),
-          completedAt: toFiniteNumber(snapshot.pull.completed_at),
-          runId: snapshot.pull.run_id ?? null,
-          lastRunStatus: snapshot.pull.last_run_status,
-          lastError: snapshot.pull.last_error
-        });
-      }
-    });
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
 
-    void syncPullStatus();
-    void refreshLiveSummary(true);
-    pullStatusTimer = setInterval(() => {
-      if (!isPulling && liveConnected) return;
-      void syncPullStatus();
-    }, PULL_STATUS_POLL_MS);
-    liveSummaryTimer = setInterval(() => {
-      if (liveConnected) return;
-      void refreshLiveSummary();
-    }, LIVE_STATS_FALLBACK_POLL_MS);
+    scheduleHeartbeat(true);
   });
 
   onDestroy(() => {
-    if (pullStatusTimer) { clearInterval(pullStatusTimer); pullStatusTimer = null; }
-    if (liveSummaryTimer) { clearInterval(liveSummaryTimer); liveSummaryTimer = null; }
-    liveUnsubscribe();
-    stopLiveEvents();
-    if (summaryRefreshTimer) { clearTimeout(summaryRefreshTimer); summaryRefreshTimer = null; }
-    if (invalidateTimer) { clearTimeout(invalidateTimer); invalidateTimer = null; }
+    clearHeartbeatTimer();
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    }
   });
 
   const scoreLabel = (score) => {
@@ -251,6 +210,7 @@
     pullTracker = { pending: true, startedAt: Date.now(), runId: null };
     writePullTracker(pullTracker);
     const cycles = data.isDev ? 3 : 1;
+
     try {
       const res = await apiFetch('/api/pull', {
         method: 'POST',
@@ -258,32 +218,39 @@
         body: JSON.stringify({ cycles })
       });
       const payload = await res.json().catch(() => ({}));
+
       if (!res.ok) {
         if (res.status === 409) {
           isPulling = true;
-          pullMessage = payload?.error ?? 'Manual pull already in progress';
-          if (payload?.run_id) { pullTracker = { ...pullTracker, runId: payload.run_id }; writePullTracker(pullTracker); }
-          void syncPullStatus();
+          pullMessage = payload?.error?.message ?? payload?.error ?? 'Manual pull already in progress';
+          const conflictRunId = payload?.error?.details?.run_id ?? payload?.run_id ?? null;
+          if (conflictRunId) {
+            pullTracker = { ...pullTracker, runId: conflictRunId };
+            writePullTracker(pullTracker);
+          }
+          scheduleHeartbeat(true);
           return;
         }
-        pullMessage = payload?.error ?? 'Manual pull failed';
+
+        pullMessage = payload?.error?.message ?? payload?.error ?? 'Manual pull failed';
         isPulling = false;
         clearPullTracker();
         return;
       }
+
       if (payload?.started) {
         isPulling = true;
         pullTracker = { pending: true, startedAt: pullTracker.startedAt ?? Date.now(), runId: payload?.run_id ?? null };
         writePullTracker(pullTracker);
-        pullMessage = 'Pull started. Running in background...';
-        void syncPullStatus();
+        pullMessage = 'Pull queued. Running in scheduled slices...';
+        scheduleHeartbeat(true);
         return;
       }
+
       pullMessage = `Pull complete. ${payload.stats?.articles ?? 0} articles, ${payload.stats?.pendingJobs ?? 0} jobs queued.`;
       isPulling = false;
       clearPullTracker();
-      await refreshLiveSummary(true);
-      scheduleDashboardInvalidate(true);
+      await invalidate('app:dashboard');
     } catch (error) {
       if (typeof DOMException !== 'undefined' && error instanceof DOMException && error.name === 'AbortError') return;
       pullMessage = 'Manual pull failed';
@@ -314,7 +281,11 @@
         <p class="pull-msg" role="status" aria-live="polite">{pullMessage}</p>
       {/if}
       <span class="live-badge" class:live={liveConnected}>
-        {liveConnected ? '● Live' : '○ Connecting...'}
+        {#if liveConnected}
+          {heartbeatDegraded ? '◐ Live (throttled)' : '● Live'}
+        {:else}
+          ○ Connecting...
+        {/if}
       </span>
     </div>
   </div>

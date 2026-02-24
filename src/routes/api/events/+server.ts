@@ -16,6 +16,15 @@ const sseEvent = (event: string, data: unknown) => {
 export const GET = async ({ platform, request }) => {
   const db = platform.env.DB;
   const eventsV2Enabled = isEventsV2Enabled(platform.env);
+  if (!eventsV2Enabled) {
+    return new Response(JSON.stringify({ error: 'Live events are disabled' }), {
+      status: 503,
+      headers: {
+        'content-type': 'application/json; charset=utf-8',
+        'cache-control': 'no-store'
+      }
+    });
+  }
   const pollMs = Math.max(5000, await getEventsPollMs(db, platform.env).catch(() => DEFAULT_POLL_MS));
   const throttled = pollMs > 5000;
   const stream = new ReadableStream<Uint8Array>({

@@ -72,7 +72,7 @@ describe('getManualPullState', () => {
     });
   });
 
-  it('recovers stale queued/running runs before reporting state', async () => {
+  it('does not mutate stale runs in read path', async () => {
     harness.run = {
       id: 'pull-1',
       status: 'running',
@@ -90,10 +90,10 @@ describe('getManualPullState', () => {
     const state = await getManualPullState({} as D1Database);
 
     expect(state.runId).toBe('pull-1');
-    expect(state.status).toBe('failed');
-    expect(state.inProgress).toBe(false);
-    expect(state.lastRunStatus).toBe('failed');
-    expect(state.lastError).toContain('marked failed');
+    expect(state.status).toBe('running');
+    expect(state.inProgress).toBe(true);
+    expect(state.lastRunStatus).toBe(null);
+    expect(dbRunMock).not.toHaveBeenCalled();
   });
 
   it('keeps recently updated running runs in progress', async () => {

@@ -19,10 +19,11 @@ const JOB_LEASE_MS = 1000 * 60 * 3;
 const MAX_BACKOFF_MS = 1000 * 60 * 60;
 const LEGACY_BATCH_SIZE = 5;
 const PROCESS_TIME_BUDGET_MS = 20_000;
-const PROD_PROCESS_TIME_BUDGET_MS = 12_000;
+const PROD_PROCESS_TIME_BUDGET_MS = 8_000;
 const MAX_BATCH_ROUNDS = 20;
 const IMAGE_FETCH_TIMEOUT_MS = 8000;
 const IMAGE_BACKFILL_RETRY_INTERVAL_MS = 1000 * 60 * 60 * 6;
+const IMAGE_BACKFILL_PRESSURE_THRESHOLD = 20;
 type JobRunMetadata = { provider: string; model: string } | null;
 
 const getAffectedRows = (result: unknown) => {
@@ -48,7 +49,7 @@ export async function processJobs(env: App.Platform['env']) {
   let retried = 0;
   let selected = 0;
   let rounds = 0;
-  const batchSize = isJobBatchV2Enabled(env) ? await getJobProcessorBatchSize(db) : LEGACY_BATCH_SIZE;
+  const batchSize = isJobBatchV2Enabled(env) ? await getJobProcessorBatchSize(db, env) : LEGACY_BATCH_SIZE;
   const processTimeBudgetMs = env.APP_ENV === 'production' ? PROD_PROCESS_TIME_BUDGET_MS : PROCESS_TIME_BUDGET_MS;
 
   // Reclaim stale running jobs whose lease has expired.
@@ -190,6 +191,15 @@ export async function processJobs(env: App.Platform['env']) {
   while (Date.now() - startedWallClock < processTimeBudgetMs && rounds < MAX_BATCH_ROUNDS) {
     rounds += 1;
     const selectionTimestamp = now();
+    const pressureRow = await dbGet<{ count: number }>(
+      db,
+      `SELECT COUNT(*) as count
+       FROM jobs
+       WHERE status = 'pending'
+         AND type IN ('summarize', 'score', 'auto_tag', 'key_points', 'refresh_profile')`
+    );
+    const queuePressure = Number(pressureRow?.count ?? 0);
+    const allowImageBackfill = queuePressure < IMAGE_BACKFILL_PRESSURE_THRESHOLD;
     const jobs = await dbAll<{
       id: string;
       type: string;
@@ -203,6 +213,7 @@ export async function processJobs(env: App.Platform['env']) {
        FROM jobs
        WHERE status = 'pending'
          AND run_after <= ?
+         ${allowImageBackfill ? '' : "AND type != 'image_backfill'"}
        ORDER BY priority ASC, run_after ASC
        LIMIT ?`,
       [selectionTimestamp, batchSize]
@@ -237,6 +248,7 @@ export async function processJobs(env: App.Platform['env']) {
     done,
     failed,
     retried,
+    image_backfill_allowed: pendingRemaining < IMAGE_BACKFILL_PRESSURE_THRESHOLD,
     pending_remaining: pendingRemaining,
     duration_ms: durationMs
   });

@@ -61,7 +61,7 @@ const DEFAULT_RETENTION_DAYS = 0;
 const MIN_RETENTION_DAYS = 0;
 const MAX_RETENTION_DAYS = 3650;
 const DEFAULT_RETENTION_MODE: RetentionMode = 'archive';
-const DEFAULT_JOB_PROCESSOR_BATCH_SIZE = 12;
+const DEFAULT_JOB_PROCESSOR_BATCH_SIZE = 6;
 const MIN_JOB_PROCESSOR_BATCH_SIZE = 1;
 const MAX_JOB_PROCESSOR_BATCH_SIZE = 100;
 const FEATURE_LANE_DEFAULTS: Record<AiFeature, AiModelLane> = {
@@ -415,8 +415,8 @@ export async function getRetentionConfig(db: Db) {
   return { days, mode };
 }
 
-export async function getJobProcessorBatchSize(db: Db) {
-  const raw = await getSetting(db, 'job_processor_batch_size');
+export async function getJobProcessorBatchSize(db: Db, env?: App.Platform['env']) {
+  const raw = (await getSetting(db, 'job_processor_batch_size')) ?? env?.JOB_PROCESSOR_BATCH_SIZE ?? null;
   return clampJobProcessorBatchSize(raw);
 }
 

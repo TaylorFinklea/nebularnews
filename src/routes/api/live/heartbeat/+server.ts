@@ -2,13 +2,15 @@ import { apiOkWithAliases } from '$lib/server/api';
 import { getLiveHeartbeat, type LiveHeartbeatPayload } from '$lib/server/live-heartbeat';
 import { logInfo, logWarn } from '$lib/server/log';
 
+const HEARTBEAT_ROUTE_BUDGET_MS = 1200;
+
 export const GET = async (event) => {
   const startedAt = Date.now();
   let data: LiveHeartbeatPayload;
   try {
     data = await getLiveHeartbeat(event.platform.env.DB, event.request.headers.get('cookie'), {
       requestId: event.locals.requestId,
-      budgetMs: 1200,
+      budgetMs: HEARTBEAT_ROUTE_BUDGET_MS,
       startedAt
     });
   } catch (error) {
@@ -39,20 +41,22 @@ export const GET = async (event) => {
       },
       refreshed_at: Date.now(),
       degraded: true,
-      degraded_reason: 'live_summary_exception'
+      degraded_reason: 'heartbeat_exception'
     };
-    logWarn('dashboard.live_summary.degraded', {
+    logWarn('live.heartbeat.degraded', {
       request_id: event.locals.requestId,
       error: error instanceof Error ? error.message : String(error)
     });
   }
-
   const durationMs = Date.now() - startedAt;
-  logInfo('dashboard.live_summary.completed', {
+
+  logInfo('live.heartbeat.completed', {
     request_id: event.locals.requestId,
     duration_ms: durationMs,
     degraded: data.degraded,
-    degraded_reason: data.degraded_reason
+    degraded_reason: data.degraded_reason,
+    pull_status: data.pull.status,
+    pull_in_progress: data.pull.in_progress
   });
 
   return apiOkWithAliases(
@@ -63,7 +67,7 @@ export const GET = async (event) => {
       server_timing_ms: durationMs
     },
     {
-      'server-timing': `dashboard_live;dur=${durationMs}`
+      'server-timing': `heartbeat;dur=${durationMs}`
     }
   );
 };

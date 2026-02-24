@@ -2,6 +2,7 @@ import { dbGet } from '$lib/server/db';
 import { getJobCounts, listJobs, normalizeJobFilter } from '$lib/server/jobs-admin';
 import { parse as parseCookie } from 'cookie';
 import { clampTimezoneOffsetMinutes, dayRangeForTimezoneOffset } from '$lib/server/time';
+import { isEventsV2Enabled } from '$lib/server/flags';
 
 export const load = async ({ platform, url, request, depends }) => {
   depends('app:jobs');
@@ -49,6 +50,7 @@ export const load = async ({ platform, url, request, depends }) => {
     jobs,
     counts,
     status,
+    liveEventsEnabled: isEventsV2Enabled(platform.env),
     today: {
       missingSummaries: todayMissingSummaries?.count ?? 0,
       missingScores: todayMissingScores?.count ?? 0,

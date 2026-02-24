@@ -3,6 +3,7 @@ import { getSessionFromRequest } from '$lib/server/auth';
 import { pollFeeds } from '$lib/server/ingest';
 import { processJobs } from '$lib/server/jobs';
 import { processPullRuns, recoverStalePullRuns } from '$lib/server/manual-pull';
+import { queueMissingTodayArticleJobs } from '$lib/server/jobs-admin';
 import { assertSchemaVersion, ensureSchema } from '$lib/server/migrations';
 import { createRequestId } from '$lib/server/api';
 import { assertRuntimeConfig } from '$lib/server/runtime-config';
@@ -122,14 +123,22 @@ export const scheduled: ExportedHandlerScheduledHandler = async (event, env, ctx
         const startedAt = Date.now();
         await recoverStalePullRuns(env.DB);
         const pull = await processPullRuns(env, { maxSlices: 1, timeBudgetMs: 8000 });
-        if (!pull.processed) {
-          await processJobs(env);
+        const latestPullSlice = pull.slices.length > 0 ? pull.slices[pull.slices.length - 1] : null;
+        const canProcessJobs = !latestPullSlice || latestPullSlice.status !== 'running';
+        let queuedToday = null;
+        let jobMetrics = null;
+        if (canProcessJobs) {
+          queuedToday = await queueMissingTodayArticleJobs(env.DB, { tzOffsetMinutes: 0 });
+          jobMetrics = await processJobs(env);
         }
         logInfo('scheduled.jobs.completed', {
           cron: event.cron,
           duration_ms: Date.now() - startedAt,
           pull_processed: pull.processed,
-          pull_slices: pull.slices.length
+          pull_slices: pull.slices.length,
+          pull_status: latestPullSlice?.status ?? null,
+          jobs_processed: Boolean(jobMetrics),
+          queued_today: queuedToday
         });
         return;
       }

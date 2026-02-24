@@ -37,6 +37,9 @@ JOB_PROCESSOR_BATCH_SIZE = "12"
 [env.staging]
 name = "nebular-news-staging"
 
+[env.staging.triggers]
+crons = ["*/5 * * * *", "0 * * * *", "30 3 * * *"]
+
 [[env.staging.d1_databases]]
 binding = "DB"
 database_name = "nebularnews-staging"
@@ -64,6 +67,9 @@ JOB_PROCESSOR_BATCH_SIZE = "12"
 
 [env.production]
 name = "nebular-news"
+
+[env.production.triggers]
+crons = ["*/5 * * * *", "0 * * * *", "30 3 * * *"]
 
 [[env.production.d1_databases]]
 binding = "DB"

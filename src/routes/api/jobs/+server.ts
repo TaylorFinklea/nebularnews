@@ -28,6 +28,7 @@ const validActions = new Set([
   'clear_finished',
   'queue_today_missing'
 ]);
+const noStoreHeaders = { 'cache-control': 'no-store' };
 
 export const GET = async (event) => {
   const { url, platform } = event;
@@ -42,7 +43,8 @@ export const GET = async (event) => {
       counts,
       status
     },
-    { jobs, counts, status }
+    { jobs, counts, status },
+    { headers: noStoreHeaders }
   );
 };
 
@@ -87,32 +89,33 @@ export const POST = async (event) => {
         cycles: result.cycles,
         counts: result.counts,
         metrics: result.metrics
-      }
+      },
+      { headers: noStoreHeaders }
     );
   }
 
   if (action === 'retry_failed') {
     const updated = await retryFailedJobs(db);
     const counts = await getJobCounts(db);
-    return apiOkWithAliases(event, { action, updated, counts }, { action, updated, counts });
+    return apiOkWithAliases(event, { action, updated, counts }, { action, updated, counts }, { headers: noStoreHeaders });
   }
 
   if (action === 'cancel_pending_all') {
     const updated = await cancelAllPendingJobs(db);
     const counts = await getJobCounts(db);
-    return apiOkWithAliases(event, { action, updated, counts }, { action, updated, counts });
+    return apiOkWithAliases(event, { action, updated, counts }, { action, updated, counts }, { headers: noStoreHeaders });
   }
 
   if (action === 'clear_finished') {
     const deleted = await clearFinishedJobs(db);
     const counts = await getJobCounts(db);
-    return apiOkWithAliases(event, { action, deleted, counts }, { action, deleted, counts });
+    return apiOkWithAliases(event, { action, deleted, counts }, { action, deleted, counts }, { headers: noStoreHeaders });
   }
 
   if (action === 'queue_today_missing') {
     const queued = await queueMissingTodayArticleJobs(db, { tzOffsetMinutes });
     const counts = await getJobCounts(db);
-    return apiOkWithAliases(event, { action, queued, counts }, { action, queued, counts });
+    return apiOkWithAliases(event, { action, queued, counts }, { action, queued, counts }, { headers: noStoreHeaders });
   }
 
   if (!jobId) {
@@ -128,7 +131,7 @@ export const POST = async (event) => {
       return apiError(event, 409, 'conflict', 'No changes made');
     }
     const counts = await getJobCounts(db);
-    return apiOkWithAliases(event, { action, updated, counts }, { action, updated, counts });
+    return apiOkWithAliases(event, { action, updated, counts }, { action, updated, counts }, { headers: noStoreHeaders });
   }
 
   if (action === 'cancel') {
@@ -140,7 +143,7 @@ export const POST = async (event) => {
       return apiError(event, 409, 'conflict', `Job is ${status}, only pending jobs can be cancelled`);
     }
     const counts = await getJobCounts(db);
-    return apiOkWithAliases(event, { action, updated, counts }, { action, updated, counts });
+    return apiOkWithAliases(event, { action, updated, counts }, { action, updated, counts }, { headers: noStoreHeaders });
   }
 
   const deleted = await deleteJob(db, jobId);
@@ -151,5 +154,5 @@ export const POST = async (event) => {
     return apiError(event, 409, 'conflict', 'No changes made');
   }
   const counts = await getJobCounts(db);
-  return apiOkWithAliases(event, { action, deleted, counts }, { action, deleted, counts });
+  return apiOkWithAliases(event, { action, deleted, counts }, { action, deleted, counts }, { headers: noStoreHeaders });
 };

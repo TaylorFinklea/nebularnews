@@ -63,7 +63,7 @@
         status: currentStatus,
         limit: '150'
       });
-      const res = await apiFetch(`/api/jobs?${query.toString()}`);
+      const res = await apiFetch(`/api/jobs?${query.toString()}`, { cache: 'no-store' });
       if (!res.ok) return false;
       const payload = extractApiData(await res.json().catch(() => ({})));
       if (Array.isArray(payload.jobs)) jobs = payload.jobs;

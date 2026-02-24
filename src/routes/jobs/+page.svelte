@@ -18,6 +18,11 @@
   import { showToast } from '$lib/client/toast';
 
   export let data;
+  let lastDataRef = data;
+  let jobs = data.jobs;
+  let jobCounts = data.counts;
+  let today = data.today;
+  let currentStatus = data.status;
 
   const filters = ['pending', 'running', 'failed', 'done', 'cancelled', 'all'];
   const LIVE_REFRESH_DEBOUNCE_MS = 600;
@@ -32,18 +37,54 @@
   let fallbackPollTimer = null;
   let lastLiveSignature = '';
 
+  $: if (data !== lastDataRef) {
+    lastDataRef = data;
+    jobs = data.jobs;
+    jobCounts = data.counts;
+    today = data.today;
+    currentStatus = data.status;
+  }
+
   $: displayCounts = {
-    ...data.counts,
+    ...jobCounts,
     ...(liveCounts
       ? { pending: liveCounts.pending, running: liveCounts.running, failed: liveCounts.failed, done: liveCounts.done }
       : {})
+  };
+
+  const extractApiData = (payload) =>
+    payload && typeof payload === 'object' && payload.data && typeof payload.data === 'object'
+      ? payload.data
+      : payload ?? {};
+
+  const refreshJobsList = async () => {
+    try {
+      const query = new URLSearchParams({
+        status: currentStatus,
+        limit: '150'
+      });
+      const res = await apiFetch(`/api/jobs?${query.toString()}`);
+      if (!res.ok) return false;
+      const payload = extractApiData(await res.json().catch(() => ({})));
+      if (Array.isArray(payload.jobs)) jobs = payload.jobs;
+      if (payload.counts && typeof payload.counts === 'object') {
+        jobCounts = payload.counts;
+        liveCounts = payload.counts;
+      }
+      return true;
+    } catch {
+      return false;
+    }
   };
 
   const scheduleJobsRefresh = () => {
     if (refreshTimer) return;
     refreshTimer = setTimeout(async () => {
       refreshTimer = null;
-      await invalidate('app:jobs');
+      const refreshed = await refreshJobsList();
+      if (!refreshed) {
+        await invalidate('app:jobs');
+      }
     }, LIVE_REFRESH_DEBOUNCE_MS);
   };
 
@@ -62,7 +103,10 @@
     clearFallbackPollTimer();
     fallbackPollTimer = setTimeout(async () => {
       fallbackPollTimer = null;
-      await invalidate('app:jobs');
+      const refreshed = await refreshJobsList();
+      if (!refreshed) {
+        await invalidate('app:jobs');
+      }
       scheduleFallbackPoll(false);
     }, immediate ? 0 : nextFallbackPollMs());
   };
@@ -127,10 +171,18 @@
           tzOffsetMinutes: action === 'queue_today_missing' ? new Date().getTimezoneOffset() : undefined
         })
       });
-      const payload = await res.json().catch(() => ({}));
+      const rawPayload = await res.json().catch(() => ({}));
+      const payload = extractApiData(rawPayload);
       if (!res.ok) {
-        showToast(payload?.error ?? `${label} failed`, 'error');
+        const apiError =
+          rawPayload?.error?.message ?? rawPayload?.error ?? payload?.error?.message ?? payload?.error;
+        showToast(apiError ?? `${label} failed`, 'error');
         return;
+      }
+
+      if (payload?.counts && typeof payload.counts === 'object') {
+        jobCounts = payload.counts;
+        liveCounts = payload.counts;
       }
 
       let msg = `${label} completed.`;
@@ -149,7 +201,12 @@
         msg = `${label} updated ${touched} job${touched === 1 ? '' : 's'}.`;
       }
       showToast(msg, 'success');
-      await invalidate('app:jobs');
+      const refreshed = await refreshJobsList();
+      if (!refreshed) {
+        await invalidate('app:jobs');
+      } else {
+        void invalidate('app:jobs');
+      }
     } catch {
       showToast(`${label} failed`, 'error');
     } finally {
@@ -202,7 +259,7 @@
     <div class="stat-label">Done</div>
   </Card>
   <Card variant="soft">
-    <div class="stat-val">{data.counts.cancelled}</div>
+    <div class="stat-val">{displayCounts.cancelled}</div>
     <div class="stat-label">Cancelled</div>
   </Card>
 </div>
@@ -210,10 +267,10 @@
 <!-- Today missing -->
 <div class="today-missing">
   <strong>Today missing:</strong>
-  <span>{data.today.missingSummaries} summaries</span>
-  <span>{data.today.missingScores} scores</span>
-  <span>{data.today.missingAutoTags} auto-tags</span>
-  <span class="tz">({formatUtcOffset(data.today.tzOffsetMinutes)})</span>
+  <span>{today.missingSummaries} summaries</span>
+  <span>{today.missingScores} scores</span>
+  <span>{today.missingAutoTags} auto-tags</span>
+  <span class="tz">({formatUtcOffset(today.tzOffsetMinutes)})</span>
 </div>
 
 <!-- Controls -->
@@ -276,7 +333,7 @@
     <a
       href={filter === 'all' ? '/jobs?status=all' : `/jobs?status=${filter}`}
       class="filter-tab"
-      class:active={data.status === filter}
+      class:active={currentStatus === filter}
     >
       {filter}
       {#if filter !== 'all' && displayCounts[filter] != null}
@@ -303,12 +360,12 @@
         </tr>
       </thead>
       <tbody>
-        {#if data.jobs.length === 0}
+        {#if jobs.length === 0}
           <tr>
             <td colspan="8" class="empty-cell">No jobs for this filter.</td>
           </tr>
         {:else}
-          {#each data.jobs as job}
+          {#each jobs as job}
             <tr>
               <td class="mono">{job.type}</td>
               <td>

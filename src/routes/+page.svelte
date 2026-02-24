@@ -2,11 +2,10 @@
   import { invalidate } from '$app/navigation';
   import { onDestroy, onMount } from 'svelte';
   import { apiFetch } from '$lib/client/api-fetch';
-  import { IconClockPlay, IconExternalLink } from '$lib/icons';
+  import { IconClockPlay, IconExternalLink, IconStars } from '$lib/icons';
   import { resolveArticleImageUrl } from '$lib/article-image';
   import Card from '$lib/components/Card.svelte';
   import Button from '$lib/components/Button.svelte';
-  import Pill from '$lib/components/Pill.svelte';
 
   export let data;
 
@@ -192,10 +191,25 @@
     }
   });
 
-  const scoreLabel = (score) => {
-    if (score >= 5) return 'Perfect fit';
-    if (score >= 4) return 'Strong fit';
-    return 'Good fit';
+  const fitScoreValue = (score) => {
+    const n = Number(score);
+    return Number.isFinite(n) && n >= 1 && n <= 5 ? Math.round(n) : null;
+  };
+
+  const fitScoreTone = (score) => {
+    const value = fitScoreValue(score);
+    if (value === null) return 'fit-none';
+    return `fit-${value}`;
+  };
+
+  const fitScoreText = (score) => {
+    const value = fitScoreValue(score);
+    return value === null ? '--' : `${value}/5`;
+  };
+
+  const fitScoreAria = (score) => {
+    const value = fitScoreValue(score);
+    return value === null ? 'AI fit score not available yet' : `AI fit score ${value} out of 5`;
   };
 
   const articleSnippet = (article) => {
@@ -358,7 +372,14 @@
           <div class="card-body">
             <div class="card-top-row">
               <a class="card-title" href={`/articles/${article.id}`}>{article.title ?? 'Untitled article'}</a>
-              <Pill>{article.score}/5 · {scoreLabel(article.score)}</Pill>
+              <span
+                class={`fit-pill ${fitScoreTone(article.score)}`}
+                title={fitScoreAria(article.score)}
+                aria-label={fitScoreAria(article.score)}
+              >
+                <IconStars size={13} stroke={1.9} />
+                <span>{fitScoreText(article.score)}</span>
+              </span>
             </div>
             <p class="card-excerpt">{articleSnippet(article)}</p>
             <div class="card-meta">
@@ -602,6 +623,55 @@
 
   .card-title:hover {
     color: var(--primary);
+  }
+
+  .fit-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--input-border);
+    background: var(--surface-soft);
+    color: var(--muted-text);
+    padding: 0.26rem 0.58rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1;
+  }
+
+  .fit-pill.fit-none {
+    color: var(--muted-text);
+    border-color: var(--input-border);
+  }
+
+  .fit-pill.fit-1 {
+    color: #fca5a5;
+    border-color: rgba(252, 165, 165, 0.42);
+    background: rgba(252, 165, 165, 0.12);
+  }
+
+  .fit-pill.fit-2 {
+    color: #fdba74;
+    border-color: rgba(253, 186, 116, 0.42);
+    background: rgba(253, 186, 116, 0.12);
+  }
+
+  .fit-pill.fit-3 {
+    color: #c4b5fd;
+    border-color: rgba(196, 181, 253, 0.45);
+    background: rgba(196, 181, 253, 0.14);
+  }
+
+  .fit-pill.fit-4 {
+    color: #67e8f9;
+    border-color: rgba(103, 232, 249, 0.45);
+    background: rgba(103, 232, 249, 0.14);
+  }
+
+  .fit-pill.fit-5 {
+    color: #86efac;
+    border-color: rgba(134, 239, 172, 0.45);
+    background: rgba(134, 239, 172, 0.14);
   }
 
   .card-excerpt {

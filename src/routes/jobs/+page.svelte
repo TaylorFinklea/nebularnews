@@ -21,12 +21,15 @@
 
   const filters = ['pending', 'running', 'failed', 'done', 'cancelled', 'all'];
   const LIVE_REFRESH_DEBOUNCE_MS = 600;
+  const FALLBACK_VISIBLE_POLL_MS = 30000;
+  const FALLBACK_HIDDEN_POLL_MS = 90000;
   let busyKey = '';
   let liveCounts = null;
   let liveConnected = false;
   let liveUnsubscribe = () => {};
   let stopLiveEvents = () => {};
   let refreshTimer = null;
+  let fallbackPollTimer = null;
   let lastLiveSignature = '';
 
   $: displayCounts = {
@@ -44,9 +47,38 @@
     }, LIVE_REFRESH_DEBOUNCE_MS);
   };
 
+  const clearFallbackPollTimer = () => {
+    if (!fallbackPollTimer) return;
+    clearTimeout(fallbackPollTimer);
+    fallbackPollTimer = null;
+  };
+
+  const nextFallbackPollMs = () =>
+    typeof document !== 'undefined' && document.visibilityState === 'hidden'
+      ? FALLBACK_HIDDEN_POLL_MS
+      : FALLBACK_VISIBLE_POLL_MS;
+
+  const scheduleFallbackPoll = (immediate = false) => {
+    clearFallbackPollTimer();
+    fallbackPollTimer = setTimeout(async () => {
+      fallbackPollTimer = null;
+      await invalidate('app:jobs');
+      scheduleFallbackPoll(false);
+    }, immediate ? 0 : nextFallbackPollMs());
+  };
+
+  const onVisibilityChange = () => {
+    if (data.liveEventsEnabled) return;
+    scheduleFallbackPoll(true);
+  };
+
   onMount(() => {
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', onVisibilityChange);
+    }
     if (!data.liveEventsEnabled) {
-      liveConnected = false;
+      liveConnected = true;
+      scheduleFallbackPoll(true);
       return;
     }
     stopLiveEvents = startLiveEvents();
@@ -65,6 +97,10 @@
     liveUnsubscribe();
     stopLiveEvents();
     if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = null; }
+    clearFallbackPollTimer();
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    }
   });
 
   const formatUtcOffset = (offsetMinutes) => {
@@ -137,7 +173,7 @@
   <svelte:fragment slot="subnav">
     <span class="live-status" class:connected={liveConnected}>
       {#if !data.liveEventsEnabled}
-        ◌ Live updates off
+        ◌ Polling
       {:else if liveConnected}
         ● Live
       {:else}

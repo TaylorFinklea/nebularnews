@@ -124,20 +124,21 @@ export const scheduled: ExportedHandlerScheduledHandler = async (event, env, ctx
         await recoverStalePullRuns(env.DB);
         const pull = await processPullRuns(env, { maxSlices: 1, timeBudgetMs: 8000 });
         const latestPullSlice = pull.slices.length > 0 ? pull.slices[pull.slices.length - 1] : null;
-        const canProcessJobs = !latestPullSlice || latestPullSlice.status !== 'running';
+        const pullRunning = latestPullSlice?.status === 'running';
         let queuedToday = null;
-        let jobMetrics = null;
-        if (canProcessJobs) {
+        if (!pullRunning) {
           queuedToday = await queueMissingTodayArticleJobs(env.DB, { tzOffsetMinutes: 0 });
-          jobMetrics = await processJobs(env);
         }
+        const jobMetrics = await processJobs(env, {
+          timeBudgetMs: pullRunning ? 3000 : undefined
+        });
         logInfo('scheduled.jobs.completed', {
           cron: event.cron,
           duration_ms: Date.now() - startedAt,
           pull_processed: pull.processed,
           pull_slices: pull.slices.length,
           pull_status: latestPullSlice?.status ?? null,
-          jobs_processed: Boolean(jobMetrics),
+          jobs_processed: true,
           queued_today: queuedToday
         });
         return;

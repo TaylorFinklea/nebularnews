@@ -38,7 +38,12 @@ const computeRetryDelayMs = (attempts: number) => {
 
 const createPendingTimestamp = () => now();
 
-export async function processJobs(env: App.Platform['env']) {
+export async function processJobs(
+  env: App.Platform['env'],
+  options: {
+    timeBudgetMs?: number;
+  } = {}
+) {
   const db = env.DB;
   const processorId = nanoid();
   const timestamp = now();
@@ -50,7 +55,10 @@ export async function processJobs(env: App.Platform['env']) {
   let selected = 0;
   let rounds = 0;
   const batchSize = isJobBatchV2Enabled(env) ? await getJobProcessorBatchSize(db, env) : LEGACY_BATCH_SIZE;
-  const processTimeBudgetMs = env.APP_ENV === 'production' ? PROD_PROCESS_TIME_BUDGET_MS : PROCESS_TIME_BUDGET_MS;
+  const defaultBudgetMs = env.APP_ENV === 'production' ? PROD_PROCESS_TIME_BUDGET_MS : PROCESS_TIME_BUDGET_MS;
+  const processTimeBudgetMs = Number.isFinite(options.timeBudgetMs)
+    ? Math.max(500, Math.min(30_000, Math.floor(Number(options.timeBudgetMs))))
+    : defaultBudgetMs;
 
   // Reclaim stale running jobs whose lease has expired.
   await dbRun(

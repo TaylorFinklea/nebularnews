@@ -8,6 +8,7 @@
     IconEyeOff,
     IconFilterX,
     IconSearch,
+    IconStars,
     IconThumbDown,
     IconThumbUp
   } from '$lib/icons';
@@ -23,13 +24,25 @@
   const DEFAULT_SCORE_FILTER = ['5', '4', '3', '2', '1', 'unscored'];
   const DEFAULT_REACTION_FILTER = ['up', 'down', 'none'];
 
-  const scoreLabel = (score) => {
-    if (!score) return 'Unscored';
-    if (score >= 5) return 'Perfect fit';
-    if (score >= 4) return 'Strong fit';
-    if (score >= 3) return 'Okay fit';
-    if (score >= 2) return 'Weak fit';
-    return 'Not a fit';
+  const fitScoreValue = (score) => {
+    const n = Number(score);
+    return Number.isFinite(n) && n >= 1 && n <= 5 ? Math.round(n) : null;
+  };
+
+  const fitScoreTone = (score) => {
+    const value = fitScoreValue(score);
+    if (value === null) return 'fit-none';
+    return `fit-${value}`;
+  };
+
+  const fitScoreText = (score) => {
+    const value = fitScoreValue(score);
+    return value === null ? '--' : `${value}/5`;
+  };
+
+  const fitScoreAria = (score) => {
+    const value = fitScoreValue(score);
+    return value === null ? 'AI fit score not available yet' : `AI fit score ${value} out of 5`;
   };
 
   const toInt = (value, fallback = 0) => { const n = Number(value); return Number.isFinite(n) ? n : fallback; };
@@ -377,12 +390,17 @@
               </a>
             </h3>
             <div class="pills">
+              <span
+                class={`fit-pill ${fitScoreTone(article.score)}`}
+                title={fitScoreAria(article.score)}
+                aria-label={fitScoreAria(article.score)}
+              >
+                <IconStars size={13} stroke={1.9} />
+                <span>{fitScoreText(article.score)}</span>
+              </span>
               <Pill variant={isArticleRead(article) ? 'muted' : 'default'}>
                 {isArticleRead(article) ? 'Read' : 'Unread'}
               </Pill>
-              {#if article.score}
-                <Pill>{article.score}/5</Pill>
-              {/if}
             </div>
           </div>
           <div class="card-meta">
@@ -776,6 +794,55 @@
     flex-shrink: 0;
     flex-wrap: wrap;
     justify-content: flex-end;
+  }
+
+  .fit-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--input-border);
+    background: var(--surface-soft);
+    color: var(--muted-text);
+    padding: 0.26rem 0.58rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1;
+  }
+
+  .fit-pill.fit-none {
+    color: var(--muted-text);
+    border-color: var(--input-border);
+  }
+
+  .fit-pill.fit-1 {
+    color: #fca5a5;
+    border-color: rgba(252, 165, 165, 0.42);
+    background: rgba(252, 165, 165, 0.12);
+  }
+
+  .fit-pill.fit-2 {
+    color: #fdba74;
+    border-color: rgba(253, 186, 116, 0.42);
+    background: rgba(253, 186, 116, 0.12);
+  }
+
+  .fit-pill.fit-3 {
+    color: #c4b5fd;
+    border-color: rgba(196, 181, 253, 0.45);
+    background: rgba(196, 181, 253, 0.14);
+  }
+
+  .fit-pill.fit-4 {
+    color: #67e8f9;
+    border-color: rgba(103, 232, 249, 0.45);
+    background: rgba(103, 232, 249, 0.14);
+  }
+
+  .fit-pill.fit-5 {
+    color: #86efac;
+    border-color: rgba(134, 239, 172, 0.45);
+    background: rgba(134, 239, 172, 0.14);
   }
 
   .card-meta {

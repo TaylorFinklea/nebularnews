@@ -1,8 +1,8 @@
 <script>
   import { createEventDispatcher } from 'svelte';
   import { resolveArticleImageUrl } from '$lib/article-image';
-  import { IconEye, IconEyeOff, IconThumbDown, IconThumbUp } from '$lib/icons';
-  import { isArticleRead, reactionNumber, scoreLabel } from '$lib/client/articles/articles-state';
+  import { IconEye, IconEyeOff, IconStars, IconThumbDown, IconThumbUp } from '$lib/icons';
+  import { isArticleRead, reactionNumber } from '$lib/client/articles/articles-state';
 
   export let article;
   export let cardLayout = 'split';
@@ -29,6 +29,27 @@
 
   const onImageError = () => {
     dispatch('imageError', { articleId: article.id });
+  };
+
+  const fitScoreValue = (score) => {
+    const n = Number(score);
+    return Number.isFinite(n) && n >= 1 && n <= 5 ? Math.round(n) : null;
+  };
+
+  const fitScoreTone = (score) => {
+    const value = fitScoreValue(score);
+    if (value === null) return 'fit-none';
+    return `fit-${value}`;
+  };
+
+  const fitScoreText = (score) => {
+    const value = fitScoreValue(score);
+    return value === null ? '--' : `${value}/5`;
+  };
+
+  const fitScoreAria = (score) => {
+    const value = fitScoreValue(score);
+    return value === null ? 'AI fit score not available yet' : `AI fit score ${value} out of 5`;
   };
 </script>
 
@@ -60,10 +81,17 @@
         </a>
       </h2>
       <div class="pills">
+        <span
+          class={`fit-pill ${fitScoreTone(article.score)}`}
+          title={fitScoreAria(article.score)}
+          aria-label={fitScoreAria(article.score)}
+        >
+          <IconStars size={13} stroke={1.9} />
+          <span>{fitScoreText(article.score)}</span>
+        </span>
         <span class={`pill ${isArticleRead(article) ? 'read' : 'unread'}`}>
           {isArticleRead(article) ? 'Read' : 'Unread'}
         </span>
-        <span class="pill">{scoreLabel(article.score)}</span>
       </div>
     </div>
     <div class="meta">
@@ -231,6 +259,55 @@
   .pills {
     display: inline-flex;
     gap: 0.5rem;
+  }
+
+  .fit-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    border-radius: 999px;
+    border: 1px solid var(--input-border);
+    background: var(--surface-soft);
+    color: var(--muted-text);
+    padding: 0.3rem 0.62rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    line-height: 1;
+  }
+
+  .fit-pill.fit-none {
+    color: var(--muted-text);
+    border-color: var(--input-border);
+  }
+
+  .fit-pill.fit-1 {
+    color: #fca5a5;
+    border-color: rgba(252, 165, 165, 0.42);
+    background: rgba(252, 165, 165, 0.12);
+  }
+
+  .fit-pill.fit-2 {
+    color: #fdba74;
+    border-color: rgba(253, 186, 116, 0.42);
+    background: rgba(253, 186, 116, 0.12);
+  }
+
+  .fit-pill.fit-3 {
+    color: #c4b5fd;
+    border-color: rgba(196, 181, 253, 0.45);
+    background: rgba(196, 181, 253, 0.14);
+  }
+
+  .fit-pill.fit-4 {
+    color: #67e8f9;
+    border-color: rgba(103, 232, 249, 0.45);
+    background: rgba(103, 232, 249, 0.14);
+  }
+
+  .fit-pill.fit-5 {
+    color: #86efac;
+    border-color: rgba(134, 239, 172, 0.45);
+    background: rgba(134, 239, 172, 0.14);
   }
 
   .pill {

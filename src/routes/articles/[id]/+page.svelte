@@ -314,9 +314,9 @@
             <strong>· {data.score.label}</strong>
           </div>
           <p class="score-reason">{data.score.reason_text}</p>
-          {#if data.score.evidence_json}
+          {#if data.score.evidence?.length}
             <ul class="score-evidence">
-              {#each JSON.parse(data.score.evidence_json) as evidence}
+              {#each data.score.evidence as evidence}
                 <li>{evidence}</li>
               {/each}
             </ul>
@@ -337,7 +337,7 @@
         {/if}
       </Card>
 
-      {#if data.keyPoints?.key_points_json}
+      {#if data.keyPoints?.points?.length}
         <Card>
           <div class="card-title-row">
             <h2>Key Points</h2>
@@ -346,7 +346,7 @@
             </Button>
           </div>
           <ul class="key-list">
-            {#each JSON.parse(data.keyPoints.key_points_json) as point}
+            {#each data.keyPoints.points as point}
               <li>{point}</li>
             {/each}
           </ul>

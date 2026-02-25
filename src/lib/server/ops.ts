@@ -4,6 +4,7 @@ const PULL_STALE_WARN_MS = 1000 * 60 * 90;
 const PENDING_JOBS_WARN_THRESHOLD = 500;
 const FEEDS_ERROR_WARN_THRESHOLD = 10;
 const ARTICLE_ROWS_WARN_THRESHOLD = 100_000;
+const ORPHAN_ARTICLES_WARN_THRESHOLD = 50;
 
 export type OpsSummary = {
   timestamp: number;
@@ -31,6 +32,7 @@ export type OpsSummary = {
   };
   data_volume: {
     articles: number;
+    orphan_articles: number;
     summaries: number;
     scores: number;
     chat_messages: number;
@@ -73,7 +75,7 @@ export async function getOpsSummary(db: Db): Promise<OpsSummary> {
     }
   }
 
-  const [latestPull, success24h, failed24h, articles, summaries, scores, chatMessages] = await Promise.all([
+  const [latestPull, success24h, failed24h, articles, orphanArticles, summaries, scores, chatMessages] = await Promise.all([
     dbGet<{
       id: string;
       status: string;
@@ -90,6 +92,14 @@ export async function getOpsSummary(db: Db): Promise<OpsSummary> {
     getCount(db, "SELECT COUNT(*) as count FROM pull_runs WHERE status = 'success' AND created_at >= ?", [since24h]),
     getCount(db, "SELECT COUNT(*) as count FROM pull_runs WHERE status = 'failed' AND created_at >= ?", [since24h]),
     getCount(db, 'SELECT COUNT(*) as count FROM articles'),
+    getCount(
+      db,
+      `SELECT COUNT(*) as count
+       FROM articles a
+       WHERE NOT EXISTS (
+         SELECT 1 FROM article_sources s WHERE s.article_id = a.id
+       )`
+    ),
     getCount(db, 'SELECT COUNT(*) as count FROM article_summaries'),
     getCount(db, 'SELECT COUNT(*) as count FROM article_scores'),
     getCount(db, 'SELECT COUNT(*) as count FROM chat_messages')
@@ -104,6 +114,11 @@ export async function getOpsSummary(db: Db): Promise<OpsSummary> {
   }
   if (articles > ARTICLE_ROWS_WARN_THRESHOLD) {
     warnings.push(`Article row count is high: ${articles} (> ${ARTICLE_ROWS_WARN_THRESHOLD}). Consider retention cleanup.`);
+  }
+  if (orphanArticles > ORPHAN_ARTICLES_WARN_THRESHOLD) {
+    warnings.push(
+      `Orphan articles detected: ${orphanArticles} (> ${ORPHAN_ARTICLES_WARN_THRESHOLD}). Run orphan cleanup.`
+    );
   }
   if (latestPull?.status === 'running') {
     const startedAt = latestPull.started_at ?? 0;
@@ -132,6 +147,7 @@ export async function getOpsSummary(db: Db): Promise<OpsSummary> {
     },
     data_volume: {
       articles,
+      orphan_articles: orphanArticles,
       summaries,
       scores,
       chat_messages: chatMessages
@@ -139,4 +155,3 @@ export async function getOpsSummary(db: Db): Promise<OpsSummary> {
     warnings
   };
 }
-

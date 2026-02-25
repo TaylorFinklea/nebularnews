@@ -74,6 +74,14 @@
   let dashboardTopRatedLayout = data.settings.dashboardTopRatedLayout ?? 'stacked';
   let dashboardTopRatedCutoff = Number(data.settings.dashboardTopRatedCutoff ?? 3);
   let dashboardTopRatedLimit = Number(data.settings.dashboardTopRatedLimit ?? 5);
+  let orphanCount = Number(data.orphanCleanup?.orphanCount ?? 0);
+  let orphanSampleArticleIds = Array.isArray(data.orphanCleanup?.sampleArticleIds)
+    ? data.orphanCleanup.sampleArticleIds
+    : [];
+  let orphanSuggestedBatchSize = Number(data.orphanCleanup?.suggestedBatchSize ?? 200);
+  let orphanCleanupLoading = false;
+  let orphanCleanupHasMore = orphanCount > 0;
+  let orphanCleanupLastRun = null;
   $: autoReadDelaySeconds = (Number(autoReadDelayMs) / 1000).toFixed(2);
 
   let openaiKey = '';
@@ -345,8 +353,10 @@
 
   const readApiError = async (res, fallback) => {
     const payload = await res.json().catch(() => ({}));
-    return payload?.error ?? fallback;
+    return payload?.error?.message ?? payload?.error ?? fallback;
   };
+
+  const readApiData = (payload) => payload?.data ?? payload ?? {};
 
   const saveAllChanges = async () => {
     if (isSaving || !hasUnsavedChanges) return;
@@ -416,6 +426,58 @@
 
   const discardChanges = () => { applySnapshot(savedSnapshot); };
 
+  const refreshOrphanPreview = async () => {
+    if (orphanCleanupLoading) return;
+    orphanCleanupLoading = true;
+    try {
+      const res = await apiFetch('/api/admin/orphans/preview');
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showToast(payload?.error?.message ?? payload?.error ?? 'Failed to load orphan preview', 'error');
+        return;
+      }
+      const summary = readApiData(payload);
+      orphanCount = Number(summary?.orphan_count ?? 0);
+      orphanSampleArticleIds = Array.isArray(summary?.sample_article_ids) ? summary.sample_article_ids : [];
+      orphanSuggestedBatchSize = Number(summary?.suggested_batch_size ?? orphanSuggestedBatchSize ?? 200);
+      orphanCleanupHasMore = orphanCount > 0;
+      showToast('Orphan preview updated.', 'success');
+    } catch {
+      showToast('Failed to load orphan preview', 'error');
+    } finally {
+      orphanCleanupLoading = false;
+    }
+  };
+
+  const runOrphanCleanup = async () => {
+    if (orphanCleanupLoading) return;
+    orphanCleanupLoading = true;
+    try {
+      const res = await apiFetch('/api/admin/orphans/run', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ limit: orphanSuggestedBatchSize, dry_run: false })
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showToast(payload?.error?.message ?? payload?.error ?? 'Failed to run orphan cleanup', 'error');
+        return;
+      }
+      const summary = readApiData(payload);
+      orphanCleanupLastRun = summary;
+      orphanCount = Number(summary?.orphan_count_after ?? orphanCount);
+      orphanCleanupHasMore = Boolean(summary?.has_more);
+      showToast(
+        `Cleaned ${Number(summary?.deleted_articles ?? 0)} orphan article${Number(summary?.deleted_articles ?? 0) === 1 ? '' : 's'}.`,
+        'success'
+      );
+    } catch {
+      showToast('Failed to run orphan cleanup', 'error');
+    } finally {
+      orphanCleanupLoading = false;
+    }
+  };
+
   const copySchedulerCommand = async () => {
     if (typeof navigator === 'undefined' || !navigator.clipboard) {
       showToast('Clipboard is unavailable in this browser.', 'error');
@@ -466,6 +528,7 @@
     <nav class="settings-subnav" aria-label="Settings sections">
       <a href="#models">AI settings</a>
       <a href="#behavior">Behavior</a>
+      <a href="#maintenance">Maintenance</a>
       <a href="#scheduler">Scheduler</a>
       <a href="#prompts">Prompts</a>
       <a href="#keys">Keys</a>
@@ -733,6 +796,41 @@
         <input type="number" min={data.dashboardTopRatedRange.limit.min} max={data.dashboardTopRatedRange.limit.max} step="1" bind:value={dashboardTopRatedLimit} />
       </label>
     </div>
+  </Card>
+
+  <!-- Maintenance -->
+  <Card id="maintenance">
+    <h2>Maintenance</h2>
+    <p class="muted">Clean up orphaned articles that no longer have any source feed linkage.</p>
+
+    <div class="maintenance-row">
+      <div>
+        <div class="maintenance-label">Orphan articles</div>
+        <div class="maintenance-value">{orphanCount}</div>
+        {#if orphanSampleArticleIds.length > 0}
+          <p class="muted small">
+            Sample IDs: {orphanSampleArticleIds.slice(0, 3).join(', ')}{orphanSampleArticleIds.length > 3 ? '…' : ''}
+          </p>
+        {/if}
+      </div>
+      <div class="maintenance-actions">
+        <Button variant="ghost" size="inline" on:click={refreshOrphanPreview} disabled={orphanCleanupLoading}>
+          <IconRefresh size={14} stroke={1.9} />
+          <span>{orphanCleanupLoading ? 'Loading...' : 'Preview'}</span>
+        </Button>
+        <Button variant="danger" size="inline" on:click={runOrphanCleanup} disabled={orphanCleanupLoading || orphanCount === 0}>
+          <IconTrash size={14} stroke={1.9} />
+          <span>{orphanCleanupLoading ? 'Cleaning...' : 'Clean now'}</span>
+        </Button>
+      </div>
+    </div>
+
+    <p class="hint">
+      Batch size: {orphanSuggestedBatchSize} per run. Re-run while “has more” is true.
+      {#if orphanCleanupLastRun}
+        {' '}Last run: deleted {Number(orphanCleanupLastRun?.deleted_articles ?? 0)}, remaining {Number(orphanCleanupLastRun?.orphan_count_after ?? 0)}, has more: {orphanCleanupHasMore ? 'yes' : 'no'}.
+      {/if}
+    </p>
   </Card>
 
   <!-- Scheduler -->
@@ -1271,6 +1369,34 @@
   }
 
   .small { font-size: var(--text-sm); }
+
+  .maintenance-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: var(--space-4);
+    flex-wrap: wrap;
+  }
+
+  .maintenance-label {
+    font-size: var(--text-sm);
+    color: var(--muted-text);
+    font-weight: 600;
+  }
+
+  .maintenance-value {
+    font-size: var(--text-2xl);
+    font-weight: 700;
+    line-height: 1.1;
+    margin-top: 0.15rem;
+  }
+
+  .maintenance-actions {
+    display: flex;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    align-items: center;
+  }
 
   code {
     background: var(--surface-soft);

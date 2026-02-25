@@ -10,6 +10,10 @@ import { assertRuntimeConfig } from '$lib/server/runtime-config';
 import { logError, logInfo, logWarn, summarizeError } from '$lib/server/log';
 import { runRetentionCleanup } from '$lib/server/retention';
 import {
+  DEFAULT_SCHEDULED_ORPHAN_CLEANUP_LIMIT,
+  deleteOrphanArticlesBatch
+} from '$lib/server/orphan-cleanup';
+import {
   getSchedulerRuntimeConfig,
   intervalMinutesToCronExpression
 } from '$lib/server/settings';
@@ -145,9 +149,24 @@ export const scheduled: ExportedHandlerScheduledHandler = async (event, env, ctx
         if (!pullRunning && scheduler.autoQueueTodayMissing) {
           queuedToday = await queueMissingTodayArticleJobs(env.DB, { tzOffsetMinutes: 0 });
         }
-        const jobMetrics = await processJobs(env, {
+        await processJobs(env, {
           timeBudgetMs: pullRunning ? scheduler.jobBudgetWhilePullMs : scheduler.jobBudgetIdleMs
         });
+        let orphanCleanup = null;
+        if (!pullRunning) {
+          const orphanCleanupStartedAt = Date.now();
+          orphanCleanup = await deleteOrphanArticlesBatch(env.DB, DEFAULT_SCHEDULED_ORPHAN_CLEANUP_LIMIT, {
+            dryRun: false
+          });
+          logInfo('scheduled.orphans.cleanup', {
+            cron: event.cron,
+            duration_ms: Date.now() - orphanCleanupStartedAt,
+            targeted: orphanCleanup.targeted,
+            deleted_articles: orphanCleanup.deleted_articles,
+            orphan_count_after: orphanCleanup.orphan_count_after,
+            has_more: orphanCleanup.has_more
+          });
+        }
         logInfo('scheduled.jobs.completed', {
           cron: event.cron,
           duration_ms: Date.now() - startedAt,
@@ -156,7 +175,8 @@ export const scheduled: ExportedHandlerScheduledHandler = async (event, env, ctx
           pull_status: latestPullSlice?.status ?? null,
           jobs_processed: true,
           scheduler,
-          queued_today: queuedToday
+          queued_today: queuedToday,
+          orphan_cleanup: orphanCleanup
         });
       }
       if (event.cron === RETENTION_CRON) {

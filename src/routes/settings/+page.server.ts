@@ -81,6 +81,12 @@ import {
   getSetting
 } from '$lib/server/settings';
 import { ensurePreferenceProfile } from '$lib/server/profile';
+import {
+  countOrphanArticles,
+  listOrphanArticleIds,
+  ORPHAN_PREVIEW_SAMPLE_SIZE,
+  DEFAULT_MANUAL_ORPHAN_CLEANUP_LIMIT
+} from '$lib/server/orphan-cleanup';
 
 export const load = async ({ platform }) => {
   const db = platform.env.DB;
@@ -142,6 +148,10 @@ export const load = async ({ platform }) => {
   }
 
   const profile = await ensurePreferenceProfile(db);
+  const [orphanCount, orphanSampleIds] = await Promise.all([
+    countOrphanArticles(db),
+    listOrphanArticleIds(db, ORPHAN_PREVIEW_SAMPLE_SIZE)
+  ]);
 
   const scorePromptDefaults = {
     scoreSystemPrompt: DEFAULT_SCORE_SYSTEM_PROMPT,
@@ -243,6 +253,11 @@ export const load = async ({ platform }) => {
         max: MAX_DASHBOARD_TOP_RATED_LIMIT,
         default: DEFAULT_DASHBOARD_TOP_RATED_LIMIT
       }
+    },
+    orphanCleanup: {
+      orphanCount,
+      sampleArticleIds: orphanSampleIds,
+      suggestedBatchSize: DEFAULT_MANUAL_ORPHAN_CLEANUP_LIMIT
     }
   };
 };

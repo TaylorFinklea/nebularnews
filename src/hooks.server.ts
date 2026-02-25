@@ -10,6 +10,10 @@ import { assertRuntimeConfig } from '$lib/server/runtime-config';
 import { logError, logInfo, logWarn, summarizeError } from '$lib/server/log';
 import { runRetentionCleanup } from '$lib/server/retention';
 import {
+  getSchedulerRuntimeConfig,
+  intervalMinutesToCronExpression
+} from '$lib/server/settings';
+import {
   applySecurityHeaders,
   buildCsrfCookie,
   createCsrfToken,
@@ -30,6 +34,9 @@ const publicPaths = [
 let runtimeWarningLogged = false;
 const SCHEMA_ASSERT_CACHE_MS = 1000 * 60 * 5;
 let schemaAssertedAt = 0;
+const RETENTION_CRON = '30 3 * * *';
+const LEGACY_JOBS_CRON = '*/5 * * * *';
+const LEGACY_POLL_CRON = '0 * * * *';
 
 export const handle: Handle = async ({ event, resolve }) => {
   const { pathname } = event.url;
@@ -119,18 +126,27 @@ export const scheduled: ExportedHandlerScheduledHandler = async (event, env, ctx
         return;
       }
       await ensureSchema(env.DB);
-      if (event.cron === '*/5 * * * *') {
+      const scheduler = await getSchedulerRuntimeConfig(env.DB);
+      const jobsCron = intervalMinutesToCronExpression(scheduler.jobsIntervalMinutes);
+      const pollCron = intervalMinutesToCronExpression(scheduler.pollIntervalMinutes);
+      const isJobsTick = event.cron === jobsCron || event.cron === LEGACY_JOBS_CRON;
+      const isPollTick = event.cron === pollCron || event.cron === LEGACY_POLL_CRON;
+
+      if (isJobsTick) {
         const startedAt = Date.now();
         await recoverStalePullRuns(env.DB);
-        const pull = await processPullRuns(env, { maxSlices: 1, timeBudgetMs: 8000 });
+        const pull = await processPullRuns(env, {
+          maxSlices: scheduler.pullSlicesPerTick,
+          timeBudgetMs: scheduler.pullSliceBudgetMs
+        });
         const latestPullSlice = pull.slices.length > 0 ? pull.slices[pull.slices.length - 1] : null;
         const pullRunning = latestPullSlice?.status === 'running';
         let queuedToday = null;
-        if (!pullRunning) {
+        if (!pullRunning && scheduler.autoQueueTodayMissing) {
           queuedToday = await queueMissingTodayArticleJobs(env.DB, { tzOffsetMinutes: 0 });
         }
         const jobMetrics = await processJobs(env, {
-          timeBudgetMs: pullRunning ? 3000 : undefined
+          timeBudgetMs: pullRunning ? scheduler.jobBudgetWhilePullMs : scheduler.jobBudgetIdleMs
         });
         logInfo('scheduled.jobs.completed', {
           cron: event.cron,
@@ -139,11 +155,11 @@ export const scheduled: ExportedHandlerScheduledHandler = async (event, env, ctx
           pull_slices: pull.slices.length,
           pull_status: latestPullSlice?.status ?? null,
           jobs_processed: true,
+          scheduler,
           queued_today: queuedToday
         });
-        return;
       }
-      if (event.cron === '30 3 * * *') {
+      if (event.cron === RETENTION_CRON) {
         const startedAt = Date.now();
         const stats = await runRetentionCleanup(env);
         logInfo('scheduled.retention.completed', {
@@ -154,13 +170,16 @@ export const scheduled: ExportedHandlerScheduledHandler = async (event, env, ctx
         return;
       }
 
-      const startedAt = Date.now();
-      const poll = await pollFeeds(env);
-      logInfo('scheduled.poll.completed', {
-        cron: event.cron,
-        duration_ms: Date.now() - startedAt,
-        poll
-      });
+      if (isPollTick) {
+        const startedAt = Date.now();
+        const poll = await pollFeeds(env);
+        logInfo('scheduled.poll.completed', {
+          cron: event.cron,
+          duration_ms: Date.now() - startedAt,
+          scheduler,
+          poll
+        });
+      }
     })()
   );
 };

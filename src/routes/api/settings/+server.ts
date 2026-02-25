@@ -13,6 +13,13 @@ import {
   clampDashboardRefreshMinMs,
   clampDashboardTopRatedCutoff,
   clampDashboardTopRatedLimit,
+  clampSchedulerJobsIntervalMinutes,
+  clampSchedulerPollIntervalMinutes,
+  clampSchedulerPullSlicesPerTick,
+  clampSchedulerPullSliceBudgetMs,
+  clampSchedulerJobBudgetIdleMs,
+  clampSchedulerJobBudgetWhilePullMs,
+  parseBooleanSetting,
   getAutoReadDelayMs,
   getArticleCardLayout,
   getDashboardTopRatedLayout,
@@ -20,6 +27,13 @@ import {
   getDashboardTopRatedConfig,
   getConfiguredIngestProviderModel,
   getJobProcessorBatchSize,
+  getSchedulerJobsIntervalMinutes,
+  getSchedulerPollIntervalMinutes,
+  getSchedulerPullSlicesPerTick,
+  getSchedulerPullSliceBudgetMs,
+  getSchedulerJobBudgetIdleMs,
+  getSchedulerJobBudgetWhilePullMs,
+  getSchedulerAutoQueueTodayMissing,
   getFeatureModelLanes,
   getInitialFeedLookbackDays,
   getMaxFeedsPerPoll,
@@ -62,7 +76,7 @@ export const GET = async ({ platform }) => {
     scoreUserPromptTemplate: scorePrompt.userPromptTemplate,
     summaryStyle: (await getSetting(db, 'summary_style')) ?? 'concise',
     summaryLength: (await getSetting(db, 'summary_length')) ?? 'short',
-    pollInterval: (await getSetting(db, 'poll_interval')) ?? '60',
+    pollInterval: String(await getSchedulerPollIntervalMinutes(db)),
     initialFeedLookbackDays: await getInitialFeedLookbackDays(db),
     maxFeedsPerPoll: await getMaxFeedsPerPoll(db, platform.env),
     maxItemsPerPoll: await getMaxItemsPerPoll(db, platform.env),
@@ -72,6 +86,13 @@ export const GET = async ({ platform }) => {
     retentionMode: retention.mode,
     autoReadDelayMs: await getAutoReadDelayMs(db),
     jobProcessorBatchSize: await getJobProcessorBatchSize(db, platform.env),
+    jobsIntervalMinutes: await getSchedulerJobsIntervalMinutes(db),
+    pollIntervalMinutes: await getSchedulerPollIntervalMinutes(db),
+    pullSlicesPerTick: await getSchedulerPullSlicesPerTick(db),
+    pullSliceBudgetMs: await getSchedulerPullSliceBudgetMs(db),
+    jobBudgetIdleMs: await getSchedulerJobBudgetIdleMs(db),
+    jobBudgetWhilePullMs: await getSchedulerJobBudgetWhilePullMs(db),
+    autoQueueTodayMissing: await getSchedulerAutoQueueTodayMissing(db),
     articleCardLayout: await getArticleCardLayout(db),
     dashboardTopRatedLayout,
     dashboardTopRatedCutoff: dashboardTopRated.cutoff,
@@ -159,7 +180,9 @@ export const POST = async ({ request, platform, locals }) => {
   if (body?.dashboardTopRatedLayout && validDashboardTopRatedLayouts.has(body.dashboardTopRatedLayout)) {
     entries.push(['dashboard_top_rated_layout', body.dashboardTopRatedLayout]);
   }
-  if (body?.pollInterval) entries.push(['poll_interval', String(body.pollInterval)]);
+  if (body?.pollInterval !== undefined && body?.pollInterval !== null) {
+    entries.push(['scheduler_poll_interval_min', String(clampSchedulerPollIntervalMinutes(body.pollInterval))]);
+  }
   if (body?.initialFeedLookbackDays !== undefined && body?.initialFeedLookbackDays !== null) {
     entries.push(['initial_feed_lookback_days', String(clampInitialFeedLookbackDays(body.initialFeedLookbackDays))]);
   }
@@ -186,6 +209,30 @@ export const POST = async ({ request, platform, locals }) => {
   }
   if (body?.jobProcessorBatchSize !== undefined && body?.jobProcessorBatchSize !== null) {
     entries.push(['job_processor_batch_size', String(clampJobProcessorBatchSize(body.jobProcessorBatchSize))]);
+  }
+  if (body?.jobsIntervalMinutes !== undefined && body?.jobsIntervalMinutes !== null) {
+    entries.push(['scheduler_jobs_interval_min', String(clampSchedulerJobsIntervalMinutes(body.jobsIntervalMinutes))]);
+  }
+  if (body?.pollIntervalMinutes !== undefined && body?.pollIntervalMinutes !== null) {
+    entries.push(['scheduler_poll_interval_min', String(clampSchedulerPollIntervalMinutes(body.pollIntervalMinutes))]);
+  }
+  if (body?.pullSlicesPerTick !== undefined && body?.pullSlicesPerTick !== null) {
+    entries.push(['scheduler_pull_slices_per_tick', String(clampSchedulerPullSlicesPerTick(body.pullSlicesPerTick))]);
+  }
+  if (body?.pullSliceBudgetMs !== undefined && body?.pullSliceBudgetMs !== null) {
+    entries.push(['scheduler_pull_slice_budget_ms', String(clampSchedulerPullSliceBudgetMs(body.pullSliceBudgetMs))]);
+  }
+  if (body?.jobBudgetIdleMs !== undefined && body?.jobBudgetIdleMs !== null) {
+    entries.push(['scheduler_job_budget_idle_ms', String(clampSchedulerJobBudgetIdleMs(body.jobBudgetIdleMs))]);
+  }
+  if (body?.jobBudgetWhilePullMs !== undefined && body?.jobBudgetWhilePullMs !== null) {
+    entries.push([
+      'scheduler_job_budget_while_pull_ms',
+      String(clampSchedulerJobBudgetWhilePullMs(body.jobBudgetWhilePullMs))
+    ]);
+  }
+  if (body?.autoQueueTodayMissing !== undefined && body?.autoQueueTodayMissing !== null) {
+    entries.push(['scheduler_auto_queue_today_missing', parseBooleanSetting(body.autoQueueTodayMissing, true) ? '1' : '0']);
   }
   if (body?.dashboardTopRatedCutoff !== undefined && body?.dashboardTopRatedCutoff !== null) {
     entries.push(['dashboard_top_rated_cutoff', String(clampDashboardTopRatedCutoff(body.dashboardTopRatedCutoff))]);

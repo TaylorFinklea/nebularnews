@@ -40,6 +40,32 @@
   let retentionDays = Number(data.settings.retentionDays ?? data.retentionRange?.default ?? 0);
   let retentionMode = data.settings.retentionMode ?? 'archive';
   let autoReadDelayMs = Number(data.settings.autoReadDelayMs ?? 4000);
+  let jobProcessorBatchSize = Number(
+    data.settings.jobProcessorBatchSize ?? data.jobProcessorBatchRange?.default ?? 6
+  );
+  let jobsIntervalMinutes = Number(
+    data.settings.jobsIntervalMinutes ?? data.schedulerRange?.jobsIntervalMinutes?.default ?? 5
+  );
+  let pollIntervalMinutes = Number(
+    data.settings.pollIntervalMinutes ?? data.schedulerRange?.pollIntervalMinutes?.default ?? 60
+  );
+  let pullSlicesPerTick = Number(
+    data.settings.pullSlicesPerTick ?? data.schedulerRange?.pullSlicesPerTick?.default ?? 1
+  );
+  let pullSliceBudgetMs = Number(
+    data.settings.pullSliceBudgetMs ?? data.schedulerRange?.pullSliceBudgetMs?.default ?? 8000
+  );
+  let jobBudgetIdleMs = Number(
+    data.settings.jobBudgetIdleMs ?? data.schedulerRange?.jobBudgetIdleMs?.default ?? 8000
+  );
+  let jobBudgetWhilePullMs = Number(
+    data.settings.jobBudgetWhilePullMs ?? data.schedulerRange?.jobBudgetWhilePullMs?.default ?? 3000
+  );
+  let autoQueueTodayMissing = Boolean(
+    data.settings.autoQueueTodayMissing ?? data.schedulerRange?.autoQueueTodayMissingDefault ?? true
+  );
+  let schedulerAdvancedOpen = false;
+  let schedulerApplyEnv = 'production';
   let articleCardLayout = data.settings.articleCardLayout ?? 'split';
   let dashboardTopRatedLayout = data.settings.dashboardTopRatedLayout ?? 'stacked';
   let dashboardTopRatedCutoff = Number(data.settings.dashboardTopRatedCutoff ?? 3);
@@ -59,6 +85,69 @@
   let anthropicModelsFetchedAt = null;
   let isSaving = false;
   let hasUnsavedChanges = false;
+
+  const clampNumber = (value, min, max, fallback) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.min(max, Math.max(min, Math.round(parsed)));
+  };
+
+  $: jobsIntervalMinutes = clampNumber(
+    jobsIntervalMinutes,
+    data.schedulerRange.jobsIntervalMinutes.min,
+    data.schedulerRange.jobsIntervalMinutes.max,
+    data.schedulerRange.jobsIntervalMinutes.default
+  );
+  $: pollIntervalMinutes = clampNumber(
+    pollIntervalMinutes,
+    data.schedulerRange.pollIntervalMinutes.min,
+    data.schedulerRange.pollIntervalMinutes.max,
+    data.schedulerRange.pollIntervalMinutes.default
+  );
+  $: pullSlicesPerTick = clampNumber(
+    pullSlicesPerTick,
+    data.schedulerRange.pullSlicesPerTick.min,
+    data.schedulerRange.pullSlicesPerTick.max,
+    data.schedulerRange.pullSlicesPerTick.default
+  );
+  $: pullSliceBudgetMs = clampNumber(
+    pullSliceBudgetMs,
+    data.schedulerRange.pullSliceBudgetMs.min,
+    data.schedulerRange.pullSliceBudgetMs.max,
+    data.schedulerRange.pullSliceBudgetMs.default
+  );
+  $: jobBudgetIdleMs = clampNumber(
+    jobBudgetIdleMs,
+    data.schedulerRange.jobBudgetIdleMs.min,
+    data.schedulerRange.jobBudgetIdleMs.max,
+    data.schedulerRange.jobBudgetIdleMs.default
+  );
+  $: jobBudgetWhilePullMs = clampNumber(
+    jobBudgetWhilePullMs,
+    data.schedulerRange.jobBudgetWhilePullMs.min,
+    data.schedulerRange.jobBudgetWhilePullMs.max,
+    data.schedulerRange.jobBudgetWhilePullMs.default
+  );
+  $: jobProcessorBatchSize = clampNumber(
+    jobProcessorBatchSize,
+    data.jobProcessorBatchRange.min,
+    data.jobProcessorBatchRange.max,
+    data.jobProcessorBatchRange.default
+  );
+
+  const schedulerDeployScript = () =>
+    schedulerApplyEnv === 'production' ? 'npm run deploy:prod' : 'npm run deploy:staging';
+
+  $: schedulerApplyCommand = `npm run ${
+    schedulerApplyEnv === 'production' ? 'scheduler:apply:prod' : 'scheduler:apply:staging'
+  } -- --jobs-interval ${jobsIntervalMinutes} --poll-interval ${pollIntervalMinutes} && ${schedulerDeployScript()}`;
+
+  $: schedulerMode =
+    jobProcessorBatchSize * pullSlicesPerTick * (jobBudgetIdleMs / 1000) <= 60
+      ? 'Conservative'
+      : jobProcessorBatchSize * pullSlicesPerTick * (jobBudgetIdleMs / 1000) <= 160
+      ? 'Balanced'
+      : 'Aggressive';
 
   const getProviderModels = (provider) => (provider === 'anthropic' ? anthropicModels : openaiModels);
   const isLoadingModels = (provider) => (provider === 'anthropic' ? anthropicModelsLoading : openaiModelsLoading);
@@ -121,7 +210,16 @@
     eventsPollMs: Number(eventsPollMs ?? 0),
     dashboardRefreshMinMs: Number(dashboardRefreshMinMs ?? 0),
     retentionDays: Number(retentionDays ?? 0), retentionMode,
-    autoReadDelayMs: Number(autoReadDelayMs ?? 0), articleCardLayout,
+    autoReadDelayMs: Number(autoReadDelayMs ?? 0),
+    jobProcessorBatchSize: Number(jobProcessorBatchSize ?? 0),
+    jobsIntervalMinutes: Number(jobsIntervalMinutes ?? 0),
+    pollIntervalMinutes: Number(pollIntervalMinutes ?? 0),
+    pullSlicesPerTick: Number(pullSlicesPerTick ?? 0),
+    pullSliceBudgetMs: Number(pullSliceBudgetMs ?? 0),
+    jobBudgetIdleMs: Number(jobBudgetIdleMs ?? 0),
+    jobBudgetWhilePullMs: Number(jobBudgetWhilePullMs ?? 0),
+    autoQueueTodayMissing: Boolean(autoQueueTodayMissing),
+    articleCardLayout,
     dashboardTopRatedLayout, dashboardTopRatedCutoff: Number(dashboardTopRatedCutoff ?? 0),
     dashboardTopRatedLimit: Number(dashboardTopRatedLimit ?? 0),
     scoreSystemPrompt, scoreUserPromptTemplate, profileText
@@ -146,7 +244,16 @@
     eventsPollMs = Number(snapshot.eventsPollMs ?? 0);
     dashboardRefreshMinMs = Number(snapshot.dashboardRefreshMinMs ?? 0);
     retentionDays = Number(snapshot.retentionDays ?? 0); retentionMode = snapshot.retentionMode;
-    autoReadDelayMs = Number(snapshot.autoReadDelayMs ?? 0); articleCardLayout = snapshot.articleCardLayout;
+    autoReadDelayMs = Number(snapshot.autoReadDelayMs ?? 0);
+    jobProcessorBatchSize = Number(snapshot.jobProcessorBatchSize ?? 0);
+    jobsIntervalMinutes = Number(snapshot.jobsIntervalMinutes ?? 0);
+    pollIntervalMinutes = Number(snapshot.pollIntervalMinutes ?? 0);
+    pullSlicesPerTick = Number(snapshot.pullSlicesPerTick ?? 0);
+    pullSliceBudgetMs = Number(snapshot.pullSliceBudgetMs ?? 0);
+    jobBudgetIdleMs = Number(snapshot.jobBudgetIdleMs ?? 0);
+    jobBudgetWhilePullMs = Number(snapshot.jobBudgetWhilePullMs ?? 0);
+    autoQueueTodayMissing = Boolean(snapshot.autoQueueTodayMissing);
+    articleCardLayout = snapshot.articleCardLayout;
     dashboardTopRatedLayout = snapshot.dashboardTopRatedLayout;
     dashboardTopRatedCutoff = Number(snapshot.dashboardTopRatedCutoff ?? 0);
     dashboardTopRatedLimit = Number(snapshot.dashboardTopRatedLimit ?? 0);
@@ -171,7 +278,9 @@
           ingestProvider, ingestModel, ingestReasoningEffort, chatProvider, chatModel, chatReasoningEffort,
           summaryStyle, summaryLength, initialFeedLookbackDays, maxFeedsPerPoll, maxItemsPerPoll,
           eventsPollMs, dashboardRefreshMinMs, retentionDays, retentionMode,
-          autoReadDelayMs, articleCardLayout, dashboardTopRatedLayout, dashboardTopRatedCutoff, dashboardTopRatedLimit,
+          autoReadDelayMs, jobProcessorBatchSize, jobsIntervalMinutes, pollIntervalMinutes,
+          pullSlicesPerTick, pullSliceBudgetMs, jobBudgetIdleMs, jobBudgetWhilePullMs, autoQueueTodayMissing,
+          articleCardLayout, dashboardTopRatedLayout, dashboardTopRatedCutoff, dashboardTopRatedLimit,
           scoreSystemPrompt, scoreUserPromptTemplate
         })
       });
@@ -203,6 +312,19 @@
   };
 
   const discardChanges = () => { applySnapshot(savedSnapshot); };
+
+  const copySchedulerCommand = async () => {
+    if (typeof navigator === 'undefined' || !navigator.clipboard) {
+      showToast('Clipboard is unavailable in this browser.', 'error');
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(schedulerApplyCommand);
+      showToast('Scheduler apply command copied.', 'success');
+    } catch {
+      showToast('Failed to copy scheduler command.', 'error');
+    }
+  };
 
   const saveKey = async (provider) => {
     const key = provider === 'openai' ? openaiKey : anthropicKey;
@@ -241,6 +363,7 @@
     <nav class="settings-subnav" aria-label="Settings sections">
       <a href="#models">AI settings</a>
       <a href="#behavior">Behavior</a>
+      <a href="#scheduler">Scheduler</a>
       <a href="#prompts">Prompts</a>
       <a href="#keys">Keys</a>
       <a href="#profile">Profile</a>
@@ -483,6 +606,123 @@
     </div>
   </Card>
 
+  <!-- Scheduler -->
+  <Card id="scheduler">
+    <h2>Scheduler</h2>
+    <p class="muted">Tune pull and queue throughput while keeping Worker resource use stable.</p>
+
+    <div class="two-col">
+      <label>
+        Job processor batch size
+        <input
+          type="number"
+          min={data.jobProcessorBatchRange.min}
+          max={data.jobProcessorBatchRange.max}
+          step="1"
+          bind:value={jobProcessorBatchSize}
+        />
+      </label>
+      <label>
+        Pull slices per scheduler tick
+        <input
+          type="number"
+          min={data.schedulerRange.pullSlicesPerTick.min}
+          max={data.schedulerRange.pullSlicesPerTick.max}
+          step="1"
+          bind:value={pullSlicesPerTick}
+        />
+      </label>
+    </div>
+
+    <div class="two-col">
+      <label>
+        Job budget when idle (ms)
+        <input
+          type="number"
+          min={data.schedulerRange.jobBudgetIdleMs.min}
+          max={data.schedulerRange.jobBudgetIdleMs.max}
+          step="100"
+          bind:value={jobBudgetIdleMs}
+        />
+      </label>
+      <label>
+        Job budget while pull is active (ms)
+        <input
+          type="number"
+          min={data.schedulerRange.jobBudgetWhilePullMs.min}
+          max={data.schedulerRange.jobBudgetWhilePullMs.max}
+          step="100"
+          bind:value={jobBudgetWhilePullMs}
+        />
+      </label>
+    </div>
+
+    <p class="hint">Estimated mode: <strong>{schedulerMode}</strong></p>
+
+    <details class="advanced" bind:open={schedulerAdvancedOpen}>
+      <summary>Advanced scheduler controls</summary>
+
+      <div class="advanced-content">
+        <label>
+          Pull slice budget (ms)
+          <input
+            type="number"
+            min={data.schedulerRange.pullSliceBudgetMs.min}
+            max={data.schedulerRange.pullSliceBudgetMs.max}
+            step="100"
+            bind:value={pullSliceBudgetMs}
+          />
+        </label>
+
+        <label class="checkbox-row">
+          <input type="checkbox" bind:checked={autoQueueTodayMissing} />
+          <span>Auto queue missing today jobs on scheduler ticks</span>
+        </label>
+
+        <div class="two-col">
+          <label>
+            Jobs scheduler interval (minutes)
+            <input
+              type="number"
+              min={data.schedulerRange.jobsIntervalMinutes.min}
+              max={data.schedulerRange.jobsIntervalMinutes.max}
+              step="1"
+              bind:value={jobsIntervalMinutes}
+            />
+            <span class="hint">Applies after running the command below and deploying.</span>
+          </label>
+          <label>
+            Poll scheduler interval (minutes)
+            <input
+              type="number"
+              min={data.schedulerRange.pollIntervalMinutes.min}
+              max={data.schedulerRange.pollIntervalMinutes.max}
+              step="1"
+              bind:value={pollIntervalMinutes}
+            />
+            <span class="hint">Applies after running the command below and deploying.</span>
+          </label>
+        </div>
+      </div>
+    </details>
+
+    <div class="scheduler-apply">
+      <div class="scheduler-apply-row">
+        <label>
+          Apply target
+          <select bind:value={schedulerApplyEnv}>
+            <option value="production">Production</option>
+            <option value="staging">Staging</option>
+          </select>
+        </label>
+        <Button variant="ghost" size="inline" on:click={copySchedulerCommand}>
+          <span>Copy command</span>
+        </Button>
+      </div>
+      <code class="command-code">{schedulerApplyCommand}</code>
+    </div>
+  </Card>
+
   <!-- API Keys -->
   <Card id="keys">
     <div class="card-title-row">
@@ -704,6 +944,68 @@
     font-size: var(--text-xs);
     color: var(--muted-text);
     font-weight: 400;
+  }
+
+  .advanced {
+    border: 1px solid var(--surface-border);
+    border-radius: var(--radius-lg);
+    background: var(--surface-soft);
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .advanced summary {
+    cursor: pointer;
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--text-color);
+    list-style: none;
+  }
+
+  .advanced summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .advanced-content {
+    display: grid;
+    gap: var(--space-4);
+    margin-top: var(--space-3);
+  }
+
+  .checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .checkbox-row input[type='checkbox'] {
+    width: 1rem;
+    height: 1rem;
+  }
+
+  .scheduler-apply {
+    display: grid;
+    gap: var(--space-2);
+    border: 1px solid var(--surface-border);
+    border-radius: var(--radius-lg);
+    background: var(--surface-soft);
+    padding: var(--space-3);
+  }
+
+  .scheduler-apply-row {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+  }
+
+  .command-code {
+    display: block;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+    font-size: var(--text-xs);
+    line-height: 1.4;
   }
 
   .two-col {

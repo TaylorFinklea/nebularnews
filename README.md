@@ -181,6 +181,45 @@ npm run deploy:staging
 npm run deploy:prod
 ```
 
+### Scheduler tuning (settings-driven)
+
+Scheduler controls are split into two groups:
+
+- Runtime (immediate after Save changes):
+  - `jobProcessorBatchSize`
+  - `pullSlicesPerTick`
+  - `pullSliceBudgetMs`
+  - `jobBudgetIdleMs`
+  - `jobBudgetWhilePullMs`
+  - `autoQueueTodayMissing`
+- Deploy-required (cron cadence):
+  - `jobsIntervalMinutes`
+  - `pollIntervalMinutes`
+
+Cron cadence changes require updating `wrangler.toml` and deploying:
+
+```bash
+# production
+npm run scheduler:apply:prod -- --jobs-interval 5 --poll-interval 60
+npm run deploy:prod
+
+# staging
+npm run scheduler:apply:staging -- --jobs-interval 5 --poll-interval 60
+npm run deploy:staging
+```
+
+`scheduler:apply:*` preserves the retention cron and prints the next deploy command.
+
+Tuning playbook (safe order):
+1. Increase `jobBudgetIdleMs`.
+2. Increase `jobProcessorBatchSize`.
+3. Increase `pullSlicesPerTick`.
+
+Rollback for aggressive tuning:
+1. Restore prior values in Settings and Save changes.
+2. Re-apply previous cron intervals with `scheduler:apply:*`.
+3. Redeploy (`deploy:staging` / `deploy:prod`).
+
 Smoke-check after deploy:
 
 ```

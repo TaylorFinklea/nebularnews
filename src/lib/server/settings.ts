@@ -64,6 +64,25 @@ const DEFAULT_RETENTION_MODE: RetentionMode = 'archive';
 const DEFAULT_JOB_PROCESSOR_BATCH_SIZE = 6;
 const MIN_JOB_PROCESSOR_BATCH_SIZE = 1;
 const MAX_JOB_PROCESSOR_BATCH_SIZE = 100;
+const DEFAULT_SCHEDULER_JOBS_INTERVAL_MIN = 5;
+const MIN_SCHEDULER_JOBS_INTERVAL_MIN = 1;
+const MAX_SCHEDULER_JOBS_INTERVAL_MIN = 30;
+const DEFAULT_SCHEDULER_POLL_INTERVAL_MIN = 60;
+const MIN_SCHEDULER_POLL_INTERVAL_MIN = 5;
+const MAX_SCHEDULER_POLL_INTERVAL_MIN = 60;
+const DEFAULT_SCHEDULER_PULL_SLICES_PER_TICK = 1;
+const MIN_SCHEDULER_PULL_SLICES_PER_TICK = 1;
+const MAX_SCHEDULER_PULL_SLICES_PER_TICK = 4;
+const DEFAULT_SCHEDULER_PULL_SLICE_BUDGET_MS = 8000;
+const MIN_SCHEDULER_PULL_SLICE_BUDGET_MS = 2000;
+const MAX_SCHEDULER_PULL_SLICE_BUDGET_MS = 20000;
+const DEFAULT_SCHEDULER_JOB_BUDGET_IDLE_MS = 8000;
+const MIN_SCHEDULER_JOB_BUDGET_IDLE_MS = 2000;
+const MAX_SCHEDULER_JOB_BUDGET_IDLE_MS = 20000;
+const DEFAULT_SCHEDULER_JOB_BUDGET_WHILE_PULL_MS = 3000;
+const MIN_SCHEDULER_JOB_BUDGET_WHILE_PULL_MS = 500;
+const MAX_SCHEDULER_JOB_BUDGET_WHILE_PULL_MS = 10000;
+const DEFAULT_SCHEDULER_AUTO_QUEUE_TODAY_MISSING = true;
 const FEATURE_LANE_DEFAULTS: Record<AiFeature, AiModelLane> = {
   summaries: 'pipeline',
   scoring: 'pipeline',
@@ -112,7 +131,26 @@ export {
   MAX_RETENTION_DAYS,
   DEFAULT_JOB_PROCESSOR_BATCH_SIZE,
   MIN_JOB_PROCESSOR_BATCH_SIZE,
-  MAX_JOB_PROCESSOR_BATCH_SIZE
+  MAX_JOB_PROCESSOR_BATCH_SIZE,
+  DEFAULT_SCHEDULER_JOBS_INTERVAL_MIN,
+  MIN_SCHEDULER_JOBS_INTERVAL_MIN,
+  MAX_SCHEDULER_JOBS_INTERVAL_MIN,
+  DEFAULT_SCHEDULER_POLL_INTERVAL_MIN,
+  MIN_SCHEDULER_POLL_INTERVAL_MIN,
+  MAX_SCHEDULER_POLL_INTERVAL_MIN,
+  DEFAULT_SCHEDULER_PULL_SLICES_PER_TICK,
+  MIN_SCHEDULER_PULL_SLICES_PER_TICK,
+  MAX_SCHEDULER_PULL_SLICES_PER_TICK,
+  DEFAULT_SCHEDULER_PULL_SLICE_BUDGET_MS,
+  MIN_SCHEDULER_PULL_SLICE_BUDGET_MS,
+  MAX_SCHEDULER_PULL_SLICE_BUDGET_MS,
+  DEFAULT_SCHEDULER_JOB_BUDGET_IDLE_MS,
+  MIN_SCHEDULER_JOB_BUDGET_IDLE_MS,
+  MAX_SCHEDULER_JOB_BUDGET_IDLE_MS,
+  DEFAULT_SCHEDULER_JOB_BUDGET_WHILE_PULL_MS,
+  MIN_SCHEDULER_JOB_BUDGET_WHILE_PULL_MS,
+  MAX_SCHEDULER_JOB_BUDGET_WHILE_PULL_MS,
+  DEFAULT_SCHEDULER_AUTO_QUEUE_TODAY_MISSING
 };
 
 const toReasoningEffort = (value: string | null): ReasoningEffort => {
@@ -233,6 +271,76 @@ export const clampJobProcessorBatchSize = (value: unknown) => {
     MAX_JOB_PROCESSOR_BATCH_SIZE,
     Math.max(MIN_JOB_PROCESSOR_BATCH_SIZE, Math.round(parsed))
   );
+};
+
+export const clampSchedulerJobsIntervalMinutes = (value: unknown) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return DEFAULT_SCHEDULER_JOBS_INTERVAL_MIN;
+  return Math.min(
+    MAX_SCHEDULER_JOBS_INTERVAL_MIN,
+    Math.max(MIN_SCHEDULER_JOBS_INTERVAL_MIN, Math.round(parsed))
+  );
+};
+
+export const clampSchedulerPollIntervalMinutes = (value: unknown) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return DEFAULT_SCHEDULER_POLL_INTERVAL_MIN;
+  return Math.min(
+    MAX_SCHEDULER_POLL_INTERVAL_MIN,
+    Math.max(MIN_SCHEDULER_POLL_INTERVAL_MIN, Math.round(parsed))
+  );
+};
+
+export const clampSchedulerPullSlicesPerTick = (value: unknown) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return DEFAULT_SCHEDULER_PULL_SLICES_PER_TICK;
+  return Math.min(
+    MAX_SCHEDULER_PULL_SLICES_PER_TICK,
+    Math.max(MIN_SCHEDULER_PULL_SLICES_PER_TICK, Math.round(parsed))
+  );
+};
+
+export const clampSchedulerPullSliceBudgetMs = (value: unknown) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return DEFAULT_SCHEDULER_PULL_SLICE_BUDGET_MS;
+  return Math.min(
+    MAX_SCHEDULER_PULL_SLICE_BUDGET_MS,
+    Math.max(MIN_SCHEDULER_PULL_SLICE_BUDGET_MS, Math.round(parsed))
+  );
+};
+
+export const clampSchedulerJobBudgetIdleMs = (value: unknown) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return DEFAULT_SCHEDULER_JOB_BUDGET_IDLE_MS;
+  return Math.min(
+    MAX_SCHEDULER_JOB_BUDGET_IDLE_MS,
+    Math.max(MIN_SCHEDULER_JOB_BUDGET_IDLE_MS, Math.round(parsed))
+  );
+};
+
+export const clampSchedulerJobBudgetWhilePullMs = (value: unknown) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return DEFAULT_SCHEDULER_JOB_BUDGET_WHILE_PULL_MS;
+  return Math.min(
+    MAX_SCHEDULER_JOB_BUDGET_WHILE_PULL_MS,
+    Math.max(MIN_SCHEDULER_JOB_BUDGET_WHILE_PULL_MS, Math.round(parsed))
+  );
+};
+
+export const parseBooleanSetting = (value: unknown, fallback: boolean) => {
+  if (value === null || value === undefined) return fallback;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return value !== 0;
+  const normalized = String(value).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+  return fallback;
+};
+
+export const intervalMinutesToCronExpression = (minutes: number) => {
+  const value = Math.max(1, Math.floor(Number(minutes) || 1));
+  if (value >= 60) return '0 * * * *';
+  return `*/${value} * * * *`;
 };
 
 const getFirstSetting = async (db: Db, keys: string[]) => {
@@ -418,6 +526,71 @@ export async function getRetentionConfig(db: Db) {
 export async function getJobProcessorBatchSize(db: Db, env?: App.Platform['env']) {
   const raw = (await getSetting(db, 'job_processor_batch_size')) ?? env?.JOB_PROCESSOR_BATCH_SIZE ?? null;
   return clampJobProcessorBatchSize(raw);
+}
+
+export async function getSchedulerJobsIntervalMinutes(db: Db) {
+  const raw = await getSetting(db, 'scheduler_jobs_interval_min');
+  return clampSchedulerJobsIntervalMinutes(raw);
+}
+
+export async function getSchedulerPollIntervalMinutes(db: Db) {
+  const raw = await getSetting(db, 'scheduler_poll_interval_min');
+  return clampSchedulerPollIntervalMinutes(raw);
+}
+
+export async function getSchedulerPullSlicesPerTick(db: Db) {
+  const raw = await getSetting(db, 'scheduler_pull_slices_per_tick');
+  return clampSchedulerPullSlicesPerTick(raw);
+}
+
+export async function getSchedulerPullSliceBudgetMs(db: Db) {
+  const raw = await getSetting(db, 'scheduler_pull_slice_budget_ms');
+  return clampSchedulerPullSliceBudgetMs(raw);
+}
+
+export async function getSchedulerJobBudgetIdleMs(db: Db) {
+  const raw = await getSetting(db, 'scheduler_job_budget_idle_ms');
+  return clampSchedulerJobBudgetIdleMs(raw);
+}
+
+export async function getSchedulerJobBudgetWhilePullMs(db: Db) {
+  const raw = await getSetting(db, 'scheduler_job_budget_while_pull_ms');
+  return clampSchedulerJobBudgetWhilePullMs(raw);
+}
+
+export async function getSchedulerAutoQueueTodayMissing(db: Db) {
+  const raw = await getSetting(db, 'scheduler_auto_queue_today_missing');
+  return parseBooleanSetting(raw, DEFAULT_SCHEDULER_AUTO_QUEUE_TODAY_MISSING);
+}
+
+export async function getSchedulerRuntimeConfig(db: Db) {
+  const [
+    jobsIntervalMinutes,
+    pollIntervalMinutes,
+    pullSlicesPerTick,
+    pullSliceBudgetMs,
+    jobBudgetIdleMs,
+    jobBudgetWhilePullMs,
+    autoQueueTodayMissing
+  ] = await Promise.all([
+    getSchedulerJobsIntervalMinutes(db),
+    getSchedulerPollIntervalMinutes(db),
+    getSchedulerPullSlicesPerTick(db),
+    getSchedulerPullSliceBudgetMs(db),
+    getSchedulerJobBudgetIdleMs(db),
+    getSchedulerJobBudgetWhilePullMs(db),
+    getSchedulerAutoQueueTodayMissing(db)
+  ]);
+
+  return {
+    jobsIntervalMinutes,
+    pollIntervalMinutes,
+    pullSlicesPerTick,
+    pullSliceBudgetMs,
+    jobBudgetIdleMs,
+    jobBudgetWhilePullMs,
+    autoQueueTodayMissing
+  };
 }
 
 export async function getDashboardTopRatedLayout(db: Db): Promise<DashboardTopRatedLayout> {

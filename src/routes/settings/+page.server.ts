@@ -11,6 +11,13 @@ import {
   DEFAULT_MAX_ITEMS_PER_POLL,
   DEFAULT_RETENTION_DAYS,
   DEFAULT_JOB_PROCESSOR_BATCH_SIZE,
+  DEFAULT_SCHEDULER_JOBS_INTERVAL_MIN,
+  DEFAULT_SCHEDULER_POLL_INTERVAL_MIN,
+  DEFAULT_SCHEDULER_PULL_SLICES_PER_TICK,
+  DEFAULT_SCHEDULER_PULL_SLICE_BUDGET_MS,
+  DEFAULT_SCHEDULER_JOB_BUDGET_IDLE_MS,
+  DEFAULT_SCHEDULER_JOB_BUDGET_WHILE_PULL_MS,
+  DEFAULT_SCHEDULER_AUTO_QUEUE_TODAY_MISSING,
   MAX_DASHBOARD_TOP_RATED_CUTOFF,
   MAX_DASHBOARD_TOP_RATED_LIMIT,
   MAX_DASHBOARD_REFRESH_MIN_MS,
@@ -20,6 +27,12 @@ import {
   MAX_MAX_ITEMS_PER_POLL,
   MAX_RETENTION_DAYS,
   MAX_JOB_PROCESSOR_BATCH_SIZE,
+  MAX_SCHEDULER_JOBS_INTERVAL_MIN,
+  MAX_SCHEDULER_POLL_INTERVAL_MIN,
+  MAX_SCHEDULER_PULL_SLICES_PER_TICK,
+  MAX_SCHEDULER_PULL_SLICE_BUDGET_MS,
+  MAX_SCHEDULER_JOB_BUDGET_IDLE_MS,
+  MAX_SCHEDULER_JOB_BUDGET_WHILE_PULL_MS,
   MIN_DASHBOARD_TOP_RATED_CUTOFF,
   MIN_DASHBOARD_TOP_RATED_LIMIT,
   MIN_DASHBOARD_REFRESH_MIN_MS,
@@ -29,6 +42,12 @@ import {
   MIN_MAX_ITEMS_PER_POLL,
   MIN_RETENTION_DAYS,
   MIN_JOB_PROCESSOR_BATCH_SIZE,
+  MIN_SCHEDULER_JOBS_INTERVAL_MIN,
+  MIN_SCHEDULER_POLL_INTERVAL_MIN,
+  MIN_SCHEDULER_PULL_SLICES_PER_TICK,
+  MIN_SCHEDULER_PULL_SLICE_BUDGET_MS,
+  MIN_SCHEDULER_JOB_BUDGET_IDLE_MS,
+  MIN_SCHEDULER_JOB_BUDGET_WHILE_PULL_MS,
   getFeatureModelLanes,
   getDashboardTopRatedConfig,
   MAX_AUTO_READ_DELAY_MS,
@@ -42,6 +61,13 @@ import {
   getEventsPollMs,
   getInitialFeedLookbackDays,
   getJobProcessorBatchSize,
+  getSchedulerJobsIntervalMinutes,
+  getSchedulerPollIntervalMinutes,
+  getSchedulerPullSlicesPerTick,
+  getSchedulerPullSliceBudgetMs,
+  getSchedulerJobBudgetIdleMs,
+  getSchedulerJobBudgetWhilePullMs,
+  getSchedulerAutoQueueTodayMissing,
   getMaxFeedsPerPoll,
   getMaxItemsPerPoll,
   getRetentionConfig,
@@ -88,6 +114,13 @@ export const load = async ({ platform }) => {
     retentionMode: retention.mode,
     autoReadDelayMs: await getAutoReadDelayMs(db),
     jobProcessorBatchSize: await getJobProcessorBatchSize(db, platform.env),
+    jobsIntervalMinutes: await getSchedulerJobsIntervalMinutes(db),
+    pollIntervalMinutes: await getSchedulerPollIntervalMinutes(db),
+    pullSlicesPerTick: await getSchedulerPullSlicesPerTick(db),
+    pullSliceBudgetMs: await getSchedulerPullSliceBudgetMs(db),
+    jobBudgetIdleMs: await getSchedulerJobBudgetIdleMs(db),
+    jobBudgetWhilePullMs: await getSchedulerJobBudgetWhilePullMs(db),
+    autoQueueTodayMissing: await getSchedulerAutoQueueTodayMissing(db),
     articleCardLayout: await getArticleCardLayout(db),
     dashboardTopRatedLayout,
     dashboardTopRatedCutoff: dashboardTopRated.cutoff,
@@ -149,6 +182,39 @@ export const load = async ({ platform }) => {
       min: MIN_JOB_PROCESSOR_BATCH_SIZE,
       max: MAX_JOB_PROCESSOR_BATCH_SIZE,
       default: DEFAULT_JOB_PROCESSOR_BATCH_SIZE
+    },
+    schedulerRange: {
+      jobsIntervalMinutes: {
+        min: MIN_SCHEDULER_JOBS_INTERVAL_MIN,
+        max: MAX_SCHEDULER_JOBS_INTERVAL_MIN,
+        default: DEFAULT_SCHEDULER_JOBS_INTERVAL_MIN
+      },
+      pollIntervalMinutes: {
+        min: MIN_SCHEDULER_POLL_INTERVAL_MIN,
+        max: MAX_SCHEDULER_POLL_INTERVAL_MIN,
+        default: DEFAULT_SCHEDULER_POLL_INTERVAL_MIN
+      },
+      pullSlicesPerTick: {
+        min: MIN_SCHEDULER_PULL_SLICES_PER_TICK,
+        max: MAX_SCHEDULER_PULL_SLICES_PER_TICK,
+        default: DEFAULT_SCHEDULER_PULL_SLICES_PER_TICK
+      },
+      pullSliceBudgetMs: {
+        min: MIN_SCHEDULER_PULL_SLICE_BUDGET_MS,
+        max: MAX_SCHEDULER_PULL_SLICE_BUDGET_MS,
+        default: DEFAULT_SCHEDULER_PULL_SLICE_BUDGET_MS
+      },
+      jobBudgetIdleMs: {
+        min: MIN_SCHEDULER_JOB_BUDGET_IDLE_MS,
+        max: MAX_SCHEDULER_JOB_BUDGET_IDLE_MS,
+        default: DEFAULT_SCHEDULER_JOB_BUDGET_IDLE_MS
+      },
+      jobBudgetWhilePullMs: {
+        min: MIN_SCHEDULER_JOB_BUDGET_WHILE_PULL_MS,
+        max: MAX_SCHEDULER_JOB_BUDGET_WHILE_PULL_MS,
+        default: DEFAULT_SCHEDULER_JOB_BUDGET_WHILE_PULL_MS
+      },
+      autoQueueTodayMissingDefault: DEFAULT_SCHEDULER_AUTO_QUEUE_TODAY_MISSING
     },
     dashboardTopRatedRange: {
       cutoff: {

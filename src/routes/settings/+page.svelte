@@ -150,6 +150,74 @@
       ? 'Balanced'
       : 'Aggressive';
 
+  const schedulerPresets = [
+    {
+      id: 'conservative',
+      label: 'Conservative',
+      description: 'Lower throughput, lowest risk of Worker limit spikes.',
+      values: {
+        jobProcessorBatchSize: 4,
+        pullSlicesPerTick: 1,
+        jobBudgetIdleMs: 4000,
+        jobBudgetWhilePullMs: 1500,
+        pullSliceBudgetMs: 6000,
+        jobsIntervalMinutes: 10,
+        pollIntervalMinutes: 60
+      }
+    },
+    {
+      id: 'balanced',
+      label: 'Balanced',
+      description: 'Good default throughput while staying resource-aware.',
+      values: {
+        jobProcessorBatchSize: 6,
+        pullSlicesPerTick: 1,
+        jobBudgetIdleMs: 8000,
+        jobBudgetWhilePullMs: 3000,
+        pullSliceBudgetMs: 8000,
+        jobsIntervalMinutes: 5,
+        pollIntervalMinutes: 60
+      }
+    },
+    {
+      id: 'aggressive',
+      label: 'Aggressive',
+      description: 'Higher throughput with higher chance of resource pressure.',
+      values: {
+        jobProcessorBatchSize: 10,
+        pullSlicesPerTick: 2,
+        jobBudgetIdleMs: 12000,
+        jobBudgetWhilePullMs: 4500,
+        pullSliceBudgetMs: 12000,
+        jobsIntervalMinutes: 3,
+        pollIntervalMinutes: 30
+      }
+    }
+  ];
+
+  const matchesSchedulerPreset = (preset) =>
+    jobProcessorBatchSize === preset.values.jobProcessorBatchSize &&
+    pullSlicesPerTick === preset.values.pullSlicesPerTick &&
+    jobBudgetIdleMs === preset.values.jobBudgetIdleMs &&
+    jobBudgetWhilePullMs === preset.values.jobBudgetWhilePullMs &&
+    pullSliceBudgetMs === preset.values.pullSliceBudgetMs &&
+    jobsIntervalMinutes === preset.values.jobsIntervalMinutes &&
+    pollIntervalMinutes === preset.values.pollIntervalMinutes;
+
+  $: activeSchedulerPreset = schedulerPresets.find((preset) => matchesSchedulerPreset(preset))?.id ?? 'custom';
+
+  const applySchedulerPreset = (presetId) => {
+    const preset = schedulerPresets.find((candidate) => candidate.id === presetId);
+    if (!preset) return;
+    jobProcessorBatchSize = preset.values.jobProcessorBatchSize;
+    pullSlicesPerTick = preset.values.pullSlicesPerTick;
+    jobBudgetIdleMs = preset.values.jobBudgetIdleMs;
+    jobBudgetWhilePullMs = preset.values.jobBudgetWhilePullMs;
+    pullSliceBudgetMs = preset.values.pullSliceBudgetMs;
+    jobsIntervalMinutes = preset.values.jobsIntervalMinutes;
+    pollIntervalMinutes = preset.values.pollIntervalMinutes;
+  };
+
   const getProviderModels = (provider) => (provider === 'anthropic' ? anthropicModels : openaiModels);
   const isLoadingModels = (provider) => (provider === 'anthropic' ? anthropicModelsLoading : openaiModelsLoading);
 
@@ -619,58 +687,74 @@
     <h2>Scheduler</h2>
     <p class="muted">Tune pull and queue throughput while keeping Worker resource use stable.</p>
 
-    <div class="two-col">
-      <label>
-        Job processor batch size
-        <input
-          type="number"
-          min={data.jobProcessorBatchRange.min}
-          max={data.jobProcessorBatchRange.max}
-          step="1"
-          bind:value={jobProcessorBatchSize}
-        />
-      </label>
-      <label>
-        Pull slices per scheduler tick
-        <input
-          type="number"
-          min={data.schedulerRange.pullSlicesPerTick.min}
-          max={data.schedulerRange.pullSlicesPerTick.max}
-          step="1"
-          bind:value={pullSlicesPerTick}
-        />
-      </label>
+    <div class="preset-grid">
+      {#each schedulerPresets as preset}
+        <button
+          type="button"
+          class="preset-btn"
+          class:active={activeSchedulerPreset === preset.id}
+          on:click={() => applySchedulerPreset(preset.id)}
+        >
+          <span class="preset-title">{preset.label}</span>
+          <span class="preset-desc">{preset.description}</span>
+        </button>
+      {/each}
     </div>
 
-    <div class="two-col">
-      <label>
-        Job budget when idle (ms)
-        <input
-          type="number"
-          min={data.schedulerRange.jobBudgetIdleMs.min}
-          max={data.schedulerRange.jobBudgetIdleMs.max}
-          step="100"
-          bind:value={jobBudgetIdleMs}
-        />
-      </label>
-      <label>
-        Job budget while pull is active (ms)
-        <input
-          type="number"
-          min={data.schedulerRange.jobBudgetWhilePullMs.min}
-          max={data.schedulerRange.jobBudgetWhilePullMs.max}
-          step="100"
-          bind:value={jobBudgetWhilePullMs}
-        />
-      </label>
-    </div>
-
-    <p class="hint">Estimated mode: <strong>{schedulerMode}</strong></p>
+    <p class="hint">
+      Current profile: <strong>{activeSchedulerPreset === 'custom' ? `${schedulerMode} (custom)` : schedulerPresets.find((preset) => preset.id === activeSchedulerPreset)?.label}</strong>
+    </p>
 
     <details class="advanced" bind:open={schedulerAdvancedOpen}>
       <summary>Advanced scheduler controls</summary>
 
       <div class="advanced-content">
+        <div class="two-col">
+          <label>
+            Job processor batch size
+            <input
+              type="number"
+              min={data.jobProcessorBatchRange.min}
+              max={data.jobProcessorBatchRange.max}
+              step="1"
+              bind:value={jobProcessorBatchSize}
+            />
+          </label>
+          <label>
+            Pull slices per scheduler tick
+            <input
+              type="number"
+              min={data.schedulerRange.pullSlicesPerTick.min}
+              max={data.schedulerRange.pullSlicesPerTick.max}
+              step="1"
+              bind:value={pullSlicesPerTick}
+            />
+          </label>
+        </div>
+
+        <div class="two-col">
+          <label>
+            Job budget when idle (ms)
+            <input
+              type="number"
+              min={data.schedulerRange.jobBudgetIdleMs.min}
+              max={data.schedulerRange.jobBudgetIdleMs.max}
+              step="100"
+              bind:value={jobBudgetIdleMs}
+            />
+          </label>
+          <label>
+            Job budget while pull is active (ms)
+            <input
+              type="number"
+              min={data.schedulerRange.jobBudgetWhilePullMs.min}
+              max={data.schedulerRange.jobBudgetWhilePullMs.max}
+              step="100"
+              bind:value={jobBudgetWhilePullMs}
+            />
+          </label>
+        </div>
+
         <label>
           Pull slice budget (ms)
           <input
@@ -711,6 +795,8 @@
             <span class="hint">Applies after running the command below and deploying.</span>
           </label>
         </div>
+
+        <p class="hint">Estimated mode: <strong>{schedulerMode}</strong></p>
       </div>
     </details>
 
@@ -954,6 +1040,46 @@
     font-weight: 400;
   }
 
+  .preset-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-3);
+  }
+
+  .preset-btn {
+    display: grid;
+    gap: 0.35rem;
+    text-align: left;
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--surface-border);
+    background: var(--surface-soft);
+    color: var(--text-color);
+    cursor: pointer;
+    transition: border-color var(--transition-fast), background var(--transition-fast), box-shadow var(--transition-fast);
+  }
+
+  .preset-btn:hover {
+    border-color: var(--ghost-border);
+  }
+
+  .preset-btn.active {
+    border-color: var(--ghost-border);
+    background: var(--primary-soft);
+    box-shadow: inset 0 0 0 1px rgba(138, 110, 255, 0.25);
+  }
+
+  .preset-title {
+    font-size: var(--text-sm);
+    font-weight: 700;
+  }
+
+  .preset-desc {
+    font-size: var(--text-xs);
+    color: var(--muted-text);
+    line-height: 1.35;
+  }
+
   .advanced {
     border: 1px solid var(--surface-border);
     border-radius: var(--radius-lg);
@@ -1097,7 +1223,8 @@
 
   @media (max-width: 800px) {
     .model-sections,
-    .two-col {
+    .two-col,
+    .preset-grid {
       grid-template-columns: 1fr;
     }
   }

@@ -40,6 +40,7 @@
   let retentionDays = Number(data.settings.retentionDays ?? data.retentionRange?.default ?? 0);
   let retentionMode = data.settings.retentionMode ?? 'archive';
   let autoReadDelayMs = Number(data.settings.autoReadDelayMs ?? 4000);
+  let autoTaggingEnabled = Boolean(data.settings.autoTaggingEnabled ?? data.autoTagging?.default ?? true);
   let jobProcessorBatchSize = Number(
     data.settings.jobProcessorBatchSize ?? data.jobProcessorBatchRange?.default ?? 6
   );
@@ -211,6 +212,7 @@
     dashboardRefreshMinMs: Number(dashboardRefreshMinMs ?? 0),
     retentionDays: Number(retentionDays ?? 0), retentionMode,
     autoReadDelayMs: Number(autoReadDelayMs ?? 0),
+    autoTaggingEnabled: Boolean(autoTaggingEnabled),
     jobProcessorBatchSize: Number(jobProcessorBatchSize ?? 0),
     jobsIntervalMinutes: Number(jobsIntervalMinutes ?? 0),
     pollIntervalMinutes: Number(pollIntervalMinutes ?? 0),
@@ -245,6 +247,7 @@
     dashboardRefreshMinMs = Number(snapshot.dashboardRefreshMinMs ?? 0);
     retentionDays = Number(snapshot.retentionDays ?? 0); retentionMode = snapshot.retentionMode;
     autoReadDelayMs = Number(snapshot.autoReadDelayMs ?? 0);
+    autoTaggingEnabled = Boolean(snapshot.autoTaggingEnabled);
     jobProcessorBatchSize = Number(snapshot.jobProcessorBatchSize ?? 0);
     jobsIntervalMinutes = Number(snapshot.jobsIntervalMinutes ?? 0);
     pollIntervalMinutes = Number(snapshot.pollIntervalMinutes ?? 0);
@@ -278,7 +281,7 @@
           ingestProvider, ingestModel, ingestReasoningEffort, chatProvider, chatModel, chatReasoningEffort,
           summaryStyle, summaryLength, initialFeedLookbackDays, maxFeedsPerPoll, maxItemsPerPoll,
           eventsPollMs, dashboardRefreshMinMs, retentionDays, retentionMode,
-          autoReadDelayMs, jobProcessorBatchSize, jobsIntervalMinutes, pollIntervalMinutes,
+          autoReadDelayMs, autoTaggingEnabled, jobProcessorBatchSize, jobsIntervalMinutes, pollIntervalMinutes,
           pullSlicesPerTick, pullSliceBudgetMs, jobBudgetIdleMs, jobBudgetWhilePullMs, autoQueueTodayMissing,
           articleCardLayout, dashboardTopRatedLayout, dashboardTopRatedCutoff, dashboardTopRatedLimit,
           scoreSystemPrompt, scoreUserPromptTemplate
@@ -433,6 +436,11 @@
           </div>
         {/each}
       </div>
+
+      <label class="checkbox-row">
+        <input type="checkbox" bind:checked={autoTaggingEnabled} />
+        <span>Enable AI auto-tagging (disabling stops enqueue + execution of auto-tag jobs)</span>
+      </label>
     </div>
 
     <div class="divider"></div>

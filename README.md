@@ -192,6 +192,7 @@ Scheduler controls are split into two groups:
   - `jobBudgetIdleMs`
   - `jobBudgetWhilePullMs`
   - `autoQueueTodayMissing`
+  - `autoTaggingEnabled` (disables all AI auto-tag enqueue/execution)
 - Deploy-required (cron cadence):
   - `jobsIntervalMinutes`
   - `pollIntervalMinutes`

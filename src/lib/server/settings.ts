@@ -64,6 +64,7 @@ const DEFAULT_RETENTION_MODE: RetentionMode = 'archive';
 const DEFAULT_JOB_PROCESSOR_BATCH_SIZE = 6;
 const MIN_JOB_PROCESSOR_BATCH_SIZE = 1;
 const MAX_JOB_PROCESSOR_BATCH_SIZE = 100;
+const DEFAULT_AUTO_TAGGING_ENABLED = true;
 const DEFAULT_SCHEDULER_JOBS_INTERVAL_MIN = 5;
 const MIN_SCHEDULER_JOBS_INTERVAL_MIN = 1;
 const MAX_SCHEDULER_JOBS_INTERVAL_MIN = 30;
@@ -132,6 +133,7 @@ export {
   DEFAULT_JOB_PROCESSOR_BATCH_SIZE,
   MIN_JOB_PROCESSOR_BATCH_SIZE,
   MAX_JOB_PROCESSOR_BATCH_SIZE,
+  DEFAULT_AUTO_TAGGING_ENABLED,
   DEFAULT_SCHEDULER_JOBS_INTERVAL_MIN,
   MIN_SCHEDULER_JOBS_INTERVAL_MIN,
   MAX_SCHEDULER_JOBS_INTERVAL_MIN,
@@ -526,6 +528,11 @@ export async function getRetentionConfig(db: Db) {
 export async function getJobProcessorBatchSize(db: Db, env?: App.Platform['env']) {
   const raw = (await getSetting(db, 'job_processor_batch_size')) ?? env?.JOB_PROCESSOR_BATCH_SIZE ?? null;
   return clampJobProcessorBatchSize(raw);
+}
+
+export async function getAutoTaggingEnabled(db: Db) {
+  const raw = await getSetting(db, 'auto_tagging_enabled');
+  return parseBooleanSetting(raw, DEFAULT_AUTO_TAGGING_ENABLED);
 }
 
 export async function getSchedulerJobsIntervalMinutes(db: Db) {

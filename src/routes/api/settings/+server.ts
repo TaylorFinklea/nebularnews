@@ -1,8 +1,9 @@
 import { json } from '@sveltejs/kit';
-import { dbAll } from '$lib/server/db';
+import { dbAll, dbRun, now } from '$lib/server/db';
 import {
   DEFAULT_SCORE_SYSTEM_PROMPT,
   DEFAULT_SCORE_USER_PROMPT_TEMPLATE,
+  DEFAULT_AUTO_TAGGING_ENABLED,
   clampAutoReadDelayMs,
   clampJobProcessorBatchSize,
   clampInitialFeedLookbackDays,
@@ -21,6 +22,7 @@ import {
   clampSchedulerJobBudgetWhilePullMs,
   parseBooleanSetting,
   getAutoReadDelayMs,
+  getAutoTaggingEnabled,
   getArticleCardLayout,
   getDashboardTopRatedLayout,
   getConfiguredChatProviderModel,
@@ -85,6 +87,7 @@ export const GET = async ({ platform }) => {
     retentionDays: retention.days,
     retentionMode: retention.mode,
     autoReadDelayMs: await getAutoReadDelayMs(db),
+    autoTaggingEnabled: await getAutoTaggingEnabled(db),
     jobProcessorBatchSize: await getJobProcessorBatchSize(db, platform.env),
     jobsIntervalMinutes: await getSchedulerJobsIntervalMinutes(db),
     pollIntervalMinutes: await getSchedulerPollIntervalMinutes(db),
@@ -207,6 +210,12 @@ export const POST = async ({ request, platform, locals }) => {
   if (body?.autoReadDelayMs !== undefined && body?.autoReadDelayMs !== null) {
     entries.push(['auto_read_delay_ms', String(clampAutoReadDelayMs(body.autoReadDelayMs))]);
   }
+  if (body?.autoTaggingEnabled !== undefined && body?.autoTaggingEnabled !== null) {
+    entries.push([
+      'auto_tagging_enabled',
+      parseBooleanSetting(body.autoTaggingEnabled, DEFAULT_AUTO_TAGGING_ENABLED) ? '1' : '0'
+    ]);
+  }
   if (body?.jobProcessorBatchSize !== undefined && body?.jobProcessorBatchSize !== null) {
     entries.push(['job_processor_batch_size', String(clampJobProcessorBatchSize(body.jobProcessorBatchSize))]);
   }
@@ -249,6 +258,21 @@ export const POST = async ({ request, platform, locals }) => {
 
   for (const [key, value] of entries) {
     await setSetting(platform.env.DB, key, value);
+  }
+
+  const autoTaggingDisabled = entries.some(
+    ([key, value]) => key === 'auto_tagging_enabled' && (value === '0' || value.toLowerCase() === 'false')
+  );
+  if (autoTaggingDisabled) {
+    await dbRun(
+      platform.env.DB,
+      `UPDATE jobs
+       SET status = 'cancelled',
+           updated_at = ?
+       WHERE type = 'auto_tag'
+         AND status = 'pending'`,
+      [now()]
+    );
   }
 
   await recordAuditEvent(platform.env.DB, {

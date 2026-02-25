@@ -2,6 +2,7 @@ import { dbAll } from '$lib/server/db';
 import {
   DEFAULT_SCORE_SYSTEM_PROMPT,
   DEFAULT_SCORE_USER_PROMPT_TEMPLATE,
+  DEFAULT_AUTO_TAGGING_ENABLED,
   DEFAULT_DASHBOARD_TOP_RATED_CUTOFF,
   DEFAULT_DASHBOARD_TOP_RATED_LIMIT,
   DEFAULT_DASHBOARD_REFRESH_MIN_MS,
@@ -53,6 +54,7 @@ import {
   MAX_AUTO_READ_DELAY_MS,
   MIN_AUTO_READ_DELAY_MS,
   getAutoReadDelayMs,
+  getAutoTaggingEnabled,
   getArticleCardLayout,
   getDashboardTopRatedLayout,
   getConfiguredChatProviderModel,
@@ -113,6 +115,7 @@ export const load = async ({ platform }) => {
     retentionDays: retention.days,
     retentionMode: retention.mode,
     autoReadDelayMs: await getAutoReadDelayMs(db),
+    autoTaggingEnabled: await getAutoTaggingEnabled(db),
     jobProcessorBatchSize: await getJobProcessorBatchSize(db, platform.env),
     jobsIntervalMinutes: await getSchedulerJobsIntervalMinutes(db),
     pollIntervalMinutes: await getSchedulerPollIntervalMinutes(db),
@@ -215,6 +218,9 @@ export const load = async ({ platform }) => {
         default: DEFAULT_SCHEDULER_JOB_BUDGET_WHILE_PULL_MS
       },
       autoQueueTodayMissingDefault: DEFAULT_SCHEDULER_AUTO_QUEUE_TODAY_MISSING
+    },
+    autoTagging: {
+      default: DEFAULT_AUTO_TAGGING_ENABLED
     },
     dashboardTopRatedRange: {
       cutoff: {

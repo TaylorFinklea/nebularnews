@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { nanoid } from 'nanoid';
 import { dbRun, now } from '$lib/server/db';
+import { getAutoTaggingEnabled } from '$lib/server/settings';
 
 const enqueueJob = async (
   db: D1Database,
@@ -33,8 +34,17 @@ export const POST = async ({ params, request, platform }) => {
   const types = Array.isArray(body?.types) ? body.types : ['summarize', 'score'];
   const articleId = params.id;
   const allowed = new Set(['summarize', 'summarize_chat', 'score', 'key_points', 'auto_tag']);
-  const filtered = types.filter((type: string) => allowed.has(type));
-  if (filtered.length === 0) return json({ error: 'No valid types' }, { status: 400 });
+  let filtered = types.filter((type: string) => allowed.has(type));
+  const autoTaggingEnabled = await getAutoTaggingEnabled(platform.env.DB);
+  if (!autoTaggingEnabled) {
+    filtered = filtered.filter((type: string) => type !== 'auto_tag');
+  }
+  if (filtered.length === 0) {
+    if (!autoTaggingEnabled && types.includes('auto_tag')) {
+      return json({ error: 'AI auto-tagging is disabled in Settings' }, { status: 400 });
+    }
+    return json({ error: 'No valid types' }, { status: 400 });
+  }
 
   if (filtered.includes('summarize')) {
     await enqueueJob(platform.env.DB, 'summarize', articleId);

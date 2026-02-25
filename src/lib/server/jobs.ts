@@ -4,6 +4,7 @@ import { generateArticleKeyPoints, generateArticleTags, refreshPreferenceProfile
 import { extractLeadImageUrlFromHtml } from './images';
 import {
   getFeatureProviderModel,
+  getAutoTaggingEnabled,
   getJobProcessorBatchSize,
   getProviderKey,
   getScorePromptConfig,
@@ -432,7 +433,12 @@ async function runKeyPointsJob(db: Db, env: App.Platform['env'], articleId: stri
   return { provider, model };
 }
 
-async function runAutoTagJob(db: Db, env: App.Platform['env'], articleId: string): Promise<{ provider: string; model: string }> {
+async function runAutoTagJob(db: Db, env: App.Platform['env'], articleId: string): Promise<JobRunMetadata> {
+  const autoTaggingEnabled = await getAutoTaggingEnabled(db);
+  if (!autoTaggingEnabled) {
+    return null;
+  }
+
   const article = await dbGet<{
     title: string | null;
     canonical_url: string | null;

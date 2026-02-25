@@ -269,7 +269,7 @@
   <strong>Today missing:</strong>
   <span>{today.missingSummaries} summaries</span>
   <span>{today.missingScores} scores</span>
-  <span>{today.missingAutoTags} auto-tags</span>
+  <span>{today.missingAutoTags} auto-tags{#if !today.autoTaggingEnabled} (disabled){/if}</span>
   <span class="tz">({formatUtcOffset(today.tzOffsetMinutes)})</span>
 </div>
 

@@ -148,6 +148,28 @@ CREATE TABLE IF NOT EXISTS article_tags (
   FOREIGN KEY(tag_id) REFERENCES tags(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS article_tag_suggestions (
+  id TEXT PRIMARY KEY,
+  article_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  name_normalized TEXT NOT NULL,
+  confidence REAL,
+  source_provider TEXT,
+  source_model TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  UNIQUE(article_id, name_normalized),
+  FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS article_tag_suggestion_dismissals (
+  article_id TEXT NOT NULL,
+  name_normalized TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY(article_id, name_normalized),
+  FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS chat_threads (
   id TEXT PRIMARY KEY,
   scope TEXT NOT NULL,
@@ -283,6 +305,9 @@ CREATE INDEX IF NOT EXISTS idx_article_reactions_feed ON article_reactions(feed_
 CREATE INDEX IF NOT EXISTS idx_article_read_state_updated ON article_read_state(updated_at);
 CREATE INDEX IF NOT EXISTS idx_article_tags_article ON article_tags(article_id);
 CREATE INDEX IF NOT EXISTS idx_article_tags_tag ON article_tags(tag_id);
+CREATE INDEX IF NOT EXISTS idx_article_tag_suggestions_article ON article_tag_suggestions(article_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_article_tag_suggestions_name ON article_tag_suggestions(name_normalized);
+CREATE INDEX IF NOT EXISTS idx_article_tag_dismissals_article ON article_tag_suggestion_dismissals(article_id);
 CREATE INDEX IF NOT EXISTS idx_tags_updated ON tags(updated_at);
 CREATE INDEX IF NOT EXISTS idx_chat_messages_thread ON chat_messages(thread_id);
 CREATE INDEX IF NOT EXISTS idx_pull_runs_status ON pull_runs(status, created_at);
@@ -298,3 +323,6 @@ VALUES (3, 'v3_query_indexes', unixepoch() * 1000);
 
 INSERT OR IGNORE INTO schema_migrations (version, name, applied_at)
 VALUES (4, 'v4_reliability_budgets', unixepoch() * 1000);
+
+INSERT OR IGNORE INTO schema_migrations (version, name, applied_at)
+VALUES (5, 'v5_tagging_v2_suggestions', unixepoch() * 1000);

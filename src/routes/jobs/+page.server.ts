@@ -43,6 +43,18 @@ export const load = async ({ platform, url, request, depends }) => {
          FROM article_tags t
          WHERE t.article_id = a.id
            AND t.source = 'ai'
+       )
+       AND NOT EXISTS (
+         SELECT 1
+         FROM article_tag_suggestions ts
+         WHERE ts.article_id = a.id
+       )
+       AND NOT EXISTS (
+         SELECT 1
+         FROM jobs j
+         WHERE j.article_id = a.id
+           AND j.type = 'auto_tag'
+           AND j.status = 'done'
        )`,
     [dayStart, dayEnd]
   );

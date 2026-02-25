@@ -41,6 +41,9 @@
   let retentionMode = data.settings.retentionMode ?? 'archive';
   let autoReadDelayMs = Number(data.settings.autoReadDelayMs ?? 4000);
   let autoTaggingEnabled = Boolean(data.settings.autoTaggingEnabled ?? data.autoTagging?.default ?? true);
+  let autoTagMaxPerArticle = Number(
+    data.settings.autoTagMaxPerArticle ?? data.autoTagging?.maxPerArticle?.default ?? 2
+  );
   let jobProcessorBatchSize = Number(
     data.settings.jobProcessorBatchSize ?? data.jobProcessorBatchRange?.default ?? 6
   );
@@ -134,6 +137,12 @@
     data.jobProcessorBatchRange.min,
     data.jobProcessorBatchRange.max,
     data.jobProcessorBatchRange.default
+  );
+  $: autoTagMaxPerArticle = clampNumber(
+    autoTagMaxPerArticle,
+    data.autoTagging?.maxPerArticle?.min ?? 1,
+    data.autoTagging?.maxPerArticle?.max ?? 5,
+    data.autoTagging?.maxPerArticle?.default ?? 2
   );
 
   const schedulerDeployScript = () =>
@@ -281,6 +290,7 @@
     retentionDays: Number(retentionDays ?? 0), retentionMode,
     autoReadDelayMs: Number(autoReadDelayMs ?? 0),
     autoTaggingEnabled: Boolean(autoTaggingEnabled),
+    autoTagMaxPerArticle: Number(autoTagMaxPerArticle ?? 0),
     jobProcessorBatchSize: Number(jobProcessorBatchSize ?? 0),
     jobsIntervalMinutes: Number(jobsIntervalMinutes ?? 0),
     pollIntervalMinutes: Number(pollIntervalMinutes ?? 0),
@@ -316,6 +326,7 @@
     retentionDays = Number(snapshot.retentionDays ?? 0); retentionMode = snapshot.retentionMode;
     autoReadDelayMs = Number(snapshot.autoReadDelayMs ?? 0);
     autoTaggingEnabled = Boolean(snapshot.autoTaggingEnabled);
+    autoTagMaxPerArticle = Number(snapshot.autoTagMaxPerArticle ?? 0);
     jobProcessorBatchSize = Number(snapshot.jobProcessorBatchSize ?? 0);
     jobsIntervalMinutes = Number(snapshot.jobsIntervalMinutes ?? 0);
     pollIntervalMinutes = Number(snapshot.pollIntervalMinutes ?? 0);
@@ -349,7 +360,8 @@
           ingestProvider, ingestModel, ingestReasoningEffort, chatProvider, chatModel, chatReasoningEffort,
           summaryStyle, summaryLength, initialFeedLookbackDays, maxFeedsPerPoll, maxItemsPerPoll,
           eventsPollMs, dashboardRefreshMinMs, retentionDays, retentionMode,
-          autoReadDelayMs, autoTaggingEnabled, jobProcessorBatchSize, jobsIntervalMinutes, pollIntervalMinutes,
+          autoReadDelayMs, autoTaggingEnabled, autoTagMaxPerArticle,
+          jobProcessorBatchSize, jobsIntervalMinutes, pollIntervalMinutes,
           pullSlicesPerTick, pullSliceBudgetMs, jobBudgetIdleMs, jobBudgetWhilePullMs, autoQueueTodayMissing,
           articleCardLayout, dashboardTopRatedLayout, dashboardTopRatedCutoff, dashboardTopRatedLimit,
           scoreSystemPrompt, scoreUserPromptTemplate
@@ -380,6 +392,26 @@
   const resetScorePromptDefaults = () => {
     scoreSystemPrompt = data.scorePromptDefaults.scoreSystemPrompt;
     scoreUserPromptTemplate = data.scorePromptDefaults.scoreUserPromptTemplate;
+  };
+
+  const resetDismissedTagSuggestions = async () => {
+    if (isSaving) return;
+    isSaving = true;
+    try {
+      const res = await apiFetch('/api/settings/tag-suggestions/reset-dismissed', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' }
+      });
+      if (!res.ok) {
+        showToast(await readApiError(res, 'Failed to reset dismissed AI tag suggestions'), 'error');
+        return;
+      }
+      showToast('Dismissed AI tag suggestions reset.', 'success');
+    } catch {
+      showToast('Failed to reset dismissed AI tag suggestions', 'error');
+    } finally {
+      isSaving = false;
+    }
   };
 
   const discardChanges = () => { applySnapshot(savedSnapshot); };
@@ -509,6 +541,27 @@
         <input type="checkbox" bind:checked={autoTaggingEnabled} />
         <span>Enable AI auto-tagging (disabling stops enqueue + execution of auto-tag jobs)</span>
       </label>
+
+      <div class="two-col">
+        <label>
+          Max AI tags per article
+          <input
+            type="number"
+            min={data.autoTagging?.maxPerArticle?.min ?? 1}
+            max={data.autoTagging?.maxPerArticle?.max ?? 5}
+            step="1"
+            bind:value={autoTagMaxPerArticle}
+          />
+          <span class="hint">Applies to combined existing-tag matches plus new suggestions.</span>
+        </label>
+        <div class="inline-actions">
+          <p class="muted small">Dismissed AI suggestions</p>
+          <Button variant="ghost" size="inline" on:click={resetDismissedTagSuggestions} disabled={isSaving}>
+            <IconRefresh size={14} stroke={1.9} />
+            <span>Reset dismissed suggestions</span>
+          </Button>
+        </div>
+      </div>
     </div>
 
     <div class="divider"></div>
@@ -1146,6 +1199,12 @@
     display: grid;
     grid-template-columns: repeat(2, 1fr);
     gap: var(--space-4);
+  }
+
+  .inline-actions {
+    display: grid;
+    align-content: end;
+    gap: var(--space-2);
   }
 
   /* Lane toggle */

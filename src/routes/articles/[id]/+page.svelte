@@ -24,6 +24,7 @@
   import Button from '$lib/components/Button.svelte';
   import Pill from '$lib/components/Pill.svelte';
   import ChatBox from '$lib/components/ChatBox.svelte';
+  import { showToast } from '$lib/client/toast';
   export let data;
 
   let rating = 3;
@@ -37,6 +38,8 @@
   let tagBusy = false;
   let tagError = '';
   let tagInput = '';
+  let tags = Array.isArray(data.tags) ? data.tags : [];
+  let tagSuggestions = Array.isArray(data.tagSuggestions) ? data.tagSuggestions : [];
   let chatError = '';
   const AUTO_MARK_READ_DELAY_MS = Number(data.autoReadDelayMs ?? 4000);
   let autoReadTimer = null;
@@ -44,6 +47,8 @@
   let articleBlocks = [];
   let backHref = '/articles';
   let articleImageUrl = '';
+  let tagsSyncSignature = '';
+  let suggestionsSyncSignature = '';
 
   const sanitizeBackHref = (value) => {
     if (!value || typeof value !== 'string') return '/articles';
@@ -113,9 +118,25 @@
     title: data.article?.title ?? null,
     source_name: data.preferredSource?.sourceName ?? null,
     image_url: data.article?.image_url ?? null,
-    tags: data.tags ?? []
+    tags
   });
   $: articleBlocks = parseArticleBlocks(fullTextSource);
+  $: {
+    const signature = JSON.stringify(data.tags ?? []);
+    if (signature !== tagsSyncSignature) {
+      tagsSyncSignature = signature;
+      tags = Array.isArray(data.tags) ? [...data.tags] : [];
+    }
+  }
+  $: {
+    const signature = JSON.stringify(data.tagSuggestions ?? []);
+    if (signature !== suggestionsSyncSignature) {
+      suggestionsSyncSignature = signature;
+      tagSuggestions = Array.isArray(data.tagSuggestions) ? [...data.tagSuggestions] : [];
+    }
+  }
+
+  const fromApi = (payload, key, fallback) => payload?.data?.[key] ?? payload?.[key] ?? fallback;
 
   const submitFeedback = async () => {
     await apiFetch(`/api/articles/${data.article.id}/feedback`, {
@@ -207,7 +228,8 @@
         body: JSON.stringify({ addTagNames: names, source: 'manual' })
       });
       const payload = await res.json().catch(() => ({}));
-      if (!res.ok) { tagError = payload?.error ?? 'Failed to add tags'; return; }
+      if (!res.ok) { tagError = payload?.error?.message ?? payload?.error ?? 'Failed to add tags'; return; }
+      tags = fromApi(payload, 'tags', tags);
       tagInput = '';
     } finally {
       tagBusy = false;
@@ -225,10 +247,104 @@
         body: JSON.stringify({ removeTagIds: [tagId] })
       });
       const payload = await res.json().catch(() => ({}));
-      if (!res.ok) { tagError = payload?.error ?? 'Failed to remove tag'; }
+      if (!res.ok) { tagError = payload?.error?.message ?? payload?.error ?? 'Failed to remove tag'; return; }
+      tags = fromApi(payload, 'tags', tags);
     } finally {
       tagBusy = false;
       await invalidateAll();
+    }
+  };
+
+  const acceptTagSuggestion = async (suggestion) => {
+    if (tagBusy) return;
+    const previousSuggestions = [...tagSuggestions];
+    const previousTags = [...tags];
+    tagBusy = true;
+    tagError = '';
+    tagSuggestions = tagSuggestions.filter((entry) => entry.id !== suggestion.id);
+    tags = [...tags, { id: `pending-${suggestion.name_normalized}`, name: suggestion.name, source: 'manual' }];
+    try {
+      const res = await apiFetch(`/api/articles/${data.article.id}/tag-suggestions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'accept', suggestionId: suggestion.id })
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        tagError = payload?.error?.message ?? payload?.error ?? 'Failed to accept suggestion';
+        tagSuggestions = previousSuggestions;
+        tags = previousTags;
+        return;
+      }
+      tags = fromApi(payload, 'tags', tags);
+      tagSuggestions = fromApi(payload, 'suggestions', tagSuggestions);
+      void invalidateAll();
+    } finally {
+      tagBusy = false;
+    }
+  };
+
+  const undoDismissTagSuggestion = async (suggestion) => {
+    if (tagBusy) return;
+    tagBusy = true;
+    tagError = '';
+    try {
+      const res = await apiFetch(`/api/articles/${data.article.id}/tag-suggestions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'undo_dismiss',
+          name: suggestion.name,
+          confidence: suggestion.confidence ?? null,
+          sourceProvider: suggestion.source_provider ?? null,
+          sourceModel: suggestion.source_model ?? null
+        })
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        tagError = payload?.error?.message ?? payload?.error ?? 'Failed to undo dismiss';
+        return;
+      }
+      tagSuggestions = fromApi(payload, 'suggestions', tagSuggestions);
+      tags = fromApi(payload, 'tags', tags);
+      void invalidateAll();
+    } finally {
+      tagBusy = false;
+    }
+  };
+
+  const dismissTagSuggestion = async (suggestion) => {
+    if (tagBusy) return;
+    const previousSuggestions = [...tagSuggestions];
+    tagBusy = true;
+    tagError = '';
+    tagSuggestions = tagSuggestions.filter((entry) => entry.id !== suggestion.id);
+    try {
+      const res = await apiFetch(`/api/articles/${data.article.id}/tag-suggestions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'dismiss', suggestionId: suggestion.id })
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        tagError = payload?.error?.message ?? payload?.error ?? 'Failed to dismiss suggestion';
+        tagSuggestions = previousSuggestions;
+        return;
+      }
+      tagSuggestions = fromApi(payload, 'suggestions', tagSuggestions);
+      tags = fromApi(payload, 'tags', tags);
+      void invalidateAll();
+      showToast('Suggestion dismissed.', 'info', {
+        durationMs: 5000,
+        action: {
+          label: 'Undo',
+          onClick: () => {
+            void undoDismissTagSuggestion(suggestion);
+          }
+        }
+      });
+    } finally {
+      tagBusy = false;
     }
   };
 
@@ -415,9 +531,9 @@
             <IconTag size={15} stroke={1.9} />
           </Button>
         </div>
-        {#if data.tags?.length}
+        {#if tags?.length}
           <div class="tag-row">
-            {#each data.tags as tag}
+            {#each tags as tag}
               <button
                 class="tag-chip"
                 on:click={() => removeTag(tag.id)}
@@ -432,6 +548,35 @@
           </div>
         {:else}
           <p class="muted small">No tags yet.</p>
+        {/if}
+        {#if tagSuggestions?.length}
+          <div class="suggestion-row">
+            {#each tagSuggestions as suggestion}
+              <span class="suggestion-chip">
+                <span>{suggestion.name}</span>
+                <button
+                  type="button"
+                  class="suggestion-action"
+                  on:click={() => acceptTagSuggestion(suggestion)}
+                  title={`Accept suggested tag ${suggestion.name}`}
+                  aria-label={`Accept suggested tag ${suggestion.name}`}
+                  disabled={tagBusy}
+                >
+                  <IconPlus size={11} stroke={2} />
+                </button>
+                <button
+                  type="button"
+                  class="suggestion-action"
+                  on:click={() => dismissTagSuggestion(suggestion)}
+                  title={`Dismiss suggested tag ${suggestion.name}`}
+                  aria-label={`Dismiss suggested tag ${suggestion.name}`}
+                  disabled={tagBusy}
+                >
+                  <IconX size={11} stroke={2} />
+                </button>
+              </span>
+            {/each}
+          </div>
         {/if}
         <div class="input-row">
           <input
@@ -736,6 +881,48 @@
     border: 1px solid var(--surface-border);
     border-radius: var(--radius-full);
     padding: 0 0.3rem;
+  }
+
+  .suggestion-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  .suggestion-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    background: color-mix(in srgb, #4ade80 20%, transparent);
+    border: 1px solid color-mix(in srgb, #4ade80 45%, var(--surface-border));
+    border-radius: var(--radius-full);
+    padding: 0.2rem 0.35rem 0.2rem 0.6rem;
+    font-size: var(--text-sm);
+    color: var(--text-color);
+  }
+
+  .suggestion-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.2rem;
+    height: 1.2rem;
+    border-radius: var(--radius-full);
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-color);
+    cursor: pointer;
+    padding: 0;
+  }
+
+  .suggestion-action:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--surface-strong) 55%, transparent);
+    border-color: var(--surface-border);
+  }
+
+  .suggestion-action:disabled {
+    opacity: 0.6;
+    cursor: default;
   }
 
   .input-row {

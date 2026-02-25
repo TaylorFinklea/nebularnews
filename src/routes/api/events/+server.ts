@@ -98,6 +98,10 @@ export const GET = async ({ platform, request }) => {
                  SELECT article_id, created_at as mutated_at FROM article_reactions
                  UNION ALL
                  SELECT article_id, created_at as mutated_at FROM article_tags
+                 UNION ALL
+                 SELECT article_id, updated_at as mutated_at FROM article_tag_suggestions
+                 UNION ALL
+                 SELECT article_id, created_at as mutated_at FROM article_tag_suggestion_dismissals
                )
                WHERE mutated_at > ?
                ORDER BY mutated_at DESC
@@ -113,7 +117,7 @@ export const GET = async ({ platform, request }) => {
                   throttled,
                   article: {
                     article_id: latestMutation.article_id,
-                    fields: ['read', 'reaction', 'tags'],
+                    fields: ['read', 'reaction', 'tags', 'tag_suggestions'],
                     mutated_at: lastMutationAt
                   }
                 })

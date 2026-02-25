@@ -7,10 +7,12 @@
     IconEye,
     IconEyeOff,
     IconFilterX,
+    IconPlus,
     IconSearch,
     IconStars,
     IconThumbDown,
-    IconThumbUp
+    IconThumbUp,
+    IconX
   } from '$lib/icons';
   import { resolveArticleImageUrl } from '$lib/article-image';
   import PageHeader from '$lib/components/PageHeader.svelte';
@@ -48,7 +50,13 @@
   const toInt = (value, fallback = 0) => { const n = Number(value); return Number.isFinite(n) ? n : fallback; };
   const normalizeReadValue = (value) => (toInt(value, 0) === 1 ? 1 : 0);
   const reactionNumber = (value) => { const n = Number(value); if (n === 1) return 1; if (n === -1) return -1; return null; };
-  const normalizeArticle = (article) => ({ ...article, is_read: normalizeReadValue(article?.is_read), reaction_value: reactionNumber(article?.reaction_value), tags: Array.isArray(article?.tags) ? article.tags : [] });
+  const normalizeArticle = (article) => ({
+    ...article,
+    is_read: normalizeReadValue(article?.is_read),
+    reaction_value: reactionNumber(article?.reaction_value),
+    tags: Array.isArray(article?.tags) ? article.tags : [],
+    tag_suggestions: Array.isArray(article?.tag_suggestions) ? article.tag_suggestions : []
+  });
 
   let query = data.q ?? '';
   let selectedScores = [...(data.selectedScores ?? DEFAULT_SCORE_FILTER)];
@@ -132,6 +140,7 @@
   const markImageError = (id) => { imageErrors = { ...imageErrors, [id]: true }; };
   const imageFailed = (id) => Boolean(imageErrors[id]);
   const refreshInBackground = async () => { try { await invalidateAll(); return true; } catch { return false; } };
+  const responseField = (payload, key, fallback) => payload?.data?.[key] ?? payload?.[key] ?? fallback;
 
   const reactToArticle = async (articleId, value, feedId) => {
     if (isPending(articleId)) return;
@@ -169,6 +178,111 @@
       setOptimisticPatch(articleId, { is_read: previous });
       clearOptimisticFields(articleId, ['is_read']);
       showToast('Unable to save read state. Reverted.', 'error');
+    } finally {
+      setPending(articleId, false);
+    }
+  };
+
+  const acceptTagSuggestion = async (articleId, suggestion) => {
+    if (isPending(articleId)) return;
+    const current = findMergedArticle(articleId);
+    if (!current) return;
+    const previousTags = Array.isArray(current.tags) ? current.tags : [];
+    const previousSuggestions = Array.isArray(current.tag_suggestions) ? current.tag_suggestions : [];
+    setPending(articleId, true);
+    setOptimisticPatch(articleId, {
+      tags: [...previousTags, { id: `pending-${suggestion.name_normalized}`, name: suggestion.name }],
+      tag_suggestions: previousSuggestions.filter((entry) => entry.id !== suggestion.id)
+    });
+    try {
+      const res = await apiFetch(`/api/articles/${articleId}/tag-suggestions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'accept', suggestionId: suggestion.id })
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload?.error?.message ?? payload?.error ?? 'accept_failed');
+      setOptimisticPatch(articleId, {
+        tags: responseField(payload, 'tags', previousTags),
+        tag_suggestions: responseField(payload, 'suggestions', previousSuggestions)
+      });
+      void refreshInBackground();
+    } catch {
+      setOptimisticPatch(articleId, { tags: previousTags, tag_suggestions: previousSuggestions });
+      showToast('Unable to accept tag suggestion. Reverted.', 'error');
+    } finally {
+      setPending(articleId, false);
+    }
+  };
+
+  const undoDismissTagSuggestion = async (articleId, suggestion) => {
+    if (isPending(articleId)) return;
+    const current = findMergedArticle(articleId);
+    if (!current) return;
+    const previousSuggestions = Array.isArray(current.tag_suggestions) ? current.tag_suggestions : [];
+    setPending(articleId, true);
+    setOptimisticPatch(articleId, {
+      tag_suggestions: [...previousSuggestions, suggestion]
+    });
+    try {
+      const res = await apiFetch(`/api/articles/${articleId}/tag-suggestions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          action: 'undo_dismiss',
+          name: suggestion.name,
+          confidence: suggestion.confidence ?? null,
+          sourceProvider: suggestion.source_provider ?? null,
+          sourceModel: suggestion.source_model ?? null
+        })
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload?.error?.message ?? payload?.error ?? 'undo_dismiss_failed');
+      setOptimisticPatch(articleId, {
+        tag_suggestions: responseField(payload, 'suggestions', previousSuggestions)
+      });
+      void refreshInBackground();
+    } catch {
+      setOptimisticPatch(articleId, { tag_suggestions: previousSuggestions });
+      showToast('Unable to undo suggestion dismissal.', 'error');
+    } finally {
+      setPending(articleId, false);
+    }
+  };
+
+  const dismissTagSuggestion = async (articleId, suggestion) => {
+    if (isPending(articleId)) return;
+    const current = findMergedArticle(articleId);
+    if (!current) return;
+    const previousSuggestions = Array.isArray(current.tag_suggestions) ? current.tag_suggestions : [];
+    setPending(articleId, true);
+    setOptimisticPatch(articleId, {
+      tag_suggestions: previousSuggestions.filter((entry) => entry.id !== suggestion.id)
+    });
+    try {
+      const res = await apiFetch(`/api/articles/${articleId}/tag-suggestions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'dismiss', suggestionId: suggestion.id })
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload?.error?.message ?? payload?.error ?? 'dismiss_failed');
+      setOptimisticPatch(articleId, {
+        tag_suggestions: responseField(payload, 'suggestions', previousSuggestions)
+      });
+      showToast('Suggestion dismissed.', 'info', {
+        durationMs: 5000,
+        action: {
+          label: 'Undo',
+          onClick: () => {
+            void undoDismissTagSuggestion(articleId, suggestion);
+          }
+        }
+      });
+      void refreshInBackground();
+    } catch {
+      setOptimisticPatch(articleId, { tag_suggestions: previousSuggestions });
+      showToast('Unable to dismiss tag suggestion. Reverted.', 'error');
     } finally {
       setPending(articleId, false);
     }
@@ -414,6 +528,35 @@
             <div class="tag-row">
               {#each article.tags as tag}
                 <span class="tag-chip">{tag.name}</span>
+              {/each}
+            </div>
+          {/if}
+          {#if article.tag_suggestions?.length}
+            <div class="tag-suggestion-row">
+              {#each article.tag_suggestions as suggestion}
+                <span class="tag-suggestion-chip">
+                  <span>{suggestion.name}</span>
+                  <button
+                    type="button"
+                    class="suggestion-action"
+                    on:click={() => acceptTagSuggestion(article.id, suggestion)}
+                    title={`Accept suggested tag ${suggestion.name}`}
+                    aria-label={`Accept suggested tag ${suggestion.name}`}
+                    disabled={pending}
+                  >
+                    <IconPlus size={11} stroke={2} />
+                  </button>
+                  <button
+                    type="button"
+                    class="suggestion-action"
+                    on:click={() => dismissTagSuggestion(article.id, suggestion)}
+                    title={`Dismiss suggested tag ${suggestion.name}`}
+                    aria-label={`Dismiss suggested tag ${suggestion.name}`}
+                    disabled={pending}
+                  >
+                    <IconX size={11} stroke={2} />
+                  </button>
+                </span>
               {/each}
             </div>
           {/if}
@@ -872,6 +1015,48 @@
     padding: 0.15rem 0.5rem;
     font-size: 0.75rem;
     color: var(--muted-text);
+  }
+
+  .tag-suggestion-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+
+  .tag-suggestion-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    border-radius: var(--radius-full);
+    border: 1px solid color-mix(in srgb, #4ade80 45%, var(--surface-border));
+    background: color-mix(in srgb, #4ade80 18%, transparent);
+    padding: 0.12rem 0.3rem 0.12rem 0.52rem;
+    font-size: 0.75rem;
+    color: var(--text-color);
+  }
+
+  .suggestion-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.05rem;
+    height: 1.05rem;
+    border-radius: var(--radius-full);
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-color);
+    cursor: pointer;
+    padding: 0;
+  }
+
+  .suggestion-action:hover:not(:disabled) {
+    border-color: var(--surface-border);
+    background: color-mix(in srgb, var(--surface-strong) 55%, transparent);
+  }
+
+  .suggestion-action:disabled {
+    opacity: 0.55;
+    cursor: default;
   }
 
   .excerpt {

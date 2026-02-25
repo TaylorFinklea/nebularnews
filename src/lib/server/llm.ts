@@ -151,6 +151,18 @@ const normalizeTagCandidates = (input: unknown, maxTags: number) => {
   return [...deduped.values()].slice(0, maxTags);
 };
 
+const normalizeIdList = (input: unknown, allowedIds: Set<string>, limit: number) => {
+  const raw = Array.isArray(input)
+    ? input
+    : String(input ?? '')
+        .split(/[\n,]/)
+        .map((entry) => entry.trim())
+        .filter(Boolean);
+
+  const normalized = [...new Set(raw.map((entry) => String(entry ?? '').trim()).filter(Boolean))];
+  return normalized.filter((id) => allowedIds.has(id)).slice(0, limit);
+};
+
 const buildSummaryInstruction = (style: SummaryStyle, length: SummaryLength) => {
   const bounds = summaryConstraints[length];
   if (style === 'bullet') {
@@ -415,6 +427,82 @@ export async function generateArticleTags(
   const parsed = parseJson(content);
   const tags = normalizeTagCandidates((parsed as Record<string, unknown> | null)?.tags ?? parsed ?? content, maxTags);
   return { tags, usage };
+}
+
+export async function generateArticleTagDecisions(
+  provider: Provider,
+  apiKey: string,
+  model: string,
+  input: {
+    title: string | null;
+    url: string | null;
+    contentText: string;
+    maxTags?: number;
+    existingCandidates: Array<{ id: string; name: string }>;
+  },
+  options?: LlmOptions
+) {
+  const maxTags = Math.min(5, Math.max(1, Math.floor(Number(input.maxTags ?? 2))));
+  const candidates = input.existingCandidates
+    .map((candidate) => ({
+      id: String(candidate.id ?? '').trim(),
+      name: normalizeTagName(candidate.name ?? '')
+    }))
+    .filter((candidate) => candidate.id && candidate.name)
+    .slice(0, 50);
+  const allowedIds = new Set(candidates.map((candidate) => candidate.id));
+  const candidateText =
+    candidates.length > 0
+      ? candidates.map((candidate) => `- ${candidate.name} (id: ${candidate.id})`).join('\n')
+      : '- No existing tags available.';
+
+  const prompt = `Assign tags for this article.\n\nTitle: ${input.title ?? 'Untitled'}\nURL: ${
+    input.url ?? 'Unknown'
+  }\n\nExisting tag candidates:\n${candidateText}\n\nRequirements:
+- Return JSON only.
+- JSON keys:
+  - "matched_existing_tag_ids": array of IDs selected only from candidate IDs above.
+  - "new_suggestions": array of objects with:
+    - "name": short title-case tag, 1-3 words.
+    - "confidence": number from 0.0 to 1.0.
+- Total tags across matched_existing_tag_ids + new_suggestions must be <= ${maxTags}.
+- Prefer existing candidates whenever they fit.
+- If no good match exists, include concise new suggestions.
+- Avoid generic tags such as "News", "Update", "Article", or source names.
+\nArticle:\n${input.contentText}`;
+
+  const { content, usage } = await runChat(
+    provider,
+    apiKey,
+    model,
+    [
+      {
+        role: 'system',
+        content:
+          'You classify articles into reusable taxonomy tags. Prefer selecting from provided existing tags.'
+      },
+      { role: 'user', content: prompt }
+    ],
+    options
+  );
+
+  const parsed = (parseJson(content) as Record<string, unknown> | null) ?? {};
+  const matchedExistingTagIds = normalizeIdList(
+    parsed.matched_existing_tag_ids ?? parsed.matchedExistingTagIds ?? parsed.existing_tag_ids,
+    allowedIds,
+    maxTags
+  );
+  const remaining = Math.max(0, maxTags - matchedExistingTagIds.length);
+  const newSuggestions = normalizeTagCandidates(
+    parsed.new_suggestions ?? parsed.newSuggestions ?? parsed.suggestions ?? [],
+    remaining
+  );
+
+  return {
+    matchedExistingTagIds,
+    newSuggestions,
+    usage
+  };
 }
 
 export async function scoreArticle(

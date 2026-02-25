@@ -1,7 +1,7 @@
 import { dbAll, dbGet } from '$lib/server/db';
 import { getPreferredSourceForArticle, listSourcesForArticle } from '$lib/server/sources';
 import { getAutoReadDelayMs, getFeatureModelLane, getFeatureProviderModel } from '$lib/server/settings';
-import { listTags, listTagsForArticle } from '$lib/server/tags';
+import { listTagSuggestionsForArticle, listTags, listTagsForArticle } from '$lib/server/tags';
 
 const parseStringList = (value: string | null | undefined) => {
   if (!value) return [] as string[];
@@ -104,6 +104,7 @@ export const load = async ({ params, platform }) => {
   const preferredSource = await getPreferredSourceForArticle(db, params.id);
   const sources = await listSourcesForArticle(db, params.id);
   const tags = await listTagsForArticle(db, params.id);
+  const tagSuggestions = await listTagSuggestionsForArticle(db, params.id);
   const availableTags = await listTags(db, { limit: 200 });
 
   const articleChatLane = await getFeatureModelLane(db, 'article_chat');
@@ -158,6 +159,8 @@ export const load = async ({ params, platform }) => {
     preferredSource,
     sources,
     tags,
+    tagSuggestions,
+    tag_suggestions: tagSuggestions,
     availableTags,
     chatReadiness,
     autoReadDelayMs

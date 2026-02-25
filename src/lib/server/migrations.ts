@@ -4,7 +4,7 @@ let schemaReady = false;
 let schemaInitPromise: Promise<void> | null = null;
 
 const MAX_PUBLISHED_FUTURE_MS = 1000 * 60 * 60 * 24;
-export const EXPECTED_SCHEMA_VERSION = 4;
+export const EXPECTED_SCHEMA_VERSION = 5;
 
 const runSafe = async (db: Db, sql: string, params: unknown[] = []) => {
   try {
@@ -303,6 +303,48 @@ const applyV4 = async (db: Db) => {
   await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_articles_image_status ON articles(image_status, image_checked_at)');
 };
 
+const applyV5 = async (db: Db) => {
+  await runSafe(
+    db,
+    `CREATE TABLE IF NOT EXISTS article_tag_suggestions (
+      id TEXT PRIMARY KEY,
+      article_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      name_normalized TEXT NOT NULL,
+      confidence REAL,
+      source_provider TEXT,
+      source_model TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      UNIQUE(article_id, name_normalized),
+      FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE
+    )`
+  );
+  await runSafe(
+    db,
+    `CREATE TABLE IF NOT EXISTS article_tag_suggestion_dismissals (
+      article_id TEXT NOT NULL,
+      name_normalized TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY(article_id, name_normalized),
+      FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE
+    )`
+  );
+  await runSafe(
+    db,
+    'CREATE INDEX IF NOT EXISTS idx_article_tag_suggestions_article ON article_tag_suggestions(article_id, updated_at DESC)'
+  );
+  await runSafe(
+    db,
+    'CREATE INDEX IF NOT EXISTS idx_article_tag_suggestions_name ON article_tag_suggestions(name_normalized)'
+  );
+  await runSafe(
+    db,
+    'CREATE INDEX IF NOT EXISTS idx_article_tag_dismissals_article ON article_tag_suggestion_dismissals(article_id)'
+  );
+  await runSafe(db, "DELETE FROM article_tags WHERE source = 'ai'");
+};
+
 export async function ensureSchema(db: Db) {
   if (schemaReady) return;
   if (schemaInitPromise) return schemaInitPromise;
@@ -325,6 +367,10 @@ export async function ensureSchema(db: Db) {
     if (currentVersion < 4) {
       await applyV4(db);
       await markVersionApplied(db, 4, 'v4_reliability_budgets');
+    }
+    if (currentVersion < 5) {
+      await applyV5(db);
+      await markVersionApplied(db, 5, 'v5_tagging_v2_suggestions');
     }
     schemaReady = true;
   })();
@@ -385,6 +431,15 @@ const assertRequiredV4Objects = async (db: Db) => {
   }
 };
 
+const assertRequiredV5Objects = async (db: Db) => {
+  const requiredTables = ['article_tag_suggestions', 'article_tag_suggestion_dismissals'];
+  for (const tableName of requiredTables) {
+    if (!(await tableExists(db, tableName))) {
+      throw new Error(`Missing required table: ${tableName}`);
+    }
+  }
+};
+
 export async function assertSchemaVersion(db: Db, expected = EXPECTED_SCHEMA_VERSION) {
   const version = await getSchemaVersion(db);
   if (version < expected) {
@@ -397,6 +452,9 @@ export async function assertSchemaVersion(db: Db, expected = EXPECTED_SCHEMA_VER
   }
   if (expected >= 4) {
     await assertRequiredV4Objects(db);
+  }
+  if (expected >= 5) {
+    await assertRequiredV5Objects(db);
   }
   return version;
 }

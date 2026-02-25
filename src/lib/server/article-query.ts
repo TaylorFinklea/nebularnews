@@ -1,6 +1,6 @@
 import { dbAll, dbGet, type Db } from './db';
 import { getPreferredSourcesForArticles } from './sources';
-import { listTagsForArticles } from './tags';
+import { listTagSuggestionsForArticles, listTagsForArticles } from './tags';
 
 export const SCORE_VALUES = ['5', '4', '3', '2', '1', 'unscored'] as const;
 export const REACTION_VALUES = ['up', 'down', 'none'] as const;
@@ -168,6 +168,7 @@ export const listArticlesWithFilters = async (db: Db, input: ArticleQueryInput) 
   const articleIds = rows.map((row) => row.id);
   const sourceByArticle = await getPreferredSourcesForArticles(db, articleIds);
   const tagsByArticle = await listTagsForArticles(db, articleIds);
+  const suggestionsByArticle = await listTagSuggestionsForArticles(db, articleIds);
 
   const articles = rows.map((row) => {
     const source = sourceByArticle.get(row.id);
@@ -175,6 +176,7 @@ export const listArticlesWithFilters = async (db: Db, input: ArticleQueryInput) 
       ...row,
       image_url: row.image_url ?? null,
       tags: tagsByArticle.get(row.id) ?? [],
+      tag_suggestions: suggestionsByArticle.get(row.id) ?? [],
       source: source
         ? {
             feed_id: source.feedId,

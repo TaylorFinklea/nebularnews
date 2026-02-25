@@ -65,6 +65,9 @@ const DEFAULT_JOB_PROCESSOR_BATCH_SIZE = 6;
 const MIN_JOB_PROCESSOR_BATCH_SIZE = 1;
 const MAX_JOB_PROCESSOR_BATCH_SIZE = 100;
 const DEFAULT_AUTO_TAGGING_ENABLED = true;
+const DEFAULT_AUTO_TAG_MAX_PER_ARTICLE = 2;
+const MIN_AUTO_TAG_MAX_PER_ARTICLE = 1;
+const MAX_AUTO_TAG_MAX_PER_ARTICLE = 5;
 const DEFAULT_SCHEDULER_JOBS_INTERVAL_MIN = 5;
 const MIN_SCHEDULER_JOBS_INTERVAL_MIN = 1;
 const MAX_SCHEDULER_JOBS_INTERVAL_MIN = 30;
@@ -134,6 +137,9 @@ export {
   MIN_JOB_PROCESSOR_BATCH_SIZE,
   MAX_JOB_PROCESSOR_BATCH_SIZE,
   DEFAULT_AUTO_TAGGING_ENABLED,
+  DEFAULT_AUTO_TAG_MAX_PER_ARTICLE,
+  MIN_AUTO_TAG_MAX_PER_ARTICLE,
+  MAX_AUTO_TAG_MAX_PER_ARTICLE,
   DEFAULT_SCHEDULER_JOBS_INTERVAL_MIN,
   MIN_SCHEDULER_JOBS_INTERVAL_MIN,
   MAX_SCHEDULER_JOBS_INTERVAL_MIN,
@@ -272,6 +278,15 @@ export const clampJobProcessorBatchSize = (value: unknown) => {
   return Math.min(
     MAX_JOB_PROCESSOR_BATCH_SIZE,
     Math.max(MIN_JOB_PROCESSOR_BATCH_SIZE, Math.round(parsed))
+  );
+};
+
+export const clampAutoTagMaxPerArticle = (value: unknown) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return DEFAULT_AUTO_TAG_MAX_PER_ARTICLE;
+  return Math.min(
+    MAX_AUTO_TAG_MAX_PER_ARTICLE,
+    Math.max(MIN_AUTO_TAG_MAX_PER_ARTICLE, Math.round(parsed))
   );
 };
 
@@ -533,6 +548,11 @@ export async function getJobProcessorBatchSize(db: Db, env?: App.Platform['env']
 export async function getAutoTaggingEnabled(db: Db) {
   const raw = await getSetting(db, 'auto_tagging_enabled');
   return parseBooleanSetting(raw, DEFAULT_AUTO_TAGGING_ENABLED);
+}
+
+export async function getAutoTagMaxPerArticle(db: Db) {
+  const raw = await getSetting(db, 'auto_tag_max_per_article');
+  return clampAutoTagMaxPerArticle(raw);
 }
 
 export async function getSchedulerJobsIntervalMinutes(db: Db) {

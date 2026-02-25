@@ -23,7 +23,8 @@ export const normalizeArticle = (article: ArticleListItem): ArticleListItem => (
   ...article,
   is_read: normalizeReadValue(article?.is_read),
   reaction_value: reactionNumber(article?.reaction_value),
-  tags: Array.isArray(article?.tags) ? article.tags : []
+  tags: Array.isArray(article?.tags) ? article.tags : [],
+  tag_suggestions: Array.isArray(article?.tag_suggestions) ? article.tag_suggestions : []
 });
 
 export const isArticleRead = (article: ArticleListItem) => normalizeReadValue(article?.is_read) === 1;

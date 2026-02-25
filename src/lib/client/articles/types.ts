@@ -3,6 +3,18 @@ export type ArticleTag = {
   name: string;
 };
 
+export type ArticleTagSuggestion = {
+  id: string;
+  article_id: string;
+  name: string;
+  name_normalized: string;
+  confidence: number | null;
+  source_provider?: string | null;
+  source_model?: string | null;
+  created_at?: number;
+  updated_at?: number;
+};
+
 export type ArticleListItem = {
   id: string;
   canonical_url?: string | null;
@@ -22,6 +34,7 @@ export type ArticleListItem = {
   source_reputation?: number;
   source_feedback_count?: number;
   tags?: ArticleTag[];
+  tag_suggestions?: ArticleTagSuggestion[];
 };
 
 export type AvailableTag = {

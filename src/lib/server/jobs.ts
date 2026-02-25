@@ -1,8 +1,15 @@
 import { nanoid } from 'nanoid';
 import { dbAll, dbGet, dbRun, now, type Db } from './db';
-import { generateArticleKeyPoints, generateArticleTags, refreshPreferenceProfile, scoreArticle, summarizeArticle } from './llm';
+import {
+  generateArticleKeyPoints,
+  generateArticleTagDecisions,
+  refreshPreferenceProfile,
+  scoreArticle,
+  summarizeArticle
+} from './llm';
 import { extractLeadImageUrlFromHtml } from './images';
 import {
+  getAutoTagMaxPerArticle,
   getFeatureProviderModel,
   getAutoTaggingEnabled,
   getJobProcessorBatchSize,
@@ -11,7 +18,13 @@ import {
   getSummaryConfig
 } from './settings';
 import { ensurePreferenceProfile } from './profile';
-import { attachTagToArticle, ensureTagByName } from './tags';
+import {
+  attachTagToArticle,
+  listDismissedSuggestionNamesForArticle,
+  listExistingTagCandidatesForArticle,
+  normalizeTagSuggestionKey,
+  replaceTagSuggestionsForArticle
+} from './tags';
 import { logInfo } from './log';
 import { isJobBatchV2Enabled } from './flags';
 
@@ -449,8 +462,15 @@ async function runAutoTagJob(db: Db, env: App.Platform['env'], articleId: string
   const { provider, model, reasoningEffort } = await getFeatureProviderModel(db, env, 'auto_tagging');
   const apiKey = await getProviderKey(db, env, provider);
   if (!apiKey) throw new Error('No provider key');
+  const maxTags = await getAutoTagMaxPerArticle(db);
+  const existingCandidates = await listExistingTagCandidatesForArticle(db, {
+    title: article.title,
+    contentText: article.content_text,
+    limit: 50
+  });
+  const dismissedSuggestionNames = await listDismissedSuggestionNamesForArticle(db, articleId);
 
-  const generated = await generateArticleTags(
+  const generated = await generateArticleTagDecisions(
     provider,
     apiKey,
     model,
@@ -458,26 +478,47 @@ async function runAutoTagJob(db: Db, env: App.Platform['env'], articleId: string
       title: article.title,
       url: article.canonical_url,
       contentText: article.content_text.slice(0, 12000),
-      maxTags: 6
+      maxTags,
+      existingCandidates: existingCandidates.map((candidate) => ({
+        id: candidate.id,
+        name: candidate.name
+      }))
     },
     { reasoningEffort }
   );
-  if (generated.tags.length === 0) {
-    throw new Error('No tags generated');
-  }
+  const remainingSlots = Math.max(0, maxTags - generated.matchedExistingTagIds.length);
+  const filteredSuggestions = generated.newSuggestions
+    .filter((candidate) => !dismissedSuggestionNames.has(normalizeTagSuggestionKey(candidate.name)))
+    .slice(0, remainingSlots);
 
   // Replace previous AI-generated tags only. Manual/system tags are retained.
   await dbRun(db, 'DELETE FROM article_tags WHERE article_id = ? AND source = ?', [articleId, 'ai']);
+  const existingLinks = await dbAll<{ tag_id: string }>(
+    db,
+    'SELECT tag_id FROM article_tags WHERE article_id = ?',
+    [articleId]
+  );
+  const existingTagIds = new Set(existingLinks.map((row) => row.tag_id));
 
-  for (const candidate of generated.tags) {
-    const tag = await ensureTagByName(db, candidate.name);
+  for (const tagId of generated.matchedExistingTagIds) {
+    if (existingTagIds.has(tagId)) {
+      continue;
+    }
     await attachTagToArticle(db, {
       articleId,
-      tagId: tag.id,
+      tagId,
       source: 'ai',
-      confidence: candidate.confidence
+      confidence: null
     });
+    existingTagIds.add(tagId);
   }
+
+  await replaceTagSuggestionsForArticle(db, {
+    articleId,
+    sourceProvider: provider,
+    sourceModel: model,
+    suggestions: filteredSuggestions
+  });
 
   return { provider, model };
 }

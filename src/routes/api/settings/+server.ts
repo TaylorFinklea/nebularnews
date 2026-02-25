@@ -4,6 +4,7 @@ import {
   DEFAULT_SCORE_SYSTEM_PROMPT,
   DEFAULT_SCORE_USER_PROMPT_TEMPLATE,
   DEFAULT_AUTO_TAGGING_ENABLED,
+  clampAutoTagMaxPerArticle,
   clampAutoReadDelayMs,
   clampJobProcessorBatchSize,
   clampInitialFeedLookbackDays,
@@ -23,6 +24,7 @@ import {
   parseBooleanSetting,
   getAutoReadDelayMs,
   getAutoTaggingEnabled,
+  getAutoTagMaxPerArticle,
   getArticleCardLayout,
   getDashboardTopRatedLayout,
   getConfiguredChatProviderModel,
@@ -88,6 +90,7 @@ export const GET = async ({ platform }) => {
     retentionMode: retention.mode,
     autoReadDelayMs: await getAutoReadDelayMs(db),
     autoTaggingEnabled: await getAutoTaggingEnabled(db),
+    autoTagMaxPerArticle: await getAutoTagMaxPerArticle(db),
     jobProcessorBatchSize: await getJobProcessorBatchSize(db, platform.env),
     jobsIntervalMinutes: await getSchedulerJobsIntervalMinutes(db),
     pollIntervalMinutes: await getSchedulerPollIntervalMinutes(db),
@@ -215,6 +218,9 @@ export const POST = async ({ request, platform, locals }) => {
       'auto_tagging_enabled',
       parseBooleanSetting(body.autoTaggingEnabled, DEFAULT_AUTO_TAGGING_ENABLED) ? '1' : '0'
     ]);
+  }
+  if (body?.autoTagMaxPerArticle !== undefined && body?.autoTagMaxPerArticle !== null) {
+    entries.push(['auto_tag_max_per_article', String(clampAutoTagMaxPerArticle(body.autoTagMaxPerArticle))]);
   }
   if (body?.jobProcessorBatchSize !== undefined && body?.jobProcessorBatchSize !== null) {
     entries.push(['job_processor_batch_size', String(clampJobProcessorBatchSize(body.jobProcessorBatchSize))]);

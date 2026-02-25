@@ -10,6 +10,7 @@ import {
   clampSchedulerPullSliceBudgetMs,
   clampSchedulerJobBudgetIdleMs,
   clampSchedulerJobBudgetWhilePullMs,
+  clampAutoTagMaxPerArticle,
   intervalMinutesToCronExpression,
   parseBooleanSetting,
   DEFAULT_INITIAL_FEED_LOOKBACK_DAYS,
@@ -21,7 +22,8 @@ import {
   DEFAULT_SCHEDULER_PULL_SLICES_PER_TICK,
   DEFAULT_SCHEDULER_PULL_SLICE_BUDGET_MS,
   DEFAULT_SCHEDULER_JOB_BUDGET_IDLE_MS,
-  DEFAULT_SCHEDULER_JOB_BUDGET_WHILE_PULL_MS
+  DEFAULT_SCHEDULER_JOB_BUDGET_WHILE_PULL_MS,
+  DEFAULT_AUTO_TAG_MAX_PER_ARTICLE
 } from './settings';
 
 describe('dashboard top-rated settings', () => {
@@ -90,6 +92,13 @@ describe('dashboard top-rated settings', () => {
     expect(clampSchedulerJobBudgetWhilePullMs(100)).toBe(500);
     expect(clampSchedulerJobBudgetWhilePullMs(20000)).toBe(10000);
     expect(clampSchedulerJobBudgetWhilePullMs('bad')).toBe(DEFAULT_SCHEDULER_JOB_BUDGET_WHILE_PULL_MS);
+  });
+
+  it('clamps auto-tag max per article settings', () => {
+    expect(clampAutoTagMaxPerArticle(0)).toBe(1);
+    expect(clampAutoTagMaxPerArticle(9)).toBe(5);
+    expect(clampAutoTagMaxPerArticle(3)).toBe(3);
+    expect(clampAutoTagMaxPerArticle('bad')).toBe(DEFAULT_AUTO_TAG_MAX_PER_ARTICLE);
   });
 
   it('parses scheduler booleans and cron values', () => {

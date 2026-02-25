@@ -3,6 +3,7 @@ import {
   DEFAULT_SCORE_SYSTEM_PROMPT,
   DEFAULT_SCORE_USER_PROMPT_TEMPLATE,
   DEFAULT_AUTO_TAGGING_ENABLED,
+  DEFAULT_AUTO_TAG_MAX_PER_ARTICLE,
   DEFAULT_DASHBOARD_TOP_RATED_CUTOFF,
   DEFAULT_DASHBOARD_TOP_RATED_LIMIT,
   DEFAULT_DASHBOARD_REFRESH_MIN_MS,
@@ -28,6 +29,7 @@ import {
   MAX_MAX_ITEMS_PER_POLL,
   MAX_RETENTION_DAYS,
   MAX_JOB_PROCESSOR_BATCH_SIZE,
+  MAX_AUTO_TAG_MAX_PER_ARTICLE,
   MAX_SCHEDULER_JOBS_INTERVAL_MIN,
   MAX_SCHEDULER_POLL_INTERVAL_MIN,
   MAX_SCHEDULER_PULL_SLICES_PER_TICK,
@@ -43,6 +45,7 @@ import {
   MIN_MAX_ITEMS_PER_POLL,
   MIN_RETENTION_DAYS,
   MIN_JOB_PROCESSOR_BATCH_SIZE,
+  MIN_AUTO_TAG_MAX_PER_ARTICLE,
   MIN_SCHEDULER_JOBS_INTERVAL_MIN,
   MIN_SCHEDULER_POLL_INTERVAL_MIN,
   MIN_SCHEDULER_PULL_SLICES_PER_TICK,
@@ -55,6 +58,7 @@ import {
   MIN_AUTO_READ_DELAY_MS,
   getAutoReadDelayMs,
   getAutoTaggingEnabled,
+  getAutoTagMaxPerArticle,
   getArticleCardLayout,
   getDashboardTopRatedLayout,
   getConfiguredChatProviderModel,
@@ -116,6 +120,7 @@ export const load = async ({ platform }) => {
     retentionMode: retention.mode,
     autoReadDelayMs: await getAutoReadDelayMs(db),
     autoTaggingEnabled: await getAutoTaggingEnabled(db),
+    autoTagMaxPerArticle: await getAutoTagMaxPerArticle(db),
     jobProcessorBatchSize: await getJobProcessorBatchSize(db, platform.env),
     jobsIntervalMinutes: await getSchedulerJobsIntervalMinutes(db),
     pollIntervalMinutes: await getSchedulerPollIntervalMinutes(db),
@@ -220,7 +225,12 @@ export const load = async ({ platform }) => {
       autoQueueTodayMissingDefault: DEFAULT_SCHEDULER_AUTO_QUEUE_TODAY_MISSING
     },
     autoTagging: {
-      default: DEFAULT_AUTO_TAGGING_ENABLED
+      default: DEFAULT_AUTO_TAGGING_ENABLED,
+      maxPerArticle: {
+        min: MIN_AUTO_TAG_MAX_PER_ARTICLE,
+        max: MAX_AUTO_TAG_MAX_PER_ARTICLE,
+        default: DEFAULT_AUTO_TAG_MAX_PER_ARTICLE
+      }
     },
     dashboardTopRatedRange: {
       cutoff: {

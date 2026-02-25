@@ -1,6 +1,6 @@
 <script>
   import { fly } from 'svelte/transition';
-  import { toasts, dismissToast } from '$lib/client/toast';
+  import { toasts, dismissToast, runToastAction } from '$lib/client/toast';
   import { IconX } from '$lib/icons';
 </script>
 
@@ -13,6 +13,15 @@
         out:fly={{ y: 20, duration: 150 }}
       >
         <span class="toast-message">{toast.message}</span>
+        {#if toast.action}
+          <button
+            class="toast-action"
+            on:click={() => runToastAction(toast.id)}
+            aria-label={toast.action.label}
+          >
+            {toast.action.label}
+          </button>
+        {/if}
         <button
           class="toast-dismiss"
           on:click={() => dismissToast(toast.id)}
@@ -84,6 +93,18 @@
     cursor: pointer;
     padding: 0.2rem;
     display: flex;
+    flex-shrink: 0;
+  }
+
+  .toast-action {
+    background: transparent;
+    border: 1px solid var(--surface-border);
+    color: var(--text-color);
+    border-radius: var(--radius-full);
+    padding: 0.2rem 0.55rem;
+    font-size: var(--text-xs);
+    font-weight: 600;
+    cursor: pointer;
     flex-shrink: 0;
   }
 

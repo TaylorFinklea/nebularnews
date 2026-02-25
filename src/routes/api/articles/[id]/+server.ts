@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { dbAll, dbGet } from '$lib/server/db';
 import { getPreferredSourceForArticle, listSourcesForArticle } from '$lib/server/sources';
-import { listTagsForArticle } from '$lib/server/tags';
+import { listTagSuggestionsForArticle, listTagsForArticle } from '$lib/server/tags';
 
 export const GET = async ({ params, platform }) => {
   const { id } = params;
@@ -84,6 +84,19 @@ export const GET = async ({ params, platform }) => {
   const preferredSource = await getPreferredSourceForArticle(platform.env.DB, id);
   const sources = await listSourcesForArticle(platform.env.DB, id);
   const tags = await listTagsForArticle(platform.env.DB, id);
+  const tagSuggestions = await listTagSuggestionsForArticle(platform.env.DB, id);
 
-  return json({ article, summary, keyPoints, score, feedback, reaction, preferredSource, sources, tags });
+  return json({
+    article,
+    summary,
+    keyPoints,
+    score,
+    feedback,
+    reaction,
+    preferredSource,
+    sources,
+    tags,
+    tagSuggestions,
+    tag_suggestions: tagSuggestions
+  });
 };

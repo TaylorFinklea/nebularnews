@@ -23,10 +23,31 @@ export type ArticleTag = Tag & {
   attached_updated_at: number;
 };
 
+export type ArticleTagSuggestion = {
+  id: string;
+  article_id: string;
+  name: string;
+  name_normalized: string;
+  confidence: number | null;
+  source_provider: string | null;
+  source_model: string | null;
+  created_at: number;
+  updated_at: number;
+};
+
+export type ExistingTagCandidate = {
+  id: string;
+  name: string;
+  article_count: number;
+  match_score: number;
+};
+
 const normalizeWhitespace = (value: string) => value.trim().replace(/\s+/g, ' ');
 const normalizeTagKey = (value: string) => normalizeWhitespace(value).toLowerCase();
 
 export const normalizeTagName = (value: string) => normalizeWhitespace(value).slice(0, 64);
+export const normalizeTagSuggestionName = normalizeTagName;
+export const normalizeTagSuggestionKey = normalizeTagKey;
 
 export const slugifyTagName = (value: string) =>
   normalizeWhitespace(value)
@@ -39,6 +60,54 @@ export const slugifyTagName = (value: string) =>
     .slice(0, 64) || 'tag';
 
 const placeholders = (count: number) => Array.from({ length: count }, () => '?').join(', ');
+const MATCH_CANDIDATE_SCAN_LIMIT = 400;
+const DEFAULT_MATCH_CANDIDATE_LIMIT = 50;
+const MAX_MATCH_CANDIDATE_LIMIT = 100;
+const STOP_WORDS = new Set([
+  'the',
+  'and',
+  'for',
+  'with',
+  'from',
+  'that',
+  'this',
+  'into',
+  'your',
+  'about',
+  'their',
+  'will',
+  'have',
+  'has',
+  'are',
+  'was',
+  'were',
+  'not',
+  'you',
+  'its',
+  'new',
+  'how',
+  'why',
+  'who',
+  'what',
+  'when',
+  'where',
+  'can',
+  'could',
+  'should',
+  'would',
+  'over',
+  'under',
+  'more',
+  'less'
+]);
+
+const tokenizeForMatch = (value: string) =>
+  String(value ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, ' ')
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 3 && !STOP_WORDS.has(token));
 
 const nextAvailableSlug = async (db: Db, baseSlug: string, excludeTagId?: string) => {
   let candidate = baseSlug;
@@ -237,6 +306,273 @@ export async function listTagsForArticles(db: Db, articleIds: string[]) {
 export async function listTagsForArticle(db: Db, articleId: string) {
   const byArticle = await listTagsForArticles(db, [articleId]);
   return byArticle.get(articleId) ?? [];
+}
+
+export async function listTagSuggestionsForArticles(db: Db, articleIds: string[]) {
+  const deduped = [...new Set(articleIds.filter(Boolean))];
+  const byArticle = new Map<string, ArticleTagSuggestion[]>();
+  if (deduped.length === 0) return byArticle;
+
+  const rows = await dbAll<ArticleTagSuggestion>(
+    db,
+    `SELECT
+      id,
+      article_id,
+      name,
+      name_normalized,
+      confidence,
+      source_provider,
+      source_model,
+      created_at,
+      updated_at
+    FROM article_tag_suggestions
+    WHERE article_id IN (${placeholders(deduped.length)})
+    ORDER BY article_id ASC, confidence DESC NULLS LAST, name COLLATE NOCASE ASC`,
+    deduped
+  );
+
+  for (const row of rows) {
+    const list = byArticle.get(row.article_id) ?? [];
+    list.push({
+      ...row,
+      confidence: row.confidence === null || row.confidence === undefined ? null : Number(row.confidence)
+    });
+    byArticle.set(row.article_id, list);
+  }
+
+  return byArticle;
+}
+
+export async function listTagSuggestionsForArticle(db: Db, articleId: string) {
+  const byArticle = await listTagSuggestionsForArticles(db, [articleId]);
+  return byArticle.get(articleId) ?? [];
+}
+
+export async function listDismissedSuggestionNamesForArticle(db: Db, articleId: string) {
+  const rows = await dbAll<{ name_normalized: string }>(
+    db,
+    'SELECT name_normalized FROM article_tag_suggestion_dismissals WHERE article_id = ?',
+    [articleId]
+  );
+  return new Set(rows.map((row) => row.name_normalized));
+}
+
+export async function upsertTagSuggestion(
+  db: Db,
+  input: {
+    articleId: string;
+    name: string;
+    confidence?: number | null;
+    sourceProvider?: string | null;
+    sourceModel?: string | null;
+  }
+) {
+  const name = normalizeTagSuggestionName(input.name);
+  const nameNormalized = normalizeTagSuggestionKey(name);
+  if (!name || !nameNormalized) return;
+  const nowTs = now();
+  const confidence =
+    input.confidence === null || input.confidence === undefined
+      ? null
+      : Math.max(0, Math.min(1, Number(input.confidence)));
+  await dbRun(
+    db,
+    `INSERT INTO article_tag_suggestions (
+       id,
+       article_id,
+       name,
+       name_normalized,
+       confidence,
+       source_provider,
+       source_model,
+       created_at,
+       updated_at
+     )
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(article_id, name_normalized) DO UPDATE SET
+       name = excluded.name,
+       confidence = excluded.confidence,
+       source_provider = excluded.source_provider,
+       source_model = excluded.source_model,
+       updated_at = excluded.updated_at`,
+    [
+      nanoid(),
+      input.articleId,
+      name,
+      nameNormalized,
+      confidence,
+      input.sourceProvider ?? null,
+      input.sourceModel ?? null,
+      nowTs,
+      nowTs
+    ]
+  );
+}
+
+export async function replaceTagSuggestionsForArticle(
+  db: Db,
+  input: {
+    articleId: string;
+    sourceProvider?: string | null;
+    sourceModel?: string | null;
+    suggestions: Array<{ name: string; confidence?: number | null }>;
+  }
+) {
+  const normalized = new Map<string, { name: string; confidence: number | null }>();
+  for (const candidate of input.suggestions) {
+    const name = normalizeTagSuggestionName(candidate.name);
+    if (!name) continue;
+    const key = normalizeTagSuggestionKey(name);
+    if (!key) continue;
+    const confidence =
+      candidate.confidence === null || candidate.confidence === undefined
+        ? null
+        : Math.max(0, Math.min(1, Number(candidate.confidence)));
+    const existing = normalized.get(key);
+    if (!existing) {
+      normalized.set(key, { name, confidence });
+      continue;
+    }
+    if ((confidence ?? -1) > (existing.confidence ?? -1)) {
+      normalized.set(key, { name, confidence });
+    }
+  }
+
+  for (const candidate of normalized.values()) {
+    await upsertTagSuggestion(db, {
+      articleId: input.articleId,
+      name: candidate.name,
+      confidence: candidate.confidence,
+      sourceProvider: input.sourceProvider ?? null,
+      sourceModel: input.sourceModel ?? null
+    });
+  }
+
+  const keys = [...normalized.keys()];
+  if (keys.length > 0) {
+    await dbRun(
+      db,
+      `DELETE FROM article_tag_suggestions
+       WHERE article_id = ?
+         AND name_normalized NOT IN (${placeholders(keys.length)})`,
+      [input.articleId, ...keys]
+    );
+  } else {
+    await dbRun(db, 'DELETE FROM article_tag_suggestions WHERE article_id = ?', [input.articleId]);
+  }
+}
+
+export async function dismissTagSuggestion(db: Db, articleId: string, name: string) {
+  const normalized = normalizeTagSuggestionKey(name);
+  if (!normalized) return;
+  const createdAt = now();
+  await dbRun(
+    db,
+    `INSERT INTO article_tag_suggestion_dismissals (article_id, name_normalized, created_at)
+     VALUES (?, ?, ?)
+     ON CONFLICT(article_id, name_normalized) DO UPDATE SET
+       created_at = excluded.created_at`,
+    [articleId, normalized, createdAt]
+  );
+  await dbRun(
+    db,
+    'DELETE FROM article_tag_suggestions WHERE article_id = ? AND name_normalized = ?',
+    [articleId, normalized]
+  );
+}
+
+export async function undoDismissTagSuggestion(
+  db: Db,
+  input: {
+    articleId: string;
+    name: string;
+    confidence?: number | null;
+    sourceProvider?: string | null;
+    sourceModel?: string | null;
+  }
+) {
+  const normalized = normalizeTagSuggestionKey(input.name);
+  if (!normalized) return;
+  await dbRun(
+    db,
+    'DELETE FROM article_tag_suggestion_dismissals WHERE article_id = ? AND name_normalized = ?',
+    [input.articleId, normalized]
+  );
+  await upsertTagSuggestion(db, {
+    articleId: input.articleId,
+    name: input.name,
+    confidence: input.confidence ?? null,
+    sourceProvider: input.sourceProvider ?? null,
+    sourceModel: input.sourceModel ?? null
+  });
+}
+
+export async function clearAllDismissedTagSuggestions(db: Db) {
+  await dbRun(db, 'DELETE FROM article_tag_suggestion_dismissals');
+}
+
+export async function listExistingTagCandidatesForArticle(
+  db: Db,
+  input: { title?: string | null; contentText?: string | null; limit?: number }
+): Promise<ExistingTagCandidate[]> {
+  const limit = Math.min(
+    MAX_MATCH_CANDIDATE_LIMIT,
+    Math.max(1, Math.round(Number(input.limit ?? DEFAULT_MATCH_CANDIDATE_LIMIT)))
+  );
+  const body = `${input.title ?? ''}\n${String(input.contentText ?? '').slice(0, 9000)}`;
+  const articleTokens = new Set(tokenizeForMatch(body));
+  const bodyLower = body.toLowerCase();
+
+  const rows = await dbAll<{ id: string; name: string; article_count: number }>(
+    db,
+    `SELECT t.id, t.name, COUNT(at.article_id) AS article_count
+     FROM tags t
+     JOIN article_tags at ON at.tag_id = t.id
+     GROUP BY t.id
+     HAVING COUNT(at.article_id) > 0
+     ORDER BY article_count DESC, t.updated_at DESC
+     LIMIT ?`,
+    [MATCH_CANDIDATE_SCAN_LIMIT]
+  );
+
+  const ranked = rows
+    .map((row) => {
+      const candidateTokens = tokenizeForMatch(row.name);
+      const overlap = candidateTokens.reduce((count, token) => count + (articleTokens.has(token) ? 1 : 0), 0);
+      const phrase = row.name.toLowerCase();
+      const phraseHit = phrase.length >= 3 && bodyLower.includes(phrase) ? 1 : 0;
+      const matchScore = overlap * 8 + phraseHit * 5 + Math.log1p(Number(row.article_count ?? 0));
+      return {
+        id: row.id,
+        name: row.name,
+        article_count: Number(row.article_count ?? 0),
+        match_score: Number(matchScore.toFixed(4)),
+        overlap,
+        phraseHit
+      };
+    })
+    .filter((row) => row.overlap > 0 || row.phraseHit > 0)
+    .sort((a, b) => b.match_score - a.match_score || b.article_count - a.article_count || a.name.localeCompare(b.name));
+
+  const selected = ranked.slice(0, limit);
+  if (selected.length < limit) {
+    const used = new Set(selected.map((row) => row.id));
+    for (const row of rows) {
+      if (selected.length >= limit) break;
+      if (used.has(row.id)) continue;
+      selected.push({
+        id: row.id,
+        name: row.name,
+        article_count: Number(row.article_count ?? 0),
+        match_score: Number(Math.log1p(Number(row.article_count ?? 0)).toFixed(4)),
+        overlap: 0,
+        phraseHit: 0
+      });
+      used.add(row.id);
+    }
+  }
+
+  return selected.map(({ overlap: _overlap, phraseHit: _phraseHit, ...entry }) => entry);
 }
 
 export async function resolveTagsByTokens(db: Db, tokens: string[]) {

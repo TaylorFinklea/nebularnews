@@ -797,24 +797,24 @@
         </div>
 
         <p class="hint">Estimated mode: <strong>{schedulerMode}</strong></p>
+
+        <div class="scheduler-apply">
+          <div class="scheduler-apply-row">
+            <label>
+              Apply target
+              <select bind:value={schedulerApplyEnv}>
+                <option value="production">Production</option>
+                <option value="staging">Staging</option>
+              </select>
+            </label>
+            <Button variant="ghost" size="inline" on:click={copySchedulerCommand}>
+              <span>Copy command</span>
+            </Button>
+          </div>
+          <code class="command-code">{schedulerApplyCommand}</code>
+        </div>
       </div>
     </details>
-
-    <div class="scheduler-apply">
-      <div class="scheduler-apply-row">
-        <label>
-          Apply target
-          <select bind:value={schedulerApplyEnv}>
-            <option value="production">Production</option>
-            <option value="staging">Staging</option>
-          </select>
-        </label>
-        <Button variant="ghost" size="inline" on:click={copySchedulerCommand}>
-          <span>Copy command</span>
-        </Button>
-      </div>
-      <code class="command-code">{schedulerApplyCommand}</code>
-    </div>
   </Card>
 
   <!-- API Keys -->

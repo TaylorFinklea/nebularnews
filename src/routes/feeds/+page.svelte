@@ -10,6 +10,7 @@
 
   let newUrl = '';
   let opmlText = '';
+  let removingFeedId = '';
 
   const addFeed = async () => {
     if (!newUrl) return;
@@ -28,10 +29,50 @@
     await invalidate();
   };
 
-  const removeFeed = async (id) => {
-    await apiFetch(`/api/feeds/${id}`, { method: 'DELETE' });
-    showToast('Feed removed.', 'success');
-    await invalidate();
+  const removeFeed = async (feed) => {
+    try {
+      const previewRes = await apiFetch(`/api/feeds/${feed.id}`);
+      if (!previewRes.ok) {
+        showToast('Failed to load delete preview.', 'error');
+        return;
+      }
+
+      const preview = await previewRes.json().catch(() => ({}));
+      const feedCount = Number(preview?.deletePreview?.feedCount ?? 1);
+      const articleCount = Number(preview?.deletePreview?.articleCount ?? 0);
+      const feedName = preview?.feed?.title ?? preview?.feed?.url ?? feed.title ?? feed.url ?? 'this feed';
+      const articleLabel = articleCount === 1 ? 'article' : 'articles';
+      const feedLabel = feedCount === 1 ? 'feed' : 'feeds';
+
+      const confirmed = window.confirm(
+        `You are going to delete ${feedCount} ${feedLabel} and ${articleCount} ${articleLabel}.\n\nFeed: ${feedName}\n\nThis cannot be undone.`
+      );
+      if (!confirmed) return;
+
+      removingFeedId = feed.id;
+      let res;
+      try {
+        res = await apiFetch(`/api/feeds/${feed.id}`, { method: 'DELETE' });
+      } finally {
+        removingFeedId = '';
+      }
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        showToast(payload?.error ?? 'Failed to remove feed.', 'error');
+        return;
+      }
+
+      const payload = await res.json().catch(() => ({}));
+      const deletedArticles = Number(payload?.deleted?.articles ?? articleCount);
+      showToast(
+        `Feed removed. Deleted ${deletedArticles} ${deletedArticles === 1 ? 'article' : 'articles'}.`,
+        'success'
+      );
+      await invalidate();
+    } catch {
+      removingFeedId = '';
+      showToast('Failed to remove feed.', 'error');
+    }
   };
 
   const importOpml = async () => {
@@ -94,7 +135,13 @@
                 Reputation: {Number(feed.reputation ?? 0).toFixed(2)} ({feed.feedback_count} votes)
               </div>
             </div>
-            <Button variant="ghost" size="icon" on:click={() => removeFeed(feed.id)} title="Remove feed">
+            <Button
+              variant="ghost"
+              size="icon"
+              on:click={() => removeFeed(feed)}
+              title="Remove feed"
+              disabled={removingFeedId === feed.id}
+            >
               <IconTrash size={16} stroke={1.9} />
             </Button>
           </li>
@@ -129,7 +176,13 @@
                 {/if}
               </div>
             </div>
-            <Button variant="ghost" size="icon" on:click={() => removeFeed(feed.id)} title="Remove feed">
+            <Button
+              variant="ghost"
+              size="icon"
+              on:click={() => removeFeed(feed)}
+              title="Remove feed"
+              disabled={removingFeedId === feed.id}
+            >
               <IconTrash size={16} stroke={1.9} />
             </Button>
           </li>

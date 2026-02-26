@@ -31,7 +31,7 @@
     "fast-xml-parser": "4.4.1",
     "linkedom": "0.16.11",
     "nanoid": "5.0.7",
-    "svelte": "5.2.7",
+    "svelte": "5.53.5",
     "zod": "^4.3.6"
   },
   "devDependencies": {

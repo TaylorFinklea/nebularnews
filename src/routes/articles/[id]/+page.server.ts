@@ -1,7 +1,9 @@
+import { error } from '@sveltejs/kit';
 import { dbAll, dbGet } from '$lib/server/db';
 import { getPreferredSourceForArticle, listSourcesForArticle } from '$lib/server/sources';
 import { getAutoReadDelayMs, getFeatureModelLane, getFeatureProviderModel } from '$lib/server/settings';
 import { listTagSuggestionsForArticle, listTags, listTagsForArticle } from '$lib/server/tags';
+import { logWarn, summarizeError } from '$lib/server/log';
 
 const parseStringList = (value: string | null | undefined) => {
   if (!value) return [] as string[];
@@ -16,6 +18,19 @@ const parseStringList = (value: string | null | undefined) => {
 
 export const load = async ({ params, platform }) => {
   const db = platform.env.DB;
+  const safeLoad = async <T>(label: string, fallback: T, fn: () => Promise<T>) => {
+    try {
+      return await fn();
+    } catch (loadError) {
+      logWarn('article.detail.load.partial_failure', {
+        article_id: params.id,
+        label,
+        error: summarizeError(loadError)
+      });
+      return fallback;
+    }
+  };
+
   const article = await dbGet(
     db,
     `SELECT
@@ -32,29 +47,42 @@ export const load = async ({ params, platform }) => {
     WHERE id = ?`,
     [params.id]
   );
+  if (!article) {
+    throw error(404, 'Article not found');
+  }
 
-  const summary = await dbGet<{
+  const summary = await safeLoad(
+    'summary',
+    null,
+    () =>
+      dbGet<{
     summary_text: string | null;
     provider: string | null;
     model: string | null;
     created_at: number | null;
     prompt_version: string | null;
   }>(
-    db,
-    'SELECT summary_text, provider, model, created_at, prompt_version FROM article_summaries WHERE article_id = ? ORDER BY created_at DESC LIMIT 1',
-    [params.id]
+        db,
+        'SELECT summary_text, provider, model, created_at, prompt_version FROM article_summaries WHERE article_id = ? ORDER BY created_at DESC LIMIT 1',
+        [params.id]
+      )
   );
 
-  const keyPointsRow = await dbGet<{
+  const keyPointsRow = await safeLoad(
+    'key_points',
+    null,
+    () =>
+      dbGet<{
     key_points_json: string | null;
     provider: string | null;
     model: string | null;
     created_at: number | null;
     prompt_version: string | null;
   }>(
-    db,
-    'SELECT key_points_json, provider, model, created_at, prompt_version FROM article_key_points WHERE article_id = ? ORDER BY created_at DESC LIMIT 1',
-    [params.id]
+        db,
+        'SELECT key_points_json, provider, model, created_at, prompt_version FROM article_key_points WHERE article_id = ? ORDER BY created_at DESC LIMIT 1',
+        [params.id]
+      )
   );
   const keyPoints = keyPointsRow
     ? {
@@ -63,15 +91,25 @@ export const load = async ({ params, platform }) => {
       }
     : null;
 
-  const scoreOverride = await dbGet<{ score: number; comment: string | null; updated_at: number }>(
-    db,
-    'SELECT score, comment, updated_at FROM article_score_overrides WHERE article_id = ? LIMIT 1',
-    [params.id]
+  const scoreOverride = await safeLoad(
+    'score_override',
+    null,
+    () =>
+      dbGet<{ score: number; comment: string | null; updated_at: number }>(
+        db,
+        'SELECT score, comment, updated_at FROM article_score_overrides WHERE article_id = ? LIMIT 1',
+        [params.id]
+      )
   );
-  const aiScore = await dbGet<{ score: number; label: string | null; reason_text: string | null; evidence_json: string | null }>(
-    db,
-    'SELECT score, label, reason_text, evidence_json FROM article_scores WHERE article_id = ? ORDER BY created_at DESC LIMIT 1',
-    [params.id]
+  const aiScore = await safeLoad(
+    'score',
+    null,
+    () =>
+      dbGet<{ score: number; label: string | null; reason_text: string | null; evidence_json: string | null }>(
+        db,
+        'SELECT score, label, reason_text, evidence_json FROM article_scores WHERE article_id = ? ORDER BY created_at DESC LIMIT 1',
+        [params.id]
+      )
   );
   const score = scoreOverride
     ? {
@@ -90,25 +128,37 @@ export const load = async ({ params, platform }) => {
         }
       : null;
 
-  const feedback = await dbAll(
-    db,
-    'SELECT rating, comment, created_at FROM article_feedback WHERE article_id = ? ORDER BY created_at DESC',
-    [params.id]
+  const feedback = await safeLoad(
+    'feedback',
+    [],
+    () =>
+      dbAll(
+        db,
+        'SELECT rating, comment, created_at FROM article_feedback WHERE article_id = ? ORDER BY created_at DESC',
+        [params.id]
+      )
   );
-  const reaction = await dbGet(
-    db,
-    'SELECT value, feed_id, created_at FROM article_reactions WHERE article_id = ? LIMIT 1',
-    [params.id]
+  const reaction = await safeLoad(
+    'reaction',
+    null,
+    () =>
+      dbGet(
+        db,
+        'SELECT value, feed_id, created_at FROM article_reactions WHERE article_id = ? LIMIT 1',
+        [params.id]
+      )
   );
 
-  const preferredSource = await getPreferredSourceForArticle(db, params.id);
-  const sources = await listSourcesForArticle(db, params.id);
-  const tags = await listTagsForArticle(db, params.id);
-  const tagSuggestions = await listTagSuggestionsForArticle(db, params.id);
-  const availableTags = await listTags(db, { limit: 200 });
+  const preferredSource = await safeLoad('preferred_source', null, () => getPreferredSourceForArticle(db, params.id));
+  const sources = await safeLoad('sources', [], () => listSourcesForArticle(db, params.id));
+  const tags = await safeLoad('tags', [], () => listTagsForArticle(db, params.id));
+  const tagSuggestions = await safeLoad('tag_suggestions', [], () => listTagSuggestionsForArticle(db, params.id));
+  const availableTags = await safeLoad('available_tags', [], () => listTags(db, { limit: 200 }));
 
   const articleChatLane = await getFeatureModelLane(db, 'article_chat');
-  const chatModel = await getFeatureProviderModel(db, platform.env, 'article_chat');
+  const chatModel = await safeLoad('chat_model', { provider: 'openai', model: '', reasoningEffort: 'medium' as const }, () =>
+    getFeatureProviderModel(db, platform.env, 'article_chat')
+  );
   const modelCandidates = [
     {
       provider: chatModel.provider,
@@ -116,7 +166,9 @@ export const load = async ({ params, platform }) => {
     }
   ];
 
-  const keyRows = await dbAll<{ provider: string }>(db, 'SELECT provider FROM provider_keys');
+  const keyRows = await safeLoad('provider_keys', [] as { provider: string }[], () =>
+    dbAll<{ provider: string }>(db, 'SELECT provider FROM provider_keys')
+  );
   const keySet = new Set(keyRows.map((row) => row.provider));
   const providersNeeded = [chatModel.provider];
   const providersWithKeys = providersNeeded.filter((provider) => keySet.has(provider));

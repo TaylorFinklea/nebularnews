@@ -6,8 +6,9 @@
   "scripts": {
     "dev": "vite dev",
     "check:guardrails": "node scripts/check-no-global-reload.mjs",
+    "check:ssr-render-inner": "node scripts/check-ssr-render-inner.mjs",
     "check:worker-scheduled": "node scripts/check-scheduled-export.mjs",
-    "build": "npm run check:guardrails && vite build && node scripts/patch-cloudflare-worker.mjs && npm run check:worker-scheduled",
+    "build": "npm run check:guardrails && vite build && npm run check:ssr-render-inner && node scripts/patch-cloudflare-worker.mjs && npm run check:worker-scheduled",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run",

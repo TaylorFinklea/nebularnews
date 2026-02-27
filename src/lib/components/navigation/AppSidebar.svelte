@@ -295,42 +295,42 @@
     color: var(--text-color);
   }
 
-  /* Active accent bar */
+  /* Active rail indicator */
   .nav-link::before {
     content: '';
     position: absolute;
-    left: 0.7rem;
-    top: 50%;
-    width: 0.42rem;
-    height: 0.42rem;
-    margin-top: -0.21rem;
+    left: 0.1rem;
+    top: 0.48rem;
+    bottom: 0.48rem;
+    width: 2px;
     border-radius: 999px;
-    background: var(--primary);
+    background: linear-gradient(
+      180deg,
+      rgba(154, 139, 255, 0) 0%,
+      rgba(154, 139, 255, 0.95) 22%,
+      rgba(154, 139, 255, 0.95) 78%,
+      rgba(154, 139, 255, 0) 100%
+    );
     opacity: 0;
-    box-shadow: 0 0 0 0.22rem rgba(154, 139, 255, 0.12);
-    transform: scale(0.6);
+    transform: scaleY(0.22);
+    transform-origin: center;
     transition:
       opacity 0.15s ease,
-      transform 0.18s cubic-bezier(0.4, 0, 0.2, 1),
-      box-shadow 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+      transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .nav-link.active::before {
     opacity: 1;
-    transform: scale(1);
-    box-shadow: 0 0 0 0.32rem rgba(154, 139, 255, 0.14);
+    transform: scaleY(1);
   }
 
   .nav-link.active {
-    color: var(--primary);
+    color: var(--text-color);
     background:
-      linear-gradient(135deg, rgba(154, 139, 255, 0.18), rgba(154, 139, 255, 0.06)),
+      linear-gradient(90deg, rgba(154, 139, 255, 0.16) 0%, rgba(154, 139, 255, 0.06) 52%, rgba(154, 139, 255, 0.01) 100%),
       var(--surface-soft);
-    border-color: rgba(154, 139, 255, 0.18);
-    font-weight: 500;
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.05),
-      0 10px 22px var(--shadow-color);
+    border-color: rgba(154, 139, 255, 0.14);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
   }
 
   /* ── Icon / Label ── */
@@ -341,6 +341,24 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
+    border-radius: 0.72rem;
+    color: inherit;
+    transition:
+      color 0.15s ease,
+      background 0.15s ease,
+      box-shadow 0.15s ease,
+      transform 0.15s ease;
+  }
+
+  .nav-link:hover .nav-icon {
+    background: rgba(154, 139, 255, 0.08);
+  }
+
+  .nav-link.active .nav-icon {
+    color: var(--primary);
+    background: rgba(154, 139, 255, 0.14);
+    box-shadow: inset 0 0 0 1px rgba(154, 139, 255, 0.18);
+    transform: translateX(1px);
   }
 
   .nav-label {
@@ -352,6 +370,10 @@
     transition:
       opacity 0.15s ease,
       transform 0.15s ease;
+  }
+
+  .nav-link.active .nav-label {
+    font-weight: 600;
   }
 
   /* ── Footer ── */

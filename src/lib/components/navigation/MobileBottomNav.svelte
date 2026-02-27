@@ -74,10 +74,12 @@
       href={item.href}
       class="rail-link"
       class:active
+      aria-label={item.label}
       aria-current={active ? 'page' : undefined}
+      title={item.label}
     >
       <span class="rail-icon"><Icon size={20} stroke={1.9} /></span>
-      <span class="rail-label">{item.label}</span>
+      <span class="sr-only">{item.label}</span>
     </a>
   {/each}
   <button
@@ -86,10 +88,11 @@
     class:active={moreOpen}
     aria-label="More navigation"
     aria-expanded={moreOpen}
+    title="More"
     on:click={toggleMore}
   >
     <span class="rail-icon"><IconMenu2 size={20} stroke={1.9} /></span>
-    <span class="rail-label">More</span>
+    <span class="sr-only">More navigation</span>
   </button>
 </nav>
 
@@ -141,86 +144,91 @@
   /* ── Bottom rail ── */
   .bottom-rail {
     position: fixed;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    left: 50%;
+    bottom: calc(var(--mobile-nav-offset, 12px) + env(safe-area-inset-bottom));
+    transform: translateX(-50%);
     z-index: 100;
+    width: min(26rem, calc(100vw - 1rem));
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
-    padding: var(--space-1) var(--space-2) calc(var(--space-1) + env(safe-area-inset-bottom));
-    border-top: 1px solid var(--surface-border);
-    background: var(--surface-strong);
-    backdrop-filter: blur(14px);
-    height: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom));
+    gap: 0.35rem;
+    padding: 0.45rem;
+    border: 1px solid rgba(149, 164, 255, 0.14);
+    border-radius: 999px;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 55%),
+      var(--surface-strong);
+    backdrop-filter: blur(22px) saturate(145%);
+    box-shadow:
+      0 18px 42px rgba(2, 6, 24, 0.22),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    min-height: var(--mobile-nav-height, 70px);
     box-sizing: border-box;
   }
 
-  /* ── Rail links (stacked icon + label) ── */
+  /* ── Rail links ── */
   .rail-link {
-    display: flex;
-    flex-direction: column;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 2px;
     position: relative;
-    border: none;
-    border-radius: var(--radius-sm);
+    min-width: 0;
+    min-height: 3rem;
+    border: 1px solid transparent;
+    border-radius: 999px;
     background: transparent;
     color: var(--muted-text);
     cursor: pointer;
-    padding: var(--space-1) 0;
-    min-height: 2.8rem;
+    padding: 0;
     font: inherit;
     -webkit-tap-highlight-color: transparent;
     transition:
+      transform 0.15s ease,
       color 0.15s ease,
-      background 0.15s ease;
+      background 0.15s ease,
+      border-color 0.15s ease,
+      box-shadow 0.18s ease;
   }
 
   .rail-icon {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 24px;
-  }
-
-  .rail-label {
-    font-size: 0.65rem;
-    font-weight: 500;
-    letter-spacing: 0.02em;
-    line-height: 1;
-  }
-
-  /* Active top accent line */
-  .rail-link::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 25%;
-    right: 25%;
-    height: 2.5px;
-    border-radius: 0 0 2px 2px;
-    background: var(--primary);
-    opacity: 0;
-    transform: scaleX(0.4);
+    width: 2.35rem;
+    height: 2.35rem;
+    border-radius: 999px;
     transition:
-      opacity 0.15s ease,
-      transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+      background 0.15s ease,
+      color 0.15s ease,
+      transform 0.15s ease,
+      box-shadow 0.18s ease;
+  }
+
+  .rail-link:hover {
+    color: var(--text-color);
+    background: rgba(154, 139, 255, 0.07);
+    border-color: rgba(149, 164, 255, 0.12);
   }
 
   .rail-link.active {
-    color: var(--primary);
+    color: var(--primary-contrast);
+    border-color: rgba(154, 139, 255, 0.16);
+    background:
+      linear-gradient(135deg, var(--primary) 0%, var(--primary-strong) 100%);
+    box-shadow:
+      0 10px 24px rgba(73, 58, 170, 0.28),
+      inset 0 1px 0 rgba(255, 255, 255, 0.22);
   }
 
-  .rail-link.active::before {
-    opacity: 1;
-    transform: scaleX(1);
+  .rail-link.active .rail-icon {
+    background: rgba(255, 255, 255, 0.14);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
+    transform: scale(1.02);
   }
 
-  /* Touch press feedback */
-  .rail-link:active {
-    background: var(--primary-soft);
+  .rail-link:active,
+  .rail-link.active:active {
+    transform: translateY(1px);
     transition-duration: 0s;
   }
 
@@ -230,45 +238,53 @@
     inset: 0;
     z-index: 101;
     border: none;
-    background: rgba(0, 0, 0, 0.44);
+    background: rgba(4, 8, 24, 0.5);
+    backdrop-filter: blur(6px);
     cursor: pointer;
   }
 
   /* ── More sheet ── */
   .more-sheet {
     position: fixed;
-    left: var(--space-3);
-    right: var(--space-3);
-    bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom) + var(--space-2));
+    left: 50%;
+    width: min(26rem, calc(100vw - 1rem));
+    margin: 0;
+    transform: translateX(-50%);
+    bottom: calc(var(--mobile-nav-height, 70px) + var(--mobile-nav-offset, 12px) + env(safe-area-inset-bottom) + var(--space-2));
     z-index: 102;
-    border: 1px solid var(--surface-border);
-    border-radius: var(--radius-lg);
-    background: var(--surface-strong);
-    backdrop-filter: blur(16px);
-    box-shadow: var(--shadow-lg);
-    padding: var(--space-3) var(--space-4) var(--space-4);
+    border: 1px solid rgba(149, 164, 255, 0.14);
+    border-radius: 1.4rem;
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 36%),
+      var(--surface-strong);
+    backdrop-filter: blur(24px) saturate(145%);
+    box-shadow:
+      0 20px 40px rgba(2, 6, 24, 0.26),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    padding: 0.7rem 0.7rem 0.8rem;
     display: grid;
-    gap: var(--space-3);
+    gap: 0.8rem;
   }
 
   .sheet-handle {
-    width: 32px;
-    height: 3px;
+    width: 2.35rem;
+    height: 0.24rem;
     border-radius: var(--radius-full);
-    background: var(--surface-border);
-    margin: 0 auto var(--space-1);
+    background: rgba(149, 164, 255, 0.24);
+    margin: 0.1rem auto 0;
   }
 
   .sheet-header {
-    font-size: var(--text-sm);
+    font-size: 0.68rem;
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--muted-text);
+    padding: 0 0.5rem;
   }
 
   .sheet-links {
     display: grid;
-    gap: var(--space-1);
+    gap: 0.35rem;
   }
 
   .sheet-link {
@@ -277,27 +293,54 @@
     display: inline-flex;
     align-items: center;
     gap: var(--space-3);
-    border-radius: var(--radius-md);
-    border: none;
+    min-height: 3.15rem;
+    border-radius: 1rem;
+    border: 1px solid transparent;
     background: transparent;
     color: var(--text-color);
-    padding: var(--space-3);
+    padding: 0.85rem 0.95rem;
     cursor: pointer;
     text-align: left;
     -webkit-tap-highlight-color: transparent;
     transition:
       background 0.15s ease,
-      color 0.15s ease;
+      border-color 0.15s ease,
+      color 0.15s ease,
+      transform 0.15s ease;
+  }
+
+  .sheet-link:hover {
+    background: rgba(154, 139, 255, 0.07);
+    border-color: rgba(149, 164, 255, 0.12);
+  }
+
+  .sheet-link :global(svg) {
+    color: var(--primary);
   }
 
   .sheet-link:active {
-    background: var(--primary-soft);
+    transform: translateY(1px);
     transition-duration: 0s;
   }
 
   .sheet-link.active {
-    color: var(--primary);
-    font-weight: 500;
+    color: var(--text-color);
+    border-color: rgba(154, 139, 255, 0.16);
+    background:
+      linear-gradient(135deg, rgba(154, 139, 255, 0.14), rgba(154, 139, 255, 0.04)),
+      var(--surface-soft);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+
+  .sheet-link.active :global(svg) {
+    color: var(--primary-strong);
+  }
+
+  @media (max-width: 420px) {
+    .bottom-rail,
+    .more-sheet {
+      width: calc(100vw - 0.75rem);
+    }
   }
 
   /* ── Hide on desktop ── */

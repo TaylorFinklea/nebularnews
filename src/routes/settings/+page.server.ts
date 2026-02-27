@@ -4,8 +4,9 @@ import {
   DEFAULT_SCORE_USER_PROMPT_TEMPLATE,
   DEFAULT_AUTO_TAGGING_ENABLED,
   DEFAULT_AUTO_TAG_MAX_PER_ARTICLE,
-  DEFAULT_DASHBOARD_TOP_RATED_CUTOFF,
-  DEFAULT_DASHBOARD_TOP_RATED_LIMIT,
+  DEFAULT_DASHBOARD_QUEUE_WINDOW_DAYS,
+  DEFAULT_DASHBOARD_QUEUE_LIMIT,
+  DEFAULT_DASHBOARD_QUEUE_SCORE_CUTOFF,
   DEFAULT_DASHBOARD_REFRESH_MIN_MS,
   DEFAULT_EVENTS_POLL_MS,
   DEFAULT_INITIAL_FEED_LOOKBACK_DAYS,
@@ -20,8 +21,9 @@ import {
   DEFAULT_SCHEDULER_JOB_BUDGET_IDLE_MS,
   DEFAULT_SCHEDULER_JOB_BUDGET_WHILE_PULL_MS,
   DEFAULT_SCHEDULER_AUTO_QUEUE_TODAY_MISSING,
-  MAX_DASHBOARD_TOP_RATED_CUTOFF,
-  MAX_DASHBOARD_TOP_RATED_LIMIT,
+  MAX_DASHBOARD_QUEUE_WINDOW_DAYS,
+  MAX_DASHBOARD_QUEUE_LIMIT,
+  MAX_DASHBOARD_QUEUE_SCORE_CUTOFF,
   MAX_DASHBOARD_REFRESH_MIN_MS,
   MAX_EVENTS_POLL_MS,
   MAX_INITIAL_FEED_LOOKBACK_DAYS,
@@ -36,8 +38,9 @@ import {
   MAX_SCHEDULER_PULL_SLICE_BUDGET_MS,
   MAX_SCHEDULER_JOB_BUDGET_IDLE_MS,
   MAX_SCHEDULER_JOB_BUDGET_WHILE_PULL_MS,
-  MIN_DASHBOARD_TOP_RATED_CUTOFF,
-  MIN_DASHBOARD_TOP_RATED_LIMIT,
+  MIN_DASHBOARD_QUEUE_WINDOW_DAYS,
+  MIN_DASHBOARD_QUEUE_LIMIT,
+  MIN_DASHBOARD_QUEUE_SCORE_CUTOFF,
   MIN_DASHBOARD_REFRESH_MIN_MS,
   MIN_EVENTS_POLL_MS,
   MIN_INITIAL_FEED_LOOKBACK_DAYS,
@@ -53,14 +56,13 @@ import {
   MIN_SCHEDULER_JOB_BUDGET_IDLE_MS,
   MIN_SCHEDULER_JOB_BUDGET_WHILE_PULL_MS,
   getFeatureModelLanes,
-  getDashboardTopRatedConfig,
+  getDashboardQueueConfig,
   MAX_AUTO_READ_DELAY_MS,
   MIN_AUTO_READ_DELAY_MS,
   getAutoReadDelayMs,
   getAutoTaggingEnabled,
   getAutoTagMaxPerArticle,
   getArticleCardLayout,
-  getDashboardTopRatedLayout,
   getConfiguredChatProviderModel,
   getDashboardRefreshMinMs,
   getConfiguredIngestProviderModel,
@@ -94,8 +96,7 @@ export const load = async ({ platform }) => {
   const ingestModel = await getConfiguredIngestProviderModel(db, platform.env);
   const chatModel = await getConfiguredChatProviderModel(db, platform.env);
   const scorePrompt = await getScorePromptConfig(db);
-  const dashboardTopRated = await getDashboardTopRatedConfig(db);
-  const dashboardTopRatedLayout = await getDashboardTopRatedLayout(db);
+  const dashboardQueue = await getDashboardQueueConfig(db);
   const retention = await getRetentionConfig(db);
   const settings = {
     featureLanes: {
@@ -136,9 +137,9 @@ export const load = async ({ platform }) => {
     jobBudgetWhilePullMs: await getSchedulerJobBudgetWhilePullMs(db),
     autoQueueTodayMissing: await getSchedulerAutoQueueTodayMissing(db),
     articleCardLayout: await getArticleCardLayout(db),
-    dashboardTopRatedLayout,
-    dashboardTopRatedCutoff: dashboardTopRated.cutoff,
-    dashboardTopRatedLimit: dashboardTopRated.limit
+    dashboardQueueWindowDays: dashboardQueue.windowDays,
+    dashboardQueueLimit: dashboardQueue.limit,
+    dashboardQueueScoreCutoff: dashboardQueue.scoreCutoff
   };
 
   const keys = await dbAll<{ provider: string }>(db, 'SELECT provider FROM provider_keys');
@@ -242,16 +243,21 @@ export const load = async ({ platform }) => {
         default: DEFAULT_AUTO_TAG_MAX_PER_ARTICLE
       }
     },
-    dashboardTopRatedRange: {
-      cutoff: {
-        min: MIN_DASHBOARD_TOP_RATED_CUTOFF,
-        max: MAX_DASHBOARD_TOP_RATED_CUTOFF,
-        default: DEFAULT_DASHBOARD_TOP_RATED_CUTOFF
+    dashboardQueueRange: {
+      windowDays: {
+        min: MIN_DASHBOARD_QUEUE_WINDOW_DAYS,
+        max: MAX_DASHBOARD_QUEUE_WINDOW_DAYS,
+        default: DEFAULT_DASHBOARD_QUEUE_WINDOW_DAYS
       },
       limit: {
-        min: MIN_DASHBOARD_TOP_RATED_LIMIT,
-        max: MAX_DASHBOARD_TOP_RATED_LIMIT,
-        default: DEFAULT_DASHBOARD_TOP_RATED_LIMIT
+        min: MIN_DASHBOARD_QUEUE_LIMIT,
+        max: MAX_DASHBOARD_QUEUE_LIMIT,
+        default: DEFAULT_DASHBOARD_QUEUE_LIMIT
+      },
+      scoreCutoff: {
+        min: MIN_DASHBOARD_QUEUE_SCORE_CUTOFF,
+        max: MAX_DASHBOARD_QUEUE_SCORE_CUTOFF,
+        default: DEFAULT_DASHBOARD_QUEUE_SCORE_CUTOFF
       }
     },
     orphanCleanup: {

@@ -2,6 +2,7 @@
   import { invalidate } from '$app/navigation';
   import { onDestroy, onMount } from 'svelte';
   import { apiFetch } from '$lib/client/api-fetch';
+  import { showToast } from '$lib/client/toast';
   import { IconClockPlay, IconExternalLink, IconStars } from '$lib/icons';
   import { resolveArticleImageUrl } from '$lib/article-image';
   import Card from '$lib/components/Card.svelte';
@@ -15,10 +16,22 @@
   const PULL_START_GRACE_MS = 15000;
   const PULL_COMPLETION_SKEW_MS = 5000;
 
+  const EMPTY_MOMENTUM = {
+    unreadTotal: 0,
+    unread24h: 0,
+    unread7d: 0,
+    highFitUnread7d: 0
+  };
+
   let isPulling = false;
   let pullMessage = '';
-  let today = { ...(data.today ?? {}) };
-  let lastServerTodaySignature = JSON.stringify(data.today ?? {});
+  let queueItems = [...(data.readingQueue ?? [])];
+  let momentum = { ...(data.momentum ?? EMPTY_MOMENTUM) };
+  let lastServerQueueSignature = JSON.stringify(data.readingQueue ?? []);
+  let lastServerMomentumSignature = JSON.stringify(data.momentum ?? EMPTY_MOMENTUM);
+  let pendingReadById = {};
+  let hiddenQueueIds = new Set();
+
   let syncInFlight = false;
   let pullTracker = { pending: false, startedAt: null, runId: null };
   let heartbeatTimer = null;
@@ -61,10 +74,18 @@
   };
 
   $: {
-    const serverTodaySignature = JSON.stringify(data.today ?? {});
-    if (serverTodaySignature !== lastServerTodaySignature) {
-      today = { ...(data.today ?? {}) };
-      lastServerTodaySignature = serverTodaySignature;
+    const serverQueueSignature = JSON.stringify(data.readingQueue ?? []);
+    if (serverQueueSignature !== lastServerQueueSignature) {
+      queueItems = (data.readingQueue ?? []).filter((article) => !hiddenQueueIds.has(article.id));
+      lastServerQueueSignature = serverQueueSignature;
+    }
+  }
+
+  $: {
+    const serverMomentumSignature = JSON.stringify(data.momentum ?? EMPTY_MOMENTUM);
+    if (serverMomentumSignature !== lastServerMomentumSignature) {
+      momentum = { ...(data.momentum ?? EMPTY_MOMENTUM) };
+      lastServerMomentumSignature = serverMomentumSignature;
     }
   }
 
@@ -123,10 +144,6 @@
       const heartbeat = payload?.data ?? payload;
       liveConnected = true;
       heartbeatDegraded = Boolean(heartbeat?.degraded);
-
-      if (heartbeat?.today && typeof heartbeat.today === 'object') {
-        today = { ...today, ...heartbeat.today };
-      }
 
       const pull = heartbeat?.pull ?? {};
       await applyPullState({
@@ -217,6 +234,54 @@
     return text.length > 200 ? `${text.slice(0, 200)}...` : text;
   };
 
+  const formatTimestamp = (article) => {
+    const value = article.published_at ?? article.fetched_at;
+    if (!value) return 'No date';
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? 'No date' : parsed.toLocaleString();
+  };
+
+  const setPendingRead = (articleId, value) => {
+    if (value) {
+      pendingReadById = { ...pendingReadById, [articleId]: true };
+      return;
+    }
+    if (!pendingReadById[articleId]) return;
+    const next = { ...pendingReadById };
+    delete next[articleId];
+    pendingReadById = next;
+  };
+
+  const markQueueItemRead = async (articleId) => {
+    if (pendingReadById[articleId]) return;
+    const index = queueItems.findIndex((item) => item.id === articleId);
+    if (index === -1) return;
+
+    const article = queueItems[index];
+    hiddenQueueIds.add(articleId);
+    queueItems = queueItems.filter((item) => item.id !== articleId);
+    setPendingRead(articleId, true);
+
+    try {
+      const res = await apiFetch(`/api/articles/${articleId}/read`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ isRead: true })
+      });
+      if (!res.ok) {
+        throw new Error('mark_read_failed');
+      }
+      await invalidate('app:dashboard');
+      hiddenQueueIds.delete(articleId);
+    } catch {
+      hiddenQueueIds.delete(articleId);
+      queueItems = [...queueItems.slice(0, index), article, ...queueItems.slice(index)];
+      showToast('Unable to mark article as read. Reverted.', 'error');
+    } finally {
+      setPendingRead(articleId, false);
+    }
+  };
+
   const runManualPull = async () => {
     if (isPulling) return;
     isPulling = true;
@@ -274,92 +339,60 @@
   };
 </script>
 
-<!-- Hero -->
-<section class="hero">
-  <div class="hero-left">
-    <h1>Your Nebula</h1>
-    <p class="hero-desc">Track the pulse of your feeds, summaries, and personalization queue.</p>
-
-    <div class="pull-section">
-      <Button
-        variant="primary"
-        size="inline"
-        on:click={runManualPull}
-        disabled={isPulling}
-        title={isPulling ? 'Pull in progress' : 'Pull feeds now'}
-      >
-        <span class="icon-wrap" class:spinning={isPulling}><IconClockPlay size={16} stroke={1.9} /></span>
-        <span>{isPulling ? 'Pulling...' : 'Pull feeds now'}</span>
-      </Button>
-      {#if pullMessage}
-        <p class="pull-msg" role="status" aria-live="polite">{pullMessage}</p>
-      {/if}
-      <span class="live-badge" class:live={liveConnected}>
-        {#if liveConnected}
-          {heartbeatDegraded ? '◐ Live (throttled)' : '● Live'}
-        {:else}
-          ○ Connecting...
-        {/if}
-      </span>
-    </div>
+<section class="hero-utility">
+  <div>
+    <h1>Your Reading Queue</h1>
+    <p class="hero-desc">Pick up where you left off with the most relevant unread stories.</p>
   </div>
 
-  <div class="hero-stats">
-    <div class="stats-header">
-      <h3>Today's pipeline</h3>
-      <a href="/jobs" class="view-all">
-        <IconExternalLink size={13} stroke={1.9} />
-        <span>Jobs</span>
-      </a>
-    </div>
-    <div class="stats-grid">
-      <div class="stat-card">
-        <div class="stat-num">{today.articles}</div>
-        <div class="stat-lbl">Articles</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-num">{today.summaries}</div>
-        <div class="stat-lbl">Summarized</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-num">{today.scores}</div>
-        <div class="stat-lbl">Scored</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-num" class:warn={today.pendingJobs > 0}>{today.pendingJobs}</div>
-        <div class="stat-lbl">Jobs pending</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-num" class:warn={today.missingSummaries > 0}>{today.missingSummaries}</div>
-        <div class="stat-lbl">Missing summaries</div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-num" class:warn={today.missingScores > 0}>{today.missingScores}</div>
-        <div class="stat-lbl">Missing scores</div>
-      </div>
-    </div>
+  <div class="pull-section">
+    <Button
+      variant="primary"
+      size="inline"
+      on:click={runManualPull}
+      disabled={isPulling}
+      title={isPulling ? 'Pull in progress' : 'Pull feeds now'}
+    >
+      <span class="icon-wrap" class:spinning={isPulling}><IconClockPlay size={16} stroke={1.9} /></span>
+      <span>{isPulling ? 'Pulling...' : 'Pull feeds now'}</span>
+    </Button>
+    {#if pullMessage}
+      <p class="pull-msg" role="status" aria-live="polite">{pullMessage}</p>
+    {/if}
+    <span class="live-badge" class:live={liveConnected}>
+      {#if liveConnected}
+        {heartbeatDegraded ? '◐ Live (throttled)' : '● Live'}
+      {:else}
+        ○ Connecting...
+      {/if}
+    </span>
   </div>
 </section>
 
-<!-- Top Rated -->
-<section class="top-rated">
+<section class="reading-queue">
   <div class="section-head">
-    <h2>Top Rated Today</h2>
-    <a href={data.topRatedConfig?.href ?? '/articles'} class="view-all">
+    <h2>Top Unread · Last {data.queueConfig?.windowDays ?? 7} Days</h2>
+    <a href={data.queueConfig?.hrefUnread ?? '/articles?read=unread&sort=unread_first'} class="view-all">
       <IconExternalLink size={13} stroke={1.9} />
-      <span>Full list</span>
+      <span>View unread</span>
     </a>
   </div>
-  <p class="section-cap">Showing up to {data.topRatedConfig?.limit ?? 5} highest-scored items.</p>
+  <p class="section-cap">
+    Showing up to {data.queueConfig?.limit ?? 6} articles. High-fit stories are listed first.
+  </p>
 
-  {#if data.topRatedArticles.length === 0}
-    <div class="empty-top">
-      <p>No top-rated articles yet today. Run a pull or wait for scoring to finish.</p>
+  {#if queueItems.length === 0}
+    <div class="queue-empty">
+      <p>You're caught up on unread articles in this window.</p>
+      <div class="empty-actions">
+        <a href={data.queueConfig?.hrefUnread ?? '/articles?read=unread&sort=unread_first'}>Browse unread articles</a>
+        <button type="button" on:click={runManualPull} disabled={isPulling}>Pull latest feeds</button>
+      </div>
     </div>
   {:else}
-    <div class="top-grid layout-{data.topRatedConfig?.layout ?? 'stacked'}">
-      {#each data.topRatedArticles as article}
-        <article class="top-card">
+    <div class="queue-grid">
+      {#each queueItems as article}
+        <article class="queue-card">
           <a class="card-img-wrap" href={`/articles/${article.id}`}>
             <img
               class="card-img"
@@ -369,6 +402,7 @@
               decoding="async"
             />
           </a>
+
           <div class="card-body">
             <div class="card-top-row">
               <a class="card-title" href={`/articles/${article.id}`}>{article.title ?? 'Untitled article'}</a>
@@ -381,10 +415,30 @@
                 <span>{fitScoreText(article.score)}</span>
               </span>
             </div>
+
+            <div class="reason-row">
+              <span class="reason-chip" class:high={article.queue_reason === 'high_fit'}>
+                {article.queue_reason === 'high_fit' ? 'High fit' : 'Recent unread'}
+              </span>
+            </div>
+
             <p class="card-excerpt">{articleSnippet(article)}</p>
+
             <div class="card-meta">
               <span>{article.source_name ?? 'Unknown source'}</span>
-              <span>{new Date(article.published_at ?? article.fetched_at).toLocaleString()}</span>
+              <span>{formatTimestamp(article)}</span>
+            </div>
+
+            <div class="card-actions">
+              <a class="open-link" href={`/articles/${article.id}`}>Open</a>
+              <button
+                type="button"
+                class="mark-read"
+                on:click={() => markQueueItemRead(article.id)}
+                disabled={Boolean(pendingReadById[article.id])}
+              >
+                {#if pendingReadById[article.id]}Saving...{:else}Mark read{/if}
+              </button>
             </div>
           </div>
         </article>
@@ -393,7 +447,42 @@
   {/if}
 </section>
 
-{#if data.stats.feeds === 0}
+<section class="momentum">
+  <div class="section-head">
+    <h2>Reading Momentum</h2>
+    <a href="/articles" class="view-all">
+      <IconExternalLink size={13} stroke={1.9} />
+      <span>Articles</span>
+    </a>
+  </div>
+
+  <div class="momentum-grid">
+    <div class="momentum-card">
+      <div class="momentum-num">{momentum.unreadTotal}</div>
+      <div class="momentum-label">Unread total</div>
+    </div>
+    <div class="momentum-card">
+      <div class="momentum-num">{momentum.unread24h}</div>
+      <div class="momentum-label">Unread · 24h</div>
+    </div>
+    <div class="momentum-card">
+      <div class="momentum-num">{momentum.unread7d}</div>
+      <div class="momentum-label">Unread · 7d</div>
+    </div>
+    <div class="momentum-card">
+      <div class="momentum-num">{momentum.highFitUnread7d}</div>
+      <div class="momentum-label">High fit · 7d</div>
+    </div>
+  </div>
+
+  <div class="quick-links">
+    <a href={data.queueConfig?.hrefUnread ?? '/articles?read=unread&sort=unread_first'}>Open unread queue</a>
+    <a href={data.queueConfig?.hrefHighFitUnread ?? '/articles?read=unread&sort=unread_first&score=5&score=4&score=3'}>Open high-fit unread</a>
+    <a href="/articles">Browse all articles</a>
+  </div>
+</section>
+
+{#if !data.hasFeeds}
   <Card variant="default">
     <h3>Get started</h3>
     <ul>
@@ -405,36 +494,36 @@
 {/if}
 
 <style>
-  /* Hero */
-  .hero {
+  .hero-utility {
+    background: var(--surface);
+    border-radius: var(--radius-xl);
+    border: 1px solid var(--surface-border);
+    padding: var(--space-5) var(--space-6);
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
-    gap: var(--space-8);
-    margin-bottom: var(--space-8);
-  }
-
-  .hero-left {
-    flex: 0 0 auto;
-    max-width: 360px;
+    align-items: center;
+    gap: var(--space-5);
+    margin-bottom: var(--space-6);
   }
 
   h1 {
     font-family: 'Source Serif 4', serif;
-    font-size: 2.6rem;
+    font-size: 2.2rem;
     margin: 0 0 var(--space-2);
-    line-height: 1.1;
+    line-height: 1.08;
   }
 
   .hero-desc {
     color: var(--muted-text);
-    margin: 0 0 var(--space-5);
+    margin: 0;
     line-height: 1.5;
   }
 
   .pull-section {
+    min-width: 260px;
     display: grid;
     gap: var(--space-2);
+    justify-items: end;
   }
 
   .icon-wrap {
@@ -465,59 +554,7 @@
     color: #91f0cd;
   }
 
-  /* Stats */
-  .hero-stats {
-    flex: 1 1 0;
-    min-width: 0;
-  }
-
-  .stats-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: var(--space-3);
-  }
-
-  .stats-header h3 {
-    margin: 0;
-    font-size: var(--text-base);
-    font-weight: 600;
-  }
-
-  .stats-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: var(--space-3);
-  }
-
-  .stat-card {
-    background: var(--surface-strong);
-    border: 1px solid var(--surface-border);
-    border-radius: var(--radius-lg);
-    padding: var(--space-4);
-    text-align: center;
-    box-shadow: var(--shadow-sm);
-  }
-
-  .stat-num {
-    font-size: 1.8rem;
-    font-weight: 700;
-    color: var(--primary);
-    line-height: 1;
-  }
-
-  .stat-num.warn {
-    color: #ff9dbc;
-  }
-
-  .stat-lbl {
-    font-size: var(--text-sm);
-    color: var(--muted-text);
-    margin-top: var(--space-1);
-  }
-
-  /* Top Rated */
-  .top-rated {
+  .reading-queue {
     background: var(--surface);
     border-radius: var(--radius-xl);
     border: 1px solid var(--surface-border);
@@ -529,6 +566,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: var(--space-3);
     margin-bottom: var(--space-1);
   }
 
@@ -548,48 +586,28 @@
 
   .section-cap {
     margin: 0 0 var(--space-4);
+    color: var(--muted-text);
     font-size: var(--text-sm);
-    color: var(--muted-text);
   }
 
-  .empty-top {
-    padding: var(--space-6) 0;
-    color: var(--muted-text);
-  }
-
-  .top-grid {
+  .queue-grid {
     display: grid;
     gap: var(--space-4);
   }
 
-  .top-card {
+  .queue-card {
     background: var(--surface-strong);
     border: 1px solid var(--surface-border);
     border-radius: var(--radius-lg);
     overflow: hidden;
     display: grid;
-  }
-
-  .layout-split .top-card {
     grid-template-columns: 180px 1fr;
-  }
-
-  .layout-stacked .top-card {
-    grid-template-columns: 1fr;
   }
 
   .card-img-wrap {
     display: block;
-    overflow: hidden;
     background: var(--surface-soft);
-  }
-
-  .layout-split .card-img-wrap {
-    height: 120px;
-  }
-
-  .layout-stacked .card-img-wrap {
-    height: 160px;
+    height: 140px;
   }
 
   .card-img {
@@ -611,14 +629,13 @@
     align-items: flex-start;
     justify-content: space-between;
     gap: var(--space-3);
-    flex-wrap: wrap;
   }
 
   .card-title {
-    font-weight: 600;
+    font-weight: 650;
     color: var(--text-color);
     text-decoration: none;
-    line-height: 1.35;
+    line-height: 1.34;
   }
 
   .card-title:hover {
@@ -637,6 +654,7 @@
     font-size: 0.75rem;
     font-weight: 600;
     line-height: 1;
+    flex-shrink: 0;
   }
 
   .fit-pill.fit-none {
@@ -674,11 +692,34 @@
     background: rgba(134, 239, 172, 0.14);
   }
 
+  .reason-row {
+    display: flex;
+    align-items: center;
+  }
+
+  .reason-chip {
+    border-radius: var(--radius-full);
+    border: 1px solid var(--input-border);
+    background: var(--surface-soft);
+    color: var(--muted-text);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    padding: 0.18rem 0.48rem;
+  }
+
+  .reason-chip.high {
+    color: #86efac;
+    border-color: rgba(134, 239, 172, 0.42);
+    background: rgba(134, 239, 172, 0.12);
+  }
+
   .card-excerpt {
     margin: 0;
-    font-size: var(--text-sm);
     color: var(--muted-text);
-    line-height: 1.5;
+    line-height: 1.45;
+    font-size: var(--text-sm);
     display: -webkit-box;
     -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
@@ -691,9 +732,129 @@
     gap: var(--space-3);
     font-size: var(--text-xs);
     color: var(--muted-text);
+    flex-wrap: wrap;
   }
 
-  /* Get started */
+  .card-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-2);
+    margin-top: var(--space-1);
+  }
+
+  .open-link {
+    font-size: var(--text-sm);
+    color: var(--muted-text);
+    text-decoration: none;
+    padding: 0.35rem 0.5rem;
+  }
+
+  .open-link:hover {
+    color: var(--text-color);
+  }
+
+  .mark-read {
+    border: 1px solid var(--ghost-border);
+    background: var(--surface-soft);
+    color: var(--ghost-color);
+    border-radius: var(--radius-full);
+    padding: 0.35rem 0.75rem;
+    font-family: inherit;
+    font-size: var(--text-sm);
+    cursor: pointer;
+  }
+
+  .mark-read:disabled {
+    opacity: 0.65;
+    cursor: wait;
+  }
+
+  .queue-empty {
+    padding: var(--space-8) var(--space-2);
+    color: var(--muted-text);
+    display: grid;
+    gap: var(--space-3);
+  }
+
+  .queue-empty p {
+    margin: 0;
+  }
+
+  .empty-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    align-items: center;
+  }
+
+  .empty-actions a,
+  .empty-actions button {
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-full);
+    background: var(--surface-soft);
+    color: var(--text-color);
+    padding: 0.38rem 0.78rem;
+    font-size: var(--text-sm);
+    text-decoration: none;
+    font-family: inherit;
+  }
+
+  .empty-actions button {
+    cursor: pointer;
+  }
+
+  .momentum {
+    background: var(--surface);
+    border-radius: var(--radius-xl);
+    border: 1px solid var(--surface-border);
+    padding: var(--space-6);
+    margin-bottom: var(--space-6);
+  }
+
+  .momentum-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+  }
+
+  .momentum-card {
+    background: var(--surface-strong);
+    border: 1px solid var(--surface-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4);
+    text-align: center;
+  }
+
+  .momentum-num {
+    font-size: 1.7rem;
+    line-height: 1;
+    font-weight: 700;
+    color: var(--primary);
+  }
+
+  .momentum-label {
+    margin-top: var(--space-1);
+    color: var(--muted-text);
+    font-size: var(--text-sm);
+  }
+
+  .quick-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+  }
+
+  .quick-links a {
+    border: 1px solid var(--input-border);
+    background: var(--surface-soft);
+    border-radius: var(--radius-full);
+    padding: 0.35rem 0.78rem;
+    text-decoration: none;
+    font-size: var(--text-sm);
+  }
+
   :global(.card) ul {
     padding-left: 1.2rem;
     margin: 0;
@@ -703,31 +864,41 @@
     margin: 0;
   }
 
-  @media (max-width: 860px) {
-    .hero {
+  @media (max-width: 940px) {
+    .hero-utility {
       flex-direction: column;
+      align-items: flex-start;
     }
 
-    .hero-left {
-      max-width: none;
+    .pull-section {
+      justify-items: start;
+      min-width: 0;
     }
 
-    .stats-grid {
-      grid-template-columns: repeat(2, 1fr);
-    }
-
-    .layout-split .top-card {
+    .queue-card {
       grid-template-columns: 1fr;
     }
 
-    .layout-split .card-img-wrap {
-      height: 160px;
+    .card-img-wrap {
+      height: 180px;
+    }
+
+    .momentum-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 
-  @media (max-width: 480px) {
-    .stats-grid {
+  @media (max-width: 560px) {
+    h1 {
+      font-size: 1.85rem;
+    }
+
+    .momentum-grid {
       grid-template-columns: 1fr 1fr;
+    }
+
+    .card-actions {
+      justify-content: flex-start;
     }
   }
 </style>

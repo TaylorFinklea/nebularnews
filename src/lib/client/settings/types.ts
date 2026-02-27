@@ -42,9 +42,9 @@ export type SettingsDraft = {
   autoReadDelayMs: number;
   jobProcessorBatchSize: number;
   articleCardLayout: Layout;
-  dashboardTopRatedLayout: Layout;
-  dashboardTopRatedCutoff: number;
-  dashboardTopRatedLimit: number;
+  dashboardQueueWindowDays: number;
+  dashboardQueueLimit: number;
+  dashboardQueueScoreCutoff: number;
   profileText: string;
 };
 

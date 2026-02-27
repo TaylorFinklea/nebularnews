@@ -33,9 +33,9 @@ const baseData = {
     autoReadDelayMs: 4000,
     jobProcessorBatchSize: 12,
     articleCardLayout: 'split',
-    dashboardTopRatedLayout: 'stacked',
-    dashboardTopRatedCutoff: 3,
-    dashboardTopRatedLimit: 5
+    dashboardQueueWindowDays: 7,
+    dashboardQueueLimit: 6,
+    dashboardQueueScoreCutoff: 3
   },
   keyMap: { openai: true, anthropic: false },
   profile: {

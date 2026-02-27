@@ -106,42 +106,40 @@
     </div>
   </div>
   <label>
-    Dashboard top-rated cutoff (1-5)
+    Dashboard queue window (days)
     <input
       type="number"
-      min={ranges.dashboardTopRated.cutoff.min}
-      max={ranges.dashboardTopRated.cutoff.max}
+      min={ranges.dashboardQueue.windowDays.min}
+      max={ranges.dashboardQueue.windowDays.max}
       step="1"
-      value={draft.dashboardTopRatedCutoff}
-      on:input={(event) => onSetField('dashboardTopRatedCutoff', Number(event.currentTarget.value))}
+      value={draft.dashboardQueueWindowDays}
+      on:input={(event) => onSetField('dashboardQueueWindowDays', Number(event.currentTarget.value))}
     />
   </label>
   <label>
-    Dashboard top-rated count
+    Dashboard queue count
     <input
       type="number"
-      min={ranges.dashboardTopRated.limit.min}
-      max={ranges.dashboardTopRated.limit.max}
+      min={ranges.dashboardQueue.limit.min}
+      max={ranges.dashboardQueue.limit.max}
       step="1"
-      value={draft.dashboardTopRatedLimit}
-      on:input={(event) => onSetField('dashboardTopRatedLimit', Number(event.currentTarget.value))}
+      value={draft.dashboardQueueLimit}
+      on:input={(event) => onSetField('dashboardQueueLimit', Number(event.currentTarget.value))}
     />
   </label>
-  <div class="field">
-    <div class="field-label">Dashboard top-rated layout</div>
-    <div class="lane-toggle" role="radiogroup" aria-label="Dashboard top-rated layout">
-      <label class:active={draft.dashboardTopRatedLayout === 'split'}>
-        <input type="radio" name="dashboardTopRatedLayout" value="split" checked={draft.dashboardTopRatedLayout === 'split'} on:change={() => onSetField('dashboardTopRatedLayout', 'split')} />
-        <span>Split</span>
-      </label>
-      <label class:active={draft.dashboardTopRatedLayout === 'stacked'}>
-        <input type="radio" name="dashboardTopRatedLayout" value="stacked" checked={draft.dashboardTopRatedLayout === 'stacked'} on:change={() => onSetField('dashboardTopRatedLayout', 'stacked')} />
-        <span>Stacked</span>
-      </label>
-    </div>
-  </div>
+  <label>
+    Dashboard high-fit cutoff (1-5)
+    <input
+      type="number"
+      min={ranges.dashboardQueue.scoreCutoff.min}
+      max={ranges.dashboardQueue.scoreCutoff.max}
+      step="1"
+      value={draft.dashboardQueueScoreCutoff}
+      on:input={(event) => onSetField('dashboardQueueScoreCutoff', Number(event.currentTarget.value))}
+    />
+  </label>
   <p class="muted">
-    Controls the dashboard's Top Rated section. Cutoff range {ranges.dashboardTopRated.cutoff.min}-{ranges.dashboardTopRated.cutoff.max}; count range {ranges.dashboardTopRated.limit.min}-{ranges.dashboardTopRated.limit.max}.
+    Controls the dashboard's reading queue. Window range {ranges.dashboardQueue.windowDays.min}-{ranges.dashboardQueue.windowDays.max} days; count range {ranges.dashboardQueue.limit.min}-{ranges.dashboardQueue.limit.max}; cutoff range {ranges.dashboardQueue.scoreCutoff.min}-{ranges.dashboardQueue.scoreCutoff.max}.
   </p>
 </div>
 

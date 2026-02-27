@@ -1,55 +1,75 @@
 import { dev } from '$app/environment';
 import {
-  buildTopRatedScoreQuery,
-  getDashboardStats,
-  getDashboardTopRatedArticles,
-  resolveDashboardDayRange
+  getDashboardFeedStatus,
+  getDashboardReadingMomentum,
+  getDashboardUnreadQueue
 } from '$lib/server/dashboard';
-import {
-  getDashboardTopRatedConfig,
-  getDashboardTopRatedLayout
-} from '$lib/server/settings';
+import { getDashboardQueueConfig } from '$lib/server/settings';
 import { logInfo, logWarn } from '$lib/server/log';
 
 const DASHBOARD_LOAD_BUDGET_MS = 1500;
+const EMPTY_MOMENTUM = {
+  unreadTotal: 0,
+  unread24h: 0,
+  unread7d: 0,
+  highFitUnread7d: 0
+};
+
+const buildHighFitUnreadHref = (scoreCutoff: number) => {
+  const params = new URLSearchParams();
+  params.set('read', 'unread');
+  params.set('sort', 'unread_first');
+
+  for (let score = 5; score >= 1; score -= 1) {
+    if (score >= scoreCutoff) params.append('score', String(score));
+  }
+
+  return `/articles?${params.toString()}`;
+};
 
 export const load = async ({ platform, request, depends, setHeaders, locals }) => {
   const startedAt = Date.now();
   depends('app:dashboard');
 
   const db = platform.env.DB;
-  const dashboardTopRated = await getDashboardTopRatedConfig(db);
-  const dashboardTopRatedLayout = await getDashboardTopRatedLayout(db);
-  const scoreCutoff = dashboardTopRated.cutoff;
-  const topRatedLimit = dashboardTopRated.limit;
-  const range = resolveDashboardDayRange(request.headers.get('cookie'));
+  const [queueConfig, feedStatus] = await Promise.all([
+    getDashboardQueueConfig(db),
+    getDashboardFeedStatus(db)
+  ]);
 
-  const { stats, today } = await getDashboardStats(db, range);
-  let topRatedArticles = [];
+  let readingQueue = [];
+  let momentum = { ...EMPTY_MOMENTUM };
   let degraded = false;
   let degradedReason: string | null = null;
 
-  const elapsedAfterStats = Date.now() - startedAt;
-  if (elapsedAfterStats > DASHBOARD_LOAD_BUDGET_MS) {
+  const elapsedBeforeQueue = Date.now() - startedAt;
+  if (elapsedBeforeQueue > DASHBOARD_LOAD_BUDGET_MS) {
     degraded = true;
-    degradedReason = 'budget_exceeded_before_top_rated';
+    degradedReason = 'budget_exceeded_before_reading_queue';
   } else {
     try {
-      topRatedArticles = await getDashboardTopRatedArticles(db, range, {
-        scoreCutoff,
-        limit: topRatedLimit
-      });
+      [readingQueue, momentum] = await Promise.all([
+        getDashboardUnreadQueue(db, {
+          windowDays: queueConfig.windowDays,
+          scoreCutoff: queueConfig.scoreCutoff,
+          limit: queueConfig.limit,
+          referenceAt: startedAt
+        }),
+        getDashboardReadingMomentum(db, {
+          scoreCutoff: queueConfig.scoreCutoff,
+          referenceAt: startedAt
+        })
+      ]);
     } catch (error) {
       degraded = true;
-      degradedReason = 'top_rated_query_failed';
-      logWarn('dashboard.load.top_rated_failed', {
+      degradedReason = 'reading_queue_query_failed';
+      logWarn('dashboard.load.reading_queue_failed', {
         request_id: locals.requestId ?? null,
         error: error instanceof Error ? error.message : String(error)
       });
     }
   }
 
-  const topRatedScoreQuery = buildTopRatedScoreQuery(scoreCutoff);
   const durationMs = Date.now() - startedAt;
 
   setHeaders({
@@ -58,17 +78,18 @@ export const load = async ({ platform, request, depends, setHeaders, locals }) =
 
   const payload = {
     isDev: dev,
-    stats,
-    today,
+    hasFeeds: feedStatus.hasFeeds,
     degraded,
     degradedReason,
-    topRatedConfig: {
-      scoreCutoff,
-      limit: topRatedLimit,
-      layout: dashboardTopRatedLayout,
-      href: topRatedScoreQuery ? `/articles?${topRatedScoreQuery}` : '/articles'
+    queueConfig: {
+      windowDays: queueConfig.windowDays,
+      limit: queueConfig.limit,
+      scoreCutoff: queueConfig.scoreCutoff,
+      hrefUnread: '/articles?read=unread&sort=unread_first',
+      hrefHighFitUnread: buildHighFitUnreadHref(queueConfig.scoreCutoff)
     },
-    topRatedArticles
+    readingQueue,
+    momentum
   };
 
   logInfo('dashboard.load.completed', {
@@ -76,9 +97,10 @@ export const load = async ({ platform, request, depends, setHeaders, locals }) =
     duration_ms: durationMs,
     degraded,
     degraded_reason: degradedReason,
-    today_articles: payload.today.articles,
-    today_pending_jobs: payload.today.pendingJobs,
-    top_rated_count: payload.topRatedArticles.length
+    has_feeds: payload.hasFeeds,
+    reading_queue_count: payload.readingQueue.length,
+    high_fit_count: payload.readingQueue.filter((item) => item.queue_reason === 'high_fit').length,
+    unread_total: payload.momentum.unreadTotal
   });
 
   return payload;

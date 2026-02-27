@@ -13,8 +13,9 @@ import {
   clampMaxItemsPerPoll,
   clampEventsPollMs,
   clampDashboardRefreshMinMs,
-  clampDashboardTopRatedCutoff,
-  clampDashboardTopRatedLimit,
+  clampDashboardQueueWindowDays,
+  clampDashboardQueueLimit,
+  clampDashboardQueueScoreCutoff,
   clampSchedulerJobsIntervalMinutes,
   clampSchedulerPollIntervalMinutes,
   clampSchedulerPullSlicesPerTick,
@@ -26,9 +27,8 @@ import {
   getAutoTaggingEnabled,
   getAutoTagMaxPerArticle,
   getArticleCardLayout,
-  getDashboardTopRatedLayout,
+  getDashboardQueueConfig,
   getConfiguredChatProviderModel,
-  getDashboardTopRatedConfig,
   getConfiguredIngestProviderModel,
   getJobProcessorBatchSize,
   getSchedulerJobsIntervalMinutes,
@@ -57,8 +57,7 @@ export const GET = async ({ platform }) => {
   const ingestModel = await getConfiguredIngestProviderModel(db, platform.env);
   const chatModel = await getConfiguredChatProviderModel(db, platform.env);
   const scorePrompt = await getScorePromptConfig(db);
-  const dashboardTopRated = await getDashboardTopRatedConfig(db);
-  const dashboardTopRatedLayout = await getDashboardTopRatedLayout(db);
+  const dashboardQueue = await getDashboardQueueConfig(db);
   const retention = await getRetentionConfig(db);
   const settings = {
     featureLanes: {
@@ -100,9 +99,9 @@ export const GET = async ({ platform }) => {
     jobBudgetWhilePullMs: await getSchedulerJobBudgetWhilePullMs(db),
     autoQueueTodayMissing: await getSchedulerAutoQueueTodayMissing(db),
     articleCardLayout: await getArticleCardLayout(db),
-    dashboardTopRatedLayout,
-    dashboardTopRatedCutoff: dashboardTopRated.cutoff,
-    dashboardTopRatedLimit: dashboardTopRated.limit
+    dashboardQueueWindowDays: dashboardQueue.windowDays,
+    dashboardQueueLimit: dashboardQueue.limit,
+    dashboardQueueScoreCutoff: dashboardQueue.scoreCutoff
   };
 
   const keys = await dbAll<{ provider: string }>(db, 'SELECT provider FROM provider_keys');
@@ -128,7 +127,6 @@ export const POST = async ({ request, platform, locals }) => {
   const validEfforts = new Set(['minimal', 'low', 'medium', 'high']);
   const validModelLanes = new Set(['pipeline', 'chat']);
   const validArticleCardLayouts = new Set(['split', 'stacked']);
-  const validDashboardTopRatedLayouts = new Set(['split', 'stacked']);
   const validRetentionModes = new Set(['archive', 'delete']);
   const featureLaneKeys: Record<string, string> = {
     summaries: 'lane_summaries',
@@ -182,9 +180,6 @@ export const POST = async ({ request, platform, locals }) => {
   if (body?.summaryLength) entries.push(['summary_length', body.summaryLength]);
   if (body?.articleCardLayout && validArticleCardLayouts.has(body.articleCardLayout)) {
     entries.push(['article_card_layout', body.articleCardLayout]);
-  }
-  if (body?.dashboardTopRatedLayout && validDashboardTopRatedLayouts.has(body.dashboardTopRatedLayout)) {
-    entries.push(['dashboard_top_rated_layout', body.dashboardTopRatedLayout]);
   }
   if (body?.pollInterval !== undefined && body?.pollInterval !== null) {
     entries.push(['scheduler_poll_interval_min', String(clampSchedulerPollIntervalMinutes(body.pollInterval))]);
@@ -249,11 +244,29 @@ export const POST = async ({ request, platform, locals }) => {
   if (body?.autoQueueTodayMissing !== undefined && body?.autoQueueTodayMissing !== null) {
     entries.push(['scheduler_auto_queue_today_missing', parseBooleanSetting(body.autoQueueTodayMissing, true) ? '1' : '0']);
   }
-  if (body?.dashboardTopRatedCutoff !== undefined && body?.dashboardTopRatedCutoff !== null) {
-    entries.push(['dashboard_top_rated_cutoff', String(clampDashboardTopRatedCutoff(body.dashboardTopRatedCutoff))]);
+  if (body?.dashboardQueueWindowDays !== undefined && body?.dashboardQueueWindowDays !== null) {
+    entries.push([
+      'dashboard_queue_window_days',
+      String(clampDashboardQueueWindowDays(body.dashboardQueueWindowDays))
+    ]);
   }
-  if (body?.dashboardTopRatedLimit !== undefined && body?.dashboardTopRatedLimit !== null) {
-    entries.push(['dashboard_top_rated_limit', String(clampDashboardTopRatedLimit(body.dashboardTopRatedLimit))]);
+
+  const queueLimitInput = body?.dashboardQueueLimit ?? body?.dashboardTopRatedLimit;
+  if (queueLimitInput !== undefined && queueLimitInput !== null) {
+    const normalizedLimit = String(clampDashboardQueueLimit(queueLimitInput));
+    entries.push(['dashboard_queue_limit', normalizedLimit]);
+    if (body?.dashboardTopRatedLimit !== undefined && body?.dashboardTopRatedLimit !== null) {
+      entries.push(['dashboard_top_rated_limit', normalizedLimit]);
+    }
+  }
+
+  const queueCutoffInput = body?.dashboardQueueScoreCutoff ?? body?.dashboardTopRatedCutoff;
+  if (queueCutoffInput !== undefined && queueCutoffInput !== null) {
+    const normalizedCutoff = String(clampDashboardQueueScoreCutoff(queueCutoffInput));
+    entries.push(['dashboard_queue_score_cutoff', normalizedCutoff]);
+    if (body?.dashboardTopRatedCutoff !== undefined && body?.dashboardTopRatedCutoff !== null) {
+      entries.push(['dashboard_top_rated_cutoff', normalizedCutoff]);
+    }
   }
   if (typeof body?.scoreSystemPrompt === 'string' && body.scoreSystemPrompt.trim()) {
     entries.push(['score_system_prompt', body.scoreSystemPrompt.trim()]);

@@ -42,6 +42,15 @@ const MAX_DASHBOARD_TOP_RATED_CUTOFF = 5;
 const DEFAULT_DASHBOARD_TOP_RATED_LIMIT = 5;
 const MIN_DASHBOARD_TOP_RATED_LIMIT = 1;
 const MAX_DASHBOARD_TOP_RATED_LIMIT = 20;
+const DEFAULT_DASHBOARD_QUEUE_WINDOW_DAYS = 7;
+const MIN_DASHBOARD_QUEUE_WINDOW_DAYS = 1;
+const MAX_DASHBOARD_QUEUE_WINDOW_DAYS = 30;
+const DEFAULT_DASHBOARD_QUEUE_LIMIT = 6;
+const MIN_DASHBOARD_QUEUE_LIMIT = 1;
+const MAX_DASHBOARD_QUEUE_LIMIT = 20;
+const DEFAULT_DASHBOARD_QUEUE_SCORE_CUTOFF = 3;
+const MIN_DASHBOARD_QUEUE_SCORE_CUTOFF = 1;
+const MAX_DASHBOARD_QUEUE_SCORE_CUTOFF = 5;
 const DEFAULT_INITIAL_FEED_LOOKBACK_DAYS = 45;
 const MIN_INITIAL_FEED_LOOKBACK_DAYS = 0;
 const MAX_INITIAL_FEED_LOOKBACK_DAYS = 3650;
@@ -115,6 +124,15 @@ export {
   DEFAULT_DASHBOARD_TOP_RATED_LIMIT,
   MIN_DASHBOARD_TOP_RATED_LIMIT,
   MAX_DASHBOARD_TOP_RATED_LIMIT,
+  DEFAULT_DASHBOARD_QUEUE_WINDOW_DAYS,
+  MIN_DASHBOARD_QUEUE_WINDOW_DAYS,
+  MAX_DASHBOARD_QUEUE_WINDOW_DAYS,
+  DEFAULT_DASHBOARD_QUEUE_LIMIT,
+  MIN_DASHBOARD_QUEUE_LIMIT,
+  MAX_DASHBOARD_QUEUE_LIMIT,
+  DEFAULT_DASHBOARD_QUEUE_SCORE_CUTOFF,
+  MIN_DASHBOARD_QUEUE_SCORE_CUTOFF,
+  MAX_DASHBOARD_QUEUE_SCORE_CUTOFF,
   DEFAULT_INITIAL_FEED_LOOKBACK_DAYS,
   MIN_INITIAL_FEED_LOOKBACK_DAYS,
   MAX_INITIAL_FEED_LOOKBACK_DAYS,
@@ -228,6 +246,33 @@ export const clampDashboardTopRatedLimit = (value: unknown) => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return DEFAULT_DASHBOARD_TOP_RATED_LIMIT;
   return Math.min(MAX_DASHBOARD_TOP_RATED_LIMIT, Math.max(MIN_DASHBOARD_TOP_RATED_LIMIT, Math.round(parsed)));
+};
+
+export const clampDashboardQueueWindowDays = (value: unknown) => {
+  if (value === null || value === undefined || value === '') return DEFAULT_DASHBOARD_QUEUE_WINDOW_DAYS;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return DEFAULT_DASHBOARD_QUEUE_WINDOW_DAYS;
+  return Math.min(
+    MAX_DASHBOARD_QUEUE_WINDOW_DAYS,
+    Math.max(MIN_DASHBOARD_QUEUE_WINDOW_DAYS, Math.round(parsed))
+  );
+};
+
+export const clampDashboardQueueLimit = (value: unknown) => {
+  if (value === null || value === undefined || value === '') return DEFAULT_DASHBOARD_QUEUE_LIMIT;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return DEFAULT_DASHBOARD_QUEUE_LIMIT;
+  return Math.min(MAX_DASHBOARD_QUEUE_LIMIT, Math.max(MIN_DASHBOARD_QUEUE_LIMIT, Math.round(parsed)));
+};
+
+export const clampDashboardQueueScoreCutoff = (value: unknown) => {
+  if (value === null || value === undefined || value === '') return DEFAULT_DASHBOARD_QUEUE_SCORE_CUTOFF;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return DEFAULT_DASHBOARD_QUEUE_SCORE_CUTOFF;
+  return Math.min(
+    MAX_DASHBOARD_QUEUE_SCORE_CUTOFF,
+    Math.max(MIN_DASHBOARD_QUEUE_SCORE_CUTOFF, Math.round(parsed))
+  );
 };
 
 export const clampInitialFeedLookbackDays = (value: unknown) => {
@@ -507,6 +552,22 @@ export async function getDashboardTopRatedConfig(db: Db) {
   const cutoff = clampDashboardTopRatedCutoff(await getSetting(db, 'dashboard_top_rated_cutoff'));
   const limit = clampDashboardTopRatedLimit(await getSetting(db, 'dashboard_top_rated_limit'));
   return { cutoff, limit };
+}
+
+export async function getDashboardQueueConfig(db: Db) {
+  const [windowDaysRaw, queueLimitRaw, queueCutoffRaw, legacyLimitRaw, legacyCutoffRaw] = await Promise.all([
+    getSetting(db, 'dashboard_queue_window_days'),
+    getSetting(db, 'dashboard_queue_limit'),
+    getSetting(db, 'dashboard_queue_score_cutoff'),
+    getSetting(db, 'dashboard_top_rated_limit'),
+    getSetting(db, 'dashboard_top_rated_cutoff')
+  ]);
+
+  return {
+    windowDays: clampDashboardQueueWindowDays(windowDaysRaw),
+    limit: clampDashboardQueueLimit(queueLimitRaw ?? legacyLimitRaw),
+    scoreCutoff: clampDashboardQueueScoreCutoff(queueCutoffRaw ?? legacyCutoffRaw)
+  };
 }
 
 export async function getInitialFeedLookbackDays(db: Db) {

@@ -3,6 +3,8 @@ import { getCookieValue } from './cookies';
 import { getPreferredSourcesForArticles } from './sources';
 import { clampTimezoneOffsetMinutes, dayRangeForTimezoneOffset } from './time';
 
+const DAY_MS = 1000 * 60 * 60 * 24;
+
 export type DashboardDayRange = {
   dayStart: number;
   dayEnd: number;
@@ -25,7 +27,7 @@ export type DashboardTodayStats = {
   tzOffsetMinutes: number;
 };
 
-export type DashboardTopRatedArticle = {
+export type DashboardUnreadQueueArticle = {
   id: string;
   title: string | null;
   canonical_url: string | null;
@@ -34,9 +36,17 @@ export type DashboardTopRatedArticle = {
   fetched_at: number | null;
   excerpt: string | null;
   summary_text: string | null;
-  score: number;
+  score: number | null;
   label: string | null;
+  queue_reason: 'high_fit' | 'recent_unread';
   source_name: string | null;
+};
+
+export type DashboardReadingMomentum = {
+  unreadTotal: number;
+  unread24h: number;
+  unread7d: number;
+  highFitUnread7d: number;
 };
 
 export const resolveDashboardDayRange = (cookieHeader: string | null, referenceAt = Date.now()): DashboardDayRange => {
@@ -48,13 +58,6 @@ export const resolveDashboardDayRange = (cookieHeader: string | null, referenceA
     dayEnd,
     tzOffsetMinutes
   };
-};
-
-export const buildTopRatedScoreQuery = (scoreCutoff: number) => {
-  return Array.from({ length: 5 }, (_, index) => 5 - index)
-    .filter((score) => score >= scoreCutoff)
-    .map((score) => `score=${score}`)
-    .join('&');
 };
 
 export async function getDashboardStats(db: Db, range: DashboardDayRange): Promise<{
@@ -149,14 +152,27 @@ export async function getDashboardStats(db: Db, range: DashboardDayRange): Promi
   };
 }
 
-export async function getDashboardTopRatedArticles(
+export async function getDashboardUnreadQueue(
   db: Db,
-  range: DashboardDayRange,
   options: {
+    windowDays: number;
     scoreCutoff: number;
     limit: number;
+    referenceAt?: number;
   }
-): Promise<DashboardTopRatedArticle[]> {
+): Promise<DashboardUnreadQueueArticle[]> {
+  const toBoundedInt = (value: unknown, min: number, max: number, fallback: number) => {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.min(max, Math.max(min, Math.round(parsed)));
+  };
+
+  const safeWindowDays = toBoundedInt(options.windowDays, 1, 30, 7);
+  const safeLimit = toBoundedInt(options.limit, 1, 20, 6);
+  const scoreCutoff = toBoundedInt(options.scoreCutoff, 1, 5, 3);
+  const referenceAt = options.referenceAt ?? Date.now();
+  const windowStart = referenceAt - safeWindowDays * DAY_MS;
+
   const rows = await dbAll<{
     id: string;
     title: string | null;
@@ -166,17 +182,11 @@ export async function getDashboardTopRatedArticles(
     fetched_at: number | null;
     excerpt: string | null;
     summary_text: string | null;
-    score: number;
+    score: number | null;
     label: string | null;
   }>(
     db,
-    `WITH day_articles AS (
-       SELECT id
-       FROM articles
-       WHERE COALESCE(published_at, fetched_at) >= ?
-         AND COALESCE(published_at, fetched_at) < ?
-     ),
-     latest_summaries AS (
+    `WITH latest_summaries AS (
        SELECT s.article_id, s.summary_text
        FROM article_summaries s
        JOIN (
@@ -212,15 +222,22 @@ export async function getDashboardTopRatedArticles(
          WHEN o.article_id IS NOT NULL THEN 'User corrected'
          ELSE lsc.label
        END as label
-     FROM day_articles d
-     JOIN articles a ON a.id = d.id
+     FROM articles a
      LEFT JOIN latest_summaries ls ON ls.article_id = a.id
      LEFT JOIN latest_scores lsc ON lsc.article_id = a.id
      LEFT JOIN article_score_overrides o ON o.article_id = a.id
-     WHERE COALESCE(o.score, lsc.score) >= ?
-     ORDER BY score DESC, COALESCE(a.published_at, a.fetched_at) DESC
+     WHERE COALESCE(a.published_at, a.fetched_at, 0) >= ?
+       AND COALESCE(
+         (SELECT rs.is_read FROM article_read_state rs WHERE rs.article_id = a.id LIMIT 1),
+         0
+       ) = 0
+     ORDER BY
+       CASE WHEN COALESCE(o.score, lsc.score) >= ? THEN 0 ELSE 1 END ASC,
+       CASE WHEN COALESCE(o.score, lsc.score) IS NULL THEN 1 ELSE 0 END ASC,
+       COALESCE(o.score, lsc.score) DESC,
+       COALESCE(a.published_at, a.fetched_at) DESC
      LIMIT ?`,
-    [range.dayStart, range.dayEnd, options.scoreCutoff, options.limit]
+    [windowStart, scoreCutoff, safeLimit]
   );
 
   const sourceByArticle = await getPreferredSourcesForArticles(
@@ -232,7 +249,77 @@ export async function getDashboardTopRatedArticles(
     const source = sourceByArticle.get(row.id);
     return {
       ...row,
+      queue_reason: Number(row.score) >= scoreCutoff ? 'high_fit' : 'recent_unread',
       source_name: source?.sourceName ?? null
     };
   });
+}
+
+export async function getDashboardReadingMomentum(
+  db: Db,
+  options: {
+    scoreCutoff: number;
+    referenceAt?: number;
+  }
+): Promise<DashboardReadingMomentum> {
+  const scoreCutoff = Math.max(1, Math.min(5, Math.round(Number(options.scoreCutoff) || 3)));
+  const referenceAt = options.referenceAt ?? Date.now();
+  const last24hStart = referenceAt - DAY_MS;
+  const last7dStart = referenceAt - 7 * DAY_MS;
+
+  const row = await dbGet<{
+    unread_total: number | null;
+    unread_24h: number | null;
+    unread_7d: number | null;
+    high_fit_unread_7d: number | null;
+  }>(
+    db,
+    `WITH latest_scores AS (
+       SELECT sc.article_id, sc.score
+       FROM article_scores sc
+       JOIN (
+         SELECT article_id, MAX(created_at) as created_at
+         FROM article_scores
+         GROUP BY article_id
+       ) latest
+         ON latest.article_id = sc.article_id
+        AND latest.created_at = sc.created_at
+     ),
+     unread_articles AS (
+       SELECT
+         a.id,
+         COALESCE(a.published_at, a.fetched_at) as article_at,
+         COALESCE(o.score, lsc.score) as score
+       FROM articles a
+       LEFT JOIN article_score_overrides o ON o.article_id = a.id
+       LEFT JOIN latest_scores lsc ON lsc.article_id = a.id
+       WHERE COALESCE(
+         (SELECT rs.is_read FROM article_read_state rs WHERE rs.article_id = a.id LIMIT 1),
+         0
+       ) = 0
+     )
+     SELECT
+       COUNT(*) as unread_total,
+       SUM(CASE WHEN article_at >= ? THEN 1 ELSE 0 END) as unread_24h,
+       SUM(CASE WHEN article_at >= ? THEN 1 ELSE 0 END) as unread_7d,
+       SUM(CASE WHEN article_at >= ? AND score >= ? THEN 1 ELSE 0 END) as high_fit_unread_7d
+     FROM unread_articles`,
+    [last24hStart, last7dStart, last7dStart, scoreCutoff]
+  );
+
+  return {
+    unreadTotal: Number(row?.unread_total ?? 0),
+    unread24h: Number(row?.unread_24h ?? 0),
+    unread7d: Number(row?.unread_7d ?? 0),
+    highFitUnread7d: Number(row?.high_fit_unread_7d ?? 0)
+  };
+}
+
+export async function getDashboardFeedStatus(db: Db): Promise<{ feedCount: number; hasFeeds: boolean }> {
+  const row = await dbGet<{ feed_count: number | null }>(db, 'SELECT COUNT(*) as feed_count FROM feeds');
+  const feedCount = Number(row?.feed_count ?? 0);
+  return {
+    feedCount,
+    hasFeeds: feedCount > 0
+  };
 }

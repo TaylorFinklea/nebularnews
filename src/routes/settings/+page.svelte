@@ -71,9 +71,15 @@
   let schedulerAdvancedOpen = false;
   let schedulerApplyEnv = 'production';
   let articleCardLayout = data.settings.articleCardLayout ?? 'split';
-  let dashboardTopRatedLayout = data.settings.dashboardTopRatedLayout ?? 'stacked';
-  let dashboardTopRatedCutoff = Number(data.settings.dashboardTopRatedCutoff ?? 3);
-  let dashboardTopRatedLimit = Number(data.settings.dashboardTopRatedLimit ?? 5);
+  let dashboardQueueWindowDays = Number(
+    data.settings.dashboardQueueWindowDays ?? data.dashboardQueueRange?.windowDays?.default ?? 7
+  );
+  let dashboardQueueLimit = Number(
+    data.settings.dashboardQueueLimit ?? data.dashboardQueueRange?.limit?.default ?? 6
+  );
+  let dashboardQueueScoreCutoff = Number(
+    data.settings.dashboardQueueScoreCutoff ?? data.dashboardQueueRange?.scoreCutoff?.default ?? 3
+  );
   let orphanCount = Number(data.orphanCleanup?.orphanCount ?? 0);
   let orphanSampleArticleIds = Array.isArray(data.orphanCleanup?.sampleArticleIds)
     ? data.orphanCleanup.sampleArticleIds
@@ -151,6 +157,24 @@
     data.autoTagging?.maxPerArticle?.min ?? 1,
     data.autoTagging?.maxPerArticle?.max ?? 5,
     data.autoTagging?.maxPerArticle?.default ?? 2
+  );
+  $: dashboardQueueWindowDays = clampNumber(
+    dashboardQueueWindowDays,
+    data.dashboardQueueRange.windowDays.min,
+    data.dashboardQueueRange.windowDays.max,
+    data.dashboardQueueRange.windowDays.default
+  );
+  $: dashboardQueueLimit = clampNumber(
+    dashboardQueueLimit,
+    data.dashboardQueueRange.limit.min,
+    data.dashboardQueueRange.limit.max,
+    data.dashboardQueueRange.limit.default
+  );
+  $: dashboardQueueScoreCutoff = clampNumber(
+    dashboardQueueScoreCutoff,
+    data.dashboardQueueRange.scoreCutoff.min,
+    data.dashboardQueueRange.scoreCutoff.max,
+    data.dashboardQueueRange.scoreCutoff.default
   );
 
   const schedulerDeployScript = () =>
@@ -308,8 +332,9 @@
     jobBudgetWhilePullMs: Number(jobBudgetWhilePullMs ?? 0),
     autoQueueTodayMissing: Boolean(autoQueueTodayMissing),
     articleCardLayout,
-    dashboardTopRatedLayout, dashboardTopRatedCutoff: Number(dashboardTopRatedCutoff ?? 0),
-    dashboardTopRatedLimit: Number(dashboardTopRatedLimit ?? 0),
+    dashboardQueueWindowDays: Number(dashboardQueueWindowDays ?? 0),
+    dashboardQueueLimit: Number(dashboardQueueLimit ?? 0),
+    dashboardQueueScoreCutoff: Number(dashboardQueueScoreCutoff ?? 0),
     scoreSystemPrompt, scoreUserPromptTemplate, profileText
   });
 
@@ -344,9 +369,9 @@
     jobBudgetWhilePullMs = Number(snapshot.jobBudgetWhilePullMs ?? 0);
     autoQueueTodayMissing = Boolean(snapshot.autoQueueTodayMissing);
     articleCardLayout = snapshot.articleCardLayout;
-    dashboardTopRatedLayout = snapshot.dashboardTopRatedLayout;
-    dashboardTopRatedCutoff = Number(snapshot.dashboardTopRatedCutoff ?? 0);
-    dashboardTopRatedLimit = Number(snapshot.dashboardTopRatedLimit ?? 0);
+    dashboardQueueWindowDays = Number(snapshot.dashboardQueueWindowDays ?? 0);
+    dashboardQueueLimit = Number(snapshot.dashboardQueueLimit ?? 0);
+    dashboardQueueScoreCutoff = Number(snapshot.dashboardQueueScoreCutoff ?? 0);
     scoreSystemPrompt = snapshot.scoreSystemPrompt; scoreUserPromptTemplate = snapshot.scoreUserPromptTemplate;
     profileText = snapshot.profileText;
   };
@@ -373,7 +398,7 @@
           autoReadDelayMs, autoTaggingEnabled, autoTagMaxPerArticle,
           jobProcessorBatchSize, jobsIntervalMinutes, pollIntervalMinutes,
           pullSlicesPerTick, pullSliceBudgetMs, jobBudgetIdleMs, jobBudgetWhilePullMs, autoQueueTodayMissing,
-          articleCardLayout, dashboardTopRatedLayout, dashboardTopRatedCutoff, dashboardTopRatedLimit,
+          articleCardLayout, dashboardQueueWindowDays, dashboardQueueLimit, dashboardQueueScoreCutoff,
           scoreSystemPrompt, scoreUserPromptTemplate
         })
       });
@@ -778,22 +803,21 @@
         </div>
       </div>
       <div class="field">
-        <div class="field-label">Dashboard top-rated layout</div>
-        <div class="lane-toggle" role="radiogroup" aria-label="Dashboard top-rated layout">
-          <label class:active={dashboardTopRatedLayout === 'split'}><input type="radio" name="dashboardTopRatedLayout" value="split" bind:group={dashboardTopRatedLayout} /><span>Split</span></label>
-          <label class:active={dashboardTopRatedLayout === 'stacked'}><input type="radio" name="dashboardTopRatedLayout" value="stacked" bind:group={dashboardTopRatedLayout} /><span>Stacked</span></label>
-        </div>
+        <label>
+          Dashboard queue window (days)
+          <input type="number" min={data.dashboardQueueRange.windowDays.min} max={data.dashboardQueueRange.windowDays.max} step="1" bind:value={dashboardQueueWindowDays} />
+        </label>
       </div>
     </div>
 
     <div class="two-col">
       <label>
-        Top-rated cutoff (1–5)
-        <input type="number" min={data.dashboardTopRatedRange.cutoff.min} max={data.dashboardTopRatedRange.cutoff.max} step="1" bind:value={dashboardTopRatedCutoff} />
+        Queue high-fit cutoff (1–5)
+        <input type="number" min={data.dashboardQueueRange.scoreCutoff.min} max={data.dashboardQueueRange.scoreCutoff.max} step="1" bind:value={dashboardQueueScoreCutoff} />
       </label>
       <label>
-        Top-rated count
-        <input type="number" min={data.dashboardTopRatedRange.limit.min} max={data.dashboardTopRatedRange.limit.max} step="1" bind:value={dashboardTopRatedLimit} />
+        Queue count
+        <input type="number" min={data.dashboardQueueRange.limit.min} max={data.dashboardQueueRange.limit.max} step="1" bind:value={dashboardQueueLimit} />
       </label>
     </div>
   </Card>

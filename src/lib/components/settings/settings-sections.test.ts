@@ -34,9 +34,9 @@ const draft = {
   autoReadDelayMs: 4000,
   jobProcessorBatchSize: 12,
   articleCardLayout: 'split',
-  dashboardTopRatedLayout: 'split',
-  dashboardTopRatedCutoff: 3,
-  dashboardTopRatedLimit: 5,
+  dashboardQueueWindowDays: 7,
+  dashboardQueueLimit: 6,
+  dashboardQueueScoreCutoff: 3,
   profileText: 'profile'
 };
 
@@ -70,9 +70,10 @@ describe('Settings section components', () => {
         initialFeedLookback: { min: 0, max: 365, default: 45 },
         retention: { min: 0, max: 365, default: 0 },
         autoReadDelay: { min: 0, max: 120000 },
-        dashboardTopRated: {
-          cutoff: { min: 1, max: 5, default: 3 },
-          limit: { min: 1, max: 20, default: 5 }
+        dashboardQueue: {
+          windowDays: { min: 1, max: 30, default: 7 },
+          limit: { min: 1, max: 20, default: 6 },
+          scoreCutoff: { min: 1, max: 5, default: 3 }
         },
         jobBatch: { min: 1, max: 100, default: 12 }
       },

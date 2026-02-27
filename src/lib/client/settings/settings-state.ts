@@ -37,9 +37,9 @@ type SettingsPageData = {
     autoReadDelayMs: number;
     jobProcessorBatchSize?: number;
     articleCardLayout: SettingsDraft['articleCardLayout'];
-    dashboardTopRatedLayout: SettingsDraft['dashboardTopRatedLayout'];
-    dashboardTopRatedCutoff: number;
-    dashboardTopRatedLimit: number;
+    dashboardQueueWindowDays: number;
+    dashboardQueueLimit: number;
+    dashboardQueueScoreCutoff: number;
   };
   keyMap: { openai: boolean; anthropic: boolean };
   profile: { profile_text: string; version: number; updated_at: number };
@@ -85,9 +85,9 @@ const createDraft = (data: SettingsPageData): SettingsDraft => ({
   autoReadDelayMs: normalizeNumber(data.settings.autoReadDelayMs, 4000),
   jobProcessorBatchSize: normalizeNumber(data.settings.jobProcessorBatchSize, 12),
   articleCardLayout: data.settings.articleCardLayout,
-  dashboardTopRatedLayout: data.settings.dashboardTopRatedLayout,
-  dashboardTopRatedCutoff: normalizeNumber(data.settings.dashboardTopRatedCutoff, 3),
-  dashboardTopRatedLimit: normalizeNumber(data.settings.dashboardTopRatedLimit, 5),
+  dashboardQueueWindowDays: normalizeNumber(data.settings.dashboardQueueWindowDays, 7),
+  dashboardQueueLimit: normalizeNumber(data.settings.dashboardQueueLimit, 6),
+  dashboardQueueScoreCutoff: normalizeNumber(data.settings.dashboardQueueScoreCutoff, 3),
   profileText: data.profile.profile_text
 });
 
@@ -122,9 +122,9 @@ const toSettingsPayload = (draft: SettingsDraft) => ({
   autoReadDelayMs: draft.autoReadDelayMs,
   jobProcessorBatchSize: draft.jobProcessorBatchSize,
   articleCardLayout: draft.articleCardLayout,
-  dashboardTopRatedLayout: draft.dashboardTopRatedLayout,
-  dashboardTopRatedCutoff: draft.dashboardTopRatedCutoff,
-  dashboardTopRatedLimit: draft.dashboardTopRatedLimit,
+  dashboardQueueWindowDays: draft.dashboardQueueWindowDays,
+  dashboardQueueLimit: draft.dashboardQueueLimit,
+  dashboardQueueScoreCutoff: draft.dashboardQueueScoreCutoff,
   scoreSystemPrompt: draft.scoreSystemPrompt,
   scoreUserPromptTemplate: draft.scoreUserPromptTemplate
 });

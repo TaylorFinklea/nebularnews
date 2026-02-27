@@ -3,36 +3,18 @@
   import { page } from '$app/stores';
   import { fade } from 'svelte/transition';
   import '$lib/styles/tokens.css';
-  import {
-    IconArticle,
-    IconLayoutDashboard,
-    IconMenu2,
-    IconMessage2,
-    IconMoonStars,
-    IconSettings,
-    IconSun,
-    IconX
-  } from '$lib/icons';
+  import AppSidebar from '$lib/components/navigation/AppSidebar.svelte';
+  import MobileBottomNav from '$lib/components/navigation/MobileBottomNav.svelte';
   import Toast from '$lib/components/Toast.svelte';
 
   const THEME_KEY = 'nebular-theme';
+  const SIDEBAR_COLLAPSED_KEY = 'nebular-sidebar-collapsed';
+
   let theme = 'dark';
-  let settingsMenu;
-  let mobileMenuOpen = false;
+  let sidebarCollapsed = false;
 
   $: currentPath = $page.url.pathname;
-  $: isActive = (href) => {
-    if (href === '/') return currentPath === '/';
-    return currentPath.startsWith(href);
-  };
-  $: isSettingsActive = ['/settings', '/tags', '/feeds', '/jobs'].some(
-    (p) => currentPath.startsWith(p)
-  );
-  // Auto-close mobile menu and settings dropdown on route change
-  $: currentPath, (() => {
-    mobileMenuOpen = false;
-    closeSettingsMenu();
-  })();
+  $: isLoginRoute = currentPath === '/login';
 
   const resolveInitialTheme = () => {
     try {
@@ -55,14 +37,30 @@
     }
   };
 
-  const toggleTheme = () => setTheme(theme === 'dark' ? 'light' : 'dark');
-  const closeSettingsMenu = () => settingsMenu?.removeAttribute('open');
-  const toggleMobileMenu = () => {
-    mobileMenuOpen = !mobileMenuOpen;
+  const setSidebarCollapsed = (nextValue, persist = true) => {
+    sidebarCollapsed = Boolean(nextValue);
+    if (!persist) return;
+    try {
+      localStorage.setItem(SIDEBAR_COLLAPSED_KEY, sidebarCollapsed ? '1' : '0');
+    } catch {
+      // Ignore storage errors in private/incognito sessions.
+    }
   };
+
+  const toggleTheme = () => setTheme(theme === 'dark' ? 'light' : 'dark');
+  const toggleSidebarCollapsed = () => setSidebarCollapsed(!sidebarCollapsed);
 
   onMount(() => {
     setTheme(resolveInitialTheme(), false);
+
+    try {
+      const storedSidebarValue = localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
+      if (storedSidebarValue === '1') setSidebarCollapsed(true, false);
+      if (storedSidebarValue === '0') setSidebarCollapsed(false, false);
+    } catch {
+      // Ignore storage errors in private/incognito sessions.
+    }
+
     try {
       const tzOffsetMinutes = new Date().getTimezoneOffset();
       document.cookie = `nebular_tz_offset_min=${tzOffsetMinutes}; Path=/; Max-Age=31536000; SameSite=Lax`;
@@ -97,123 +95,37 @@
   </script>
 </svelte:head>
 
-<div class="app-shell">
-  <header class="top-bar">
-    <div class="top-bar-inner">
-      <a href="/" class="brand">
-        <span class="brand-mark">Nebular</span>
-        <span class="brand-accent">News</span>
-      </a>
-
-      <!-- Desktop nav -->
-      <div class="top-actions desktop-only">
-        <nav class="nav-links">
-          <a href="/" class="nav-link" class:active={isActive('/')}>
-            <IconLayoutDashboard size={16} stroke={1.9} />
-            <span>Dashboard</span>
-          </a>
-          <a href="/articles" class="nav-link" class:active={isActive('/articles')}>
-            <IconArticle size={16} stroke={1.9} />
-            <span>Articles</span>
-          </a>
-          <a href="/chat" class="nav-link" class:active={isActive('/chat')}>
-            <IconMessage2 size={16} stroke={1.9} />
-            <span>Chat</span>
-          </a>
-          <details class="settings-menu" bind:this={settingsMenu}>
-            <summary class:active={isSettingsActive}>
-              <IconSettings size={16} stroke={1.9} />
-              <span>Settings</span>
-            </summary>
-            <div class="submenu">
-              <a href="/settings" on:click={closeSettingsMenu}>General</a>
-              <a href="/tags" on:click={closeSettingsMenu}>Tags</a>
-              <a href="/feeds" on:click={closeSettingsMenu}>Feeds</a>
-              <a href="/jobs" on:click={closeSettingsMenu}>Jobs</a>
-            </div>
-          </details>
-        </nav>
-        <button class="theme-toggle" on:click={toggleTheme} aria-label="Toggle light and dark mode">
-          {#if theme === 'dark'}
-            <IconSun size={16} stroke={1.8} />
-            <span>Light</span>
-          {:else}
-            <IconMoonStars size={16} stroke={1.8} />
-            <span>Dark</span>
-          {/if}
-        </button>
-      </div>
-
-      <!-- Mobile hamburger -->
-      <div class="mobile-controls mobile-only">
-        <button class="theme-toggle compact" on:click={toggleTheme} aria-label="Toggle theme">
-          {#if theme === 'dark'}
-            <IconSun size={16} stroke={1.8} />
-          {:else}
-            <IconMoonStars size={16} stroke={1.8} />
-          {/if}
-        </button>
-        <button
-          class="hamburger"
-          on:click={toggleMobileMenu}
-          aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
-        >
-          {#if mobileMenuOpen}
-            <IconX size={20} stroke={2} />
-          {:else}
-            <IconMenu2 size={20} stroke={2} />
-          {/if}
-        </button>
-      </div>
-    </div>
-  </header>
-
-  <!-- Mobile nav overlay -->
-  {#if mobileMenuOpen}
-    <button class="mobile-overlay" on:click={() => (mobileMenuOpen = false)} transition:fade={{ duration: 150 }} aria-label="Close menu"></button>
+<div class="app-shell" class:with-chrome={!isLoginRoute} class:sidebar-collapsed={sidebarCollapsed}>
+  {#if !isLoginRoute}
+    <AppSidebar
+      {currentPath}
+      collapsed={sidebarCollapsed}
+      {theme}
+      onToggleTheme={toggleTheme}
+      onToggleCollapse={toggleSidebarCollapsed}
+    />
   {/if}
-  <nav class="mobile-nav" class:open={mobileMenuOpen} aria-label="Mobile navigation">
-    <a href="/" class="mobile-link" class:active={isActive('/')}>
-      <IconLayoutDashboard size={18} stroke={1.9} />
-      <span>Dashboard</span>
-    </a>
-    <a href="/articles" class="mobile-link" class:active={isActive('/articles')}>
-      <IconArticle size={18} stroke={1.9} />
-      <span>Articles</span>
-    </a>
-    <a href="/chat" class="mobile-link" class:active={isActive('/chat')}>
-      <IconMessage2 size={18} stroke={1.9} />
-      <span>Chat</span>
-    </a>
-    <div class="mobile-divider"></div>
-    <a href="/settings" class="mobile-link" class:active={isActive('/settings')}>
-      <IconSettings size={18} stroke={1.9} />
-      <span>Settings</span>
-    </a>
-    <a href="/tags" class="mobile-link" class:active={currentPath.startsWith('/tags')}>
-      <span>Tags</span>
-    </a>
-    <a href="/feeds" class="mobile-link" class:active={currentPath.startsWith('/feeds')}>
-      <span>Feeds</span>
-    </a>
-    <a href="/jobs" class="mobile-link" class:active={currentPath.startsWith('/jobs')}>
-      <span>Jobs</span>
-    </a>
-  </nav>
 
-  <main class="content">
-    {#key currentPath}
-      <div in:fade={{ duration: 120, delay: 40 }}>
-        <slot />
-      </div>
-    {/key}
-  </main>
+  <div class="main-column" class:with-mobile-nav={!isLoginRoute}>
+    <main class="content">
+      {#key currentPath}
+        <div in:fade={{ duration: 120, delay: 40 }}>
+          <slot />
+        </div>
+      {/key}
+    </main>
+  </div>
+
+  {#if !isLoginRoute}
+    <MobileBottomNav {currentPath} {theme} onToggleTheme={toggleTheme} />
+  {/if}
 </div>
 
 <Toast />
 
 <style>
   :global(:root) {
+    --mobile-nav-height: 64px;
     --bg-gradient-start: #050915;
     --bg-gradient-mid: #0b1638;
     --bg-gradient-end: #1a1640;
@@ -317,147 +229,23 @@
 
   .app-shell {
     min-height: 100vh;
+  }
+
+  .app-shell.with-chrome {
+    --sidebar-width: 248px;
+    display: grid;
+    grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  }
+
+  .app-shell.with-chrome.sidebar-collapsed {
+    --sidebar-width: 76px;
+  }
+
+  .main-column {
+    min-width: 0;
+    min-height: 100vh;
     display: flex;
     flex-direction: column;
-  }
-
-  .top-bar {
-    background: var(--surface);
-    backdrop-filter: blur(8px);
-    border-bottom: 1px solid var(--surface-border);
-    position: sticky;
-    top: 0;
-    z-index: 50;
-  }
-
-  .top-bar-inner {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: var(--space-4) var(--space-10);
-    max-width: var(--content-max-width);
-    margin: 0 auto;
-    width: 100%;
-  }
-
-  .brand {
-    font-family: 'Source Serif 4', serif;
-    font-size: 1.5rem;
-    letter-spacing: 0.02em;
-    display: flex;
-    gap: 0.4rem;
-  }
-
-  .brand-mark {
-    font-weight: 600;
-  }
-
-  .brand-accent {
-    color: var(--primary);
-  }
-
-  .top-actions {
-    display: flex;
-    align-items: center;
-    gap: 0.9rem;
-  }
-
-  .nav-links {
-    display: flex;
-    gap: var(--space-2);
-    font-size: 0.95rem;
-  }
-
-  .nav-links a,
-  .nav-links .settings-menu summary {
-    padding: 0.35rem 0.7rem;
-    border-radius: var(--radius-full);
-    transition: background var(--transition-fast), color var(--transition-fast);
-  }
-
-  .nav-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-  }
-
-  .nav-links a:hover,
-  .nav-links .settings-menu summary:hover {
-    background: var(--primary-soft);
-  }
-
-  .nav-links a.active,
-  .nav-links .settings-menu summary.active {
-    background: var(--primary-soft);
-    color: var(--primary);
-    font-weight: 600;
-  }
-
-  .settings-menu {
-    position: relative;
-  }
-
-  .settings-menu summary {
-    list-style: none;
-    cursor: pointer;
-    user-select: none;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-  }
-
-  .settings-menu summary::-webkit-details-marker {
-    display: none;
-  }
-
-  .settings-menu[open] summary {
-    background: var(--primary-soft);
-  }
-
-  .submenu {
-    position: absolute;
-    right: 0;
-    top: calc(100% + 0.45rem);
-    min-width: 150px;
-    background: var(--surface-strong);
-    border: 1px solid var(--surface-border);
-    border-radius: 14px;
-    padding: 0.35rem;
-    display: grid;
-    gap: 0.2rem;
-    box-shadow: var(--shadow-md);
-    z-index: 20;
-  }
-
-  .submenu a {
-    padding: 0.45rem 0.55rem;
-    border-radius: 10px;
-    transition: background var(--transition-fast);
-  }
-
-  .submenu a:hover {
-    background: var(--primary-soft);
-  }
-
-  .theme-toggle {
-    border: 1px solid var(--ghost-border);
-    background: var(--surface-soft);
-    color: var(--ghost-color);
-    border-radius: var(--radius-full);
-    padding: 0.35rem 0.75rem;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    cursor: pointer;
-    transition: background var(--transition-fast);
-  }
-
-  .theme-toggle:hover {
-    background: var(--primary-soft);
-  }
-
-  .theme-toggle.compact {
-    padding: 0.35rem;
   }
 
   .content {
@@ -466,108 +254,20 @@
     max-width: var(--content-max-width);
     margin: 0 auto;
     width: 100%;
-  }
-
-  /* Mobile controls */
-  .mobile-controls {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-  }
-
-  .hamburger {
-    border: 1px solid var(--ghost-border);
-    background: var(--surface-soft);
-    color: var(--ghost-color);
-    border-radius: var(--radius-full);
-    width: 2.4rem;
-    height: 2.4rem;
-    padding: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-  }
-
-  /* Mobile overlay */
-  .mobile-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.5);
-    z-index: 90;
-    border: none;
-    cursor: pointer;
-  }
-
-  /* Mobile nav drawer */
-  .mobile-nav {
-    position: fixed;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: min(300px, 80vw);
-    background: var(--surface-strong);
-    backdrop-filter: blur(16px);
-    border-left: 1px solid var(--surface-border);
-    z-index: 100;
-    padding: var(--space-10) var(--space-6);
-    display: grid;
-    gap: var(--space-1);
-    align-content: start;
-    transform: translateX(100%);
-    transition: transform var(--transition-slow);
-  }
-
-  .mobile-nav.open {
-    transform: translateX(0);
-  }
-
-  .mobile-link {
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    padding: var(--space-3) var(--space-4);
-    border-radius: var(--radius-md);
-    font-size: var(--text-md);
-    transition: background var(--transition-fast);
-  }
-
-  .mobile-link:hover {
-    background: var(--primary-soft);
-  }
-
-  .mobile-link.active {
-    background: var(--primary-soft);
-    color: var(--primary);
-    font-weight: 600;
-  }
-
-  .mobile-divider {
-    height: 1px;
-    background: var(--surface-border);
-    margin: var(--space-2) 0;
-  }
-
-  /* Responsive visibility */
-  .desktop-only {
-    display: flex;
-  }
-
-  .mobile-only {
-    display: none;
+    box-sizing: border-box;
   }
 
   @media (max-width: 800px) {
-    .desktop-only {
-      display: none !important;
+    .app-shell.with-chrome {
+      display: block;
     }
 
-    .mobile-only {
-      display: flex !important;
+    .content {
+      padding: var(--space-6);
     }
 
-    .top-bar-inner {
-      padding: var(--space-4) var(--space-6);
+    .main-column.with-mobile-nav .content {
+      padding-bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom) + var(--space-6));
     }
   }
 </style>

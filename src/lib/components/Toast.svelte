@@ -112,7 +112,13 @@
     .toast-stack {
       left: var(--space-4);
       right: var(--space-4);
-      bottom: var(--space-4);
+      bottom: calc(var(--mobile-nav-height, 64px) + env(safe-area-inset-bottom) + var(--space-3));
+    }
+  }
+
+  @media (min-width: 501px) and (max-width: 800px) {
+    .toast-stack {
+      bottom: calc(var(--mobile-nav-height, 64px) + env(safe-area-inset-bottom) + var(--space-4));
     }
   }
 </style>

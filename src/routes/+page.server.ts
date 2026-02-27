@@ -15,13 +15,20 @@ const EMPTY_MOMENTUM = {
   highFitUnread7d: 0
 };
 
-const buildHighFitUnreadHref = (scoreCutoff: number) => {
+const buildUnreadHref = (options: { scoreCutoff?: number; sinceDays?: number } = {}) => {
   const params = new URLSearchParams();
   params.set('read', 'unread');
   params.set('sort', 'unread_first');
 
-  for (let score = 5; score >= 1; score -= 1) {
-    if (score >= scoreCutoff) params.append('score', String(score));
+  if (options.sinceDays && Number.isFinite(options.sinceDays)) {
+    params.set('sinceDays', String(Math.max(1, Math.round(options.sinceDays))));
+  }
+
+  if (options.scoreCutoff && Number.isFinite(options.scoreCutoff)) {
+    const scoreCutoff = Math.max(1, Math.min(5, Math.round(options.scoreCutoff)));
+    for (let score = 5; score >= 1; score -= 1) {
+      if (score >= scoreCutoff) params.append('score', String(score));
+    }
   }
 
   return `/articles?${params.toString()}`;
@@ -85,8 +92,20 @@ export const load = async ({ platform, request, depends, setHeaders, locals }) =
       windowDays: queueConfig.windowDays,
       limit: queueConfig.limit,
       scoreCutoff: queueConfig.scoreCutoff,
-      hrefUnread: '/articles?read=unread&sort=unread_first',
-      hrefHighFitUnread: buildHighFitUnreadHref(queueConfig.scoreCutoff)
+      hrefUnread: buildUnreadHref(),
+      hrefHighFitUnread: buildUnreadHref({
+        scoreCutoff: queueConfig.scoreCutoff,
+        sinceDays: 7
+      })
+    },
+    momentumLinks: {
+      unreadTotal: buildUnreadHref(),
+      unread24h: buildUnreadHref({ sinceDays: 1 }),
+      unread7d: buildUnreadHref({ sinceDays: 7 }),
+      highFitUnread7d: buildUnreadHref({
+        scoreCutoff: queueConfig.scoreCutoff,
+        sinceDays: 7
+      })
     },
     readingQueue,
     momentum

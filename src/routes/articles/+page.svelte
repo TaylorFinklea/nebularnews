@@ -61,6 +61,7 @@
   let query = data.q ?? '';
   let selectedScores = [...(data.selectedScores ?? DEFAULT_SCORE_FILTER)];
   let readFilter = data.readFilter ?? 'all';
+  let sinceDays = data.sinceDays ?? null;
   let sort = data.sort ?? 'newest';
   let view = data.view ?? 'list';
   let cardLayout = data.layout ?? 'split';
@@ -79,11 +80,11 @@
   let statusMessage = '';
 
   const syncFilterStateFromData = () => {
-    const nextState = { q: data.q ?? '', selectedScores: data.selectedScores ?? DEFAULT_SCORE_FILTER, readFilter: data.readFilter ?? 'all', sort: data.sort ?? 'newest', view: data.view ?? 'list', layout: data.layout ?? 'split', selectedReactions: data.selectedReactions ?? DEFAULT_REACTION_FILTER, selectedTagIds: data.selectedTagIds ?? [] };
+    const nextState = { q: data.q ?? '', selectedScores: data.selectedScores ?? DEFAULT_SCORE_FILTER, readFilter: data.readFilter ?? 'all', sinceDays: data.sinceDays ?? null, sort: data.sort ?? 'newest', view: data.view ?? 'list', layout: data.layout ?? 'split', selectedReactions: data.selectedReactions ?? DEFAULT_REACTION_FILTER, selectedTagIds: data.selectedTagIds ?? [] };
     const nextKey = JSON.stringify(nextState);
     if (nextKey === lastDataSyncKey) return;
     lastDataSyncKey = nextKey;
-    query = nextState.q; selectedScores = [...nextState.selectedScores]; readFilter = nextState.readFilter;
+    query = nextState.q; selectedScores = [...nextState.selectedScores]; readFilter = nextState.readFilter; sinceDays = nextState.sinceDays;
     sort = nextState.sort; view = nextState.view; cardLayout = nextState.layout;
     selectedReactions = [...nextState.selectedReactions]; selectedTagIds = [...nextState.selectedTagIds];
   };
@@ -309,6 +310,7 @@
     if (data.q) params.set('q', data.q);
     for (const score of data.selectedScores ?? []) params.append('score', score);
     if (data.readFilter && data.readFilter !== 'all') params.set('read', data.readFilter);
+    if (data.sinceDays) params.set('sinceDays', String(data.sinceDays));
     if (data.sort && data.sort !== 'newest') params.set('sort', data.sort);
     if (data.view && data.view !== 'list') params.set('view', data.view);
     for (const reaction of data.selectedReactions ?? []) params.append('reaction', reaction);
@@ -323,9 +325,10 @@
     return `/articles/${articleId}?from=${encodeURIComponent(from)}`;
   };
 
-  $: hasActiveFilters = (data.q || (data.selectedScores?.length ?? 0) < 6 || data.readFilter !== 'all' || (data.selectedReactions?.length ?? 0) < 3 || (data.selectedTagIds?.length ?? 0) > 0);
+  $: hasActiveFilters = (data.q || data.sinceDays || (data.selectedScores?.length ?? 0) < 6 || data.readFilter !== 'all' || (data.selectedReactions?.length ?? 0) < 3 || (data.selectedTagIds?.length ?? 0) > 0);
   $: activeFilterCount = [
     data.q ? 1 : 0,
+    data.sinceDays ? 1 : 0,
     (data.selectedScores?.length ?? 6) < 6 ? 1 : 0,
     data.readFilter && data.readFilter !== 'all' ? 1 : 0,
     (data.selectedReactions?.length ?? 3) < 3 ? 1 : 0,
@@ -338,6 +341,9 @@
 <PageHeader title="Articles" description="Review summaries and tune the relevance score.">
   <svelte:fragment slot="actions">
     <div class="header-actions">
+      {#if data.sinceDays}
+        <span class="article-count">Last {data.sinceDays} days</span>
+      {/if}
       <span class="article-count">{data.pagination?.total ?? 0} articles</span>
     </div>
   </svelte:fragment>
@@ -364,6 +370,9 @@
 
 {#if filtersOpen}
   <form class="filters-panel" method="get">
+    {#if sinceDays}
+      <input type="hidden" name="sinceDays" value={sinceDays} />
+    {/if}
     <div class="filter-row">
       <div class="filter-group">
         <label class="filter-label" for="q-input">Search</label>

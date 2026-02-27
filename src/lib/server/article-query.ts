@@ -19,6 +19,7 @@ export type ArticleQueryInput = {
   readFilter: 'all' | 'read' | 'unread';
   sort: SortValue;
   selectedTagIds: string[];
+  minPublishedAt?: number | null;
   groupedByPublishedAt?: boolean;
 };
 
@@ -62,6 +63,11 @@ const buildWhere = (input: ArticleQueryInput) => {
   if (query) {
     conditions.push('article_search MATCH ?');
     params.push(safeQuery || query);
+  }
+
+  if (Number.isFinite(input.minPublishedAt) && Number(input.minPublishedAt) > 0) {
+    conditions.push('COALESCE(a.published_at, a.fetched_at, 0) >= ?');
+    params.push(Math.round(Number(input.minPublishedAt)));
   }
 
   if (input.selectedScores.length < SCORE_VALUES.length) {

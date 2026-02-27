@@ -12,6 +12,7 @@ import { listTags, resolveTagsByTokens } from '$lib/server/tags';
 import { isOptimisticMutationsEnabled } from '$lib/server/flags';
 
 const PAGE_SIZE = 40;
+const DAY_MS = 1000 * 60 * 60 * 24;
 const VIEW_VALUES = ['list', 'grouped'] as const;
 type ViewValue = (typeof VIEW_VALUES)[number];
 const LAYOUT_VALUES = ['split', 'stacked'] as const;
@@ -46,6 +47,13 @@ export const load = async ({ platform, url, setHeaders }) => {
   const startedAt = Date.now();
   const defaultCardLayout = await getArticleCardLayout(platform.env.DB);
   const query = url.searchParams.get('q')?.trim() ?? '';
+  const sinceDays = (() => {
+    const parsed = Number(url.searchParams.get('sinceDays') ?? '');
+    if (!Number.isFinite(parsed)) return null;
+    if (parsed <= 0) return null;
+    return Math.min(30, Math.max(1, Math.round(parsed)));
+  })();
+  const minPublishedAt = sinceDays ? startedAt - sinceDays * DAY_MS : null;
   const requestedPage = Math.max(1, Number(url.searchParams.get('page') ?? 1) || 1);
   const view = (() => {
     const value = (url.searchParams.get('view') ?? 'list').trim().toLowerCase();
@@ -91,6 +99,7 @@ export const load = async ({ platform, url, setHeaders }) => {
     readFilter,
     sort,
     selectedTagIds,
+    minPublishedAt,
     groupedByPublishedAt: view === 'grouped'
   });
   const total = firstPass.total;
@@ -109,6 +118,7 @@ export const load = async ({ platform, url, setHeaders }) => {
           readFilter,
           sort,
           selectedTagIds,
+          minPublishedAt,
           groupedByPublishedAt: view === 'grouped'
         });
 
@@ -118,6 +128,7 @@ export const load = async ({ platform, url, setHeaders }) => {
     articles: result.articles,
     q: query,
     selectedScores,
+    sinceDays,
     readFilter,
     sort,
     view,

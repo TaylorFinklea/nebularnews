@@ -457,27 +457,27 @@
   </div>
 
   <div class="momentum-grid">
-    <div class="momentum-card">
+    <a class="momentum-card is-link" href={data.momentumLinks?.unreadTotal ?? '/articles?read=unread&sort=unread_first'}>
       <div class="momentum-num">{momentum.unreadTotal}</div>
       <div class="momentum-label">Unread total</div>
-    </div>
-    <div class="momentum-card">
+    </a>
+    <a class="momentum-card is-link" href={data.momentumLinks?.unread24h ?? '/articles?read=unread&sort=unread_first&sinceDays=1'}>
       <div class="momentum-num">{momentum.unread24h}</div>
       <div class="momentum-label">Unread · 24h</div>
-    </div>
-    <div class="momentum-card">
+    </a>
+    <a class="momentum-card is-link" href={data.momentumLinks?.unread7d ?? '/articles?read=unread&sort=unread_first&sinceDays=7'}>
       <div class="momentum-num">{momentum.unread7d}</div>
       <div class="momentum-label">Unread · 7d</div>
-    </div>
-    <div class="momentum-card">
+    </a>
+    <a class="momentum-card is-link" href={data.momentumLinks?.highFitUnread7d ?? '/articles?read=unread&sort=unread_first&sinceDays=7&score=5&score=4&score=3'}>
       <div class="momentum-num">{momentum.highFitUnread7d}</div>
       <div class="momentum-label">High fit · 7d</div>
-    </div>
+    </a>
   </div>
 
   <div class="quick-links">
     <a href={data.queueConfig?.hrefUnread ?? '/articles?read=unread&sort=unread_first'}>Open unread queue</a>
-    <a href={data.queueConfig?.hrefHighFitUnread ?? '/articles?read=unread&sort=unread_first&score=5&score=4&score=3'}>Open high-fit unread</a>
+    <a href={data.queueConfig?.hrefHighFitUnread ?? '/articles?read=unread&sort=unread_first&sinceDays=7&score=5&score=4&score=3'}>Open high-fit unread</a>
     <a href="/articles">Browse all articles</a>
   </div>
 </section>
@@ -825,6 +825,18 @@
     border-radius: var(--radius-lg);
     padding: var(--space-4);
     text-align: center;
+  }
+
+  .momentum-card.is-link {
+    text-decoration: none;
+    color: inherit;
+    transition: transform var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
+  }
+
+  .momentum-card.is-link:hover {
+    transform: translateY(-1px);
+    border-color: var(--ghost-border);
+    box-shadow: var(--shadow-sm);
   }
 
   .momentum-num {

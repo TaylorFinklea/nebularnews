@@ -10,6 +10,8 @@ import {
 } from '$lib/server/article-query';
 import { resolveTagsByTokens } from '$lib/server/tags';
 
+const DAY_MS = 1000 * 60 * 60 * 24;
+
 const normalizeScores = (values: string[]): ScoreValue[] => {
   const requested = [...new Set(values.map((entry) => entry.trim().toLowerCase()).filter(Boolean))];
   const expanded = requested.flatMap((value) => {
@@ -36,9 +38,17 @@ const normalizeSort = (value: string | null): SortValue => {
 };
 
 export const GET = async ({ url, platform }) => {
+  const startedAt = Date.now();
   const limit = Math.max(1, Math.min(50, Number(url.searchParams.get('limit') ?? 20)));
   const offset = Math.max(0, Number(url.searchParams.get('offset') ?? 0));
   const query = url.searchParams.get('q')?.trim() ?? '';
+  const sinceDays = (() => {
+    const parsed = Number(url.searchParams.get('sinceDays') ?? '');
+    if (!Number.isFinite(parsed)) return null;
+    if (parsed <= 0) return null;
+    return Math.min(30, Math.max(1, Math.round(parsed)));
+  })();
+  const minPublishedAt = sinceDays ? startedAt - sinceDays * DAY_MS : null;
   const readFilterRaw = (url.searchParams.get('read') ?? 'all').trim().toLowerCase();
   const readFilter = readFilterRaw === 'read' || readFilterRaw === 'unread' ? readFilterRaw : 'all';
   const sort = normalizeSort(url.searchParams.get('sort'));
@@ -73,7 +83,8 @@ export const GET = async ({ url, platform }) => {
     selectedReactions,
     readFilter,
     sort,
-    selectedTagIds
+    selectedTagIds,
+    minPublishedAt
   });
 
   return json({
@@ -83,9 +94,9 @@ export const GET = async ({ url, platform }) => {
     offset,
     readFilter,
     sort,
+    sinceDays,
     selectedScores,
     selectedReactions,
     selectedTagIds
   });
 };
-

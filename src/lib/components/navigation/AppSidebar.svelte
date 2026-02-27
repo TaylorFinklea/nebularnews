@@ -141,10 +141,11 @@
   .sidebar-inner {
     height: 100%;
     padding: var(--space-5) var(--space-3);
-    display: grid;
-    grid-template-rows: auto auto 1fr auto;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
     gap: var(--space-4);
-    overflow: hidden;
+    overflow-y: auto;
   }
 
   /* ── Brand ── */
@@ -194,7 +195,8 @@
   }
 
   .workspace-block {
-    display: grid;
+    display: flex;
+    flex-direction: column;
     gap: var(--space-2);
   }
 
@@ -287,6 +289,7 @@
   .sidebar-footer {
     display: grid;
     gap: var(--space-1);
+    margin-top: auto;
     padding-top: var(--space-3);
     border-top: 1px solid var(--surface-border);
   }

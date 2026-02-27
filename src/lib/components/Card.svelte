@@ -11,12 +11,12 @@
 
 <style>
   .card {
-    padding: var(--space-6);
-    border-radius: var(--radius-xl);
-    box-shadow: var(--shadow-md);
+    padding: var(--space-5);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
     border: 1px solid var(--surface-border);
     display: grid;
-    gap: var(--space-4);
+    gap: var(--space-3);
     align-content: start;
   }
   .card-strong {

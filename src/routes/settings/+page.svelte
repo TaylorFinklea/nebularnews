@@ -1099,7 +1099,6 @@
   }
 
   .settings-subnav a {
-    border: 1px solid var(--surface-border);
     border-radius: var(--radius-full);
     padding: 0.2rem 0.75rem;
     font-size: var(--text-sm);
@@ -1153,7 +1152,7 @@
   .feature-name {
     font-size: var(--text-sm);
     color: var(--muted-text);
-    font-weight: 600;
+    font-weight: 500;
   }
 
   /* Model sections */
@@ -1166,7 +1165,6 @@
   .model-section {
     display: grid;
     gap: var(--space-4);
-    border: 1px solid var(--surface-border);
     border-radius: var(--radius-lg);
     padding: var(--space-5);
     background: var(--surface-soft);
@@ -1227,7 +1225,7 @@
     text-align: left;
     padding: var(--space-3);
     border-radius: var(--radius-md);
-    border: 1px solid var(--surface-border);
+    border: none;
     background: var(--surface-soft);
     color: var(--text-color);
     cursor: pointer;
@@ -1235,18 +1233,17 @@
   }
 
   .preset-btn:hover {
-    border-color: var(--ghost-border);
+    background: var(--primary-soft);
   }
 
   .preset-btn.active {
-    border-color: var(--ghost-border);
     background: var(--primary-soft);
     box-shadow: inset 0 0 0 1px rgba(138, 110, 255, 0.25);
   }
 
   .preset-title {
     font-size: var(--text-sm);
-    font-weight: 700;
+    font-weight: 600;
   }
 
   .preset-desc {
@@ -1256,7 +1253,6 @@
   }
 
   .advanced {
-    border: 1px solid var(--surface-border);
     border-radius: var(--radius-lg);
     background: var(--surface-soft);
     padding: var(--space-3) var(--space-4);
@@ -1294,7 +1290,6 @@
   .scheduler-apply {
     display: grid;
     gap: var(--space-2);
-    border: 1px solid var(--surface-border);
     border-radius: var(--radius-lg);
     background: var(--surface-soft);
     padding: var(--space-3);
@@ -1333,7 +1328,6 @@
   .lane-toggle {
     display: inline-grid;
     grid-template-columns: 1fr 1fr;
-    border: 1px solid var(--input-border);
     border-radius: var(--radius-full);
     padding: 0.2rem;
     background: var(--surface-soft);
@@ -1348,7 +1342,7 @@
     border-radius: var(--radius-full);
     padding: 0.4rem 0.75rem;
     cursor: pointer;
-    font-weight: 600;
+    font-weight: 500;
     font-size: var(--text-sm);
     color: var(--muted-text);
     transition: background var(--transition-fast), color var(--transition-fast);
@@ -1410,7 +1404,7 @@
 
   .maintenance-value {
     font-size: var(--text-2xl);
-    font-weight: 700;
+    font-weight: 600;
     line-height: 1.1;
     margin-top: 0.15rem;
   }
@@ -1424,7 +1418,6 @@
 
   code {
     background: var(--surface-soft);
-    border: 1px solid var(--surface-border);
     border-radius: var(--radius-sm);
     padding: 0.1rem 0.35rem;
     font-size: var(--text-sm);

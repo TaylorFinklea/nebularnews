@@ -29,8 +29,8 @@
   }
 
   h1 {
-    font-family: 'Source Serif 4', serif;
     font-size: var(--text-3xl);
+    font-weight: 600;
     margin: 0 0 var(--space-2);
     line-height: 1.2;
   }

@@ -49,6 +49,25 @@ const createLocalStorage = () => {
 describe('Layout navigation shell', () => {
   beforeEach(() => {
     cleanup();
+    // Polyfill Web Animations API for JSDOM (Svelte transitions use element.animate)
+    if (!Element.prototype.animate) {
+      Element.prototype.animate = vi.fn().mockImplementation(() => {
+        const anim = {
+          onfinish: null as (() => void) | null,
+          cancel: vi.fn(),
+          finish: vi.fn(),
+          play: vi.fn(),
+          pause: vi.fn(),
+          reverse: vi.fn(),
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          finished: Promise.resolve()
+        };
+        // Fire onfinish asynchronously so Svelte cleans up transition elements
+        queueMicrotask(() => { if (anim.onfinish) anim.onfinish(); });
+        return anim;
+      });
+    }
     vi.stubGlobal('localStorage', createLocalStorage());
     document.cookie = '';
     document.documentElement.dataset.theme = 'dark';

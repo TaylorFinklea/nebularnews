@@ -449,7 +449,7 @@
 
   .stat-val {
     font-size: var(--text-2xl);
-    font-weight: 700;
+    font-weight: 600;
     color: var(--primary);
     line-height: 1;
   }
@@ -503,7 +503,6 @@
     padding: 0.3rem 0.75rem;
     border-radius: var(--radius-full);
     background: var(--surface-soft);
-    border: 1px solid var(--surface-border);
     text-transform: capitalize;
     font-size: var(--text-sm);
     color: var(--muted-text);
@@ -512,9 +511,8 @@
 
   .filter-tab.active {
     background: var(--primary-soft);
-    border-color: var(--ghost-border);
     color: var(--primary);
-    font-weight: 600;
+    font-weight: 500;
   }
 
   .filter-count {
@@ -522,7 +520,7 @@
     border-radius: var(--radius-full);
     padding: 0 0.35rem;
     font-size: 0.72rem;
-    font-weight: 700;
+    font-weight: 600;
   }
 
   .live-status {

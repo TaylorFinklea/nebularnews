@@ -51,7 +51,6 @@
     pointer-events: auto;
     padding: 0.7rem 0.9rem;
     border-radius: var(--radius-md);
-    border: 1px solid var(--surface-border);
     backdrop-filter: blur(12px);
     display: flex;
     align-items: center;
@@ -98,12 +97,12 @@
 
   .toast-action {
     background: transparent;
-    border: 1px solid var(--surface-border);
-    color: var(--text-color);
+    border: none;
+    color: var(--primary);
     border-radius: var(--radius-full);
     padding: 0.2rem 0.55rem;
     font-size: var(--text-xs);
-    font-weight: 600;
+    font-weight: 500;
     cursor: pointer;
     flex-shrink: 0;
   }

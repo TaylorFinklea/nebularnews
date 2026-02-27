@@ -419,12 +419,11 @@
 
   .count {
     background: var(--surface-soft);
-    border: 1px solid var(--surface-border);
     border-radius: var(--radius-full);
     padding: 0.1rem 0.55rem;
     font-size: var(--text-sm);
     color: var(--muted-text);
-    font-weight: 600;
+    font-weight: 500;
   }
 
   .table-wrap {

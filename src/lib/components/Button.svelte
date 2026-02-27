@@ -53,7 +53,7 @@
   .btn-primary {
     background: var(--button-bg);
     color: var(--button-text);
-    font-weight: 600;
+    font-weight: 500;
   }
 
   .btn-ghost {

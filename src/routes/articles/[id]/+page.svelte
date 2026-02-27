@@ -700,7 +700,6 @@
   }
 
   h1 {
-    font-family: 'Source Serif 4', serif;
     font-size: var(--text-3xl);
     margin: 0 0 var(--space-2);
     line-height: 1.2;
@@ -730,7 +729,7 @@
     border-radius: var(--radius-full);
     padding: 0.48rem 0.95rem;
     font-size: var(--text-sm);
-    font-weight: 600;
+    font-weight: 500;
     text-decoration: none;
   }
 
@@ -739,7 +738,6 @@
     margin-bottom: var(--space-6);
     border-radius: var(--radius-xl);
     overflow: hidden;
-    border: 1px solid var(--surface-border);
     background: var(--surface-soft);
     max-height: 340px;
   }
@@ -768,7 +766,6 @@
   /* Score banner */
   .score-banner {
     background: var(--primary-soft);
-    border: 1px solid var(--ghost-border);
     border-radius: var(--radius-xl);
     padding: var(--space-5);
     display: grid;
@@ -781,7 +778,7 @@
     gap: 0.45rem;
     font-size: var(--text-lg);
     color: var(--primary);
-    font-weight: 700;
+    font-weight: 600;
   }
 
   .score-reason {
@@ -833,7 +830,7 @@
 
   .reaction-btn {
     background: var(--surface-soft);
-    border: 1px solid var(--input-border);
+    border: none;
     border-radius: var(--radius-full);
     width: 2.2rem;
     height: 2.2rem;
@@ -847,7 +844,6 @@
 
   .reaction-btn.active {
     background: var(--primary-soft);
-    border-color: var(--ghost-border);
     color: var(--primary);
   }
 
@@ -863,7 +859,6 @@
     align-items: center;
     gap: 0.3rem;
     background: var(--surface-soft);
-    border: 1px solid var(--input-border);
     border-radius: var(--radius-full);
     padding: 0.25rem 0.6rem;
     font-size: var(--text-sm);
@@ -872,14 +867,14 @@
     transition: background var(--transition-fast);
   }
 
-  .tag-chip:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 15%, transparent); border-color: var(--danger); }
+  .tag-chip:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 15%, transparent); }
   .tag-chip:disabled { opacity: 0.6; cursor: default; }
 
   .tag-ai {
     font-size: 0.68rem;
     color: var(--muted-text);
-    border: 1px solid var(--surface-border);
     border-radius: var(--radius-full);
+    background: var(--surface-soft);
     padding: 0 0.3rem;
   }
 
@@ -894,7 +889,6 @@
     align-items: center;
     gap: 0.2rem;
     background: color-mix(in srgb, #4ade80 20%, transparent);
-    border: 1px solid color-mix(in srgb, #4ade80 45%, var(--surface-border));
     border-radius: var(--radius-full);
     padding: 0.2rem 0.35rem 0.2rem 0.6rem;
     font-size: var(--text-sm);
@@ -967,7 +961,7 @@
 
   .score-num {
     font-size: 2rem;
-    font-weight: 700;
+    font-weight: 600;
     color: var(--primary);
     line-height: 1;
   }
@@ -997,7 +991,7 @@
   .article-heading {
     margin: 0.25rem 0 0;
     font-size: 1.05rem;
-    font-weight: 700;
+    font-weight: 600;
   }
 
   .key-list {

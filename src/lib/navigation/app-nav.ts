@@ -23,7 +23,7 @@ export type AppNavItem = {
   icon: AppNavItemIcon;
   activePrefixes: string[];
   exact?: boolean;
-  group: 'primary' | 'manage';
+  group: 'primary' | 'workspace';
   mobilePrimary: boolean;
 };
 
@@ -71,7 +71,7 @@ export const APP_NAV_ITEMS: readonly AppNavItem[] = [
     href: '/tags',
     icon: 'tag',
     activePrefixes: ['/tags'],
-    group: 'manage',
+    group: 'workspace',
     mobilePrimary: false
   },
   {
@@ -80,7 +80,7 @@ export const APP_NAV_ITEMS: readonly AppNavItem[] = [
     href: '/feeds',
     icon: 'rss',
     activePrefixes: ['/feeds'],
-    group: 'manage',
+    group: 'workspace',
     mobilePrimary: false
   },
   {
@@ -89,7 +89,7 @@ export const APP_NAV_ITEMS: readonly AppNavItem[] = [
     href: '/jobs',
     icon: 'clockPlay',
     activePrefixes: ['/jobs'],
-    group: 'manage',
+    group: 'workspace',
     mobilePrimary: false
   }
 ];

@@ -8,6 +8,7 @@
     IconMoonStars,
     IconRss,
     IconSettings,
+    IconStars,
     IconSun,
     IconTag
   } from '$lib/icons';
@@ -30,7 +31,7 @@
   };
 
   const primaryItems = APP_NAV_ITEMS.filter((item) => item.group === 'primary');
-  const manageItems = APP_NAV_ITEMS.filter((item) => item.group === 'manage');
+  const workspaceItems = APP_NAV_ITEMS.filter((item) => item.group === 'workspace');
   const themeLabel = () => (theme === 'dark' ? 'Light mode' : 'Dark mode');
   const collapseLabel = () => (collapsed ? 'Expand sidebar' : 'Collapse sidebar');
   const isActive = (item: AppNavItem) => isAppNavItemActive(item, currentPath);
@@ -44,8 +45,13 @@
       aria-label="Nebular News"
       title={collapsed ? 'Nebular News' : undefined}
     >
-      <span class="brand-mark">Nebular</span>
-      <span class="brand-accent">News</span>
+      <span class="brand-icon">
+        <IconStars size={22} stroke={1.8} />
+      </span>
+      <span class="brand-text">
+        <span class="brand-mark">Nebular</span>
+        <span class="brand-accent">News</span>
+      </span>
     </a>
 
     <nav class="nav-group" aria-label="Primary navigation">
@@ -66,10 +72,10 @@
       {/each}
     </nav>
 
-    <div class="manage-block">
-      <div class="block-label">Manage</div>
-      <nav class="nav-group" aria-label="Management navigation">
-        {#each manageItems as item}
+    <div class="workspace-block">
+      <div class="block-label">Workspace</div>
+      <nav class="nav-group" aria-label="Workspace navigation">
+        {#each workspaceItems as item}
           {@const Icon = iconByName[item.icon]}
           {@const active = isActive(item)}
           <a
@@ -138,17 +144,39 @@
     display: grid;
     grid-template-rows: auto auto 1fr auto;
     gap: var(--space-4);
+    overflow: hidden;
   }
 
+  /* ── Brand ── */
   .brand {
-    font-family: 'Source Serif 4', serif;
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+  }
+
+  .brand-icon {
+    flex-shrink: 0;
+    width: 2rem;
+    height: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--primary);
+  }
+
+  .brand-text {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.35rem;
+    font-family: 'Space Grotesk', system-ui, sans-serif;
     font-size: 1.35rem;
     letter-spacing: 0.02em;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    padding: 0.1rem var(--space-2);
-    border-radius: var(--radius-sm);
+    white-space: nowrap;
+    opacity: 1;
+    transition: opacity 0.2s ease 0.05s;
   }
 
   .brand-mark {
@@ -159,12 +187,13 @@
     color: var(--primary);
   }
 
+  /* ── Nav group ── */
   .nav-group {
     display: grid;
     gap: var(--space-1);
   }
 
-  .manage-block {
+  .workspace-block {
     display: grid;
     gap: var(--space-2);
   }
@@ -175,36 +204,67 @@
     text-transform: uppercase;
     color: var(--muted-text);
     padding: 0 var(--space-2);
+    white-space: nowrap;
+    opacity: 1;
+    transition: opacity 0.12s ease;
   }
 
+  /* ── Nav links ── */
   .nav-link,
   .sidebar-action {
+    position: relative;
     display: flex;
     align-items: center;
     gap: var(--space-3);
     border-radius: var(--radius-md);
     padding: 0.55rem var(--space-3);
-    color: var(--text-color);
+    color: var(--muted-text);
     background: transparent;
-    border: 1px solid transparent;
+    border: none;
     font: inherit;
     text-align: left;
     cursor: pointer;
-    transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+    overflow: hidden;
+    transition:
+      background 0.15s ease,
+      color 0.15s ease;
   }
 
   .nav-link:hover,
   .sidebar-action:hover {
     background: var(--primary-soft);
+    color: var(--text-color);
+  }
+
+  /* Active accent bar */
+  .nav-link::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 6px;
+    bottom: 6px;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background: var(--primary);
+    opacity: 0;
+    transform: scaleY(0.4);
+    transition:
+      opacity 0.15s ease,
+      transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .nav-link.active::before {
+    opacity: 1;
+    transform: scaleY(1);
   }
 
   .nav-link.active {
-    background: var(--primary-soft);
-    border-color: var(--ghost-border);
     color: var(--primary);
-    font-weight: 600;
+    background: var(--primary-soft);
+    font-weight: 500;
   }
 
+  /* ── Icon / Label ── */
   .nav-icon {
     width: 1.35rem;
     height: 1.35rem;
@@ -216,8 +276,14 @@
 
   .nav-label {
     white-space: nowrap;
+    opacity: 1;
+    transform: translateX(0);
+    transition:
+      opacity 0.15s ease,
+      transform 0.15s ease;
   }
 
+  /* ── Footer ── */
   .sidebar-footer {
     display: grid;
     gap: var(--space-1);
@@ -226,13 +292,14 @@
   }
 
   .collapse-icon {
-    transition: transform var(--transition-fast);
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .collapse-icon.is-collapsed {
     transform: rotate(180deg);
   }
 
+  /* ── Collapsed state ── */
   .sidebar.collapsed .sidebar-inner {
     padding-left: var(--space-2);
     padding-right: var(--space-2);
@@ -240,14 +307,33 @@
 
   .sidebar.collapsed .brand {
     justify-content: center;
-    padding: 0.25rem 0;
+    padding: var(--space-1) 0;
   }
 
-  .sidebar.collapsed .brand-mark,
-  .sidebar.collapsed .brand-accent,
-  .sidebar.collapsed .block-label,
+  .sidebar.collapsed .brand-text {
+    opacity: 0;
+    width: 0;
+    overflow: hidden;
+    transition: opacity 0.12s ease, width 0s linear 0.12s;
+  }
+
+  .sidebar.collapsed .block-label {
+    opacity: 0;
+    height: 0;
+    overflow: hidden;
+    transition: opacity 0.1s ease, height 0s linear 0.1s;
+  }
+
   .sidebar.collapsed .nav-label {
-    display: none;
+    opacity: 0;
+    transform: translateX(-8px);
+    width: 0;
+    overflow: hidden;
+    pointer-events: none;
+    transition:
+      opacity 0.12s ease,
+      transform 0.12s ease,
+      width 0s linear 0.12s;
   }
 
   .sidebar.collapsed .nav-link,
@@ -257,6 +343,7 @@
     padding-right: var(--space-2);
   }
 
+  /* ── Hide on mobile ── */
   @media (max-width: 800px) {
     .sidebar {
       display: none;

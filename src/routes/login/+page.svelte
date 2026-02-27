@@ -35,7 +35,6 @@
   }
 
   h1 {
-    font-family: 'Source Serif 4', serif;
     margin-top: 0;
   }
 

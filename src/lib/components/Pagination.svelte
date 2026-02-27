@@ -75,10 +75,11 @@
     align-items: center;
     justify-content: center;
     min-width: 3rem;
-    border: 1px solid var(--ghost-border);
+    border: none;
     border-radius: var(--radius-full);
     padding: 0.25rem 0.7rem;
     color: var(--ghost-color);
+    background: var(--surface-soft);
     text-decoration: none;
     font-size: var(--text-sm);
     transition: background var(--transition-fast);

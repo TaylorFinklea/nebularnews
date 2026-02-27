@@ -1,5 +1,7 @@
 <script lang="ts">
   import { tick } from 'svelte';
+  import { fly, fade } from 'svelte/transition';
+  import { cubicOut } from 'svelte/easing';
   import {
     IconArticle,
     IconClockPlay,
@@ -19,7 +21,8 @@
   export let onToggleTheme: () => void = () => {};
 
   let moreOpen = false;
-  let firstMoreAction: HTMLAnchorElement | null = null;
+  /** @type {HTMLAnchorElement[]} */
+  let moreItemRefs: HTMLAnchorElement[] = [];
 
   const iconByName: Record<AppNavItemIcon, typeof IconLayoutDashboard> = {
     layoutDashboard: IconLayoutDashboard,
@@ -32,7 +35,7 @@
   };
 
   const primaryItems = APP_NAV_ITEMS.filter((item) => item.mobilePrimary);
-  const moreItems = APP_NAV_ITEMS.filter((item) => item.group === 'manage');
+  const moreItems = APP_NAV_ITEMS.filter((item) => item.group === 'workspace');
   const isActive = (item: AppNavItem) => isAppNavItemActive(item, currentPath);
   const themeLabel = () => (theme === 'dark' ? 'Light mode' : 'Dark mode');
 
@@ -44,7 +47,7 @@
     moreOpen = !moreOpen;
     if (!moreOpen) return;
     await tick();
-    firstMoreAction?.focus();
+    moreItemRefs[0]?.focus();
   };
 
   const handleKeydown = (event: KeyboardEvent) => {
@@ -71,12 +74,10 @@
       href={item.href}
       class="rail-link"
       class:active
-      aria-label={item.label}
       aria-current={active ? 'page' : undefined}
-      title={item.label}
     >
-      <Icon size={20} stroke={1.9} />
-      <span class="sr-only">{item.label}</span>
+      <span class="rail-icon"><Icon size={20} stroke={1.9} /></span>
+      <span class="rail-label">{item.label}</span>
     </a>
   {/each}
   <button
@@ -85,46 +86,44 @@
     class:active={moreOpen}
     aria-label="More navigation"
     aria-expanded={moreOpen}
-    title="More"
     on:click={toggleMore}
   >
-    <IconMenu2 size={20} stroke={1.9} />
-    <span class="sr-only">More navigation</span>
+    <span class="rail-icon"><IconMenu2 size={20} stroke={1.9} /></span>
+    <span class="rail-label">More</span>
   </button>
 </nav>
 
 {#if moreOpen}
-  <button class="more-overlay" aria-label="Close more navigation" on:click={closeMore}></button>
-  <dialog class="more-sheet" open aria-modal="true" aria-label="More navigation">
-    <div class="sheet-header">More</div>
+  <button
+    class="more-overlay"
+    aria-label="Close more navigation"
+    on:click={closeMore}
+    transition:fade={{ duration: 150 }}
+  ></button>
+  <dialog
+    class="more-sheet"
+    open
+    aria-modal="true"
+    aria-label="More navigation"
+    transition:fly={{ y: 120, duration: 250, easing: cubicOut }}
+  >
+    <div class="sheet-handle" aria-hidden="true"></div>
+    <div class="sheet-header">Workspace</div>
     <div class="sheet-links">
       {#each moreItems as item, index}
         {@const Icon = iconByName[item.icon]}
         {@const active = isActive(item)}
-        {#if index === 0}
-          <a
-            bind:this={firstMoreAction}
-            href={item.href}
-            class="sheet-link"
-            class:active
-            aria-current={active ? 'page' : undefined}
-            on:click={closeMore}
-          >
-            <Icon size={18} stroke={1.9} />
-            <span>{item.label}</span>
-          </a>
-        {:else}
-          <a
-            href={item.href}
-            class="sheet-link"
-            class:active
-            aria-current={active ? 'page' : undefined}
-            on:click={closeMore}
-          >
-            <Icon size={18} stroke={1.9} />
-            <span>{item.label}</span>
-          </a>
-        {/if}
+        <a
+          bind:this={moreItemRefs[index]}
+          href={item.href}
+          class="sheet-link"
+          class:active
+          aria-current={active ? 'page' : undefined}
+          on:click={closeMore}
+        >
+          <Icon size={18} stroke={1.9} />
+          <span>{item.label}</span>
+        </a>
       {/each}
       <button type="button" class="sheet-link" on:click={handleThemeToggle}>
         {#if theme === 'dark'}
@@ -139,6 +138,7 @@
 {/if}
 
 <style>
+  /* ── Bottom rail ── */
   .bottom-rail {
     position: fixed;
     left: 0;
@@ -147,8 +147,7 @@
     z-index: 100;
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: var(--space-1);
-    padding: var(--space-2) var(--space-3) calc(var(--space-2) + env(safe-area-inset-bottom));
+    padding: var(--space-1) var(--space-2) calc(var(--space-1) + env(safe-area-inset-bottom));
     border-top: 1px solid var(--surface-border);
     background: var(--surface-strong);
     backdrop-filter: blur(14px);
@@ -156,25 +155,76 @@
     box-sizing: border-box;
   }
 
+  /* ── Rail links (stacked icon + label) ── */
   .rail-link {
-    border: 1px solid transparent;
-    border-radius: var(--radius-md);
-    background: transparent;
-    color: var(--muted-text);
-    display: inline-flex;
+    display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
+    gap: 2px;
+    position: relative;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--muted-text);
     cursor: pointer;
-    min-height: 2.45rem;
-    transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+    padding: var(--space-1) 0;
+    min-height: 2.8rem;
+    font: inherit;
+    -webkit-tap-highlight-color: transparent;
+    transition:
+      color 0.15s ease,
+      background 0.15s ease;
+  }
+
+  .rail-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+  }
+
+  .rail-label {
+    font-size: 0.65rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    line-height: 1;
+  }
+
+  /* Active top accent line */
+  .rail-link::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 25%;
+    right: 25%;
+    height: 2.5px;
+    border-radius: 0 0 2px 2px;
+    background: var(--primary);
+    opacity: 0;
+    transform: scaleX(0.4);
+    transition:
+      opacity 0.15s ease,
+      transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .rail-link.active {
     color: var(--primary);
-    background: var(--primary-soft);
-    border-color: var(--ghost-border);
   }
 
+  .rail-link.active::before {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+
+  /* Touch press feedback */
+  .rail-link:active {
+    background: var(--primary-soft);
+    transition-duration: 0s;
+  }
+
+  /* ── More overlay ── */
   .more-overlay {
     position: fixed;
     inset: 0;
@@ -184,6 +234,7 @@
     cursor: pointer;
   }
 
+  /* ── More sheet ── */
   .more-sheet {
     position: fixed;
     left: var(--space-3);
@@ -193,10 +244,19 @@
     border: 1px solid var(--surface-border);
     border-radius: var(--radius-lg);
     background: var(--surface-strong);
+    backdrop-filter: blur(16px);
     box-shadow: var(--shadow-lg);
-    padding: var(--space-4);
+    padding: var(--space-3) var(--space-4) var(--space-4);
     display: grid;
     gap: var(--space-3);
+  }
+
+  .sheet-handle {
+    width: 32px;
+    height: 3px;
+    border-radius: var(--radius-full);
+    background: var(--surface-border);
+    margin: 0 auto var(--space-1);
   }
 
   .sheet-header {
@@ -208,7 +268,7 @@
 
   .sheet-links {
     display: grid;
-    gap: var(--space-2);
+    gap: var(--space-1);
   }
 
   .sheet-link {
@@ -218,26 +278,29 @@
     align-items: center;
     gap: var(--space-3);
     border-radius: var(--radius-md);
-    border: 1px solid transparent;
+    border: none;
     background: transparent;
     color: var(--text-color);
-    padding: var(--space-3) var(--space-3);
+    padding: var(--space-3);
     cursor: pointer;
     text-align: left;
-    transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+    -webkit-tap-highlight-color: transparent;
+    transition:
+      background 0.15s ease,
+      color 0.15s ease;
   }
 
-  .sheet-link:hover {
+  .sheet-link:active {
     background: var(--primary-soft);
+    transition-duration: 0s;
   }
 
   .sheet-link.active {
-    background: var(--primary-soft);
-    border-color: var(--ghost-border);
     color: var(--primary);
-    font-weight: 600;
+    font-weight: 500;
   }
 
+  /* ── Hide on desktop ── */
   @media (min-width: 801px) {
     .bottom-rail,
     .more-overlay,

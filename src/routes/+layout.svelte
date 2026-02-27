@@ -74,7 +74,7 @@
   <title>Nebular News</title>
   <link
     rel="stylesheet"
-    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=Source+Serif+4:wght@400;600&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap"
   />
   <script>
     (() => {
@@ -136,13 +136,13 @@
     --surface: rgba(14, 22, 52, 0.78);
     --surface-strong: rgba(10, 16, 40, 0.88);
     --surface-soft: rgba(20, 28, 60, 0.7);
-    --surface-border: rgba(149, 164, 255, 0.2);
+    --surface-border: rgba(149, 164, 255, 0.10);
     --shadow-color: rgba(2, 6, 24, 0.45);
     --primary: #9a8bff;
     --primary-strong: #8573ff;
     --primary-soft: rgba(154, 139, 255, 0.2);
     --primary-contrast: #f6f8ff;
-    --button-bg: linear-gradient(135deg, #6f63ff 0%, #8f6dff 100%);
+    --button-bg: var(--primary);
     --button-text: #f6f8ff;
     --ghost-color: #b5a7ff;
     --ghost-border: rgba(154, 139, 255, 0.42);
@@ -159,16 +159,16 @@
     --nebula-b: rgba(80, 179, 255, 0.18);
     --text-color: #171e41;
     --muted-text: rgba(22, 30, 65, 0.66);
-    --surface: rgba(255, 255, 255, 0.84);
-    --surface-strong: rgba(255, 255, 255, 0.92);
-    --surface-soft: rgba(244, 247, 255, 0.86);
-    --surface-border: rgba(98, 112, 191, 0.24);
+    --surface: rgba(255, 255, 255, 0.92);
+    --surface-strong: rgba(255, 255, 255, 0.96);
+    --surface-soft: rgba(244, 247, 255, 0.90);
+    --surface-border: rgba(98, 112, 191, 0.10);
     --shadow-color: rgba(35, 49, 122, 0.16);
     --primary: #6351ef;
     --primary-strong: #5442d8;
     --primary-soft: rgba(99, 81, 239, 0.14);
     --primary-contrast: #f8f9ff;
-    --button-bg: linear-gradient(135deg, #4f62e9 0%, #6345df 100%);
+    --button-bg: var(--primary);
     --button-text: #f8f9ff;
     --ghost-color: #5543da;
     --ghost-border: rgba(86, 67, 218, 0.35);
@@ -186,6 +186,12 @@
       linear-gradient(160deg, var(--bg-gradient-start), var(--bg-gradient-mid) 45%, var(--bg-gradient-end));
     color: var(--text-color);
     min-height: 100vh;
+  }
+
+  :global(h1),
+  :global(h2),
+  :global(h3) {
+    font-family: 'Space Grotesk', system-ui, sans-serif;
   }
 
   :global(a) {
@@ -232,13 +238,13 @@
   }
 
   .app-shell.with-chrome {
-    --sidebar-width: 248px;
     display: grid;
-    grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+    grid-template-columns: 248px minmax(0, 1fr);
+    transition: grid-template-columns 0.28s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .app-shell.with-chrome.sidebar-collapsed {
-    --sidebar-width: 76px;
+    grid-template-columns: 76px minmax(0, 1fr);
   }
 
   .main-column {

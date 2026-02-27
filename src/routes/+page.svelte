@@ -497,7 +497,6 @@
   .hero-utility {
     background: var(--surface);
     border-radius: var(--radius-xl);
-    border: 1px solid var(--surface-border);
     padding: var(--space-5) var(--space-6);
     display: flex;
     justify-content: space-between;
@@ -507,8 +506,8 @@
   }
 
   h1 {
-    font-family: 'Source Serif 4', serif;
     font-size: 2.2rem;
+    font-weight: 600;
     margin: 0 0 var(--space-2);
     line-height: 1.08;
   }
@@ -557,7 +556,6 @@
   .reading-queue {
     background: var(--surface);
     border-radius: var(--radius-xl);
-    border: 1px solid var(--surface-border);
     padding: var(--space-6);
     margin-bottom: var(--space-6);
   }
@@ -573,7 +571,7 @@
   .section-head h2 {
     margin: 0;
     font-size: var(--text-lg);
-    font-weight: 700;
+    font-weight: 600;
   }
 
   .view-all {
@@ -597,7 +595,6 @@
 
   .queue-card {
     background: var(--surface-strong);
-    border: 1px solid var(--surface-border);
     border-radius: var(--radius-lg);
     overflow: hidden;
     display: grid;
@@ -647,48 +644,37 @@
     align-items: center;
     gap: 0.3rem;
     border-radius: var(--radius-full);
-    border: 1px solid var(--input-border);
     background: var(--surface-soft);
     color: var(--muted-text);
     padding: 0.26rem 0.58rem;
     font-size: 0.75rem;
-    font-weight: 600;
+    font-weight: 500;
     line-height: 1;
     flex-shrink: 0;
   }
 
-  .fit-pill.fit-none {
-    color: var(--muted-text);
-    border-color: var(--input-border);
-  }
-
   .fit-pill.fit-1 {
     color: #fca5a5;
-    border-color: rgba(252, 165, 165, 0.42);
     background: rgba(252, 165, 165, 0.12);
   }
 
   .fit-pill.fit-2 {
     color: #fdba74;
-    border-color: rgba(253, 186, 116, 0.42);
     background: rgba(253, 186, 116, 0.12);
   }
 
   .fit-pill.fit-3 {
     color: #c4b5fd;
-    border-color: rgba(196, 181, 253, 0.45);
     background: rgba(196, 181, 253, 0.14);
   }
 
   .fit-pill.fit-4 {
     color: #67e8f9;
-    border-color: rgba(103, 232, 249, 0.45);
     background: rgba(103, 232, 249, 0.14);
   }
 
   .fit-pill.fit-5 {
     color: #86efac;
-    border-color: rgba(134, 239, 172, 0.45);
     background: rgba(134, 239, 172, 0.14);
   }
 
@@ -699,11 +685,10 @@
 
   .reason-chip {
     border-radius: var(--radius-full);
-    border: 1px solid var(--input-border);
     background: var(--surface-soft);
     color: var(--muted-text);
     font-size: 0.72rem;
-    font-weight: 700;
+    font-weight: 600;
     letter-spacing: 0.03em;
     text-transform: uppercase;
     padding: 0.18rem 0.48rem;
@@ -711,7 +696,6 @@
 
   .reason-chip.high {
     color: #86efac;
-    border-color: rgba(134, 239, 172, 0.42);
     background: rgba(134, 239, 172, 0.12);
   }
 
@@ -755,7 +739,7 @@
   }
 
   .mark-read {
-    border: 1px solid var(--ghost-border);
+    border: none;
     background: var(--surface-soft);
     color: var(--ghost-color);
     border-radius: var(--radius-full);
@@ -790,7 +774,7 @@
 
   .empty-actions a,
   .empty-actions button {
-    border: 1px solid var(--input-border);
+    border: none;
     border-radius: var(--radius-full);
     background: var(--surface-soft);
     color: var(--text-color);
@@ -807,7 +791,6 @@
   .momentum {
     background: var(--surface);
     border-radius: var(--radius-xl);
-    border: 1px solid var(--surface-border);
     padding: var(--space-6);
     margin-bottom: var(--space-6);
   }
@@ -821,7 +804,6 @@
 
   .momentum-card {
     background: var(--surface-strong);
-    border: 1px solid var(--surface-border);
     border-radius: var(--radius-lg);
     padding: var(--space-4);
     text-align: center;
@@ -834,15 +816,13 @@
   }
 
   .momentum-card.is-link:hover {
-    transform: translateY(-1px);
-    border-color: var(--ghost-border);
-    box-shadow: var(--shadow-sm);
+    box-shadow: var(--shadow-md);
   }
 
   .momentum-num {
     font-size: 1.7rem;
     line-height: 1;
-    font-weight: 700;
+    font-weight: 600;
     color: var(--primary);
   }
 
@@ -859,7 +839,7 @@
   }
 
   .quick-links a {
-    border: 1px solid var(--input-border);
+    border: none;
     background: var(--surface-soft);
     border-radius: var(--radius-full);
     padding: 0.35rem 0.78rem;

@@ -234,6 +234,16 @@
     return text.length > 200 ? `${text.slice(0, 200)}...` : text;
   };
 
+  const defaultAllArticlesHref = '/articles?reaction=up&reaction=none';
+  const defaultUnreadHref = '/articles?read=unread&sort=unread_first&reaction=up&reaction=none';
+  const defaultHighFitUnreadHref = '/articles?read=unread&sort=unread_first&sinceDays=7&score=5&score=4&score=3&reaction=up&reaction=none';
+  const queueArticleHref = (article) => {
+    const fromHref = article?.queue_reason === 'high_fit'
+      ? (data.queueConfig?.hrefHighFitUnread ?? defaultHighFitUnreadHref)
+      : (data.queueConfig?.hrefUnread ?? defaultUnreadHref);
+    return `/articles/${article.id}?from=${encodeURIComponent(fromHref)}`;
+  };
+
   const formatTimestamp = (article) => {
     const value = article.published_at ?? article.fetched_at;
     if (!value) return 'No date';
@@ -372,7 +382,7 @@
 <section class="reading-queue">
   <div class="section-head">
     <h2>Top Unread · Last {data.queueConfig?.windowDays ?? 7} Days</h2>
-    <a href={data.queueConfig?.hrefUnread ?? '/articles?read=unread&sort=unread_first'} class="view-all">
+    <a href={data.queueConfig?.hrefUnread ?? defaultUnreadHref} class="view-all">
       <IconExternalLink size={13} stroke={1.9} />
       <span>View unread</span>
     </a>
@@ -385,7 +395,7 @@
     <div class="queue-empty">
       <p>You're caught up on unread articles in this window.</p>
       <div class="empty-actions">
-        <a href={data.queueConfig?.hrefUnread ?? '/articles?read=unread&sort=unread_first'}>Browse unread articles</a>
+        <a href={data.queueConfig?.hrefUnread ?? defaultUnreadHref}>Browse unread articles</a>
         <button type="button" on:click={runManualPull} disabled={isPulling}>Pull latest feeds</button>
       </div>
     </div>
@@ -393,7 +403,7 @@
     <div class="queue-grid">
       {#each queueItems as article}
         <article class="queue-card">
-          <a class="card-img-wrap" href={`/articles/${article.id}`}>
+          <a class="card-img-wrap" href={queueArticleHref(article)}>
             <img
               class="card-img"
               src={resolveArticleImageUrl(article)}
@@ -405,7 +415,7 @@
 
           <div class="card-body">
             <div class="card-top-row">
-              <a class="card-title" href={`/articles/${article.id}`}>{article.title ?? 'Untitled article'}</a>
+              <a class="card-title" href={queueArticleHref(article)}>{article.title ?? 'Untitled article'}</a>
               <span
                 class={`fit-pill ${fitScoreTone(article.score)}`}
                 title={fitScoreAria(article.score)}
@@ -430,7 +440,7 @@
             </div>
 
             <div class="card-actions">
-              <a class="open-link" href={`/articles/${article.id}`}>Open</a>
+              <a class="open-link" href={queueArticleHref(article)}>Open</a>
               <button
                 type="button"
                 class="mark-read"
@@ -450,35 +460,35 @@
 <section class="momentum">
   <div class="section-head">
     <h2>Reading Momentum</h2>
-    <a href="/articles" class="view-all">
+    <a href={data.momentumLinks?.allArticles ?? defaultAllArticlesHref} class="view-all">
       <IconExternalLink size={13} stroke={1.9} />
       <span>Articles</span>
     </a>
   </div>
 
   <div class="momentum-grid">
-    <a class="momentum-card is-link" href={data.momentumLinks?.unreadTotal ?? '/articles?read=unread&sort=unread_first'}>
+    <a class="momentum-card is-link" href={data.momentumLinks?.unreadTotal ?? defaultUnreadHref}>
       <div class="momentum-num">{momentum.unreadTotal}</div>
       <div class="momentum-label">Unread total</div>
     </a>
-    <a class="momentum-card is-link" href={data.momentumLinks?.unread24h ?? '/articles?read=unread&sort=unread_first&sinceDays=1'}>
+    <a class="momentum-card is-link" href={data.momentumLinks?.unread24h ?? `${defaultUnreadHref}&sinceDays=1`}>
       <div class="momentum-num">{momentum.unread24h}</div>
       <div class="momentum-label">Unread · 24h</div>
     </a>
-    <a class="momentum-card is-link" href={data.momentumLinks?.unread7d ?? '/articles?read=unread&sort=unread_first&sinceDays=7'}>
+    <a class="momentum-card is-link" href={data.momentumLinks?.unread7d ?? `${defaultUnreadHref}&sinceDays=7`}>
       <div class="momentum-num">{momentum.unread7d}</div>
       <div class="momentum-label">Unread · 7d</div>
     </a>
-    <a class="momentum-card is-link" href={data.momentumLinks?.highFitUnread7d ?? '/articles?read=unread&sort=unread_first&sinceDays=7&score=5&score=4&score=3'}>
+    <a class="momentum-card is-link" href={data.momentumLinks?.highFitUnread7d ?? defaultHighFitUnreadHref}>
       <div class="momentum-num">{momentum.highFitUnread7d}</div>
       <div class="momentum-label">High fit · 7d</div>
     </a>
   </div>
 
   <div class="quick-links">
-    <a href={data.queueConfig?.hrefUnread ?? '/articles?read=unread&sort=unread_first'}>Open unread queue</a>
-    <a href={data.queueConfig?.hrefHighFitUnread ?? '/articles?read=unread&sort=unread_first&sinceDays=7&score=5&score=4&score=3'}>Open high-fit unread</a>
-    <a href="/articles">Browse all articles</a>
+    <a href={data.queueConfig?.hrefUnread ?? defaultUnreadHref}>Open unread queue</a>
+    <a href={data.queueConfig?.hrefHighFitUnread ?? defaultHighFitUnreadHref}>Open high-fit unread</a>
+    <a href={data.momentumLinks?.allArticles ?? defaultAllArticlesHref}>Browse all articles</a>
   </div>
 </section>
 

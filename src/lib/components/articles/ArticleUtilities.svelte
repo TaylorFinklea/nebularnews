@@ -319,12 +319,12 @@
     display: grid;
     gap: var(--space-4);
     padding: clamp(0.95rem, 1.4vw, 1.2rem);
-    border-radius: calc(var(--radius-xl) + 0.1rem);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 115%, transparent);
+    border-radius: var(--radius-xl);
+    border: 1px solid color-mix(in srgb, var(--surface-border) 108%, transparent);
     background:
-      linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 88%, transparent), color-mix(in srgb, var(--surface) 88%, transparent)),
-      radial-gradient(circle at top right, color-mix(in srgb, var(--primary-soft) 80%, transparent), transparent 48%);
-    box-shadow: 0 18px 40px color-mix(in srgb, var(--shadow-color) 35%, transparent);
+      linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 94%, transparent), color-mix(in srgb, var(--surface) 94%, transparent)),
+      radial-gradient(circle at top right, color-mix(in srgb, var(--primary-soft) 56%, transparent), transparent 48%);
+    box-shadow: 0 14px 28px color-mix(in srgb, var(--shadow-color) 18%, transparent);
     overflow: clip;
   }
 
@@ -393,10 +393,10 @@
     display: inline-flex;
     align-items: baseline;
     gap: 0.35rem;
-    padding: 0.4rem 0.7rem;
-    border-radius: var(--radius-full);
-    background: color-mix(in srgb, var(--surface-soft) 86%, transparent);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 110%, transparent);
+    padding: 0.35rem 0.6rem;
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--surface-soft) 68%, transparent);
+    border: 1px solid color-mix(in srgb, var(--surface-border) 104%, transparent);
     font-size: var(--text-xs);
     color: var(--muted-text);
   }
@@ -451,10 +451,10 @@
     display: inline-flex;
     align-items: center;
     gap: 0.3rem;
-    padding: 0.38rem 0.68rem;
-    border-radius: var(--radius-full);
-    background: color-mix(in srgb, var(--surface-soft) 92%, transparent);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 110%, transparent);
+    padding: 0.36rem 0.6rem;
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--surface-soft) 72%, transparent);
+    border: 1px solid color-mix(in srgb, var(--surface-border) 104%, transparent);
     color: var(--text-color);
     font-size: var(--text-xs);
     overflow-wrap: anywhere;
@@ -468,8 +468,8 @@
 
   .chip-badge {
     padding: 0.05rem 0.35rem;
-    border-radius: var(--radius-full);
-    background: color-mix(in srgb, var(--surface) 85%, transparent);
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--surface) 92%, transparent);
     color: var(--muted-text);
   }
 
@@ -482,8 +482,8 @@
     height: 1.3rem;
     padding: 0;
     border: 0;
-    border-radius: var(--radius-full);
-    background: transparent;
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--surface) 88%, transparent);
     color: inherit;
     display: inline-flex;
     align-items: center;
@@ -503,9 +503,9 @@
   .chat-card,
   .feedback-card,
   .source-cards li {
-    border-radius: calc(var(--radius-lg) + 0.05rem);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 110%, transparent);
-    background: color-mix(in srgb, var(--surface-soft) 78%, transparent);
+    border-radius: var(--radius-lg);
+    border: 1px solid color-mix(in srgb, var(--surface-border) 104%, transparent);
+    background: color-mix(in srgb, var(--surface-soft) 58%, transparent);
   }
 
   .input-card,
@@ -568,9 +568,9 @@
     min-width: 0;
     min-height: 48px;
     padding: 0.85rem 0.9rem;
-    border-radius: var(--radius-lg);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 115%, transparent);
-    background: color-mix(in srgb, var(--surface-soft) 86%, transparent);
+    border-radius: var(--radius-md);
+    border: 1px solid color-mix(in srgb, var(--surface-border) 104%, transparent);
+    background: color-mix(in srgb, var(--surface-soft) 64%, transparent);
     color: var(--text-color);
     display: inline-flex;
     align-items: center;
@@ -578,6 +578,13 @@
     justify-content: flex-start;
     font: inherit;
     overflow-wrap: anywhere;
+  }
+
+  .tool-button:hover:not(:disabled),
+  .tag-chip.removable:hover:not(:disabled),
+  .chip-action:hover:not(:disabled) {
+    border-color: color-mix(in srgb, var(--primary) 18%, transparent);
+    background: color-mix(in srgb, var(--surface-soft) 74%, transparent);
   }
 
   .meta-list {

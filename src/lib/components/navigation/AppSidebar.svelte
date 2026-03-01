@@ -133,87 +133,58 @@
 
 <style>
   .sidebar {
-    position: relative;
     position: sticky;
     top: 0;
     height: 100vh;
     border-right: 1px solid var(--surface-border);
     background:
-      radial-gradient(280px 220px at 0% 0%, rgba(154, 139, 255, 0.14), transparent 72%),
-      linear-gradient(180deg, var(--surface-strong) 0%, var(--surface) 100%);
+      linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 96%, transparent), var(--surface) 100%),
+      radial-gradient(220px 180px at 0% 0%, rgba(154, 139, 255, 0.08), transparent 72%);
     backdrop-filter: blur(12px);
     overflow: hidden;
-    box-shadow:
-      inset -1px 0 0 rgba(149, 164, 255, 0.08),
-      24px 0 48px var(--shadow-color);
-  }
-
-  .sidebar::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 22%),
-      radial-gradient(320px 360px at 100% 100%, rgba(53, 147, 255, 0.08), transparent 65%);
-    opacity: 0.9;
   }
 
   .sidebar-inner {
-    position: relative;
-    z-index: 1;
     height: 100%;
-    padding: var(--space-5) var(--space-4) var(--space-4);
+    padding: var(--space-5) var(--space-3) var(--space-4);
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    gap: var(--space-5);
+    gap: var(--space-4);
     overflow-y: auto;
   }
 
   .sidebar-main {
     display: flex;
     flex-direction: column;
-    gap: var(--space-4);
+    gap: var(--space-5);
   }
 
-  /* ── Brand ── */
   .brand {
     display: flex;
     align-items: center;
-    gap: var(--space-3);
-    padding: 0.95rem 1rem;
-    border-radius: 1.15rem;
-    border: 1px solid rgba(149, 164, 255, 0.12);
-    background:
-      linear-gradient(135deg, rgba(154, 139, 255, 0.16), transparent 72%),
-      var(--surface-soft);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.05),
-      0 14px 34px var(--shadow-color);
-    overflow: hidden;
+    gap: 0.55rem;
+    padding: 0.15rem var(--space-2);
+    border-radius: var(--radius-sm);
   }
 
   .brand-icon {
     flex-shrink: 0;
-    width: 2.5rem;
-    height: 2.5rem;
+    width: 1.7rem;
+    height: 1.7rem;
     display: flex;
     align-items: center;
     justify-content: center;
     color: var(--primary);
-    border-radius: 0.9rem;
-    background: rgba(154, 139, 255, 0.12);
-    box-shadow: inset 0 0 0 1px rgba(154, 139, 255, 0.2);
   }
 
   .brand-text {
     display: inline-flex;
     align-items: baseline;
     gap: 0.35rem;
-    font-family: 'Space Grotesk', system-ui, sans-serif;
-    font-size: 1.1rem;
-    letter-spacing: -0.02em;
+    font-family: 'Source Serif 4', serif;
+    font-size: 1.32rem;
+    letter-spacing: 0.01em;
     white-space: nowrap;
     opacity: 1;
     transition: opacity 0.2s ease 0.05s;
@@ -228,60 +199,46 @@
   }
 
   .nav-panel {
-    padding: 0.5rem;
-    border-radius: 1.25rem;
-    border: 1px solid rgba(149, 164, 255, 0.12);
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 32%),
-      var(--surface-soft);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    display: grid;
+    gap: var(--space-2);
   }
 
-  .nav-panel-primary {
-    padding-top: 0.55rem;
-    padding-bottom: 0.55rem;
-  }
-
-  /* ── Nav group ── */
   .nav-group {
     display: grid;
-    gap: 0.35rem;
+    gap: var(--space-1);
   }
 
   .workspace-block {
     display: flex;
     flex-direction: column;
-    gap: 0.65rem;
+    gap: var(--space-2);
   }
 
   .block-label {
-    font-size: 0.68rem;
+    font-size: var(--text-xs);
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--muted-text);
-    padding: 0.1rem 0.45rem 0;
+    padding: 0 0.7rem;
     white-space: nowrap;
     opacity: 1;
     transition: opacity 0.12s ease;
   }
 
-  /* ── Nav links ── */
   .nav-link,
   .sidebar-action {
-    position: relative;
     display: flex;
     align-items: center;
     gap: var(--space-3);
-    min-height: 3rem;
-    border-radius: 1rem;
-    padding: 0.72rem 0.85rem;
-    color: var(--muted-text);
+    min-height: 2.75rem;
+    border-radius: var(--radius-md);
+    padding: 0.62rem var(--space-3);
+    color: var(--text-color);
     background: transparent;
     border: 1px solid transparent;
     font: inherit;
     text-align: left;
     cursor: pointer;
-    overflow: hidden;
     transition:
       background 0.15s ease,
       border-color 0.15s ease,
@@ -290,50 +247,15 @@
 
   .nav-link:hover,
   .sidebar-action:hover {
-    background: rgba(154, 139, 255, 0.09);
-    border-color: rgba(149, 164, 255, 0.12);
-    color: var(--text-color);
-  }
-
-  /* Active rail indicator */
-  .nav-link::before {
-    content: '';
-    position: absolute;
-    left: 0.1rem;
-    top: 0.48rem;
-    bottom: 0.48rem;
-    width: 2px;
-    border-radius: 999px;
-    background: linear-gradient(
-      180deg,
-      rgba(154, 139, 255, 0) 0%,
-      rgba(154, 139, 255, 0.95) 22%,
-      rgba(154, 139, 255, 0.95) 78%,
-      rgba(154, 139, 255, 0) 100%
-    );
-    opacity: 0;
-    transform: scaleY(0.22);
-    transform-origin: center;
-    transition:
-      opacity 0.15s ease,
-      transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  .nav-link.active::before {
-    opacity: 1;
-    transform: scaleY(1);
+    background: color-mix(in srgb, var(--primary-soft) 62%, transparent);
   }
 
   .nav-link.active {
-    color: var(--text-color);
-    background:
-      linear-gradient(90deg, rgba(154, 139, 255, 0.16) 0%, rgba(154, 139, 255, 0.06) 52%, rgba(154, 139, 255, 0.01) 100%),
-      var(--surface-soft);
-    border-color: rgba(154, 139, 255, 0.14);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    background: var(--primary-soft);
+    border-color: var(--ghost-border);
+    color: var(--primary);
   }
 
-  /* ── Icon / Label ── */
   .nav-icon {
     width: 1.35rem;
     height: 1.35rem;
@@ -341,30 +263,12 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    border-radius: 0.72rem;
     color: inherit;
-    transition:
-      color 0.15s ease,
-      background 0.15s ease,
-      box-shadow 0.15s ease,
-      transform 0.15s ease;
-  }
-
-  .nav-link:hover .nav-icon {
-    background: rgba(154, 139, 255, 0.08);
-  }
-
-  .nav-link.active .nav-icon {
-    color: var(--primary);
-    background: rgba(154, 139, 255, 0.14);
-    box-shadow: inset 0 0 0 1px rgba(154, 139, 255, 0.18);
-    transform: translateX(1px);
   }
 
   .nav-label {
     white-space: nowrap;
     font-size: 0.98rem;
-    letter-spacing: -0.01em;
     opacity: 1;
     transform: translateX(0);
     transition:
@@ -376,18 +280,12 @@
     font-weight: 600;
   }
 
-  /* ── Footer ── */
   .sidebar-footer {
     display: grid;
     gap: var(--space-1);
     margin-top: auto;
-    padding: 0.5rem;
-    border-radius: 1.25rem;
-    border: 1px solid rgba(149, 164, 255, 0.12);
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 28%),
-      var(--surface-soft);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    padding-top: var(--space-3);
+    border-top: 1px solid var(--surface-border);
   }
 
   .collapse-icon {
@@ -398,19 +296,14 @@
     transform: rotate(180deg);
   }
 
-  /* ── Collapsed state ── */
   .sidebar.collapsed .sidebar-inner {
     padding-left: var(--space-2);
     padding-right: var(--space-2);
   }
 
-  .sidebar.collapsed .sidebar-main {
-    gap: var(--space-3);
-  }
-
   .sidebar.collapsed .brand {
     justify-content: center;
-    padding: 0.85rem 0;
+    padding: 0.25rem 0;
   }
 
   .sidebar.collapsed .brand-text {
@@ -443,21 +336,10 @@
   .sidebar.collapsed .nav-link,
   .sidebar.collapsed .sidebar-action {
     justify-content: center;
-    padding-left: 0.65rem;
-    padding-right: 0.65rem;
+    padding-left: var(--space-2);
+    padding-right: var(--space-2);
   }
 
-  .sidebar.collapsed .nav-link::before {
-    display: none;
-  }
-
-  .sidebar.collapsed .nav-panel,
-  .sidebar.collapsed .sidebar-footer {
-    padding-left: 0.4rem;
-    padding-right: 0.4rem;
-  }
-
-  /* ── Hide on mobile ── */
   @media (max-width: 800px) {
     .sidebar {
       display: none;

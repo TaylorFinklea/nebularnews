@@ -101,12 +101,12 @@
     display: grid;
     gap: var(--space-4);
     padding: var(--space-3) var(--space-4) calc(var(--mobile-nav-height) + var(--mobile-nav-offset) + env(safe-area-inset-bottom) + var(--space-4));
-    border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
-    border: 1px solid color-mix(in srgb, var(--surface-border) 120%, transparent);
+    border-radius: calc(var(--radius-xl) + 0.1rem) calc(var(--radius-xl) + 0.1rem) 0 0;
+    border: 1px solid color-mix(in srgb, var(--surface-border) 108%, transparent);
     background:
-      linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 92%, transparent), color-mix(in srgb, var(--surface) 96%, transparent)),
-      radial-gradient(circle at top, color-mix(in srgb, var(--primary-soft) 90%, transparent), transparent 55%);
-    box-shadow: 0 -20px 50px rgba(2, 6, 24, 0.45);
+      linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 96%, transparent), color-mix(in srgb, var(--surface) 98%, transparent)),
+      radial-gradient(circle at top, color-mix(in srgb, var(--primary-soft) 60%, transparent), transparent 55%);
+    box-shadow: 0 -16px 36px rgba(2, 6, 24, 0.32);
   }
 
   .sheet-handle {
@@ -155,8 +155,8 @@
     width: 2.75rem;
     height: 2.75rem;
     border: 1px solid var(--surface-border);
-    border-radius: var(--radius-full);
-    background: color-mix(in srgb, var(--surface-soft) 86%, transparent);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--surface-soft) 70%, transparent);
     color: var(--text-color);
     display: inline-flex;
     align-items: center;

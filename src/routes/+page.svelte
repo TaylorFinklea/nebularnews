@@ -554,12 +554,12 @@
 
   .surface-panel {
     padding: clamp(1.05rem, 1.9vw, 1.55rem);
-    border-radius: clamp(1.2rem, 2vw, 1.75rem);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 115%, transparent);
+    border-radius: clamp(0.95rem, 1.3vw, 1.2rem);
+    border: 1px solid color-mix(in srgb, var(--surface-border) 108%, transparent);
     background:
-      linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 90%, transparent), color-mix(in srgb, var(--surface) 90%, transparent)),
-      radial-gradient(circle at top right, color-mix(in srgb, var(--primary-soft) 84%, transparent), transparent 48%);
-    box-shadow: 0 18px 40px color-mix(in srgb, var(--shadow-color) 28%, transparent);
+      linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 96%, transparent), color-mix(in srgb, var(--surface) 96%, transparent)),
+      radial-gradient(circle at top right, color-mix(in srgb, var(--primary-soft) 52%, transparent), transparent 48%);
+    box-shadow: 0 12px 28px color-mix(in srgb, var(--shadow-color) 16%, transparent);
     overflow: clip;
   }
 
@@ -570,9 +570,8 @@
     gap: clamp(1rem, 2vw, 2rem);
     flex-wrap: wrap;
     background:
-      linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 92%, transparent), color-mix(in srgb, var(--surface) 90%, transparent)),
-      radial-gradient(circle at top left, color-mix(in srgb, var(--primary-soft) 88%, transparent), transparent 44%),
-      radial-gradient(circle at top right, color-mix(in srgb, var(--nebula-b) 48%, transparent), transparent 42%);
+      linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 98%, transparent), color-mix(in srgb, var(--surface) 96%, transparent)),
+      radial-gradient(circle at top left, color-mix(in srgb, var(--primary-soft) 70%, transparent), transparent 42%);
   }
 
   .hero-copy {
@@ -629,11 +628,11 @@
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
-    min-height: 1.95rem;
-    padding: 0.32rem 0.72rem;
-    border-radius: var(--radius-full);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 110%, transparent);
-    background: color-mix(in srgb, var(--surface-soft) 88%, transparent);
+    min-height: 1.8rem;
+    padding: 0.22rem 0.58rem;
+    border-radius: var(--radius-md);
+    border: 1px solid color-mix(in srgb, var(--surface-border) 104%, transparent);
+    background: color-mix(in srgb, var(--surface-soft) 72%, transparent);
     font-size: var(--text-xs);
   }
 
@@ -653,9 +652,9 @@
     display: grid;
     gap: var(--space-3);
     padding: 0.95rem 1rem;
-    border-radius: calc(var(--radius-xl) - 0.1rem);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 115%, transparent);
-    background: color-mix(in srgb, var(--surface-soft) 80%, transparent);
+    border-radius: var(--radius-lg);
+    border: 1px solid color-mix(in srgb, var(--surface-border) 106%, transparent);
+    background: color-mix(in srgb, var(--surface-soft) 60%, transparent);
   }
 
   .pull-copy {
@@ -714,10 +713,10 @@
     align-items: center;
     gap: 0.35rem;
     min-height: 42px;
-    padding: 0.7rem 1rem;
-    border-radius: var(--radius-full);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 112%, transparent);
-    background: color-mix(in srgb, var(--surface-soft) 84%, transparent);
+    padding: 0.65rem 0.9rem;
+    border-radius: var(--radius-md);
+    border: 1px solid color-mix(in srgb, var(--surface-border) 104%, transparent);
+    background: transparent;
     color: var(--text-color);
     font-size: var(--text-sm);
     text-decoration: none;
@@ -725,8 +724,8 @@
   }
 
   .view-all:hover {
-    transform: translateY(-1px);
-    border-color: color-mix(in srgb, var(--primary) 28%, transparent);
+    border-color: color-mix(in srgb, var(--primary) 22%, transparent);
+    background: color-mix(in srgb, var(--surface-soft) 55%, transparent);
   }
 
   .section-cap {
@@ -743,17 +742,17 @@
   .queue-card {
     display: grid;
     grid-template-columns: minmax(210px, 235px) minmax(0, 1fr);
-    border-radius: calc(var(--radius-xl) - 0.15rem);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 112%, transparent);
-    background: color-mix(in srgb, var(--surface-soft) 74%, transparent);
+    border-radius: var(--radius-lg);
+    border: 1px solid color-mix(in srgb, var(--surface-border) 106%, transparent);
+    background: color-mix(in srgb, var(--surface-soft) 56%, transparent);
     overflow: clip;
     transition: transform var(--transition-fast), box-shadow var(--transition-fast), border-color var(--transition-fast);
   }
 
   .queue-card:hover {
-    transform: translateY(-2px);
-    border-color: color-mix(in srgb, var(--primary) 24%, transparent);
-    box-shadow: 0 18px 34px color-mix(in srgb, var(--shadow-color) 24%, transparent);
+    transform: translateY(-1px);
+    border-color: color-mix(in srgb, var(--primary) 18%, transparent);
+    box-shadow: 0 10px 22px color-mix(in srgb, var(--shadow-color) 14%, transparent);
   }
 
   .card-img-wrap {
@@ -807,10 +806,11 @@
     display: inline-flex;
     align-items: center;
     gap: 0.3rem;
-    border-radius: var(--radius-full);
-    background: var(--surface-soft);
+    border-radius: var(--radius-md);
+    border: 1px solid color-mix(in srgb, var(--surface-border) 102%, transparent);
+    background: color-mix(in srgb, var(--surface-soft) 68%, transparent);
     color: var(--muted-text);
-    padding: 0.3rem 0.62rem;
+    padding: 0.24rem 0.55rem;
     font-size: 0.75rem;
     font-weight: 600;
     line-height: 1;
@@ -847,6 +847,7 @@
     font-weight: 600;
     letter-spacing: 0.03em;
     text-transform: uppercase;
+    border-radius: var(--radius-sm);
   }
 
   .reason-chip.high {
@@ -872,7 +873,7 @@
   .empty-actions button,
   .quick-links a {
     min-height: 42px;
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-md);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -887,14 +888,14 @@
   .empty-actions a,
   .empty-actions button,
   .quick-links a {
-    border: 1px solid color-mix(in srgb, var(--surface-border) 112%, transparent);
-    background: color-mix(in srgb, var(--surface-soft) 84%, transparent);
+    border: 1px solid color-mix(in srgb, var(--surface-border) 105%, transparent);
+    background: color-mix(in srgb, var(--surface-soft) 66%, transparent);
     color: var(--text-color);
   }
 
   .mark-read {
-    border: 1px solid color-mix(in srgb, var(--primary) 24%, transparent);
-    background: linear-gradient(90deg, color-mix(in srgb, var(--primary-soft) 84%, transparent), color-mix(in srgb, var(--surface-soft) 86%, transparent));
+    border: 1px solid color-mix(in srgb, var(--primary) 18%, transparent);
+    background: color-mix(in srgb, var(--primary-soft) 56%, transparent);
     color: var(--text-color);
     cursor: pointer;
   }
@@ -904,7 +905,7 @@
   .empty-actions a:hover,
   .empty-actions button:hover,
   .quick-links a:hover {
-    transform: translateY(-1px);
+    border-color: color-mix(in srgb, var(--primary) 18%, transparent);
   }
 
   .mark-read:disabled {
@@ -937,18 +938,18 @@
     display: grid;
     gap: 0.45rem;
     padding: 1rem;
-    border-radius: calc(var(--radius-lg) + 0.05rem);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 112%, transparent);
-    background: color-mix(in srgb, var(--surface-soft) 78%, transparent);
+    border-radius: var(--radius-lg);
+    border: 1px solid color-mix(in srgb, var(--surface-border) 106%, transparent);
+    background: color-mix(in srgb, var(--surface-soft) 60%, transparent);
     text-decoration: none;
     color: inherit;
     transition: transform var(--transition-fast), box-shadow var(--transition-fast), border-color var(--transition-fast);
   }
 
   .momentum-card:hover {
-    transform: translateY(-2px);
-    border-color: color-mix(in srgb, var(--primary) 26%, transparent);
-    box-shadow: 0 18px 34px color-mix(in srgb, var(--shadow-color) 24%, transparent);
+    transform: translateY(-1px);
+    border-color: color-mix(in srgb, var(--primary) 18%, transparent);
+    box-shadow: 0 10px 22px color-mix(in srgb, var(--shadow-color) 14%, transparent);
   }
 
   .momentum-label {

@@ -459,13 +459,12 @@
     gap: clamp(1rem, 2vw, 2rem);
     flex-wrap: wrap;
     padding: clamp(1.05rem, 1.9vw, 1.55rem);
-    border-radius: clamp(1.2rem, 2vw, 1.75rem);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 115%, transparent);
+    border-radius: clamp(0.95rem, 1.3vw, 1.2rem);
+    border: 1px solid color-mix(in srgb, var(--surface-border) 108%, transparent);
     background:
-      linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 90%, transparent), color-mix(in srgb, var(--surface) 90%, transparent)),
-      radial-gradient(circle at top left, color-mix(in srgb, var(--primary-soft) 88%, transparent), transparent 44%),
-      radial-gradient(circle at top right, color-mix(in srgb, var(--nebula-b) 48%, transparent), transparent 42%);
-    box-shadow: 0 18px 40px color-mix(in srgb, var(--shadow-color) 28%, transparent);
+      linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 96%, transparent), color-mix(in srgb, var(--surface) 96%, transparent)),
+      radial-gradient(circle at top left, color-mix(in srgb, var(--primary-soft) 60%, transparent), transparent 42%);
+    box-shadow: 0 12px 28px color-mix(in srgb, var(--shadow-color) 16%, transparent);
     overflow: clip;
   }
 
@@ -525,23 +524,24 @@
   .filter-toggle,
   .clear-all {
     min-height: 42px;
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-md);
     display: inline-flex;
     align-items: center;
     gap: 0.45rem;
   }
 
   .stat-pill {
-    padding: 0.55rem 0.85rem;
-    background: color-mix(in srgb, var(--surface-soft) 88%, transparent);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 112%, transparent);
+    padding: 0.5rem 0.78rem;
+    background: color-mix(in srgb, var(--surface-soft) 68%, transparent);
+    border: 1px solid color-mix(in srgb, var(--surface-border) 104%, transparent);
     color: var(--text-color);
     font-size: var(--text-sm);
     overflow-wrap: anywhere;
   }
 
   .stat-pill.active {
-    background: linear-gradient(90deg, color-mix(in srgb, var(--primary-soft) 84%, transparent), color-mix(in srgb, var(--surface-soft) 86%, transparent));
+    background: color-mix(in srgb, var(--primary-soft) 56%, transparent);
+    border-color: color-mix(in srgb, var(--primary) 18%, transparent);
   }
 
   .filter-toggle,
@@ -558,27 +558,28 @@
   }
 
   .filter-toggle {
-    border: 1px solid color-mix(in srgb, var(--surface-border) 116%, transparent);
-    background: color-mix(in srgb, var(--surface-soft) 86%, transparent);
+    border: 1px solid color-mix(in srgb, var(--surface-border) 106%, transparent);
+    background: color-mix(in srgb, var(--surface-soft) 68%, transparent);
     color: var(--text-color);
   }
 
   .clear-all {
-    border: 1px solid color-mix(in srgb, var(--surface-border) 112%, transparent);
+    border: 1px solid color-mix(in srgb, var(--surface-border) 104%, transparent);
     background: transparent;
     color: var(--muted-text);
   }
 
   .filter-toggle:hover,
   .clear-all:hover {
-    transform: translateY(-1px);
+    border-color: color-mix(in srgb, var(--primary) 18%, transparent);
+    background: color-mix(in srgb, var(--surface-soft) 52%, transparent);
   }
 
   .filter-badge {
     min-width: 1.4rem;
     height: 1.4rem;
     padding: 0 0.35rem;
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-sm);
     background: var(--primary);
     color: var(--button-text);
     display: inline-flex;
@@ -638,7 +639,7 @@
     display: grid;
     gap: 0.45rem;
     padding: clamp(1.1rem, 1.8vw, 1.5rem);
-    border-radius: clamp(1.1rem, 1.8vw, 1.45rem);
+    border-radius: var(--radius-lg);
     border: 1px dashed color-mix(in srgb, var(--surface-border) 120%, transparent);
     background: color-mix(in srgb, var(--surface-strong) 52%, transparent);
   }

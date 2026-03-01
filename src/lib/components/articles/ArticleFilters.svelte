@@ -195,12 +195,12 @@
     display: grid;
     gap: clamp(1rem, 1.7vw, 1.45rem);
     padding: clamp(1rem, 1.8vw, 1.45rem);
-    border-radius: clamp(1.2rem, 1.8vw, 1.6rem);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 112%, transparent);
+    border-radius: clamp(0.95rem, 1.3vw, 1.2rem);
+    border: 1px solid color-mix(in srgb, var(--surface-border) 106%, transparent);
     background:
-      linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 88%, transparent), color-mix(in srgb, var(--surface) 90%, transparent)),
-      radial-gradient(circle at top right, color-mix(in srgb, var(--primary-soft) 86%, transparent), transparent 48%);
-    box-shadow: 0 18px 40px color-mix(in srgb, var(--shadow-color) 26%, transparent);
+      linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 94%, transparent), color-mix(in srgb, var(--surface) 94%, transparent)),
+      radial-gradient(circle at top right, color-mix(in srgb, var(--primary-soft) 54%, transparent), transparent 48%);
+    box-shadow: 0 12px 28px color-mix(in srgb, var(--shadow-color) 16%, transparent);
     overflow: clip;
   }
 
@@ -266,13 +266,13 @@
   .clear-link,
   .reset-button {
     min-height: 40px;
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-md);
     font: inherit;
   }
 
   .apply-button {
     border: 0;
-    background: linear-gradient(90deg, var(--button-bg), color-mix(in srgb, var(--button-bg) 82%, white 18%));
+    background: var(--button-bg);
     color: var(--button-text);
     display: inline-flex;
     align-items: center;
@@ -282,8 +282,8 @@
   }
 
   .clear-link {
-    border: 1px solid color-mix(in srgb, var(--surface-border) 115%, transparent);
-    background: color-mix(in srgb, var(--surface-soft) 88%, transparent);
+    border: 1px solid color-mix(in srgb, var(--surface-border) 106%, transparent);
+    background: color-mix(in srgb, var(--surface-soft) 66%, transparent);
     color: var(--muted-text);
     display: inline-flex;
     align-items: center;
@@ -309,8 +309,8 @@
   select {
     min-width: 0;
     min-height: 3.15rem;
-    border-radius: calc(var(--radius-lg) + 0.1rem);
-    border: 1px solid color-mix(in srgb, var(--input-border) 98%, transparent);
+    border-radius: var(--radius-md);
+    border: 1px solid color-mix(in srgb, var(--input-border) 96%, transparent);
     background: color-mix(in srgb, var(--input-bg) 95%, transparent);
     color: var(--text-color);
     box-sizing: border-box;
@@ -350,9 +350,9 @@
     display: grid;
     gap: 0.8rem;
     padding: 0.95rem 1rem;
-    border-radius: calc(var(--radius-lg) + 0.1rem);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 108%, transparent);
-    background: color-mix(in srgb, var(--surface-soft) 82%, transparent);
+    border-radius: var(--radius-lg);
+    border: 1px solid color-mix(in srgb, var(--surface-border) 104%, transparent);
+    background: color-mix(in srgb, var(--surface-soft) 60%, transparent);
   }
 
   .compact-cluster {
@@ -369,7 +369,7 @@
   }
 
   .reset-button {
-    border: 1px solid color-mix(in srgb, var(--surface-border) 112%, transparent);
+    border: 1px solid color-mix(in srgb, var(--surface-border) 104%, transparent);
     background: transparent;
     color: var(--muted-text);
     padding: 0.3rem 0.7rem;
@@ -390,9 +390,9 @@
     align-items: center;
     justify-content: center;
     padding: 0.55rem 0.9rem;
-    border-radius: var(--radius-full);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 108%, transparent);
-    background: color-mix(in srgb, var(--surface) 60%, transparent);
+    border-radius: var(--radius-md);
+    border: 1px solid color-mix(in srgb, var(--surface-border) 104%, transparent);
+    background: color-mix(in srgb, var(--surface) 40%, transparent);
     color: var(--muted-text);
     cursor: pointer;
     transition:
@@ -408,8 +408,8 @@
 
   .choice-chip.active,
   .segment-option.active {
-    background: linear-gradient(90deg, color-mix(in srgb, var(--primary-soft) 85%, transparent), color-mix(in srgb, var(--surface-soft) 86%, transparent));
-    border-color: color-mix(in srgb, var(--primary) 28%, transparent);
+    background: color-mix(in srgb, var(--primary-soft) 56%, transparent);
+    border-color: color-mix(in srgb, var(--primary) 18%, transparent);
     color: var(--text-color);
   }
 

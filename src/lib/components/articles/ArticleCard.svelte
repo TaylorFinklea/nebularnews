@@ -248,12 +248,12 @@
     min-width: 0;
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    border-radius: clamp(1.3rem, 1.8vw, 1.75rem);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 110%, transparent);
+    border-radius: clamp(0.95rem, 1.3vw, 1.2rem);
+    border: 1px solid color-mix(in srgb, var(--surface-border) 106%, transparent);
     background:
-      linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 92%, transparent), color-mix(in srgb, var(--surface) 90%, transparent)),
-      radial-gradient(circle at top left, color-mix(in srgb, var(--primary-soft) 80%, transparent), transparent 48%);
-    box-shadow: 0 16px 34px color-mix(in srgb, var(--shadow-color) 28%, transparent);
+      linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 96%, transparent), color-mix(in srgb, var(--surface) 94%, transparent)),
+      radial-gradient(circle at top left, color-mix(in srgb, var(--primary-soft) 54%, transparent), transparent 46%);
+    box-shadow: 0 10px 24px color-mix(in srgb, var(--shadow-color) 16%, transparent);
     overflow: clip;
     transition:
       transform var(--transition-fast),
@@ -262,9 +262,9 @@
   }
 
   .article-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 24px 48px color-mix(in srgb, var(--shadow-color) 36%, transparent);
-    border-color: color-mix(in srgb, var(--primary) 26%, var(--surface-border));
+    transform: translateY(-1px);
+    box-shadow: 0 14px 28px color-mix(in srgb, var(--shadow-color) 18%, transparent);
+    border-color: color-mix(in srgb, var(--primary) 18%, var(--surface-border));
   }
 
   .article-card.layout-split {
@@ -341,9 +341,10 @@
     align-items: center;
     gap: 0.35rem;
     min-height: 1.8rem;
-    padding: 0.28rem 0.7rem;
-    border-radius: var(--radius-full);
-    background: color-mix(in srgb, var(--surface-soft) 88%, transparent);
+    padding: 0.24rem 0.6rem;
+    border-radius: var(--radius-md);
+    border: 1px solid color-mix(in srgb, var(--surface-border) 104%, transparent);
+    background: color-mix(in srgb, var(--surface-soft) 68%, transparent);
     color: var(--muted-text);
     font-size: var(--text-xs);
     overflow-wrap: anywhere;
@@ -411,10 +412,10 @@
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
-    border-radius: var(--radius-full);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 108%, transparent);
-    background: color-mix(in srgb, var(--surface-soft) 88%, transparent);
-    padding: 0.34rem 0.72rem;
+    border-radius: var(--radius-md);
+    border: 1px solid color-mix(in srgb, var(--surface-border) 104%, transparent);
+    background: color-mix(in srgb, var(--surface-soft) 68%, transparent);
+    padding: 0.3rem 0.62rem;
     font-size: var(--text-xs);
     overflow-wrap: anywhere;
   }
@@ -490,7 +491,7 @@
 
   .suggestion-pill {
     padding-right: 0.32rem;
-    background: color-mix(in srgb, #4ade80 16%, var(--surface-soft));
+    background: color-mix(in srgb, #4ade80 12%, var(--surface-soft));
   }
 
   .suggestion-action {
@@ -498,11 +499,11 @@
     height: 1.35rem;
     padding: 0;
     border: 0;
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-sm);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background: transparent;
+    background: color-mix(in srgb, var(--surface) 90%, transparent);
     color: inherit;
     cursor: pointer;
     flex-shrink: 0;
@@ -534,7 +535,7 @@
   .open-link {
     min-height: 44px;
     min-width: 44px;
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-md);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -550,8 +551,8 @@
 
   .icon-button,
   .read-button {
-    border: 1px solid color-mix(in srgb, var(--surface-border) 115%, transparent);
-    background: color-mix(in srgb, var(--surface-soft) 90%, transparent);
+    border: 1px solid color-mix(in srgb, var(--surface-border) 106%, transparent);
+    background: color-mix(in srgb, var(--surface-soft) 68%, transparent);
     color: var(--text-color);
     cursor: pointer;
   }
@@ -563,8 +564,8 @@
 
   .icon-button.active {
     color: var(--primary);
-    background: color-mix(in srgb, var(--primary-soft) 82%, transparent);
-    border-color: color-mix(in srgb, var(--primary) 28%, transparent);
+    background: color-mix(in srgb, var(--primary-soft) 56%, transparent);
+    border-color: color-mix(in srgb, var(--primary) 18%, transparent);
   }
 
   .read-button {
@@ -573,8 +574,8 @@
 
   .open-link {
     padding: 0.72rem 1rem;
-    border: 1px solid color-mix(in srgb, var(--primary) 22%, transparent);
-    background: linear-gradient(90deg, color-mix(in srgb, var(--primary-soft) 88%, transparent), color-mix(in srgb, var(--surface-soft) 92%, transparent));
+    border: 1px solid color-mix(in srgb, var(--primary) 18%, transparent);
+    background: color-mix(in srgb, var(--primary-soft) 56%, transparent);
     color: var(--text-color);
     text-decoration: none;
     font-weight: 600;
@@ -583,7 +584,7 @@
   .icon-button:hover:not(:disabled),
   .read-button:hover:not(:disabled),
   .open-link:hover {
-    transform: translateY(-1px);
+    border-color: color-mix(in srgb, var(--primary) 18%, transparent);
   }
 
   .icon-button:disabled,

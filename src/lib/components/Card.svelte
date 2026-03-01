@@ -12,8 +12,8 @@
 <style>
   .card {
     padding: var(--space-5);
-    border-radius: var(--radius-md);
-    box-shadow: none;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
     border: 1px solid var(--surface-border);
     display: grid;
     gap: var(--space-3);

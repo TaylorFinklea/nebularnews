@@ -51,11 +51,12 @@
     pointer-events: auto;
     padding: 0.7rem 0.9rem;
     border-radius: var(--radius-md);
-    border: 1px solid var(--surface-border);
+    backdrop-filter: blur(12px);
     display: flex;
     align-items: center;
     gap: var(--space-3);
     font-size: var(--text-sm);
+    box-shadow: var(--shadow-md);
   }
 
   .toast-info {
@@ -77,7 +78,7 @@
   .toast-error {
     background: var(--surface-strong);
     color: var(--danger);
-    border-color: var(--danger);
+    border-color: color-mix(in srgb, var(--danger) 30%, transparent);
   }
 
   .toast-message {
@@ -110,13 +111,13 @@
     .toast-stack {
       left: var(--space-4);
       right: var(--space-4);
-      bottom: calc(var(--mobile-nav-height, 70px) + var(--mobile-nav-offset, 12px) + env(safe-area-inset-bottom) + var(--space-3));
+      bottom: calc(var(--mobile-nav-height, 64px) + env(safe-area-inset-bottom) + var(--space-3));
     }
   }
 
   @media (min-width: 501px) and (max-width: 800px) {
     .toast-stack {
-      bottom: calc(var(--mobile-nav-height, 70px) + var(--mobile-nav-offset, 12px) + env(safe-area-inset-bottom) + var(--space-4));
+      bottom: calc(var(--mobile-nav-height, 64px) + env(safe-area-inset-bottom) + var(--space-4));
     }
   }
 </style>

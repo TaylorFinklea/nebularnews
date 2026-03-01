@@ -75,18 +75,18 @@
     align-items: center;
     justify-content: center;
     min-width: 3rem;
-    border: 1px solid var(--surface-border);
-    border-radius: var(--radius-md);
+    border: none;
+    border-radius: var(--radius-full);
     padding: 0.25rem 0.7rem;
     color: var(--ghost-color);
-    background: transparent;
+    background: var(--surface-soft);
     text-decoration: none;
     font-size: var(--text-sm);
     transition: background var(--transition-fast);
   }
 
   .page-link:not(.disabled):hover {
-    background: var(--surface-soft);
+    background: var(--primary-soft);
   }
 
   .page-link.disabled {

@@ -74,12 +74,10 @@
       href={item.href}
       class="rail-link"
       class:active
-      aria-label={item.label}
       aria-current={active ? 'page' : undefined}
-      title={item.label}
     >
       <span class="rail-icon"><Icon size={20} stroke={1.9} /></span>
-      <span class="sr-only">{item.label}</span>
+      <span class="rail-label">{item.label}</span>
     </a>
   {/each}
   <button
@@ -88,11 +86,10 @@
     class:active={moreOpen}
     aria-label="More navigation"
     aria-expanded={moreOpen}
-    title="More"
     on:click={toggleMore}
   >
     <span class="rail-icon"><IconMenu2 size={20} stroke={1.9} /></span>
-    <span class="sr-only">More navigation</span>
+    <span class="rail-label">More</span>
   </button>
 </nav>
 
@@ -145,61 +142,86 @@
   .bottom-rail {
     position: fixed;
     left: 0;
+    right: 0;
     bottom: 0;
     z-index: 100;
-    width: 100%;
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 0;
-    padding: 0.5rem;
-    padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
-    border: none;
+    padding: var(--space-1) var(--space-2) calc(var(--space-1) + env(safe-area-inset-bottom));
     border-top: 1px solid var(--surface-border);
-    border-radius: 0;
-    background: var(--surface);
-    min-height: var(--mobile-nav-height, 70px);
+    background: var(--surface-strong);
+    backdrop-filter: blur(14px);
+    height: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom));
     box-sizing: border-box;
   }
 
-  /* ── Rail links ── */
+  /* ── Rail links (stacked icon + label) ── */
   .rail-link {
-    display: inline-flex;
+    display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
+    gap: 2px;
     position: relative;
-    min-width: 0;
-    min-height: 3rem;
     border: none;
-    border-radius: 0;
+    border-radius: var(--radius-sm);
     background: transparent;
     color: var(--muted-text);
     cursor: pointer;
-    padding: 0;
+    padding: var(--space-1) 0;
+    min-height: 2.8rem;
     font: inherit;
     -webkit-tap-highlight-color: transparent;
-    transition: color var(--transition-fast);
+    transition:
+      color 0.15s ease,
+      background 0.15s ease;
   }
 
   .rail-icon {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 2.35rem;
-    height: 2.35rem;
-    border-radius: 0;
+    width: 24px;
+    height: 24px;
   }
 
-  .rail-link:hover {
-    color: var(--text-color);
+  .rail-label {
+    font-size: 0.65rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    line-height: 1;
+  }
+
+  /* Active top accent line */
+  .rail-link::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 25%;
+    right: 25%;
+    height: 2.5px;
+    border-radius: 0 0 2px 2px;
+    background: var(--primary);
+    opacity: 0;
+    transform: scaleX(0.4);
+    transition:
+      opacity 0.15s ease,
+      transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .rail-link.active {
     color: var(--primary);
-    background: transparent;
   }
 
-  .rail-link.active .rail-icon {
-    background: transparent;
+  .rail-link.active::before {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+
+  /* Touch press feedback */
+  .rail-link:active {
+    background: var(--primary-soft);
+    transition-duration: 0s;
   }
 
   /* ── More overlay ── */
@@ -208,46 +230,45 @@
     inset: 0;
     z-index: 101;
     border: none;
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.44);
     cursor: pointer;
   }
 
   /* ── More sheet ── */
   .more-sheet {
     position: fixed;
-    left: 0;
-    width: 100%;
-    margin: 0;
-    bottom: calc(var(--mobile-nav-height, 70px) + env(safe-area-inset-bottom));
+    left: var(--space-3);
+    right: var(--space-3);
+    bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom) + var(--space-2));
     z-index: 102;
-    border: none;
-    border-top: 1px solid var(--surface-border);
-    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-    background: var(--surface);
-    padding: 0.7rem 0.7rem 0.8rem;
+    border: 1px solid var(--surface-border);
+    border-radius: var(--radius-lg);
+    background: var(--surface-strong);
+    backdrop-filter: blur(16px);
+    box-shadow: var(--shadow-lg);
+    padding: var(--space-3) var(--space-4) var(--space-4);
     display: grid;
-    gap: 0.8rem;
+    gap: var(--space-3);
   }
 
   .sheet-handle {
-    width: 2.35rem;
-    height: 0.24rem;
+    width: 32px;
+    height: 3px;
     border-radius: var(--radius-full);
     background: var(--surface-border);
-    margin: 0.1rem auto 0;
+    margin: 0 auto var(--space-1);
   }
 
   .sheet-header {
-    font-size: 0.68rem;
+    font-size: var(--text-sm);
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--muted-text);
-    padding: 0 0.5rem;
   }
 
   .sheet-links {
     display: grid;
-    gap: 0.35rem;
+    gap: var(--space-1);
   }
 
   .sheet-link {
@@ -256,41 +277,27 @@
     display: inline-flex;
     align-items: center;
     gap: var(--space-3);
-    min-height: 3.15rem;
     border-radius: var(--radius-md);
-    border: 1px solid transparent;
+    border: none;
     background: transparent;
     color: var(--text-color);
-    padding: 0.85rem 0.95rem;
+    padding: var(--space-3);
     cursor: pointer;
     text-align: left;
     -webkit-tap-highlight-color: transparent;
-    transition: background var(--transition-fast), color var(--transition-fast);
+    transition:
+      background 0.15s ease,
+      color 0.15s ease;
   }
 
-  .sheet-link:hover {
-    background: var(--surface-soft);
-  }
-
-  .sheet-link :global(svg) {
-    color: var(--primary);
+  .sheet-link:active {
+    background: var(--primary-soft);
+    transition-duration: 0s;
   }
 
   .sheet-link.active {
-    color: var(--text-color);
-    background: var(--surface-soft);
-    font-weight: 600;
-  }
-
-  .sheet-link.active :global(svg) {
     color: var(--primary);
-  }
-
-  @media (max-width: 420px) {
-    .bottom-rail,
-    .more-sheet {
-      width: calc(100vw - 0.75rem);
-    }
+    font-weight: 500;
   }
 
   /* ── Hide on desktop ── */

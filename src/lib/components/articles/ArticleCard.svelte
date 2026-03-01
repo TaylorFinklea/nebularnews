@@ -1,8 +1,7 @@
 <script>
   import { createEventDispatcher } from 'svelte';
   import { resolveArticleImageUrl } from '$lib/article-image';
-  import Pill from '$lib/components/Pill.svelte';
-  import { IconEye, IconEyeOff, IconPlus, IconStars, IconThumbDown, IconThumbUp, IconX } from '$lib/icons';
+  import { IconEye, IconEyeOff, IconStars, IconThumbDown, IconThumbUp } from '$lib/icons';
   import { isArticleRead, reactionNumber } from '$lib/client/articles/articles-state';
 
   export let article;
@@ -32,14 +31,6 @@
     dispatch('imageError', { articleId: article.id });
   };
 
-  const onAcceptSuggestion = (suggestion) => {
-    dispatch('acceptSuggestion', { articleId: article.id, suggestion });
-  };
-
-  const onDismissSuggestion = (suggestion) => {
-    dispatch('dismissSuggestion', { articleId: article.id, suggestion });
-  };
-
   const fitScoreValue = (score) => {
     const n = Number(score);
     return Number.isFinite(n) && n >= 1 && n <= 5 ? Math.round(n) : null;
@@ -60,564 +51,405 @@
     const value = fitScoreValue(score);
     return value === null ? 'AI fit score not available yet' : `AI fit score ${value} out of 5`;
   };
-
-  const formatPublished = (value) => {
-    if (!value) return '';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return '';
-    return new Intl.DateTimeFormat(undefined, {
-      month: 'short',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit'
-    }).format(date);
-  };
-
-  const sourceReputationLabel = (article) => {
-    const feedbackCount = Number(article?.source_feedback_count ?? 0);
-    const reputation = Number(article?.source_reputation ?? 0);
-    if (!feedbackCount || !Number.isFinite(reputation)) return '';
-    return `Source reputation ${reputation.toFixed(2)} from ${feedbackCount} votes`;
-  };
-
-  $: publishedLabel = formatPublished(article?.published_at ?? article?.fetched_at ?? null);
-  $: visibleTags = Array.isArray(article?.tags) ? article.tags.slice(0, 4) : [];
-  $: extraTagCount = Array.isArray(article?.tags) ? Math.max(0, article.tags.length - visibleTags.length) : 0;
-  $: excerpt = article?.summary_text ?? article?.excerpt ?? '';
 </script>
 
-<article class={`article-card layout-${cardLayout}`} id={`article-${article.id}`}>
+<article class={`card layout-${cardLayout}`} id={`article-${article.id}`}>
   <a
-    class="visual-link"
+    class="card-image-link"
     href={href}
-    tabindex="-1"
-    aria-hidden="true"
-    data-sveltekit-reload="true"
+    title="Open article"
+    aria-label="Open article"
   >
     {#if imageFailed}
-      <div class="visual-fallback" aria-hidden="true">
-        <span>{article?.source_name ?? 'Story'}</span>
-      </div>
+      <div class="image-fallback" aria-hidden="true">No image</div>
     {:else}
       <img
-        class="visual-image"
+        class="card-image"
         src={resolveArticleImageUrl(article)}
-        alt=""
+        alt={article.title ?? 'Article image'}
         loading="lazy"
         decoding="async"
         on:error={onImageError}
       />
     {/if}
   </a>
-
-  <div class="card-body">
-    <div class="meta-row">
-      <span class="source-pill">{article?.source_name ?? 'Unknown source'}</span>
-      {#if publishedLabel}
-        <span class="published-label">{publishedLabel}</span>
-      {/if}
-    </div>
-
-    <div class="headline-row">
-      <div class="headline-copy">
-        <h2>
-          <a class="title-link" href={href} data-sveltekit-reload="true">
-            {article?.title ?? 'Untitled article'}
-          </a>
-        </h2>
-        {#if article?.author}
-          <p class="byline">By {article.author}</p>
-        {/if}
-      </div>
-
-      <div class="signal-stack">
+  <div class="card-main">
+    <div class="card-head">
+      <h2>
+        <a class="title-link" href={href}>
+          {article.title ?? 'Untitled article'}
+        </a>
+      </h2>
+      <div class="pills">
         <span
-          class={`fit-pill ${fitScoreTone(article?.score)}`}
-          title={fitScoreAria(article?.score)}
-          aria-label={fitScoreAria(article?.score)}
+          class={`fit-pill ${fitScoreTone(article.score)}`}
+          title={fitScoreAria(article.score)}
+          aria-label={fitScoreAria(article.score)}
         >
           <IconStars size={13} stroke={1.9} />
-          <span>{fitScoreText(article?.score)}</span>
+          <span>{fitScoreText(article.score)}</span>
         </span>
-        <Pill variant={isArticleRead(article) ? 'muted' : 'default'}>
+        <span class={`pill ${isArticleRead(article) ? 'read' : 'unread'}`}>
           {isArticleRead(article) ? 'Read' : 'Unread'}
-        </Pill>
+        </span>
       </div>
     </div>
-
-    {#if sourceReputationLabel(article)}
-      <p class="reputation-note">{sourceReputationLabel(article)}</p>
+    <div class="meta">
+      <span>
+        {article.source_name ?? 'Unknown source'}
+        {#if article.source_feedback_count}
+          · rep {Number(article.source_reputation ?? 0).toFixed(2)} ({article.source_feedback_count} votes)
+        {/if}
+      </span>
+      <span>{article.published_at ? new Date(article.published_at).toLocaleString() : ''}</span>
+    </div>
+    {#if article.author}
+      <div class="byline">By {article.author}</div>
     {/if}
-
-    {#if excerpt}
-      <p class="excerpt">{excerpt}</p>
-    {/if}
-
-    {#if visibleTags.length || extraTagCount > 0}
-      <div class="tag-row" aria-label="Article tags">
-        {#each visibleTags as tag}
+    {#if article.tags?.length}
+      <div class="tag-row">
+        {#each article.tags as tag}
           <span class="tag-pill">{tag.name}</span>
         {/each}
-        {#if extraTagCount > 0}
-          <span class="tag-pill more-tag">+{extraTagCount}</span>
-        {/if}
       </div>
     {/if}
-
-    {#if article?.tag_suggestions?.length}
-      <div class="suggestion-row" aria-label="Suggested tags">
-        {#each article.tag_suggestions as suggestion}
-          <span class="suggestion-pill">
-            <span>{suggestion.name}</span>
-            <button
-              type="button"
-              class="suggestion-action"
-              on:click={() => onAcceptSuggestion(suggestion)}
-              title={`Accept suggested tag ${suggestion.name}`}
-              aria-label={`Accept suggested tag ${suggestion.name}`}
-              disabled={pending}
-            >
-              <IconPlus size={11} stroke={2} />
-            </button>
-            <button
-              type="button"
-              class="suggestion-action"
-              on:click={() => onDismissSuggestion(suggestion)}
-              title={`Dismiss suggested tag ${suggestion.name}`}
-              aria-label={`Dismiss suggested tag ${suggestion.name}`}
-              disabled={pending}
-            >
-              <IconX size={11} stroke={2} />
-            </button>
-          </span>
-        {/each}
-      </div>
-    {/if}
-
-    <div class="footer-row" class:pending>
-      <div class="action-group">
-        <button
-          type="button"
-          class="icon-button"
-          class:active={reactionNumber(article?.reaction_value) === 1}
-          on:click={() => onReact(1)}
-          title="Thumbs up feed"
-          aria-label="Thumbs up feed"
-          disabled={pending}
-        >
-          <IconThumbUp size={16} stroke={1.9} />
-        </button>
-        <button
-          type="button"
-          class="icon-button"
-          class:active={reactionNumber(article?.reaction_value) === -1}
-          on:click={() => onReact(-1)}
-          title="Thumbs down feed"
-          aria-label="Thumbs down feed"
-          disabled={pending}
-        >
-          <IconThumbDown size={16} stroke={1.9} />
-        </button>
-        <button
-          type="button"
-          class="read-button"
-          on:click={onToggleRead}
-          title={isArticleRead(article) ? 'Mark unread' : 'Mark read'}
-          aria-label={isArticleRead(article) ? 'Mark unread' : 'Mark read'}
-          disabled={pending}
-        >
-          {#if isArticleRead(article)}
-            <IconEyeOff size={16} stroke={1.9} />
-            <span>Mark unread</span>
-          {:else}
-            <IconEye size={16} stroke={1.9} />
-            <span>Mark read</span>
-          {/if}
-        </button>
-      </div>
-
-      <a class="open-link" href={href} data-sveltekit-reload="true">
-        Open article
-      </a>
+    <p class="excerpt">{article.summary_text ?? article.excerpt ?? ''}</p>
+  </div>
+  <div class="action-row" class:pending>
+    <div class="reactions">
+      <button
+        type="button"
+        class="icon-button"
+        class:active={reactionNumber(article.reaction_value) === 1}
+        on:click={() => onReact(1)}
+        title="Thumbs up feed"
+        aria-label="Thumbs up feed"
+        disabled={pending}
+      >
+        <IconThumbUp size={16} stroke={1.9} />
+        <span class="sr-only">Thumbs up feed</span>
+      </button>
+      <button
+        type="button"
+        class="icon-button"
+        class:active={reactionNumber(article.reaction_value) === -1}
+        on:click={() => onReact(-1)}
+        title="Thumbs down feed"
+        aria-label="Thumbs down feed"
+        disabled={pending}
+      >
+        <IconThumbDown size={16} stroke={1.9} />
+        <span class="sr-only">Thumbs down feed</span>
+      </button>
     </div>
+    <button
+      type="button"
+      class="ghost icon-button"
+      on:click={onToggleRead}
+      title={isArticleRead(article) ? 'Mark unread' : 'Mark read'}
+      aria-label={isArticleRead(article) ? 'Mark unread' : 'Mark read'}
+      disabled={pending}
+    >
+      {#if isArticleRead(article)}
+        <IconEyeOff size={16} stroke={1.9} />
+        <span class="sr-only">Mark unread</span>
+      {:else}
+        <IconEye size={16} stroke={1.9} />
+        <span class="sr-only">Mark read</span>
+      {/if}
+    </button>
   </div>
 </article>
 
 <style>
-  .article-card {
-    min-width: 0;
+  .card {
+    background: var(--surface-strong);
+    padding: 1.6rem;
+    border-radius: 22px;
+    box-shadow: 0 16px 30px var(--shadow-color);
+    border: 1px solid var(--surface-border);
     display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    border-radius: 0;
-    border: none;
-    border-bottom: 1px solid var(--surface-border);
-    background: transparent;
-    overflow: clip;
-    padding-bottom: var(--space-4);
+    gap: 1rem;
+    align-items: start;
   }
 
-  .article-card:hover {
-    border-color: var(--surface-border);
+  .card.layout-split {
+    grid-template-columns: 180px minmax(0, 1fr);
+    grid-template-areas:
+      'image main'
+      'actions actions';
   }
 
-  .article-card.layout-split {
-    grid-template-columns: minmax(220px, 250px) minmax(0, 1fr);
+  .card.layout-stacked {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      'image'
+      'main'
+      'actions';
   }
 
-  .visual-link {
-    min-width: 0;
+  .card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+
+  .card-image-link {
+    grid-area: image;
     display: block;
-    background: var(--surface-soft);
-    border-radius: var(--radius-md);
+    border-radius: 14px;
     overflow: hidden;
+    background: linear-gradient(145deg, rgba(83, 118, 255, 0.24), rgba(69, 36, 199, 0.12));
+    border: 1px solid var(--surface-border);
   }
 
-  .layout-split .visual-link {
-    height: 100%;
-    min-height: 100%;
+  .card.layout-split .card-image-link {
+    width: 100%;
+    height: 126px;
   }
 
-  .layout-stacked .visual-link {
-    aspect-ratio: 16 / 9;
+  .card.layout-stacked .card-image-link {
+    width: 100%;
+    max-width: 560px;
+    max-height: 220px;
   }
 
-  .visual-image,
-  .visual-fallback {
+  .card-image {
     width: 100%;
     height: 100%;
-    display: block;
-  }
-
-  .visual-image {
     object-fit: cover;
+    display: block;
+    background: linear-gradient(145deg, rgba(83, 118, 255, 0.24), rgba(69, 36, 199, 0.12));
   }
 
-  .visual-fallback {
-    min-height: 100%;
+  .image-fallback {
+    width: 100%;
+    height: 100%;
     display: grid;
-    place-items: end start;
-    padding: var(--space-5);
+    place-items: center;
     color: var(--muted-text);
-    font-size: var(--text-xs);
-    letter-spacing: 0.12em;
+    font-size: 0.82rem;
     text-transform: uppercase;
+    letter-spacing: 0.04em;
   }
 
-  .card-body {
-    min-width: 0;
+  .card-main {
+    grid-area: main;
     display: grid;
-    gap: var(--space-4);
-    padding: clamp(1rem, 1.8vw, 1.5rem);
-  }
-
-  .meta-row,
-  .headline-row,
-  .signal-stack,
-  .footer-row,
-  .tag-row,
-  .suggestion-row,
-  .action-group {
+    gap: 0.7rem;
     min-width: 0;
+    align-content: start;
   }
 
-  .meta-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-3);
-    flex-wrap: wrap;
-  }
-
-  .source-pill,
-  .published-label {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    font-size: var(--text-xs);
-    overflow-wrap: anywhere;
-  }
-
-  .source-pill {
-    color: var(--primary);
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    padding: 0;
-    background: transparent;
-    border: none;
-  }
-
-  .published-label {
-    color: var(--muted-text);
-  }
-
-  .headline-row {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: var(--space-4);
-  }
-
-  .headline-copy {
-    min-width: 0;
-    display: grid;
-    gap: 0.45rem;
-    flex: 1 1 auto;
-  }
-
-  h2 {
+  .card h2 {
     margin: 0;
-    font-size: clamp(1.15rem, 1.6vw, 1.5rem);
-    line-height: 1.16;
-    letter-spacing: -0.02em;
+    font-size: 1.02rem;
   }
 
   .title-link {
     color: var(--text-color);
     text-decoration: none;
-    overflow-wrap: anywhere;
-    text-wrap: balance;
-    transition: color var(--transition-fast);
   }
 
   .title-link:hover {
     color: var(--primary);
   }
 
-  .byline,
-  .reputation-note {
-    margin: 0;
-    color: var(--muted-text);
-    font-size: var(--text-sm);
-    overflow-wrap: anywhere;
-  }
-
-  .signal-stack {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: 0.45rem;
-    flex-shrink: 0;
-  }
-
-  .fit-pill,
-  .tag-pill,
-  .suggestion-pill {
-    min-width: 0;
-    max-width: 100%;
+  .pills {
     display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--surface-border);
-    background: var(--surface-soft);
-    padding: 0.3rem 0.62rem;
-    font-size: var(--text-xs);
-    overflow-wrap: anywhere;
+    gap: 0.5rem;
   }
 
   .fit-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    border-radius: 999px;
+    border: 1px solid var(--input-border);
+    background: var(--surface-soft);
     color: var(--muted-text);
+    padding: 0.3rem 0.62rem;
+    font-size: 0.8rem;
     font-weight: 600;
     line-height: 1;
   }
 
   .fit-pill.fit-none {
     color: var(--muted-text);
+    border-color: var(--input-border);
   }
 
   .fit-pill.fit-1 {
     color: #fca5a5;
+    border-color: rgba(252, 165, 165, 0.42);
     background: rgba(252, 165, 165, 0.12);
-    border-color: rgba(252, 165, 165, 0.25);
   }
 
   .fit-pill.fit-2 {
     color: #fdba74;
+    border-color: rgba(253, 186, 116, 0.42);
     background: rgba(253, 186, 116, 0.12);
-    border-color: rgba(253, 186, 116, 0.25);
   }
 
   .fit-pill.fit-3 {
     color: #c4b5fd;
+    border-color: rgba(196, 181, 253, 0.45);
     background: rgba(196, 181, 253, 0.14);
-    border-color: rgba(196, 181, 253, 0.26);
   }
 
   .fit-pill.fit-4 {
     color: #67e8f9;
+    border-color: rgba(103, 232, 249, 0.45);
     background: rgba(103, 232, 249, 0.14);
-    border-color: rgba(103, 232, 249, 0.26);
   }
 
   .fit-pill.fit-5 {
     color: #86efac;
+    border-color: rgba(134, 239, 172, 0.45);
     background: rgba(134, 239, 172, 0.14);
-    border-color: rgba(134, 239, 172, 0.26);
+  }
+
+  .pill {
+    background: var(--primary-soft);
+    color: var(--primary);
+    padding: 0.3rem 0.7rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+
+  .pill.read {
+    background: var(--surface-soft);
+    color: var(--muted-text);
+  }
+
+  .pill.unread {
+    background: var(--primary-soft);
+    color: var(--primary);
   }
 
   .excerpt {
     margin: 0;
     color: var(--muted-text);
-    font-size: clamp(0.98rem, 1.1vw, 1.05rem);
-    line-height: 1.68;
     display: -webkit-box;
+    -webkit-line-clamp: 8;
+    line-clamp: 8;
     -webkit-box-orient: vertical;
-    -webkit-line-clamp: 4;
-    line-clamp: 4;
     overflow: hidden;
-    overflow-wrap: anywhere;
+    font-size: 0.92rem;
+    line-height: 1.45;
   }
 
-  .tag-row,
-  .suggestion-row {
+  .meta {
     display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    color: var(--muted-text);
+    gap: 0.7rem;
     flex-wrap: wrap;
-    gap: 0.45rem;
   }
 
-  .tag-pill {
+  .byline {
+    font-size: 0.85rem;
     color: var(--muted-text);
   }
 
-  .more-tag {
-    color: var(--text-color);
-    font-weight: 600;
-  }
-
-  .suggestion-pill {
-    padding-right: 0.32rem;
-    background: rgba(74, 222, 128, 0.08);
-  }
-
-  .suggestion-action {
-    width: 1.35rem;
-    height: 1.35rem;
-    padding: 0;
-    border: 0;
-    border-radius: var(--radius-sm);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--surface);
-    color: inherit;
-    cursor: pointer;
-    flex-shrink: 0;
-  }
-
-  .footer-row {
+  .action-row {
+    grid-area: actions;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: var(--space-3);
+    justify-content: flex-start;
     flex-wrap: wrap;
-    padding-top: var(--space-3);
+    gap: 0.7rem;
+    padding-top: 0.25rem;
     border-top: 1px solid var(--surface-border);
   }
 
-  .footer-row.pending {
-    opacity: 0.88;
+  .action-row.pending {
+    opacity: 0.9;
   }
 
-  .action-group {
-    display: flex;
-    align-items: center;
-    gap: 0.55rem;
-    flex-wrap: wrap;
+  .reactions {
+    display: inline-flex;
+    gap: 0.5rem;
   }
 
-  .icon-button,
-  .read-button,
-  .open-link {
-    min-height: 44px;
-    min-width: 44px;
-    border-radius: var(--radius-md);
+  .reactions button {
+    border: 1px solid var(--input-border);
+    background: var(--surface-soft);
+    border-radius: 999px;
+    padding: 0;
+    cursor: pointer;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.45rem;
-    font: inherit;
-    transition:
-      background var(--transition-fast),
-      border-color var(--transition-fast),
-      color var(--transition-fast),
-      opacity var(--transition-fast);
-  }
-
-  .icon-button,
-  .read-button {
-    border: 1px solid var(--surface-border);
-    background: transparent;
     color: var(--text-color);
-    cursor: pointer;
+    width: 2.1rem;
+    height: 2.1rem;
   }
 
-  .icon-button {
-    width: 44px;
-    padding: 0;
-  }
-
-  .icon-button.active {
+  .reactions button.active {
+    border-color: var(--ghost-border);
+    background: var(--primary-soft);
     color: var(--primary);
-    background: var(--primary-soft);
-    border-color: var(--primary);
   }
 
-  .read-button {
-    padding: 0.72rem 1rem;
+  .action-row button:disabled {
+    opacity: 0.62;
+    cursor: wait;
   }
 
-  .open-link {
-    padding: 0.72rem 1rem;
-    border: 1px solid var(--surface-border);
-    background: var(--primary-soft);
-    color: var(--text-color);
-    text-decoration: none;
-    font-weight: 600;
+  .ghost {
+    border: 1px solid var(--ghost-border);
+    background: transparent;
+    color: var(--ghost-color);
+    border-radius: 999px;
+    padding: 0;
+    cursor: pointer;
+    width: 2.1rem;
+    height: 2.1rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
 
-  .icon-button:hover:not(:disabled),
-  .read-button:hover:not(:disabled),
-  .open-link:hover {
-    border-color: var(--primary);
+  .tag-row {
+    margin-top: 0.7rem;
+    display: flex;
+    gap: 0.45rem;
+    flex-wrap: wrap;
   }
 
-  .icon-button:disabled,
-  .read-button:disabled,
-  .suggestion-action:disabled {
-    opacity: 0.6;
-    cursor: default;
+  .tag-pill {
+    border: 1px solid var(--input-border);
+    background: var(--surface-soft);
+    border-radius: 999px;
+    padding: 0.2rem 0.55rem;
+    font-size: 0.78rem;
+    color: var(--muted-text);
   }
 
-  @media (max-width: 920px) {
-    .article-card.layout-split,
-    .article-card.layout-stacked {
-      grid-template-columns: minmax(0, 1fr);
+  @media (max-width: 700px) {
+    .card.layout-split,
+    .card.layout-stacked {
+      grid-template-columns: 1fr;
+      grid-template-areas:
+        'image'
+        'main'
+        'actions';
     }
 
-    .visual-link {
+    .card.layout-split .card-image-link,
+    .card.layout-stacked .card-image-link {
+      width: 100%;
+      max-width: none;
+      height: auto;
       aspect-ratio: 16 / 9;
     }
-  }
 
-  @media (max-width: 640px) {
-    .headline-row {
-      display: grid;
-      gap: var(--space-3);
-    }
-
-    .signal-stack {
-      justify-content: flex-start;
-    }
-
-    .read-button,
-    .open-link {
-      flex: 1 1 12rem;
-      min-width: 0;
-    }
-
-    .action-group {
-      width: 100%;
+    .card-image {
+      height: 100%;
     }
   }
 </style>

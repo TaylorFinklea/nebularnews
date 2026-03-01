@@ -8,8 +8,6 @@
   export let disabled = false;
   export let placeholder = 'Type a message';
   export let error = '';
-  /** @type {'default' | 'compact'} */
-  export let density = 'default';
 
   const dispatch = createEventDispatcher();
   let chatContainer;
@@ -28,7 +26,7 @@
   };
 </script>
 
-<div class={`chat-wrap density-${density}`}>
+<div class="chat-wrap">
   <div class="chat-box" bind:this={chatContainer}>
     {#if chatLog.length === 0 && !sending}
       <div class="chat-empty">
@@ -74,7 +72,6 @@
   .chat-wrap {
     display: grid;
     gap: var(--space-3);
-    min-width: 0;
   }
 
   .chat-box {
@@ -87,7 +84,6 @@
     max-height: 500px;
     overflow-y: auto;
     align-content: start;
-    min-width: 0;
   }
 
   .chat-empty {
@@ -112,7 +108,6 @@
     max-width: 80%;
     line-height: 1.5;
     word-break: break-word;
-    overflow-wrap: anywhere;
   }
 
   .bubble.user {
@@ -160,12 +155,10 @@
   .input-row {
     display: flex;
     gap: var(--space-2);
-    min-width: 0;
   }
 
   input {
     flex: 1;
-    min-width: 0;
     padding: 0.7rem;
     border-radius: var(--radius-md);
     border: 1px solid var(--input-border);
@@ -199,51 +192,5 @@
     color: var(--danger);
     font-size: var(--text-sm);
     margin: 0;
-  }
-
-  .density-compact {
-    gap: var(--space-2);
-  }
-
-  .density-compact .chat-box {
-    min-height: 220px;
-    max-height: 380px;
-    padding: var(--space-3);
-  }
-
-  .density-compact .chat-empty {
-    min-height: 120px;
-    gap: var(--space-2);
-  }
-
-  .density-compact .chat-empty p {
-    font-size: var(--text-sm);
-  }
-
-  .density-compact .bubble {
-    max-width: 88%;
-    padding: 0.55rem 0.8rem;
-    font-size: var(--text-sm);
-  }
-
-  .density-compact input {
-    padding: 0.65rem 0.75rem;
-    font-size: var(--text-sm);
-  }
-
-  .density-compact .send-btn {
-    width: 2.5rem;
-    height: 2.5rem;
-  }
-
-  @media (max-width: 640px) {
-    .density-compact .input-row {
-      flex-wrap: wrap;
-    }
-
-    .density-compact .send-btn {
-      width: 100%;
-      height: 2.75rem;
-    }
   }
 </style>

@@ -15,17 +15,10 @@ const EMPTY_MOMENTUM = {
   highFitUnread7d: 0
 };
 
-const DASHBOARD_VISIBLE_REACTIONS = ['up', 'none'] as const;
-
-const buildArticlesHref = (
-  options: { unreadOnly?: boolean; scoreCutoff?: number; sinceDays?: number } = {}
-) => {
+const buildUnreadHref = (options: { scoreCutoff?: number; sinceDays?: number } = {}) => {
   const params = new URLSearchParams();
-
-  if (options.unreadOnly) {
-    params.set('read', 'unread');
-    params.set('sort', 'unread_first');
-  }
+  params.set('read', 'unread');
+  params.set('sort', 'unread_first');
 
   if (options.sinceDays && Number.isFinite(options.sinceDays)) {
     params.set('sinceDays', String(Math.max(1, Math.round(options.sinceDays))));
@@ -36,10 +29,6 @@ const buildArticlesHref = (
     for (let score = 5; score >= 1; score -= 1) {
       if (score >= scoreCutoff) params.append('score', String(score));
     }
-  }
-
-  for (const reaction of DASHBOARD_VISIBLE_REACTIONS) {
-    params.append('reaction', reaction);
   }
 
   return `/articles?${params.toString()}`;
@@ -103,20 +92,17 @@ export const load = async ({ platform, request, depends, setHeaders, locals }) =
       windowDays: queueConfig.windowDays,
       limit: queueConfig.limit,
       scoreCutoff: queueConfig.scoreCutoff,
-      hrefUnread: buildArticlesHref({ unreadOnly: true }),
-      hrefHighFitUnread: buildArticlesHref({
-        unreadOnly: true,
+      hrefUnread: buildUnreadHref(),
+      hrefHighFitUnread: buildUnreadHref({
         scoreCutoff: queueConfig.scoreCutoff,
         sinceDays: 7
       })
     },
     momentumLinks: {
-      allArticles: buildArticlesHref(),
-      unreadTotal: buildArticlesHref({ unreadOnly: true }),
-      unread24h: buildArticlesHref({ unreadOnly: true, sinceDays: 1 }),
-      unread7d: buildArticlesHref({ unreadOnly: true, sinceDays: 7 }),
-      highFitUnread7d: buildArticlesHref({
-        unreadOnly: true,
+      unreadTotal: buildUnreadHref(),
+      unread24h: buildUnreadHref({ sinceDays: 1 }),
+      unread7d: buildUnreadHref({ sinceDays: 7 }),
+      highFitUnread7d: buildUnreadHref({
         scoreCutoff: queueConfig.scoreCutoff,
         sinceDays: 7
       })

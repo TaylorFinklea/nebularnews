@@ -72,6 +72,10 @@
 
 <svelte:head>
   <title>Nebular News</title>
+  <link
+    rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap"
+  />
   <script>
     (() => {
       try {
@@ -121,55 +125,65 @@
 
 <style>
   :global(:root) {
-    --mobile-nav-height: 70px;
-    --mobile-nav-offset: 12px;
-    --bg-flat: #000000;
-    --text-color: #f5f5f7;
-    --muted-text: rgba(245, 245, 247, 0.55);
-    --surface: #1c1c1e;
-    --surface-strong: #1c1c1e;
-    --surface-soft: #2c2c2e;
-    --surface-border: rgba(255, 255, 255, 0.08);
-    --shadow-color: rgba(0, 0, 0, 0.3);
-    --primary: #7c5cff;
-    --primary-strong: #6B4EFF;
-    --primary-soft: rgba(124, 92, 255, 0.12);
-    --primary-contrast: #ffffff;
+    --mobile-nav-height: 64px;
+    --bg-gradient-start: #050915;
+    --bg-gradient-mid: #0b1638;
+    --bg-gradient-end: #1a1640;
+    --nebula-a: rgba(120, 95, 255, 0.28);
+    --nebula-b: rgba(53, 147, 255, 0.22);
+    --text-color: #ecf0ff;
+    --muted-text: rgba(225, 232, 255, 0.72);
+    --surface: rgba(14, 22, 52, 0.78);
+    --surface-strong: rgba(10, 16, 40, 0.88);
+    --surface-soft: rgba(20, 28, 60, 0.7);
+    --surface-border: rgba(149, 164, 255, 0.10);
+    --shadow-color: rgba(2, 6, 24, 0.45);
+    --primary: #9a8bff;
+    --primary-strong: #8573ff;
+    --primary-soft: rgba(154, 139, 255, 0.2);
+    --primary-contrast: #f6f8ff;
     --button-bg: var(--primary);
-    --button-text: #ffffff;
-    --ghost-color: var(--text-color);
-    --ghost-border: rgba(255, 255, 255, 0.16);
-    --input-bg: #1c1c1e;
-    --input-border: rgba(255, 255, 255, 0.12);
-    --danger: #ff453a;
+    --button-text: #f6f8ff;
+    --ghost-color: #b5a7ff;
+    --ghost-border: rgba(154, 139, 255, 0.42);
+    --input-bg: rgba(8, 13, 34, 0.7);
+    --input-border: rgba(149, 164, 255, 0.26);
+    --danger: #ff8ca1;
   }
 
   :global(:root[data-theme='light']) {
-    --bg-flat: #ffffff;
-    --text-color: #1d1d1f;
-    --muted-text: rgba(29, 29, 31, 0.50);
-    --surface: #ffffff;
-    --surface-strong: #ffffff;
-    --surface-soft: #f5f5f7;
-    --surface-border: rgba(0, 0, 0, 0.08);
-    --shadow-color: rgba(0, 0, 0, 0.08);
-    --primary: #6340e0;
-    --primary-strong: #5633cc;
-    --primary-soft: rgba(99, 64, 224, 0.08);
-    --primary-contrast: #ffffff;
+    --bg-gradient-start: #f6f8ff;
+    --bg-gradient-mid: #e9ecff;
+    --bg-gradient-end: #dde4ff;
+    --nebula-a: rgba(129, 107, 255, 0.2);
+    --nebula-b: rgba(80, 179, 255, 0.18);
+    --text-color: #171e41;
+    --muted-text: rgba(22, 30, 65, 0.66);
+    --surface: rgba(255, 255, 255, 0.92);
+    --surface-strong: rgba(255, 255, 255, 0.96);
+    --surface-soft: rgba(244, 247, 255, 0.90);
+    --surface-border: rgba(98, 112, 191, 0.10);
+    --shadow-color: rgba(35, 49, 122, 0.16);
+    --primary: #6351ef;
+    --primary-strong: #5442d8;
+    --primary-soft: rgba(99, 81, 239, 0.14);
+    --primary-contrast: #f8f9ff;
     --button-bg: var(--primary);
-    --button-text: #ffffff;
-    --ghost-color: #1d1d1f;
-    --ghost-border: rgba(0, 0, 0, 0.12);
-    --input-bg: #ffffff;
-    --input-border: rgba(0, 0, 0, 0.12);
-    --danger: #d4232a;
+    --button-text: #f8f9ff;
+    --ghost-color: #5543da;
+    --ghost-border: rgba(86, 67, 218, 0.35);
+    --input-bg: rgba(255, 255, 255, 0.84);
+    --input-border: rgba(93, 107, 187, 0.34);
+    --danger: #c12f5d;
   }
 
   :global(body) {
     margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
-    background: var(--bg-flat);
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+    background:
+      radial-gradient(1200px 620px at 8% -10%, var(--nebula-a), transparent 62%),
+      radial-gradient(950px 560px at 95% 0%, var(--nebula-b), transparent 60%),
+      linear-gradient(160deg, var(--bg-gradient-start), var(--bg-gradient-mid) 45%, var(--bg-gradient-end));
     color: var(--text-color);
     min-height: 100vh;
   }
@@ -177,7 +191,7 @@
   :global(h1),
   :global(h2),
   :global(h3) {
-    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', system-ui, sans-serif;
+    font-family: 'Space Grotesk', system-ui, sans-serif;
   }
 
   :global(a) {
@@ -259,7 +273,7 @@
     }
 
     .main-column.with-mobile-nav .content {
-      padding-bottom: calc(var(--mobile-nav-height) + var(--mobile-nav-offset) + env(safe-area-inset-bottom) + var(--space-6));
+      padding-bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom) + var(--space-6));
     }
   }
 </style>

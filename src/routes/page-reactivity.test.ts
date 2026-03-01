@@ -34,15 +34,8 @@ const createData = (overrides = {}) => ({
     windowDays: 7,
     limit: 6,
     scoreCutoff: 3,
-    hrefUnread: '/articles?read=unread&sort=unread_first&reaction=up&reaction=none',
-    hrefHighFitUnread: '/articles?read=unread&sort=unread_first&sinceDays=7&score=5&score=4&score=3&reaction=up&reaction=none'
-  },
-  momentumLinks: {
-    allArticles: '/articles?reaction=up&reaction=none',
-    unreadTotal: '/articles?read=unread&sort=unread_first&reaction=up&reaction=none',
-    unread24h: '/articles?read=unread&sort=unread_first&sinceDays=1&reaction=up&reaction=none',
-    unread7d: '/articles?read=unread&sort=unread_first&sinceDays=7&reaction=up&reaction=none',
-    highFitUnread7d: '/articles?read=unread&sort=unread_first&sinceDays=7&score=5&score=4&score=3&reaction=up&reaction=none'
+    hrefUnread: '/articles?read=unread&sort=unread_first',
+    hrefHighFitUnread: '/articles?read=unread&sort=unread_first&score=5&score=4&score=3'
   },
   readingQueue: [baseQueueArticle],
   momentum: {
@@ -133,20 +126,5 @@ describe('Dashboard page reactivity', () => {
       );
       expect(invalidateMock).toHaveBeenCalledWith('app:dashboard');
     });
-  });
-
-  it('uses dashboard links that hide thumbs-down articles', () => {
-    render(DashboardPage, { data: createData() });
-
-    expect(screen.getByRole('link', { name: 'View unread' }).getAttribute('href')).toContain('reaction=up');
-    expect(screen.getByRole('link', { name: 'View unread' }).getAttribute('href')).toContain('reaction=none');
-    expect(screen.getByRole('link', { name: 'Browse all articles' }).getAttribute('href')).toBe('/articles?reaction=up&reaction=none');
-
-    const openLink = screen.getByRole('link', { name: 'Open' });
-    const href = openLink.getAttribute('href') ?? '';
-    expect(href).toContain('/articles/article-1?from=');
-    expect(decodeURIComponent(href)).toContain('reaction=up');
-    expect(decodeURIComponent(href)).toContain('reaction=none');
-    expect(decodeURIComponent(href)).not.toContain('reaction=down');
   });
 });

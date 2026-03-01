@@ -39,62 +39,58 @@
 
 <aside class="sidebar" class:collapsed aria-label="App sidebar">
   <div class="sidebar-inner">
-    <div class="sidebar-main">
-      <a
-        class="brand"
-        href="/"
-        aria-label="Nebular News"
-        title={collapsed ? 'Nebular News' : undefined}
-      >
-        <span class="brand-icon">
-          <IconStars size={22} stroke={1.8} />
-        </span>
-        <span class="brand-text">
-          <span class="brand-mark">Nebular</span>
-          <span class="brand-accent">News</span>
-        </span>
-      </a>
+    <a
+      class="brand"
+      href="/"
+      aria-label="Nebular News"
+      title={collapsed ? 'Nebular News' : undefined}
+    >
+      <span class="brand-icon">
+        <IconStars size={22} stroke={1.8} />
+      </span>
+      <span class="brand-text">
+        <span class="brand-mark">Nebular</span>
+        <span class="brand-accent">News</span>
+      </span>
+    </a>
 
-      <div class="nav-panel nav-panel-primary">
-        <nav class="nav-group" aria-label="Primary navigation">
-          {#each primaryItems as item}
-            {@const Icon = iconByName[item.icon]}
-            {@const active = isActive(item)}
-            <a
-              href={item.href}
-              class="nav-link"
-              class:active
-              aria-current={active ? 'page' : undefined}
-              aria-label={collapsed ? item.label : undefined}
-              title={collapsed ? item.label : undefined}
-            >
-              <span class="nav-icon"><Icon size={18} stroke={1.9} /></span>
-              <span class="nav-label">{item.label}</span>
-            </a>
-          {/each}
-        </nav>
-      </div>
+    <nav class="nav-group" aria-label="Primary navigation">
+      {#each primaryItems as item}
+        {@const Icon = iconByName[item.icon]}
+        {@const active = isActive(item)}
+        <a
+          href={item.href}
+          class="nav-link"
+          class:active
+          aria-current={active ? 'page' : undefined}
+          aria-label={collapsed ? item.label : undefined}
+          title={collapsed ? item.label : undefined}
+        >
+          <span class="nav-icon"><Icon size={18} stroke={1.9} /></span>
+          <span class="nav-label">{item.label}</span>
+        </a>
+      {/each}
+    </nav>
 
-      <div class="nav-panel workspace-block">
-        <div class="block-label">Workspace</div>
-        <nav class="nav-group" aria-label="Workspace navigation">
-          {#each workspaceItems as item}
-            {@const Icon = iconByName[item.icon]}
-            {@const active = isActive(item)}
-            <a
-              href={item.href}
-              class="nav-link"
-              class:active
-              aria-current={active ? 'page' : undefined}
-              aria-label={collapsed ? item.label : undefined}
-              title={collapsed ? item.label : undefined}
-            >
-              <span class="nav-icon"><Icon size={18} stroke={1.9} /></span>
-              <span class="nav-label">{item.label}</span>
-            </a>
-          {/each}
-        </nav>
-      </div>
+    <div class="workspace-block">
+      <div class="block-label">Workspace</div>
+      <nav class="nav-group" aria-label="Workspace navigation">
+        {#each workspaceItems as item}
+          {@const Icon = iconByName[item.icon]}
+          {@const active = isActive(item)}
+          <a
+            href={item.href}
+            class="nav-link"
+            class:active
+            aria-current={active ? 'page' : undefined}
+            aria-label={collapsed ? item.label : undefined}
+            title={collapsed ? item.label : undefined}
+          >
+            <span class="nav-icon"><Icon size={18} stroke={1.9} /></span>
+            <span class="nav-label">{item.label}</span>
+          </a>
+        {/each}
+      </nav>
     </div>
 
     <div class="sidebar-footer">
@@ -138,37 +134,33 @@
     height: 100vh;
     border-right: 1px solid var(--surface-border);
     background: var(--surface);
+    backdrop-filter: blur(12px);
     overflow: hidden;
   }
 
   .sidebar-inner {
     height: 100%;
-    padding: var(--space-5) var(--space-3) var(--space-4);
-    box-sizing: border-box;
-    display: flex;
-    flex-direction: column;
+    padding: var(--space-5) var(--space-3);
+    display: grid;
+    grid-template-rows: auto auto 1fr auto;
     gap: var(--space-4);
-    overflow-y: auto;
+    overflow: hidden;
   }
 
-  .sidebar-main {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-5);
-  }
-
+  /* ── Brand ── */
   .brand {
     display: flex;
     align-items: center;
-    gap: 0.55rem;
-    padding: 0.15rem var(--space-2);
+    gap: var(--space-3);
+    padding: var(--space-1) var(--space-2);
     border-radius: var(--radius-sm);
+    overflow: hidden;
   }
 
   .brand-icon {
     flex-shrink: 0;
-    width: 1.7rem;
-    height: 1.7rem;
+    width: 2rem;
+    height: 2rem;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -179,35 +171,30 @@
     display: inline-flex;
     align-items: baseline;
     gap: 0.35rem;
-    font-family: inherit;
-    font-size: 1.32rem;
-    letter-spacing: 0.01em;
+    font-family: 'Space Grotesk', system-ui, sans-serif;
+    font-size: 1.35rem;
+    letter-spacing: 0.02em;
     white-space: nowrap;
     opacity: 1;
     transition: opacity 0.2s ease 0.05s;
   }
 
   .brand-mark {
-    font-weight: 700;
+    font-weight: 600;
   }
 
   .brand-accent {
-    color: var(--muted-text);
+    color: var(--primary);
   }
 
-  .nav-panel {
-    display: grid;
-    gap: var(--space-2);
-  }
-
+  /* ── Nav group ── */
   .nav-group {
     display: grid;
     gap: var(--space-1);
   }
 
   .workspace-block {
-    display: flex;
-    flex-direction: column;
+    display: grid;
     gap: var(--space-2);
   }
 
@@ -216,46 +203,68 @@
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--muted-text);
-    padding: 0 0.7rem;
+    padding: 0 var(--space-2);
     white-space: nowrap;
     opacity: 1;
     transition: opacity 0.12s ease;
   }
 
+  /* ── Nav links ── */
   .nav-link,
   .sidebar-action {
+    position: relative;
     display: flex;
     align-items: center;
     gap: var(--space-3);
-    min-height: 2.75rem;
     border-radius: var(--radius-md);
-    padding: 0.62rem var(--space-3);
-    color: var(--text-color);
+    padding: 0.55rem var(--space-3);
+    color: var(--muted-text);
     background: transparent;
-    border: 1px solid transparent;
+    border: none;
     font: inherit;
     text-align: left;
     cursor: pointer;
+    overflow: hidden;
     transition:
       background 0.15s ease,
-      border-color 0.15s ease,
       color 0.15s ease;
   }
 
   .nav-link:hover,
   .sidebar-action:hover {
-    background: var(--surface-soft);
-  }
-
-  .nav-link.active {
-    background: transparent;
-    border-color: transparent;
-    border-left: 3px solid var(--primary);
-    border-radius: 0;
-    padding-left: calc(var(--space-3) - 3px);
+    background: var(--primary-soft);
     color: var(--text-color);
   }
 
+  /* Active accent bar */
+  .nav-link::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 6px;
+    bottom: 6px;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background: var(--primary);
+    opacity: 0;
+    transform: scaleY(0.4);
+    transition:
+      opacity 0.15s ease,
+      transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .nav-link.active::before {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+
+  .nav-link.active {
+    color: var(--primary);
+    background: var(--primary-soft);
+    font-weight: 500;
+  }
+
+  /* ── Icon / Label ── */
   .nav-icon {
     width: 1.35rem;
     height: 1.35rem;
@@ -263,12 +272,10 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    color: inherit;
   }
 
   .nav-label {
     white-space: nowrap;
-    font-size: 0.98rem;
     opacity: 1;
     transform: translateX(0);
     transition:
@@ -276,14 +283,10 @@
       transform 0.15s ease;
   }
 
-  .nav-link.active .nav-label {
-    font-weight: 600;
-  }
-
+  /* ── Footer ── */
   .sidebar-footer {
     display: grid;
     gap: var(--space-1);
-    margin-top: auto;
     padding-top: var(--space-3);
     border-top: 1px solid var(--surface-border);
   }
@@ -296,6 +299,7 @@
     transform: rotate(180deg);
   }
 
+  /* ── Collapsed state ── */
   .sidebar.collapsed .sidebar-inner {
     padding-left: var(--space-2);
     padding-right: var(--space-2);
@@ -303,7 +307,7 @@
 
   .sidebar.collapsed .brand {
     justify-content: center;
-    padding: 0.25rem 0;
+    padding: var(--space-1) 0;
   }
 
   .sidebar.collapsed .brand-text {
@@ -317,7 +321,6 @@
     opacity: 0;
     height: 0;
     overflow: hidden;
-    padding: 0;
     transition: opacity 0.1s ease, height 0s linear 0.1s;
   }
 
@@ -340,6 +343,7 @@
     padding-right: var(--space-2);
   }
 
+  /* ── Hide on mobile ── */
   @media (max-width: 800px) {
     .sidebar {
       display: none;

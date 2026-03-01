@@ -27,7 +27,7 @@
     font-family: inherit;
     font-size: var(--text-base);
     border: none;
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-full);
     cursor: pointer;
     display: inline-flex;
     align-items: center;
@@ -35,6 +35,8 @@
     gap: 0.35rem;
     transition:
       background var(--transition-fast),
+      transform var(--transition-fast),
+      box-shadow var(--transition-fast),
       opacity var(--transition-fast);
   }
 
@@ -44,7 +46,7 @@
   }
 
   .btn:not(:disabled):active {
-    opacity: 0.85;
+    transform: scale(0.97);
   }
 
   /* Variants */
@@ -67,7 +69,7 @@
   .btn-danger {
     background: transparent;
     color: var(--danger);
-    border: 1px solid var(--danger);
+    border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
   }
 
   .btn-danger:not(:disabled):hover {

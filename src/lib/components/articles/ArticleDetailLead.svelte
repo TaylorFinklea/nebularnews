@@ -30,119 +30,147 @@
 </script>
 
 <section class:has-image={Boolean(imageUrl)} class:no-image={!imageUrl} class="lead-shell">
-  <div class="lead-copy">
-    <a class="back-link" href={backHref} data-sveltekit-reload="true">
-      <IconArrowLeft size={16} stroke={1.9} />
-      <span>Back to list</span>
-    </a>
+  <div class="lead-grid">
+    <div class="lead-copy">
+      <a class="back-link" href={backHref} data-sveltekit-reload="true">
+        <IconArrowLeft size={16} stroke={1.9} />
+        <span>Back to list</span>
+      </a>
 
-    <div class="meta-row">
-      <span>{sourceName}</span>
-      {#if publishedLabel}
-        <span>{publishedLabel}</span>
-      {/if}
-      {#if author}
-        <span>{author}</span>
-      {/if}
-    </div>
-
-    <h1>{title}</h1>
-
-    <div class="chip-row">
-      <Pill variant={isRead ? 'muted' : 'default'}>{isRead ? 'Read' : 'Unread'}</Pill>
-      {#if scoreText(fitScore)}
-        <span class="meta-chip score-chip">
-          <IconStars size={14} stroke={1.9} />
-          <span>{scoreText(fitScore)}</span>
-          {#if fitLabel}
-            <span class="chip-separator">·</span>
-            <span>{fitLabel}</span>
+      <div class="lead-meta">
+        <span class="source-pill">{sourceName}</span>
+        <div class="meta-row">
+          {#if publishedLabel}
+            <span>{publishedLabel}</span>
           {/if}
-        </span>
-      {/if}
-      {#each leadTags as tag}
-        <span class="meta-chip tag-chip">{tag.name}</span>
-      {/each}
-      {#if extraTagCount > 0}
-        <span class="meta-chip tag-chip">+{extraTagCount}</span>
-      {/if}
-    </div>
+          {#if author}
+            <span>{author}</span>
+          {/if}
+        </div>
+      </div>
 
-    <div class="action-row">
-      {#if canonicalUrl}
-        <a class="action-primary" href={canonicalUrl} target="_blank" rel="noopener noreferrer">
-          <IconExternalLink size={16} stroke={1.9} />
-          <span>Open Original</span>
-        </a>
-      {/if}
+      <div class="headline-stack">
+        <h1>{title}</h1>
 
-      <button type="button" class="action-secondary" on:click={() => onToggleRead?.()} disabled={readBusy} aria-label={isRead ? 'Mark unread' : 'Mark read'}>
-        {#if isRead}
-          <IconEyeOff size={16} stroke={1.9} />
-          <span>Mark Unread</span>
-        {:else}
-          <IconEye size={16} stroke={1.9} />
-          <span>Mark Read</span>
+        <div class="chip-row">
+          <Pill variant={isRead ? 'muted' : 'default'}>{isRead ? 'Read' : 'Unread'}</Pill>
+          {#if scoreText(fitScore)}
+            <span class="meta-chip score-chip">
+              <IconStars size={14} stroke={1.9} />
+              <span>{scoreText(fitScore)}</span>
+              {#if fitLabel}
+                <span class="chip-separator">·</span>
+                <span>{fitLabel}</span>
+              {/if}
+            </span>
+          {/if}
+          {#each leadTags as tag}
+            <span class="meta-chip tag-chip">{tag.name}</span>
+          {/each}
+          {#if extraTagCount > 0}
+            <span class="meta-chip tag-chip">+{extraTagCount}</span>
+          {/if}
+        </div>
+      </div>
+
+      <div class="action-row">
+        {#if canonicalUrl}
+          <a class="action-primary" href={canonicalUrl} target="_blank" rel="noopener noreferrer">
+            <IconExternalLink size={16} stroke={1.9} />
+            <span>Open Original</span>
+          </a>
         {/if}
-      </button>
 
-      <button
-        type="button"
-        class="action-icon"
-        class:active={reactionValue === 1}
-        on:click={() => onReactUp?.()}
-        disabled={reactionBusy}
-        aria-label="Thumbs up feed"
-      >
-        <IconThumbUp size={16} stroke={1.9} />
-      </button>
+        <button type="button" class="action-secondary" on:click={() => onToggleRead?.()} disabled={readBusy} aria-label={isRead ? 'Mark unread' : 'Mark read'}>
+          {#if isRead}
+            <IconEyeOff size={16} stroke={1.9} />
+            <span>Mark Unread</span>
+          {:else}
+            <IconEye size={16} stroke={1.9} />
+            <span>Mark Read</span>
+          {/if}
+        </button>
 
-      <button
-        type="button"
-        class="action-icon"
-        class:active={reactionValue === -1}
-        on:click={() => onReactDown?.()}
-        disabled={reactionBusy}
-        aria-label="Thumbs down feed"
-      >
-        <IconThumbDown size={16} stroke={1.9} />
-      </button>
+        <div class="reaction-group" aria-label="Feed reaction controls">
+          <button
+            type="button"
+            class="action-icon"
+            class:active={reactionValue === 1}
+            on:click={() => onReactUp?.()}
+            disabled={reactionBusy}
+            aria-label="Thumbs up feed"
+          >
+            <IconThumbUp size={16} stroke={1.9} />
+          </button>
 
-      <button type="button" class="action-secondary utilities-trigger" on:click={() => onOpenUtilities?.()} aria-label="Open utilities">
-        <IconAdjustments size={16} stroke={1.9} />
-        <span>Utilities</span>
-      </button>
+          <button
+            type="button"
+            class="action-icon"
+            class:active={reactionValue === -1}
+            on:click={() => onReactDown?.()}
+            disabled={reactionBusy}
+            aria-label="Thumbs down feed"
+          >
+            <IconThumbDown size={16} stroke={1.9} />
+          </button>
+        </div>
+
+        <button type="button" class="action-secondary utilities-trigger" on:click={() => onOpenUtilities?.()} aria-label="Open utilities">
+          <IconAdjustments size={16} stroke={1.9} />
+          <span>Utilities</span>
+        </button>
+      </div>
     </div>
+
+    {#if imageUrl}
+      <div class="hero-wrap">
+        <img class="hero-image" src={imageUrl} alt="" decoding="async" />
+      </div>
+    {/if}
   </div>
-
-  {#if imageUrl}
-    <div class="hero-wrap">
-      <img class="hero-image" src={imageUrl} alt="" decoding="async" />
-    </div>
-  {/if}
 </section>
 
 <style>
   .lead-shell {
     min-width: 0;
-    display: grid;
-    gap: var(--space-5);
     padding: clamp(1.1rem, 2vw, 1.75rem);
-    border-radius: clamp(1.2rem, 2vw, 1.8rem);
+    border-radius: clamp(1.25rem, 2vw, 1.85rem);
     border: 1px solid color-mix(in srgb, var(--surface-border) 120%, transparent);
     background:
       linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 92%, transparent), color-mix(in srgb, var(--surface) 90%, transparent)),
       radial-gradient(circle at top left, color-mix(in srgb, var(--primary-soft) 88%, transparent), transparent 42%),
-      radial-gradient(circle at top right, color-mix(in srgb, var(--nebula-b) 65%, transparent), transparent 44%);
+      radial-gradient(circle at top right, color-mix(in srgb, var(--nebula-b) 58%, transparent), transparent 44%);
     box-shadow: 0 24px 55px color-mix(in srgb, var(--shadow-color) 70%, transparent);
     overflow: clip;
     position: relative;
   }
 
-  .lead-copy {
+  .lead-grid,
+  .lead-copy,
+  .lead-meta,
+  .meta-row,
+  .headline-stack,
+  .chip-row,
+  .action-row,
+  .reaction-group,
+  .hero-wrap {
     min-width: 0;
+  }
+
+  .lead-grid {
+    display: grid;
+    gap: clamp(1rem, 2vw, 1.6rem);
+    align-items: start;
+  }
+
+  .has-image .lead-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .lead-copy {
     display: grid;
     gap: var(--space-4);
+    align-content: start;
   }
 
   .back-link {
@@ -159,8 +187,35 @@
     color: var(--primary);
   }
 
-  .meta-row {
+  .lead-meta {
+    display: grid;
+    gap: 0.65rem;
+  }
+
+  .source-pill,
+  .meta-chip {
     min-width: 0;
+    max-width: 100%;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.78rem;
+    border-radius: var(--radius-full);
+    border: 1px solid color-mix(in srgb, var(--surface-border) 110%, transparent);
+    background: color-mix(in srgb, var(--surface-soft) 92%, transparent);
+    overflow-wrap: anywhere;
+  }
+
+  .source-pill {
+    width: fit-content;
+    color: var(--text-color);
+    font-size: var(--text-xs);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .meta-row {
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem;
@@ -178,41 +233,35 @@
     color: color-mix(in srgb, var(--muted-text) 72%, transparent);
   }
 
+  .headline-stack {
+    display: grid;
+    gap: var(--space-4);
+  }
+
   h1 {
     margin: 0;
-    max-inline-size: 18ch;
-    font-size: clamp(2rem, 3vw, 3.65rem);
-    line-height: 1.02;
-    letter-spacing: -0.03em;
+    max-inline-size: 15ch;
+    font-size: clamp(2.2rem, 3.6vw, 4rem);
+    line-height: 0.98;
+    letter-spacing: -0.035em;
     overflow-wrap: anywhere;
     text-wrap: balance;
   }
 
   .chip-row {
-    min-width: 0;
     display: flex;
     flex-wrap: wrap;
     gap: 0.55rem;
   }
 
   .meta-chip {
-    min-width: 0;
-    max-width: 100%;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    padding: 0.34rem 0.75rem;
-    border-radius: var(--radius-full);
-    background: color-mix(in srgb, var(--surface-soft) 92%, transparent);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 110%, transparent);
     font-size: var(--text-xs);
     color: var(--text-color);
-    overflow-wrap: anywhere;
   }
 
   .score-chip {
     color: var(--primary-contrast);
-    background: linear-gradient(90deg, color-mix(in srgb, var(--primary) 45%, transparent), color-mix(in srgb, var(--primary-soft) 92%, transparent));
+    background: linear-gradient(90deg, color-mix(in srgb, var(--primary) 42%, transparent), color-mix(in srgb, var(--primary-soft) 92%, transparent));
   }
 
   .chip-separator {
@@ -220,10 +269,20 @@
   }
 
   .action-row {
-    min-width: 0;
     display: flex;
     flex-wrap: wrap;
     gap: 0.7rem;
+    align-items: center;
+  }
+
+  .reaction-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.2rem;
+    border-radius: var(--radius-full);
+    border: 1px solid color-mix(in srgb, var(--surface-border) 112%, transparent);
+    background: color-mix(in srgb, var(--surface-soft) 88%, transparent);
   }
 
   .action-primary,
@@ -237,12 +296,17 @@
     justify-content: center;
     gap: 0.45rem;
     font: inherit;
-    transition: transform var(--transition-fast), background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), opacity var(--transition-fast);
+    transition:
+      transform var(--transition-fast),
+      background var(--transition-fast),
+      border-color var(--transition-fast),
+      color var(--transition-fast),
+      opacity var(--transition-fast);
   }
 
   .action-primary,
   .action-secondary {
-    padding: 0.78rem 1.05rem;
+    padding: 0.8rem 1.05rem;
   }
 
   .action-icon {
@@ -287,11 +351,11 @@
   }
 
   .hero-wrap {
-    min-width: 0;
     border-radius: calc(var(--radius-xl) + 0.2rem);
     overflow: hidden;
     border: 1px solid color-mix(in srgb, var(--surface-border) 110%, transparent);
     background: color-mix(in srgb, var(--surface-soft) 92%, transparent);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, white 12%, transparent);
   }
 
   .hero-image {
@@ -307,6 +371,20 @@
   }
 
   @media (min-width: 960px) {
+    .has-image .lead-grid {
+      grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.9fr);
+      align-items: stretch;
+    }
+
+    .hero-wrap {
+      height: 100%;
+    }
+
+    .hero-image {
+      height: 100%;
+      aspect-ratio: auto;
+    }
+
     .utilities-trigger {
       display: none;
     }
@@ -327,6 +405,10 @@
     .action-secondary {
       flex: 1 1 12rem;
       min-width: 0;
+    }
+
+    .reaction-group {
+      order: 3;
     }
 
     .utilities-trigger {

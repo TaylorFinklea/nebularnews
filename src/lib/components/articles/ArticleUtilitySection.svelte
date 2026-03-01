@@ -42,7 +42,7 @@
 <style>
   .utility-section {
     min-width: 0;
-    border-top: 1px solid var(--surface-border);
+    border-top: 1px solid color-mix(in srgb, var(--surface-border) 108%, transparent);
     padding-top: var(--space-3);
   }
 
@@ -54,8 +54,9 @@
   .utility-trigger {
     width: 100%;
     min-width: 0;
-    padding: 0;
+    padding: 0.35rem 0.45rem;
     border: 0;
+    border-radius: calc(var(--radius-lg) - 0.1rem);
     background: transparent;
     color: inherit;
     cursor: pointer;
@@ -107,6 +108,10 @@
     min-width: 0;
     display: grid;
     gap: var(--space-3);
-    padding-top: var(--space-3);
+    padding: var(--space-3) 0.45rem 0;
+  }
+
+  .utility-section.open .utility-trigger {
+    background: color-mix(in srgb, var(--surface-soft) 72%, transparent);
   }
 </style>

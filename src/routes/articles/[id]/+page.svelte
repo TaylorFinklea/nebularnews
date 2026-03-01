@@ -578,6 +578,9 @@
     display: grid;
     gap: clamp(1.25rem, 2vw, 2rem);
     overflow-x: clip;
+    width: 100%;
+    max-width: min(100%, 86rem);
+    margin-inline: auto;
   }
 
   .article-detail-layout {

@@ -117,7 +117,7 @@ describe('Articles page reactivity', () => {
     const readButton = screen.getByRole('button', { name: 'Mark read' });
     await fireEvent.click(readButton);
 
-    expect(screen.getByText('No articles yet. Add feeds to start pulling stories.')).toBeTruthy();
+    expect(screen.getByText('Nothing matches this filter set yet.')).toBeTruthy();
     expect(fetch).toHaveBeenCalledWith(
       '/api/articles/article-1/read',
       expect.objectContaining({ method: 'POST' })

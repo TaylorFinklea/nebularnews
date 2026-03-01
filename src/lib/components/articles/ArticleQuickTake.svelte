@@ -15,7 +15,7 @@
 
 <section class="quick-take-shell" aria-labelledby="article-quick-take-heading">
   <div class="quick-take-head">
-    <div>
+    <div class="head-copy">
       <p class="eyebrow">Quick Take</p>
       <h2 id="article-quick-take-heading">The fastest way to understand this story</h2>
     </div>
@@ -90,25 +90,39 @@
     min-width: 0;
     display: grid;
     gap: var(--space-4);
-    padding: clamp(1rem, 2vw, 1.4rem);
+    padding: clamp(1rem, 2vw, 1.45rem);
     border-radius: calc(var(--radius-xl) + 0.15rem);
     border: 1px solid color-mix(in srgb, var(--surface-border) 115%, transparent);
     background:
-      linear-gradient(180deg, color-mix(in srgb, var(--surface-soft) 90%, transparent), color-mix(in srgb, var(--surface) 86%, transparent)),
+      linear-gradient(180deg, color-mix(in srgb, var(--surface-soft) 92%, transparent), color-mix(in srgb, var(--surface) 88%, transparent)),
       radial-gradient(circle at top right, color-mix(in srgb, var(--primary-soft) 85%, transparent), transparent 48%);
-    box-shadow: 0 16px 36px color-mix(in srgb, var(--shadow-color) 38%, transparent);
+    box-shadow: 0 16px 36px color-mix(in srgb, var(--shadow-color) 30%, transparent);
+    overflow: clip;
+  }
+
+  .quick-take-head,
+  .head-copy,
+  .fit-row,
+  .fit-brief,
+  .fit-copy,
+  .fit-rationale {
+    min-width: 0;
   }
 
   .quick-take-head {
-    min-width: 0;
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
     gap: var(--space-3);
   }
 
+  .head-copy {
+    display: grid;
+    gap: 0.35rem;
+  }
+
   .eyebrow {
-    margin: 0 0 0.35rem;
+    margin: 0;
     color: var(--muted-text);
     font-size: var(--text-xs);
     letter-spacing: 0.12em;
@@ -117,14 +131,14 @@
 
   h2 {
     margin: 0;
-    font-size: clamp(1.1rem, 1.5vw, 1.35rem);
-    line-height: 1.15;
+    font-size: clamp(1.15rem, 1.6vw, 1.45rem);
+    line-height: 1.12;
     text-wrap: balance;
   }
 
   .quick-take-icon {
-    width: 2.5rem;
-    height: 2.5rem;
+    width: 2.65rem;
+    height: 2.65rem;
     flex-shrink: 0;
     border-radius: var(--radius-full);
     display: inline-flex;
@@ -139,8 +153,8 @@
   .fit-reason,
   .pending-copy {
     margin: 0;
-    font-size: clamp(1rem, 1.25vw, 1.08rem);
-    line-height: 1.68;
+    font-size: clamp(1rem, 1.25vw, 1.1rem);
+    line-height: 1.72;
     color: var(--text-color);
     overflow-wrap: anywhere;
   }
@@ -150,27 +164,27 @@
     margin: 0;
     padding-left: 1.1rem;
     display: grid;
-    gap: 0.55rem;
+    gap: 0.6rem;
   }
 
   .point-list li,
   .evidence-list li {
-    line-height: 1.55;
+    line-height: 1.58;
     overflow-wrap: anywhere;
   }
 
   .fit-brief {
-    min-width: 0;
     display: grid;
     gap: var(--space-3);
-    padding-top: var(--space-2);
-    border-top: 1px solid color-mix(in srgb, var(--surface-border) 105%, transparent);
+    padding: clamp(0.9rem, 1.6vw, 1.05rem);
+    border-radius: calc(var(--radius-lg) + 0.1rem);
+    border: 1px solid color-mix(in srgb, var(--surface-border) 108%, transparent);
+    background: color-mix(in srgb, var(--surface-soft) 72%, transparent);
   }
 
   .fit-copy {
-    min-width: 0;
     display: grid;
-    gap: 0.5rem;
+    gap: 0.55rem;
   }
 
   .fit-kicker {
@@ -181,7 +195,6 @@
   }
 
   .fit-row {
-    min-width: 0;
     display: flex;
     flex-wrap: wrap;
     gap: 0.6rem;
@@ -193,6 +206,10 @@
     align-items: center;
     gap: 0.4rem;
     color: var(--primary);
+  }
+
+  .fit-score strong {
+    letter-spacing: -0.02em;
   }
 
   .evidence-trigger {
@@ -211,19 +228,20 @@
   }
 
   .trigger-chevron {
-    width: 1.75rem;
-    height: 1.75rem;
+    width: 1.8rem;
+    height: 1.8rem;
     border-radius: var(--radius-full);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background: color-mix(in srgb, var(--surface-soft) 75%, transparent);
+    background: color-mix(in srgb, var(--surface) 82%, transparent);
     color: var(--muted-text);
-    transition: transform var(--transition-normal), color var(--transition-normal);
+    transition: transform var(--transition-normal), color var(--transition-normal), background var(--transition-normal);
   }
 
   .trigger-chevron.open {
     transform: rotate(180deg);
     color: var(--primary);
+    background: color-mix(in srgb, var(--primary-soft) 82%, transparent);
   }
 </style>

@@ -1,13 +1,107 @@
 <script>
-  import { invalidate } from '$app/navigation';
-  import { onMount } from 'svelte';
+  import { invalidateAll } from '$app/navigation';
+  import { onMount, tick } from 'svelte';
   import { apiFetch } from '$lib/client/api-fetch';
   import { IconDeviceFloppy, IconRefresh, IconRestore, IconTrash } from '$lib/icons';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import Card from '$lib/components/Card.svelte';
   import Button from '$lib/components/Button.svelte';
+  import SettingsSectionCard from '$lib/components/settings/SettingsSectionCard.svelte';
   import { showToast } from '$lib/client/toast';
+
   export let data;
+
+  /** @typedef {'ai' | 'reading' | 'profile' | 'keys' | 'intake' | 'operations'} SettingsSectionId */
+
+  const sectionConfig = [
+    {
+      id: 'ai',
+      title: 'AI setup',
+      description: 'Route features between model lanes and tune auto-tagging.',
+      defaultOpen: true
+    },
+    {
+      id: 'reading',
+      title: 'Reading defaults',
+      description: 'Set how summaries, cards, and queue defaults behave.',
+      defaultOpen: true
+    },
+    {
+      id: 'profile',
+      title: 'Profile & prompts',
+      description: 'Maintain your preference profile and fit-score instructions.',
+      defaultOpen: false
+    },
+    {
+      id: 'keys',
+      title: 'Provider keys',
+      description: 'Manage provider credentials and encryption rotation.',
+      defaultOpen: false
+    },
+    {
+      id: 'intake',
+      title: 'Intake & retention',
+      description: 'Control feed backfill, polling limits, and cleanup rules.',
+      defaultOpen: false
+    },
+    {
+      id: 'operations',
+      title: 'Operations',
+      description: 'Tune scheduler throughput and clean up orphaned records.',
+      defaultOpen: false
+    }
+  ];
+
+  const defaultSectionState = Object.fromEntries(sectionConfig.map((section) => [section.id, section.defaultOpen]));
+  const sectionFields = {
+    ai: [
+      'laneSummaries',
+      'laneScoring',
+      'laneProfileRefresh',
+      'laneKeyPoints',
+      'laneAutoTagging',
+      'laneArticleChat',
+      'laneGlobalChat',
+      'ingestProvider',
+      'ingestModel',
+      'ingestReasoningEffort',
+      'chatProvider',
+      'chatModel',
+      'chatReasoningEffort',
+      'autoTaggingEnabled',
+      'autoTagMaxPerArticle'
+    ],
+    reading: [
+      'summaryStyle',
+      'summaryLength',
+      'autoReadDelayMs',
+      'articleCardLayout',
+      'dashboardQueueWindowDays',
+      'dashboardQueueLimit',
+      'dashboardQueueScoreCutoff'
+    ],
+    profile: ['scoreSystemPrompt', 'scoreUserPromptTemplate', 'profileText'],
+    keys: [],
+    intake: [
+      'initialFeedLookbackDays',
+      'maxFeedsPerPoll',
+      'maxItemsPerPoll',
+      'eventsPollMs',
+      'dashboardRefreshMinMs',
+      'retentionDays',
+      'retentionMode'
+    ],
+    operations: [
+      'jobProcessorBatchSize',
+      'jobsIntervalMinutes',
+      'pollIntervalMinutes',
+      'pullSlicesPerTick',
+      'pullSliceBudgetMs',
+      'jobBudgetIdleMs',
+      'jobBudgetWhilePullMs',
+      'autoQueueTodayMissing'
+    ]
+  };
 
   let laneSummaries = data.settings.featureLanes?.summaries ?? 'pipeline';
   let laneScoring = data.settings.featureLanes?.scoring ?? 'pipeline';
@@ -88,11 +182,16 @@
   let orphanCleanupLoading = false;
   let orphanCleanupHasMore = orphanCount > 0;
   let orphanCleanupLastRun = null;
+  let sectionOpen = { ...defaultSectionState };
   $: autoReadDelaySeconds = (Number(autoReadDelayMs) / 1000).toFixed(2);
 
   let openaiKey = '';
   let anthropicKey = '';
   let profileText = data.profile.profile_text;
+  let keyStatus = {
+    openai: Boolean(data.keyMap.openai),
+    anthropic: Boolean(data.keyMap.anthropic)
+  };
   let openaiModels = [];
   let anthropicModels = [];
   let openaiModelsLoading = false;
@@ -101,8 +200,77 @@
   let anthropicModelsError = '';
   let openaiModelsFetchedAt = null;
   let anthropicModelsFetchedAt = null;
-  let isSaving = false;
+  let isSavingSettings = false;
+  let isResettingDismissedSuggestions = false;
+  let keyLoading = { openai: false, anthropic: false };
+  let rotatingKeys = false;
   let hasUnsavedChanges = false;
+  let modifiedSectionCount = 0;
+  let dirtySections = Object.fromEntries(sectionConfig.map((section) => [section.id, false]));
+
+  $: keyStatus = {
+    openai: Boolean(data.keyMap.openai),
+    anthropic: Boolean(data.keyMap.anthropic)
+  };
+
+  const featureLaneOptions = [
+    {
+      label: 'Summaries',
+      name: 'laneSummaries',
+      get: () => laneSummaries,
+      set: (value) => {
+        laneSummaries = value;
+      }
+    },
+    {
+      label: 'Key Points',
+      name: 'laneKeyPoints',
+      get: () => laneKeyPoints,
+      set: (value) => {
+        laneKeyPoints = value;
+      }
+    },
+    {
+      label: 'Auto Tagging',
+      name: 'laneAutoTagging',
+      get: () => laneAutoTagging,
+      set: (value) => {
+        laneAutoTagging = value;
+      }
+    },
+    {
+      label: 'Scoring',
+      name: 'laneScoring',
+      get: () => laneScoring,
+      set: (value) => {
+        laneScoring = value;
+      }
+    },
+    {
+      label: 'Profile Refresh',
+      name: 'laneProfileRefresh',
+      get: () => laneProfileRefresh,
+      set: (value) => {
+        laneProfileRefresh = value;
+      }
+    },
+    {
+      label: 'Article Chat',
+      name: 'laneArticleChat',
+      get: () => laneArticleChat,
+      set: (value) => {
+        laneArticleChat = value;
+      }
+    },
+    {
+      label: 'Global Chat',
+      name: 'laneGlobalChat',
+      get: () => laneGlobalChat,
+      set: (value) => {
+        laneGlobalChat = value;
+      }
+    }
+  ];
 
   const clampNumber = (value, min, max, fallback) => {
     const parsed = Number(value);
@@ -188,8 +356,8 @@
     jobProcessorBatchSize * pullSlicesPerTick * (jobBudgetIdleMs / 1000) <= 60
       ? 'Conservative'
       : jobProcessorBatchSize * pullSlicesPerTick * (jobBudgetIdleMs / 1000) <= 160
-      ? 'Balanced'
-      : 'Aggressive';
+        ? 'Balanced'
+        : 'Aggressive';
 
   const schedulerPresets = [
     {
@@ -246,6 +414,8 @@
     pollIntervalMinutes === preset.values.pollIntervalMinutes;
 
   $: activeSchedulerPreset = schedulerPresets.find((preset) => matchesSchedulerPreset(preset))?.id ?? 'custom';
+  $: activeSchedulerPresetLabel =
+    schedulerPresets.find((preset) => preset.id === activeSchedulerPreset)?.label ?? 'Custom';
 
   const applySchedulerPreset = (presetId) => {
     const preset = schedulerPresets.find((candidate) => candidate.id === presetId);
@@ -297,7 +467,11 @@
         if (!silent) setProviderModelState(provider, { error: payload?.error ?? 'Model sync failed' });
         return;
       }
-      setProviderModelState(provider, { models: Array.isArray(payload?.models) ? payload.models : [], fetchedAt: payload?.fetchedAt ?? Date.now(), error: '' });
+      setProviderModelState(provider, {
+        models: Array.isArray(payload?.models) ? payload.models : [],
+        fetchedAt: payload?.fetchedAt ?? Date.now(),
+        error: ''
+      });
     } catch {
       if (!silent) setProviderModelState(provider, { error: 'Model sync failed' });
     } finally {
@@ -305,21 +479,29 @@
     }
   };
 
-  onMount(() => {
-    if (data.keyMap.openai) void syncModels('openai', { silent: true });
-    if (data.keyMap.anthropic) void syncModels('anthropic', { silent: true });
-  });
-
-  const snapshotObject = () => ({
-    laneSummaries, laneScoring, laneProfileRefresh, laneKeyPoints, laneAutoTagging, laneArticleChat, laneGlobalChat,
-    ingestProvider, ingestModel, ingestReasoningEffort, chatProvider, chatModel, chatReasoningEffort,
-    summaryStyle, summaryLength,
+  const initialSnapshot = () => ({
+    laneSummaries,
+    laneScoring,
+    laneProfileRefresh,
+    laneKeyPoints,
+    laneAutoTagging,
+    laneArticleChat,
+    laneGlobalChat,
+    ingestProvider,
+    ingestModel,
+    ingestReasoningEffort,
+    chatProvider,
+    chatModel,
+    chatReasoningEffort,
+    summaryStyle,
+    summaryLength,
     initialFeedLookbackDays: Number(initialFeedLookbackDays ?? 0),
     maxFeedsPerPoll: Number(maxFeedsPerPoll ?? 0),
     maxItemsPerPoll: Number(maxItemsPerPoll ?? 0),
     eventsPollMs: Number(eventsPollMs ?? 0),
     dashboardRefreshMinMs: Number(dashboardRefreshMinMs ?? 0),
-    retentionDays: Number(retentionDays ?? 0), retentionMode,
+    retentionDays: Number(retentionDays ?? 0),
+    retentionMode,
     autoReadDelayMs: Number(autoReadDelayMs ?? 0),
     autoTaggingEnabled: Boolean(autoTaggingEnabled),
     autoTagMaxPerArticle: Number(autoTagMaxPerArticle ?? 0),
@@ -335,28 +517,87 @@
     dashboardQueueWindowDays: Number(dashboardQueueWindowDays ?? 0),
     dashboardQueueLimit: Number(dashboardQueueLimit ?? 0),
     dashboardQueueScoreCutoff: Number(dashboardQueueScoreCutoff ?? 0),
-    scoreSystemPrompt, scoreUserPromptTemplate, profileText
+    scoreSystemPrompt,
+    scoreUserPromptTemplate,
+    profileText
   });
 
-  let savedSnapshot = snapshotObject();
-  let currentSnapshot = snapshotObject();
-  $: currentSnapshot = snapshotObject();
+  let savedSnapshot = initialSnapshot();
+  let currentSnapshot = initialSnapshot();
+  $: currentSnapshot = {
+    laneSummaries,
+    laneScoring,
+    laneProfileRefresh,
+    laneKeyPoints,
+    laneAutoTagging,
+    laneArticleChat,
+    laneGlobalChat,
+    ingestProvider,
+    ingestModel,
+    ingestReasoningEffort,
+    chatProvider,
+    chatModel,
+    chatReasoningEffort,
+    summaryStyle,
+    summaryLength,
+    initialFeedLookbackDays: Number(initialFeedLookbackDays ?? 0),
+    maxFeedsPerPoll: Number(maxFeedsPerPoll ?? 0),
+    maxItemsPerPoll: Number(maxItemsPerPoll ?? 0),
+    eventsPollMs: Number(eventsPollMs ?? 0),
+    dashboardRefreshMinMs: Number(dashboardRefreshMinMs ?? 0),
+    retentionDays: Number(retentionDays ?? 0),
+    retentionMode,
+    autoReadDelayMs: Number(autoReadDelayMs ?? 0),
+    autoTaggingEnabled: Boolean(autoTaggingEnabled),
+    autoTagMaxPerArticle: Number(autoTagMaxPerArticle ?? 0),
+    jobProcessorBatchSize: Number(jobProcessorBatchSize ?? 0),
+    jobsIntervalMinutes: Number(jobsIntervalMinutes ?? 0),
+    pollIntervalMinutes: Number(pollIntervalMinutes ?? 0),
+    pullSlicesPerTick: Number(pullSlicesPerTick ?? 0),
+    pullSliceBudgetMs: Number(pullSliceBudgetMs ?? 0),
+    jobBudgetIdleMs: Number(jobBudgetIdleMs ?? 0),
+    jobBudgetWhilePullMs: Number(jobBudgetWhilePullMs ?? 0),
+    autoQueueTodayMissing: Boolean(autoQueueTodayMissing),
+    articleCardLayout,
+    dashboardQueueWindowDays: Number(dashboardQueueWindowDays ?? 0),
+    dashboardQueueLimit: Number(dashboardQueueLimit ?? 0),
+    dashboardQueueScoreCutoff: Number(dashboardQueueScoreCutoff ?? 0),
+    scoreSystemPrompt,
+    scoreUserPromptTemplate,
+    profileText
+  };
   $: hasUnsavedChanges = JSON.stringify(currentSnapshot) !== JSON.stringify(savedSnapshot);
+  $: dirtySections = Object.fromEntries(
+    sectionConfig.map((section) => [
+      section.id,
+      (sectionFields[section.id] ?? []).some((field) => currentSnapshot[field] !== savedSnapshot[field])
+    ])
+  );
+  $: modifiedSectionCount = Object.values(dirtySections).filter(Boolean).length;
 
   const applySnapshot = (snapshot) => {
-    laneSummaries = snapshot.laneSummaries; laneScoring = snapshot.laneScoring;
-    laneProfileRefresh = snapshot.laneProfileRefresh; laneKeyPoints = snapshot.laneKeyPoints;
-    laneAutoTagging = snapshot.laneAutoTagging; laneArticleChat = snapshot.laneArticleChat;
-    laneGlobalChat = snapshot.laneGlobalChat; ingestProvider = snapshot.ingestProvider;
-    ingestModel = snapshot.ingestModel; ingestReasoningEffort = snapshot.ingestReasoningEffort;
-    chatProvider = snapshot.chatProvider; chatModel = snapshot.chatModel;
-    chatReasoningEffort = snapshot.chatReasoningEffort; summaryStyle = snapshot.summaryStyle;
-    summaryLength = snapshot.summaryLength; initialFeedLookbackDays = Number(snapshot.initialFeedLookbackDays ?? 0);
+    laneSummaries = snapshot.laneSummaries;
+    laneScoring = snapshot.laneScoring;
+    laneProfileRefresh = snapshot.laneProfileRefresh;
+    laneKeyPoints = snapshot.laneKeyPoints;
+    laneAutoTagging = snapshot.laneAutoTagging;
+    laneArticleChat = snapshot.laneArticleChat;
+    laneGlobalChat = snapshot.laneGlobalChat;
+    ingestProvider = snapshot.ingestProvider;
+    ingestModel = snapshot.ingestModel;
+    ingestReasoningEffort = snapshot.ingestReasoningEffort;
+    chatProvider = snapshot.chatProvider;
+    chatModel = snapshot.chatModel;
+    chatReasoningEffort = snapshot.chatReasoningEffort;
+    summaryStyle = snapshot.summaryStyle;
+    summaryLength = snapshot.summaryLength;
+    initialFeedLookbackDays = Number(snapshot.initialFeedLookbackDays ?? 0);
     maxFeedsPerPoll = Number(snapshot.maxFeedsPerPoll ?? 0);
     maxItemsPerPoll = Number(snapshot.maxItemsPerPoll ?? 0);
     eventsPollMs = Number(snapshot.eventsPollMs ?? 0);
     dashboardRefreshMinMs = Number(snapshot.dashboardRefreshMinMs ?? 0);
-    retentionDays = Number(snapshot.retentionDays ?? 0); retentionMode = snapshot.retentionMode;
+    retentionDays = Number(snapshot.retentionDays ?? 0);
+    retentionMode = snapshot.retentionMode;
     autoReadDelayMs = Number(snapshot.autoReadDelayMs ?? 0);
     autoTaggingEnabled = Boolean(snapshot.autoTaggingEnabled);
     autoTagMaxPerArticle = Number(snapshot.autoTagMaxPerArticle ?? 0);
@@ -372,7 +613,8 @@
     dashboardQueueWindowDays = Number(snapshot.dashboardQueueWindowDays ?? 0);
     dashboardQueueLimit = Number(snapshot.dashboardQueueLimit ?? 0);
     dashboardQueueScoreCutoff = Number(snapshot.dashboardQueueScoreCutoff ?? 0);
-    scoreSystemPrompt = snapshot.scoreSystemPrompt; scoreUserPromptTemplate = snapshot.scoreUserPromptTemplate;
+    scoreSystemPrompt = snapshot.scoreSystemPrompt;
+    scoreUserPromptTemplate = snapshot.scoreUserPromptTemplate;
     profileText = snapshot.profileText;
   };
 
@@ -383,26 +625,75 @@
 
   const readApiData = (payload) => payload?.data ?? payload ?? {};
 
+  const setKeyLoading = (provider, nextValue) => {
+    keyLoading = { ...keyLoading, [provider]: nextValue };
+  };
+
+  const resetScorePromptDefaults = () => {
+    scoreSystemPrompt = data.scorePromptDefaults.scoreSystemPrompt;
+    scoreUserPromptTemplate = data.scorePromptDefaults.scoreUserPromptTemplate;
+  };
+
+  const discardChanges = () => {
+    if (isSavingSettings) return;
+    applySnapshot(savedSnapshot);
+  };
+
   const saveAllChanges = async () => {
-    if (isSaving || !hasUnsavedChanges) return;
-    isSaving = true;
+    if (isSavingSettings || !hasUnsavedChanges) return;
+    isSavingSettings = true;
     try {
       const settingsRes = await apiFetch('/api/settings', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          featureLanes: { summaries: laneSummaries, scoring: laneScoring, profileRefresh: laneProfileRefresh, keyPoints: laneKeyPoints, autoTagging: laneAutoTagging, articleChat: laneArticleChat, globalChat: laneGlobalChat },
-          ingestProvider, ingestModel, ingestReasoningEffort, chatProvider, chatModel, chatReasoningEffort,
-          summaryStyle, summaryLength, initialFeedLookbackDays, maxFeedsPerPoll, maxItemsPerPoll,
-          eventsPollMs, dashboardRefreshMinMs, retentionDays, retentionMode,
-          autoReadDelayMs, autoTaggingEnabled, autoTagMaxPerArticle,
-          jobProcessorBatchSize, jobsIntervalMinutes, pollIntervalMinutes,
-          pullSlicesPerTick, pullSliceBudgetMs, jobBudgetIdleMs, jobBudgetWhilePullMs, autoQueueTodayMissing,
-          articleCardLayout, dashboardQueueWindowDays, dashboardQueueLimit, dashboardQueueScoreCutoff,
-          scoreSystemPrompt, scoreUserPromptTemplate
+          featureLanes: {
+            summaries: laneSummaries,
+            scoring: laneScoring,
+            profileRefresh: laneProfileRefresh,
+            keyPoints: laneKeyPoints,
+            autoTagging: laneAutoTagging,
+            articleChat: laneArticleChat,
+            globalChat: laneGlobalChat
+          },
+          ingestProvider,
+          ingestModel,
+          ingestReasoningEffort,
+          chatProvider,
+          chatModel,
+          chatReasoningEffort,
+          summaryStyle,
+          summaryLength,
+          initialFeedLookbackDays,
+          maxFeedsPerPoll,
+          maxItemsPerPoll,
+          eventsPollMs,
+          dashboardRefreshMinMs,
+          retentionDays,
+          retentionMode,
+          autoReadDelayMs,
+          autoTaggingEnabled,
+          autoTagMaxPerArticle,
+          jobProcessorBatchSize,
+          jobsIntervalMinutes,
+          pollIntervalMinutes,
+          pullSlicesPerTick,
+          pullSliceBudgetMs,
+          jobBudgetIdleMs,
+          jobBudgetWhilePullMs,
+          autoQueueTodayMissing,
+          articleCardLayout,
+          dashboardQueueWindowDays,
+          dashboardQueueLimit,
+          dashboardQueueScoreCutoff,
+          scoreSystemPrompt,
+          scoreUserPromptTemplate
         })
       });
-      if (!settingsRes.ok) { showToast(await readApiError(settingsRes, 'Failed to save settings'), 'error'); return; }
+      if (!settingsRes.ok) {
+        showToast(await readApiError(settingsRes, 'Failed to save settings'), 'error');
+        return;
+      }
 
       const nextProfile = profileText.trim();
       if (nextProfile) {
@@ -411,27 +702,25 @@
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ profileText: nextProfile })
         });
-        if (!profileRes.ok) { showToast(await readApiError(profileRes, 'Failed to save profile'), 'error'); return; }
+        if (!profileRes.ok) {
+          showToast(await readApiError(profileRes, 'Failed to save profile'), 'error');
+          return;
+        }
       }
 
       savedSnapshot = { ...currentSnapshot };
       showToast('Settings saved.', 'success');
-      await invalidate();
+      await invalidateAll();
     } catch {
       showToast('Failed to save settings', 'error');
     } finally {
-      isSaving = false;
+      isSavingSettings = false;
     }
   };
 
-  const resetScorePromptDefaults = () => {
-    scoreSystemPrompt = data.scorePromptDefaults.scoreSystemPrompt;
-    scoreUserPromptTemplate = data.scorePromptDefaults.scoreUserPromptTemplate;
-  };
-
   const resetDismissedTagSuggestions = async () => {
-    if (isSaving) return;
-    isSaving = true;
+    if (isResettingDismissedSuggestions) return;
+    isResettingDismissedSuggestions = true;
     try {
       const res = await apiFetch('/api/settings/tag-suggestions/reset-dismissed', {
         method: 'POST',
@@ -445,11 +734,9 @@
     } catch {
       showToast('Failed to reset dismissed AI tag suggestions', 'error');
     } finally {
-      isSaving = false;
+      isResettingDismissedSuggestions = false;
     }
   };
-
-  const discardChanges = () => { applySnapshot(savedSnapshot); };
 
   const refreshOrphanPreview = async () => {
     if (orphanCleanupLoading) return;
@@ -517,556 +804,953 @@
   };
 
   const saveKey = async (provider) => {
+    if (keyLoading[provider]) return;
     const key = provider === 'openai' ? openaiKey : anthropicKey;
     if (!key) return;
-    await apiFetch('/api/keys', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ provider, apiKey: key })
-    });
-    if (provider === 'openai') openaiKey = ''; else anthropicKey = '';
-    showToast(`${provider === 'openai' ? 'OpenAI' : 'Anthropic'} key saved.`, 'success');
-    await invalidate();
-    await syncModels(provider);
+    setKeyLoading(provider, true);
+    try {
+      const res = await apiFetch('/api/keys', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ provider, apiKey: key })
+      });
+      if (!res.ok) {
+        showToast(await readApiError(res, 'Failed to save provider key'), 'error');
+        return;
+      }
+      if (provider === 'openai') {
+        openaiKey = '';
+      } else {
+        anthropicKey = '';
+      }
+      keyStatus = { ...keyStatus, [provider]: true };
+      showToast(`${provider === 'openai' ? 'OpenAI' : 'Anthropic'} key saved.`, 'success');
+      await invalidateAll();
+      await syncModels(provider);
+    } catch {
+      showToast('Failed to save provider key', 'error');
+    } finally {
+      setKeyLoading(provider, false);
+    }
   };
 
   const removeKey = async (provider) => {
-    await apiFetch(`/api/keys/${provider}`, { method: 'DELETE' });
-    setProviderModelState(provider, { models: [], error: '', fetchedAt: null });
-    showToast(`${provider === 'openai' ? 'OpenAI' : 'Anthropic'} key removed.`, 'success');
-    await invalidate();
+    if (keyLoading[provider]) return;
+    setKeyLoading(provider, true);
+    try {
+      const res = await apiFetch(`/api/keys/${provider}`, { method: 'DELETE' });
+      if (!res.ok) {
+        showToast(await readApiError(res, 'Failed to remove provider key'), 'error');
+        return;
+      }
+      setProviderModelState(provider, { models: [], error: '', fetchedAt: null });
+      keyStatus = { ...keyStatus, [provider]: false };
+      showToast(`${provider === 'openai' ? 'OpenAI' : 'Anthropic'} key removed.`, 'success');
+      await invalidateAll();
+    } catch {
+      showToast('Failed to remove provider key', 'error');
+    } finally {
+      setKeyLoading(provider, false);
+    }
   };
 
   const rotateKeys = async (provider = null) => {
-    await apiFetch('/api/keys/rotate', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ provider })
-    });
-    showToast('Keys rotated.', 'success');
-    await invalidate();
+    if (rotatingKeys) return;
+    rotatingKeys = true;
+    try {
+      const res = await apiFetch('/api/keys/rotate', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ provider })
+      });
+      if (!res.ok) {
+        showToast(await readApiError(res, 'Failed to rotate ciphers'), 'error');
+        return;
+      }
+      showToast('Keys rotated.', 'success');
+      await invalidateAll();
+    } catch {
+      showToast('Failed to rotate ciphers', 'error');
+    } finally {
+      rotatingKeys = false;
+    }
   };
+
+  const sectionSummary = (sectionId) => {
+    switch (sectionId) {
+      case 'ai':
+        return `Pipeline: ${ingestProvider}/${ingestModel} · Chat: ${chatProvider}/${chatModel} · Auto-tagging ${autoTaggingEnabled ? 'on' : 'off'}`;
+      case 'reading':
+        return `${summaryStyle} / ${summaryLength} · ${articleCardLayout} cards · Queue ${dashboardQueueLimit}`;
+      case 'profile':
+        return `Profile v${data.profile.version} · Prompt ${
+          scoreSystemPrompt === data.scorePromptDefaults.scoreSystemPrompt &&
+          scoreUserPromptTemplate === data.scorePromptDefaults.scoreUserPromptTemplate
+            ? 'default'
+            : 'custom'
+        }`;
+      case 'keys':
+        return `OpenAI ${keyStatus.openai ? 'connected' : 'missing'} · Anthropic ${
+          keyStatus.anthropic ? 'connected' : 'missing'
+        }`;
+      case 'intake':
+        return `${initialFeedLookbackDays}-day backfill · ${maxFeedsPerPoll} feeds/${maxItemsPerPoll} items · ${retentionMode}`;
+      case 'operations':
+        return `${activeSchedulerPresetLabel} · ${orphanCount} orphan article${orphanCount === 1 ? '' : 's'}`;
+      default:
+        return '';
+    }
+  };
+
+  const getSectionIdFromHash = (hashValue) => {
+    const nextHash = String(hashValue ?? '').replace(/^#/, '');
+    return sectionConfig.some((section) => section.id === nextHash) ? nextHash : null;
+  };
+
+  const toggleSection = (sectionId) => {
+    const nextOpen = !sectionOpen[sectionId];
+    sectionOpen = { ...sectionOpen, [sectionId]: nextOpen };
+    if (nextOpen && typeof history !== 'undefined') {
+      history.replaceState(null, '', `#${sectionId}`);
+    }
+  };
+
+  const openSection = async (sectionId, { scroll = true, updateHash = true } = {}) => {
+    if (!sectionConfig.some((section) => section.id === sectionId)) return;
+    if (!sectionOpen[sectionId]) {
+      sectionOpen = { ...sectionOpen, [sectionId]: true };
+      await tick();
+    }
+    if (updateHash && typeof history !== 'undefined') {
+      history.replaceState(null, '', `#${sectionId}`);
+    }
+    if (scroll) {
+      document.getElementById(sectionId)?.scrollIntoView?.({
+        behavior: 'smooth',
+        block: 'start'
+      });
+    }
+  };
+
+  const openSectionFromHash = async (hashValue, { scroll = false } = {}) => {
+    const sectionId = getSectionIdFromHash(hashValue);
+    if (!sectionId) return;
+    await openSection(sectionId, { scroll, updateHash: false });
+  };
+
+  onMount(() => {
+    if (keyStatus.openai) void syncModels('openai', { silent: true });
+    if (keyStatus.anthropic) void syncModels('anthropic', { silent: true });
+
+    if (typeof window !== 'undefined') {
+      void openSectionFromHash(window.location.hash, { scroll: false });
+
+      const handleHashChange = () => {
+        void openSectionFromHash(window.location.hash, { scroll: true });
+      };
+
+      window.addEventListener('hashchange', handleHashChange);
+      return () => window.removeEventListener('hashchange', handleHashChange);
+    }
+
+    return undefined;
+  });
 </script>
 
-<PageHeader title="Settings" description="Configure AI behavior, prompts, keys, and display defaults.">
-  <svelte:fragment slot="subnav">
-    <nav class="settings-subnav" aria-label="Settings sections">
-      <a href="#models">AI settings</a>
-      <a href="#behavior">Behavior</a>
-      <a href="#maintenance">Maintenance</a>
-      <a href="#scheduler">Scheduler</a>
-      <a href="#prompts">Prompts</a>
-      <a href="#keys">Keys</a>
-      <a href="#profile">Profile</a>
-    </nav>
-  </svelte:fragment>
-  <svelte:fragment slot="actions">
-    <div class="save-actions">
-      {#if hasUnsavedChanges}
-        <span class="unsaved-badge">Unsaved changes</span>
-      {/if}
-      <Button variant="ghost" size="inline" on:click={discardChanges} disabled={!hasUnsavedChanges || isSaving}>
-        <IconRestore size={15} stroke={1.9} />
-        <span>Discard</span>
-      </Button>
-      <Button variant="primary" size="inline" on:click={saveAllChanges} disabled={!hasUnsavedChanges || isSaving}>
-        <IconDeviceFloppy size={15} stroke={1.9} />
-        <span>{isSaving ? 'Saving...' : 'Save changes'}</span>
-      </Button>
-    </div>
-  </svelte:fragment>
-</PageHeader>
+<PageHeader
+  title="Settings"
+  description="Configure AI behavior, reading defaults, provider access, and operational controls."
+/>
 
-<div class="settings-stack">
-  <!-- AI Settings -->
-  <Card id="models">
-    <h2>AI Settings</h2>
+<div class="settings-layout">
+  <div class="settings-main">
+    <SettingsSectionCard
+      id="ai"
+      title="AI setup"
+      summary={sectionSummary('ai')}
+      description={sectionConfig[0].description}
+      open={sectionOpen.ai}
+      dirty={dirtySections.ai}
+      onToggle={() => toggleSection('ai')}
+    >
+      <div class="section-block">
+        <div class="subsection">
+          <div class="subsection-header">
+            <h3>Feature routing</h3>
+            <p class="muted">Choose which model lane each AI feature should use.</p>
+          </div>
+          <div class="feature-lanes">
+            {#each featureLaneOptions as feature}
+              <div class="feature-lane">
+                <div class="feature-name">{feature.label}</div>
+                <div class="lane-toggle" role="radiogroup" aria-label={`${feature.label} lane`}>
+                  <label class:active={feature.get() === 'pipeline'}>
+                    <input
+                      type="radio"
+                      name={feature.name}
+                      value="pipeline"
+                      checked={feature.get() === 'pipeline'}
+                      on:change={() => feature.set('pipeline')}
+                    />
+                    <span>Pipeline</span>
+                  </label>
+                  <label class:active={feature.get() === 'chat'}>
+                    <input
+                      type="radio"
+                      name={feature.name}
+                      value="chat"
+                      checked={feature.get() === 'chat'}
+                      on:change={() => feature.set('chat')}
+                    />
+                    <span>Chat</span>
+                  </label>
+                </div>
+              </div>
+            {/each}
+          </div>
+        </div>
 
-    <div class="section-block">
-      <h3>Feature routing</h3>
-      <p class="muted">Assign each AI feature to a model lane.</p>
-      <div class="feature-lanes">
-        {#each [
-          ['Summaries', 'laneSummaries', 'laneSum'],
-          ['Key Points', 'laneKeyPoints', 'laneKP'],
-          ['Auto Tagging', 'laneAutoTagging', 'laneAT'],
-          ['Scoring', 'laneScoring', 'laneSc'],
-          ['Profile Refresh', 'laneProfileRefresh', 'lanePR'],
-          ['Article Chat', 'laneArticleChat', 'laneAC'],
-          ['Global Chat', 'laneGlobalChat', 'laneGC']
-        ] as [label]}
-          <div class="feature-lane">
-            <div class="feature-name">{label}</div>
-            <div class="lane-toggle" role="radiogroup" aria-label={`${label} lane`}>
-              {#if label === 'Summaries'}
-                <label class:active={laneSummaries === 'pipeline'}><input type="radio" name="laneSummaries" value="pipeline" bind:group={laneSummaries} /><span>Pipeline</span></label>
-                <label class:active={laneSummaries === 'chat'}><input type="radio" name="laneSummaries" value="chat" bind:group={laneSummaries} /><span>Chat</span></label>
-              {:else if label === 'Key Points'}
-                <label class:active={laneKeyPoints === 'pipeline'}><input type="radio" name="laneKeyPoints" value="pipeline" bind:group={laneKeyPoints} /><span>Pipeline</span></label>
-                <label class:active={laneKeyPoints === 'chat'}><input type="radio" name="laneKeyPoints" value="chat" bind:group={laneKeyPoints} /><span>Chat</span></label>
-              {:else if label === 'Auto Tagging'}
-                <label class:active={laneAutoTagging === 'pipeline'}><input type="radio" name="laneAutoTagging" value="pipeline" bind:group={laneAutoTagging} /><span>Pipeline</span></label>
-                <label class:active={laneAutoTagging === 'chat'}><input type="radio" name="laneAutoTagging" value="chat" bind:group={laneAutoTagging} /><span>Chat</span></label>
-              {:else if label === 'Scoring'}
-                <label class:active={laneScoring === 'pipeline'}><input type="radio" name="laneScoring" value="pipeline" bind:group={laneScoring} /><span>Pipeline</span></label>
-                <label class:active={laneScoring === 'chat'}><input type="radio" name="laneScoring" value="chat" bind:group={laneScoring} /><span>Chat</span></label>
-              {:else if label === 'Profile Refresh'}
-                <label class:active={laneProfileRefresh === 'pipeline'}><input type="radio" name="laneProfileRefresh" value="pipeline" bind:group={laneProfileRefresh} /><span>Pipeline</span></label>
-                <label class:active={laneProfileRefresh === 'chat'}><input type="radio" name="laneProfileRefresh" value="chat" bind:group={laneProfileRefresh} /><span>Chat</span></label>
-              {:else if label === 'Article Chat'}
-                <label class:active={laneArticleChat === 'pipeline'}><input type="radio" name="laneArticleChat" value="pipeline" bind:group={laneArticleChat} /><span>Pipeline</span></label>
-                <label class:active={laneArticleChat === 'chat'}><input type="radio" name="laneArticleChat" value="chat" bind:group={laneArticleChat} /><span>Chat</span></label>
-              {:else if label === 'Global Chat'}
-                <label class:active={laneGlobalChat === 'pipeline'}><input type="radio" name="laneGlobalChat" value="pipeline" bind:group={laneGlobalChat} /><span>Pipeline</span></label>
-                <label class:active={laneGlobalChat === 'chat'}><input type="radio" name="laneGlobalChat" value="chat" bind:group={laneGlobalChat} /><span>Chat</span></label>
-              {/if}
+        <div class="subsection">
+          <div class="subsection-header">
+            <h3>Auto-tagging</h3>
+            <p class="muted">Control whether AI tag suggestions are generated and how many can be applied.</p>
+          </div>
+          <label class="checkbox-row">
+            <input type="checkbox" bind:checked={autoTaggingEnabled} />
+            <span>Enable AI auto-tagging</span>
+          </label>
+          <div class="two-col">
+            <label>
+              Max AI tags per article
+              <input
+                type="number"
+                min={data.autoTagging?.maxPerArticle?.min ?? 1}
+                max={data.autoTagging?.maxPerArticle?.max ?? 5}
+                step="1"
+                bind:value={autoTagMaxPerArticle}
+              />
+              <span class="hint">Applies to combined existing-tag matches plus new suggestions.</span>
+            </label>
+            <div class="inline-actions">
+              <p class="muted small">Dismissed AI suggestions</p>
+              <Button
+                variant="ghost"
+                size="inline"
+                on:click={resetDismissedTagSuggestions}
+                disabled={isResettingDismissedSuggestions}
+              >
+                <IconRefresh size={14} stroke={1.9} />
+                <span>{isResettingDismissedSuggestions ? 'Resetting...' : 'Reset dismissed suggestions'}</span>
+              </Button>
             </div>
           </div>
-        {/each}
-      </div>
-
-      <label class="checkbox-row">
-        <input type="checkbox" bind:checked={autoTaggingEnabled} />
-        <span>Enable AI auto-tagging (disabling stops enqueue + execution of auto-tag jobs)</span>
-      </label>
-
-      <div class="two-col">
-        <label>
-          Max AI tags per article
-          <input
-            type="number"
-            min={data.autoTagging?.maxPerArticle?.min ?? 1}
-            max={data.autoTagging?.maxPerArticle?.max ?? 5}
-            step="1"
-            bind:value={autoTagMaxPerArticle}
-          />
-          <span class="hint">Applies to combined existing-tag matches plus new suggestions.</span>
-        </label>
-        <div class="inline-actions">
-          <p class="muted small">Dismissed AI suggestions</p>
-          <Button variant="ghost" size="inline" on:click={resetDismissedTagSuggestions} disabled={isSaving}>
-            <IconRefresh size={14} stroke={1.9} />
-            <span>Reset dismissed suggestions</span>
-          </Button>
-        </div>
-      </div>
-    </div>
-
-    <div class="divider"></div>
-
-    <div class="model-sections">
-      <div class="model-section">
-        <h3>Pipeline lane</h3>
-        <p class="muted">Cheaper, faster. Used for batch jobs.</p>
-        <label>Provider <select bind:value={ingestProvider}><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option></select></label>
-        <label>Model <input bind:value={ingestModel} placeholder="gpt-4o-mini" list={ingestProvider === 'anthropic' ? 'anthropic-model-options' : 'openai-model-options'} /></label>
-        <div class="model-tools">
-          <Button variant="ghost" size="inline" on:click={() => syncModels(ingestProvider)} disabled={isLoadingModels(ingestProvider)}>
-            <IconRefresh size={14} stroke={1.9} />
-            <span>{isLoadingModels(ingestProvider) ? 'Loading...' : `Refresh ${ingestProvider}`}</span>
-          </Button>
-          <p class="muted small">{modelStatus(ingestProvider)}</p>
-        </div>
-        <label>Reasoning level
-          <select bind:value={ingestReasoningEffort}>
-            <option value="minimal">Minimal</option>
-            <option value="low">Low</option>
-            <option value="medium">Medium</option>
-            <option value="high">High</option>
-          </select>
-        </label>
-      </div>
-
-      <div class="model-section">
-        <h3>Chat lane</h3>
-        <p class="muted">More capable. Used for chat and complex tasks.</p>
-        <label>Provider <select bind:value={chatProvider}><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option></select></label>
-        <label>Model <input bind:value={chatModel} placeholder="gpt-4o" list={chatProvider === 'anthropic' ? 'anthropic-model-options' : 'openai-model-options'} /></label>
-        <div class="model-tools">
-          <Button variant="ghost" size="inline" on:click={() => syncModels(chatProvider)} disabled={isLoadingModels(chatProvider)}>
-            <IconRefresh size={14} stroke={1.9} />
-            <span>{isLoadingModels(chatProvider) ? 'Loading...' : `Refresh ${chatProvider}`}</span>
-          </Button>
-          <p class="muted small">{modelStatus(chatProvider)}</p>
-        </div>
-        <label>Reasoning level
-          <select bind:value={chatReasoningEffort}>
-            <option value="minimal">Minimal</option>
-            <option value="low">Low</option>
-            <option value="medium">Medium</option>
-            <option value="high">High</option>
-          </select>
-        </label>
-      </div>
-    </div>
-  </Card>
-
-  <!-- Behavior -->
-  <Card id="behavior">
-    <h2>Behavior defaults</h2>
-
-    <div class="two-col">
-      <label>Summary style
-        <select bind:value={summaryStyle}>
-          <option value="concise">Concise</option>
-          <option value="detailed">Detailed</option>
-          <option value="bullet">Bullet-heavy</option>
-        </select>
-      </label>
-      <label>Summary length
-        <select bind:value={summaryLength}>
-          <option value="short">Short</option>
-          <option value="medium">Medium</option>
-          <option value="long">Long</option>
-        </select>
-      </label>
-    </div>
-
-    <label>
-      Initial feed backfill window (days)
-      <input type="number" min={data.initialFeedLookbackRange.min} max={data.initialFeedLookbackRange.max} step="1" bind:value={initialFeedLookbackDays} />
-      <span class="hint">Default {data.initialFeedLookbackRange.default} days. 0 = include all history.</span>
-    </label>
-
-    <div class="two-col">
-      <label>
-        Max feeds per poll
-        <input
-          type="number"
-          min={data.feedPollingRange.maxFeedsPerPoll.min}
-          max={data.feedPollingRange.maxFeedsPerPoll.max}
-          step="1"
-          bind:value={maxFeedsPerPoll}
-        />
-      </label>
-      <label>
-        Max items per poll
-        <input
-          type="number"
-          min={data.feedPollingRange.maxItemsPerPoll.min}
-          max={data.feedPollingRange.maxItemsPerPoll.max}
-          step="1"
-          bind:value={maxItemsPerPoll}
-        />
-      </label>
-    </div>
-
-    <div class="two-col">
-      <label>
-        Events poll interval (ms)
-        <input
-          type="number"
-          min={data.feedPollingRange.eventsPollMs.min}
-          max={data.feedPollingRange.eventsPollMs.max}
-          step="1000"
-          bind:value={eventsPollMs}
-        />
-      </label>
-      <label>
-        Dashboard refresh floor (ms)
-        <input
-          type="number"
-          min={data.feedPollingRange.dashboardRefreshMinMs.min}
-          max={data.feedPollingRange.dashboardRefreshMinMs.max}
-          step="1000"
-          bind:value={dashboardRefreshMinMs}
-        />
-      </label>
-    </div>
-
-    <label>
-      Retention window (days)
-      <input type="number" min={data.retentionRange.min} max={data.retentionRange.max} step="1" bind:value={retentionDays} />
-    </label>
-
-    <div class="field">
-      <div class="field-label">Retention mode</div>
-      <div class="lane-toggle" role="radiogroup" aria-label="Retention mode">
-        <label class:active={retentionMode === 'archive'}><input type="radio" name="retentionMode" value="archive" bind:group={retentionMode} /><span>Archive text</span></label>
-        <label class:active={retentionMode === 'delete'}><input type="radio" name="retentionMode" value="delete" bind:group={retentionMode} /><span>Delete records</span></label>
-      </div>
-      <span class="hint">Daily cleanup runs at 03:30 UTC. 0 days disables cleanup.</span>
-    </div>
-
-    <label>
-      Mark read after (ms)
-      <input type="number" min={data.autoReadDelayRange.min} max={data.autoReadDelayRange.max} step="250" bind:value={autoReadDelayMs} />
-      <span class="hint">Current: {autoReadDelaySeconds}s. 0 = immediate.</span>
-    </label>
-
-    <div class="two-col">
-      <div class="field">
-        <div class="field-label">Article card layout</div>
-        <div class="lane-toggle" role="radiogroup" aria-label="Article card layout">
-          <label class:active={articleCardLayout === 'split'}><input type="radio" name="articleCardLayout" value="split" bind:group={articleCardLayout} /><span>Split</span></label>
-          <label class:active={articleCardLayout === 'stacked'}><input type="radio" name="articleCardLayout" value="stacked" bind:group={articleCardLayout} /><span>Stacked</span></label>
-        </div>
-      </div>
-      <div class="field">
-        <label>
-          Dashboard queue window (days)
-          <input type="number" min={data.dashboardQueueRange.windowDays.min} max={data.dashboardQueueRange.windowDays.max} step="1" bind:value={dashboardQueueWindowDays} />
-        </label>
-      </div>
-    </div>
-
-    <div class="two-col">
-      <label>
-        Queue high-fit cutoff (1–5)
-        <input type="number" min={data.dashboardQueueRange.scoreCutoff.min} max={data.dashboardQueueRange.scoreCutoff.max} step="1" bind:value={dashboardQueueScoreCutoff} />
-      </label>
-      <label>
-        Queue count
-        <input type="number" min={data.dashboardQueueRange.limit.min} max={data.dashboardQueueRange.limit.max} step="1" bind:value={dashboardQueueLimit} />
-      </label>
-    </div>
-  </Card>
-
-  <!-- Maintenance -->
-  <Card id="maintenance">
-    <h2>Maintenance</h2>
-    <p class="muted">Clean up orphaned articles that no longer have any source feed linkage.</p>
-
-    <div class="maintenance-row">
-      <div>
-        <div class="maintenance-label">Orphan articles</div>
-        <div class="maintenance-value">{orphanCount}</div>
-        {#if orphanSampleArticleIds.length > 0}
-          <p class="muted small">
-            Sample IDs: {orphanSampleArticleIds.slice(0, 3).join(', ')}{orphanSampleArticleIds.length > 3 ? '…' : ''}
-          </p>
-        {/if}
-      </div>
-      <div class="maintenance-actions">
-        <Button variant="ghost" size="inline" on:click={refreshOrphanPreview} disabled={orphanCleanupLoading}>
-          <IconRefresh size={14} stroke={1.9} />
-          <span>{orphanCleanupLoading ? 'Loading...' : 'Preview'}</span>
-        </Button>
-        <Button variant="danger" size="inline" on:click={runOrphanCleanup} disabled={orphanCleanupLoading || orphanCount === 0}>
-          <IconTrash size={14} stroke={1.9} />
-          <span>{orphanCleanupLoading ? 'Cleaning...' : 'Clean now'}</span>
-        </Button>
-      </div>
-    </div>
-
-    <p class="hint">
-      Batch size: {orphanSuggestedBatchSize} per run. Re-run while “has more” is true.
-      {#if orphanCleanupLastRun}
-        {' '}Last run: deleted {Number(orphanCleanupLastRun?.deleted_articles ?? 0)}, remaining {Number(orphanCleanupLastRun?.orphan_count_after ?? 0)}, has more: {orphanCleanupHasMore ? 'yes' : 'no'}.
-      {/if}
-    </p>
-  </Card>
-
-  <!-- Scheduler -->
-  <Card id="scheduler">
-    <h2>Scheduler</h2>
-    <p class="muted">Tune pull and queue throughput while keeping Worker resource use stable.</p>
-
-    <div class="preset-grid">
-      {#each schedulerPresets as preset}
-        <button
-          type="button"
-          class="preset-btn"
-          class:active={activeSchedulerPreset === preset.id}
-          on:click={() => applySchedulerPreset(preset.id)}
-        >
-          <span class="preset-title">{preset.label}</span>
-          <span class="preset-desc">{preset.description}</span>
-        </button>
-      {/each}
-    </div>
-
-    <p class="hint">
-      Current profile: <strong>{activeSchedulerPreset === 'custom' ? `${schedulerMode} (custom)` : schedulerPresets.find((preset) => preset.id === activeSchedulerPreset)?.label}</strong>
-    </p>
-
-    <details class="advanced" bind:open={schedulerAdvancedOpen}>
-      <summary>Advanced scheduler controls</summary>
-
-      <div class="advanced-content">
-        <div class="two-col">
-          <label>
-            Job processor batch size
-            <input
-              type="number"
-              min={data.jobProcessorBatchRange.min}
-              max={data.jobProcessorBatchRange.max}
-              step="1"
-              bind:value={jobProcessorBatchSize}
-            />
-          </label>
-          <label>
-            Pull slices per scheduler tick
-            <input
-              type="number"
-              min={data.schedulerRange.pullSlicesPerTick.min}
-              max={data.schedulerRange.pullSlicesPerTick.max}
-              step="1"
-              bind:value={pullSlicesPerTick}
-            />
-          </label>
         </div>
 
-        <div class="two-col">
-          <label>
-            Job budget when idle (ms)
-            <input
-              type="number"
-              min={data.schedulerRange.jobBudgetIdleMs.min}
-              max={data.schedulerRange.jobBudgetIdleMs.max}
-              step="100"
-              bind:value={jobBudgetIdleMs}
-            />
-          </label>
-          <label>
-            Job budget while pull is active (ms)
-            <input
-              type="number"
-              min={data.schedulerRange.jobBudgetWhilePullMs.min}
-              max={data.schedulerRange.jobBudgetWhilePullMs.max}
-              step="100"
-              bind:value={jobBudgetWhilePullMs}
-            />
-          </label>
-        </div>
-
-        <label>
-          Pull slice budget (ms)
-          <input
-            type="number"
-            min={data.schedulerRange.pullSliceBudgetMs.min}
-            max={data.schedulerRange.pullSliceBudgetMs.max}
-            step="100"
-            bind:value={pullSliceBudgetMs}
-          />
-        </label>
-
-        <label class="checkbox-row">
-          <input type="checkbox" bind:checked={autoQueueTodayMissing} />
-          <span>Auto queue missing today jobs on scheduler ticks</span>
-        </label>
-
-        <div class="two-col">
-          <label>
-            Jobs scheduler interval (minutes)
-            <input
-              type="number"
-              min={data.schedulerRange.jobsIntervalMinutes.min}
-              max={data.schedulerRange.jobsIntervalMinutes.max}
-              step="1"
-              bind:value={jobsIntervalMinutes}
-            />
-            <span class="hint">Applies after running the command below and deploying.</span>
-          </label>
-          <label>
-            Poll scheduler interval (minutes)
-            <input
-              type="number"
-              min={data.schedulerRange.pollIntervalMinutes.min}
-              max={data.schedulerRange.pollIntervalMinutes.max}
-              step="1"
-              bind:value={pollIntervalMinutes}
-            />
-            <span class="hint">Applies after running the command below and deploying.</span>
-          </label>
-        </div>
-
-        <p class="hint">Estimated mode: <strong>{schedulerMode}</strong></p>
-
-        <div class="scheduler-apply">
-          <div class="scheduler-apply-row">
+        <div class="model-sections">
+          <div class="subsection soft-panel">
+            <div class="subsection-header">
+              <h3>Pipeline lane</h3>
+              <p class="muted">Faster and lower-cost lane for background jobs and bulk processing.</p>
+            </div>
             <label>
-              Apply target
-              <select bind:value={schedulerApplyEnv}>
-                <option value="production">Production</option>
-                <option value="staging">Staging</option>
+              Provider
+              <select bind:value={ingestProvider}>
+                <option value="openai">OpenAI</option>
+                <option value="anthropic">Anthropic</option>
               </select>
             </label>
-            <Button variant="ghost" size="inline" on:click={copySchedulerCommand}>
-              <span>Copy command</span>
+            <label>
+              Model
+              <input
+                bind:value={ingestModel}
+                placeholder="gpt-4o-mini"
+                list={ingestProvider === 'anthropic' ? 'anthropic-model-options' : 'openai-model-options'}
+              />
+            </label>
+            <div class="model-tools">
+              <Button
+                variant="ghost"
+                size="inline"
+                on:click={() => syncModels(ingestProvider)}
+                disabled={isLoadingModels(ingestProvider)}
+              >
+                <IconRefresh size={14} stroke={1.9} />
+                <span>{isLoadingModels(ingestProvider) ? 'Loading...' : `Refresh ${ingestProvider}`}</span>
+              </Button>
+              <p class="muted small">{modelStatus(ingestProvider)}</p>
+            </div>
+            <label>
+              Reasoning level
+              <select bind:value={ingestReasoningEffort}>
+                <option value="minimal">Minimal</option>
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="subsection soft-panel">
+            <div class="subsection-header">
+              <h3>Chat lane</h3>
+              <p class="muted">Higher-capability lane for conversations and more complex tasks.</p>
+            </div>
+            <label>
+              Provider
+              <select bind:value={chatProvider}>
+                <option value="openai">OpenAI</option>
+                <option value="anthropic">Anthropic</option>
+              </select>
+            </label>
+            <label>
+              Model
+              <input
+                bind:value={chatModel}
+                placeholder="gpt-4o"
+                list={chatProvider === 'anthropic' ? 'anthropic-model-options' : 'openai-model-options'}
+              />
+            </label>
+            <div class="model-tools">
+              <Button
+                variant="ghost"
+                size="inline"
+                on:click={() => syncModels(chatProvider)}
+                disabled={isLoadingModels(chatProvider)}
+              >
+                <IconRefresh size={14} stroke={1.9} />
+                <span>{isLoadingModels(chatProvider) ? 'Loading...' : `Refresh ${chatProvider}`}</span>
+              </Button>
+              <p class="muted small">{modelStatus(chatProvider)}</p>
+            </div>
+            <label>
+              Reasoning level
+              <select bind:value={chatReasoningEffort}>
+                <option value="minimal">Minimal</option>
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+              </select>
+            </label>
+          </div>
+        </div>
+      </div>
+    </SettingsSectionCard>
+
+    <SettingsSectionCard
+      id="reading"
+      title="Reading defaults"
+      summary={sectionSummary('reading')}
+      description={sectionConfig[1].description}
+      open={sectionOpen.reading}
+      dirty={dirtySections.reading}
+      onToggle={() => toggleSection('reading')}
+    >
+      <div class="section-block">
+        <div class="two-col">
+          <label>
+            Summary style
+            <select bind:value={summaryStyle}>
+              <option value="concise">Concise</option>
+              <option value="detailed">Detailed</option>
+              <option value="bullet">Bullet-heavy</option>
+            </select>
+          </label>
+          <label>
+            Summary length
+            <select bind:value={summaryLength}>
+              <option value="short">Short</option>
+              <option value="medium">Medium</option>
+              <option value="long">Long</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="two-col">
+          <label>
+            Mark read after (ms)
+            <input
+              type="number"
+              min={data.autoReadDelayRange.min}
+              max={data.autoReadDelayRange.max}
+              step="250"
+              bind:value={autoReadDelayMs}
+            />
+            <span class="hint">Current: {autoReadDelaySeconds}s. 0 = immediate.</span>
+          </label>
+
+          <div class="field">
+            <div class="field-label">Article card layout</div>
+            <div class="lane-toggle" role="radiogroup" aria-label="Article card layout">
+              <label class:active={articleCardLayout === 'split'}>
+                <input type="radio" name="articleCardLayout" value="split" bind:group={articleCardLayout} />
+                <span>Split</span>
+              </label>
+              <label class:active={articleCardLayout === 'stacked'}>
+                <input type="radio" name="articleCardLayout" value="stacked" bind:group={articleCardLayout} />
+                <span>Stacked</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="subsection soft-panel">
+          <div class="subsection-header">
+            <h3>Dashboard queue</h3>
+            <p class="muted">Control how many high-fit stories surface in the dashboard reading queue.</p>
+          </div>
+          <div class="field-grid field-grid-compact">
+            <label>
+              Queue window (days)
+              <input
+                type="number"
+                min={data.dashboardQueueRange.windowDays.min}
+                max={data.dashboardQueueRange.windowDays.max}
+                step="1"
+                bind:value={dashboardQueueWindowDays}
+              />
+            </label>
+            <label>
+              Queue count
+              <input
+                type="number"
+                min={data.dashboardQueueRange.limit.min}
+                max={data.dashboardQueueRange.limit.max}
+                step="1"
+                bind:value={dashboardQueueLimit}
+              />
+            </label>
+            <label>
+              High-fit cutoff (1-5)
+              <input
+                type="number"
+                min={data.dashboardQueueRange.scoreCutoff.min}
+                max={data.dashboardQueueRange.scoreCutoff.max}
+                step="1"
+                bind:value={dashboardQueueScoreCutoff}
+              />
+            </label>
+          </div>
+        </div>
+      </div>
+    </SettingsSectionCard>
+
+    <SettingsSectionCard
+      id="profile"
+      title="Profile & prompts"
+      summary={sectionSummary('profile')}
+      description={sectionConfig[2].description}
+      open={sectionOpen.profile}
+      dirty={dirtySections.profile}
+      onToggle={() => toggleSection('profile')}
+    >
+      <div class="section-block">
+        <div class="subsection">
+          <div class="subsection-header">
+            <h3>AI preference profile</h3>
+            <p class="muted">
+              Version {data.profile.version} · Updated {new Date(data.profile.updated_at).toLocaleString()}
+            </p>
+          </div>
+          <textarea rows="8" bind:value={profileText}></textarea>
+          <p class="muted small">Profile edits are saved with the global Save changes action.</p>
+        </div>
+
+        <div class="subsection">
+          <div class="subsection-header split-header">
+            <div>
+              <h3>AI fit score prompts</h3>
+              <p class="muted">
+                Variables: <code>{'{{profile}}'}</code>, <code>{'{{title}}'}</code>, <code>{'{{url}}'}</code>,
+                <code>{'{{content}}'}</code>.
+              </p>
+            </div>
+            <Button variant="ghost" size="inline" on:click={resetScorePromptDefaults}>
+              <IconRestore size={14} stroke={1.9} />
+              <span>Reset defaults</span>
             </Button>
           </div>
-          <code class="command-code">{schedulerApplyCommand}</code>
+          <label>
+            System prompt
+            <textarea rows="4" bind:value={scoreSystemPrompt}></textarea>
+          </label>
+          <label>
+            User prompt template
+            <textarea rows="12" bind:value={scoreUserPromptTemplate}></textarea>
+          </label>
+          <p class="muted small">Prompt edits are saved with the global Save changes action.</p>
         </div>
       </div>
-    </details>
-  </Card>
+    </SettingsSectionCard>
 
-  <!-- API Keys -->
-  <Card id="keys">
-    <div class="card-title-row">
-      <h2>API Keys</h2>
-      <Button variant="ghost" size="inline" on:click={() => rotateKeys()}>
-        <IconRefresh size={14} stroke={1.9} />
-        <span>Rotate ciphers</span>
-      </Button>
-    </div>
-
-    <div class="key-block">
-      <div class="key-row">
-        <div>
-          <strong>OpenAI</strong>
-          <p class="muted small">{data.keyMap.openai ? 'Key stored' : 'No key yet'}</p>
+    <SettingsSectionCard
+      id="keys"
+      title="Provider keys"
+      summary={sectionSummary('keys')}
+      description={sectionConfig[3].description}
+      open={sectionOpen.keys}
+      dirty={dirtySections.keys}
+      onToggle={() => toggleSection('keys')}
+    >
+      <div class="section-block">
+        <div class="split-header">
+          <div class="subsection-header">
+            <h3>Provider credentials</h3>
+            <p class="muted">Stored server-side and used for model sync and runtime requests.</p>
+          </div>
+          <Button variant="ghost" size="inline" on:click={() => rotateKeys()} disabled={rotatingKeys}>
+            <IconRefresh size={14} stroke={1.9} />
+            <span>{rotatingKeys ? 'Rotating...' : 'Rotate ciphers'}</span>
+          </Button>
         </div>
-        <Button variant="danger" size="icon" on:click={() => removeKey('openai')} title="Remove OpenAI key">
-          <IconTrash size={15} stroke={1.9} />
+
+        <div class="key-provider-grid">
+          <div class="subsection soft-panel">
+            <div class="key-provider-header">
+              <div>
+                <h3>OpenAI</h3>
+                <p class="muted small">{keyStatus.openai ? 'Key stored' : 'No key yet'}</p>
+              </div>
+              <Button
+                variant="danger"
+                size="icon"
+                on:click={() => removeKey('openai')}
+                disabled={!keyStatus.openai || keyLoading.openai}
+                title="Remove OpenAI key"
+              >
+                <IconTrash size={15} stroke={1.9} />
+              </Button>
+            </div>
+            <input type="password" placeholder="Paste OpenAI key" bind:value={openaiKey} />
+            <Button size="inline" on:click={() => saveKey('openai')} disabled={!openaiKey || keyLoading.openai}>
+              <IconDeviceFloppy size={15} stroke={1.9} />
+              <span>{keyLoading.openai ? 'Saving...' : 'Save OpenAI key'}</span>
+            </Button>
+          </div>
+
+          <div class="subsection soft-panel">
+            <div class="key-provider-header">
+              <div>
+                <h3>Anthropic</h3>
+                <p class="muted small">{keyStatus.anthropic ? 'Key stored' : 'No key yet'}</p>
+              </div>
+              <Button
+                variant="danger"
+                size="icon"
+                on:click={() => removeKey('anthropic')}
+                disabled={!keyStatus.anthropic || keyLoading.anthropic}
+                title="Remove Anthropic key"
+              >
+                <IconTrash size={15} stroke={1.9} />
+              </Button>
+            </div>
+            <input type="password" placeholder="Paste Anthropic key" bind:value={anthropicKey} />
+            <Button
+              size="inline"
+              on:click={() => saveKey('anthropic')}
+              disabled={!anthropicKey || keyLoading.anthropic}
+            >
+              <IconDeviceFloppy size={15} stroke={1.9} />
+              <span>{keyLoading.anthropic ? 'Saving...' : 'Save Anthropic key'}</span>
+            </Button>
+          </div>
+        </div>
+      </div>
+    </SettingsSectionCard>
+
+    <SettingsSectionCard
+      id="intake"
+      title="Intake & retention"
+      summary={sectionSummary('intake')}
+      description={sectionConfig[4].description}
+      open={sectionOpen.intake}
+      dirty={dirtySections.intake}
+      onToggle={() => toggleSection('intake')}
+    >
+      <div class="section-block">
+        <div class="subsection">
+          <div class="subsection-header">
+            <h3>Feed intake</h3>
+            <p class="muted">Set how much history to backfill and how many items a poll run can pull.</p>
+          </div>
+          <label>
+            Initial feed backfill window (days)
+            <input
+              type="number"
+              min={data.initialFeedLookbackRange.min}
+              max={data.initialFeedLookbackRange.max}
+              step="1"
+              bind:value={initialFeedLookbackDays}
+            />
+            <span class="hint">Default {data.initialFeedLookbackRange.default} days. 0 = include all history.</span>
+          </label>
+
+          <div class="field-grid field-grid-compact">
+            <label>
+              Max feeds per poll
+              <input
+                type="number"
+                min={data.feedPollingRange.maxFeedsPerPoll.min}
+                max={data.feedPollingRange.maxFeedsPerPoll.max}
+                step="1"
+                bind:value={maxFeedsPerPoll}
+              />
+            </label>
+            <label>
+              Max items per poll
+              <input
+                type="number"
+                min={data.feedPollingRange.maxItemsPerPoll.min}
+                max={data.feedPollingRange.maxItemsPerPoll.max}
+                step="1"
+                bind:value={maxItemsPerPoll}
+              />
+            </label>
+            <label>
+              Events poll interval (ms)
+              <input
+                type="number"
+                min={data.feedPollingRange.eventsPollMs.min}
+                max={data.feedPollingRange.eventsPollMs.max}
+                step="1000"
+                bind:value={eventsPollMs}
+              />
+            </label>
+          </div>
+
+          <label>
+            Dashboard refresh floor (ms)
+            <input
+              type="number"
+              min={data.feedPollingRange.dashboardRefreshMinMs.min}
+              max={data.feedPollingRange.dashboardRefreshMinMs.max}
+              step="1000"
+              bind:value={dashboardRefreshMinMs}
+            />
+          </label>
+        </div>
+
+        <div class="subsection soft-panel">
+          <div class="subsection-header">
+            <h3>Retention</h3>
+            <p class="muted">Trim or archive older article content on the daily cleanup schedule.</p>
+          </div>
+          <label>
+            Retention window (days)
+            <input
+              type="number"
+              min={data.retentionRange.min}
+              max={data.retentionRange.max}
+              step="1"
+              bind:value={retentionDays}
+            />
+          </label>
+
+          <div class="field">
+            <div class="field-label">Retention mode</div>
+            <div class="lane-toggle" role="radiogroup" aria-label="Retention mode">
+              <label class:active={retentionMode === 'archive'}>
+                <input type="radio" name="retentionMode" value="archive" bind:group={retentionMode} />
+                <span>Archive text</span>
+              </label>
+              <label class:active={retentionMode === 'delete'}>
+                <input type="radio" name="retentionMode" value="delete" bind:group={retentionMode} />
+                <span>Delete records</span>
+              </label>
+            </div>
+            <span class="hint">Daily cleanup runs at 03:30 UTC. 0 days disables cleanup.</span>
+          </div>
+        </div>
+      </div>
+    </SettingsSectionCard>
+
+    <SettingsSectionCard
+      id="operations"
+      title="Operations"
+      summary={sectionSummary('operations')}
+      description={sectionConfig[5].description}
+      open={sectionOpen.operations}
+      dirty={dirtySections.operations}
+      onToggle={() => toggleSection('operations')}
+    >
+      <div class="section-block">
+        <div class="subsection">
+          <div class="subsection-header">
+            <h3>Scheduler presets</h3>
+            <p class="muted">Tune pull and queue throughput while keeping Worker resource use stable.</p>
+          </div>
+
+          <div class="preset-grid">
+            {#each schedulerPresets as preset}
+              <button
+                type="button"
+                class="preset-btn"
+                class:active={activeSchedulerPreset === preset.id}
+                on:click={() => applySchedulerPreset(preset.id)}
+              >
+                <span class="preset-title">{preset.label}</span>
+                <span class="preset-desc">{preset.description}</span>
+              </button>
+            {/each}
+          </div>
+
+          <p class="hint">
+            Current profile:
+            <strong>{activeSchedulerPreset === 'custom' ? `${schedulerMode} (custom)` : activeSchedulerPresetLabel}</strong>
+          </p>
+
+          <details class="advanced" bind:open={schedulerAdvancedOpen}>
+            <summary>Advanced scheduler controls</summary>
+
+            <div class="advanced-content">
+              <div class="field-grid field-grid-compact">
+                <label>
+                  Job processor batch size
+                  <input
+                    type="number"
+                    min={data.jobProcessorBatchRange.min}
+                    max={data.jobProcessorBatchRange.max}
+                    step="1"
+                    bind:value={jobProcessorBatchSize}
+                  />
+                </label>
+                <label>
+                  Pull slices per tick
+                  <input
+                    type="number"
+                    min={data.schedulerRange.pullSlicesPerTick.min}
+                    max={data.schedulerRange.pullSlicesPerTick.max}
+                    step="1"
+                    bind:value={pullSlicesPerTick}
+                  />
+                </label>
+                <label>
+                  Pull slice budget (ms)
+                  <input
+                    type="number"
+                    min={data.schedulerRange.pullSliceBudgetMs.min}
+                    max={data.schedulerRange.pullSliceBudgetMs.max}
+                    step="100"
+                    bind:value={pullSliceBudgetMs}
+                  />
+                </label>
+              </div>
+
+              <div class="two-col">
+                <label>
+                  Job budget when idle (ms)
+                  <input
+                    type="number"
+                    min={data.schedulerRange.jobBudgetIdleMs.min}
+                    max={data.schedulerRange.jobBudgetIdleMs.max}
+                    step="100"
+                    bind:value={jobBudgetIdleMs}
+                  />
+                </label>
+                <label>
+                  Job budget while pull is active (ms)
+                  <input
+                    type="number"
+                    min={data.schedulerRange.jobBudgetWhilePullMs.min}
+                    max={data.schedulerRange.jobBudgetWhilePullMs.max}
+                    step="100"
+                    bind:value={jobBudgetWhilePullMs}
+                  />
+                </label>
+              </div>
+
+              <label class="checkbox-row">
+                <input type="checkbox" bind:checked={autoQueueTodayMissing} />
+                <span>Auto queue missing today jobs on scheduler ticks</span>
+              </label>
+
+              <div class="two-col">
+                <label>
+                  Jobs scheduler interval (minutes)
+                  <input
+                    type="number"
+                    min={data.schedulerRange.jobsIntervalMinutes.min}
+                    max={data.schedulerRange.jobsIntervalMinutes.max}
+                    step="1"
+                    bind:value={jobsIntervalMinutes}
+                  />
+                  <span class="hint">Applies after running the command below and deploying.</span>
+                </label>
+                <label>
+                  Poll scheduler interval (minutes)
+                  <input
+                    type="number"
+                    min={data.schedulerRange.pollIntervalMinutes.min}
+                    max={data.schedulerRange.pollIntervalMinutes.max}
+                    step="1"
+                    bind:value={pollIntervalMinutes}
+                  />
+                  <span class="hint">Applies after running the command below and deploying.</span>
+                </label>
+              </div>
+
+              <p class="hint">Estimated mode: <strong>{schedulerMode}</strong></p>
+
+              <div class="scheduler-apply">
+                <div class="scheduler-apply-row">
+                  <label>
+                    Apply target
+                    <select bind:value={schedulerApplyEnv}>
+                      <option value="production">Production</option>
+                      <option value="staging">Staging</option>
+                    </select>
+                  </label>
+                  <Button variant="ghost" size="inline" on:click={copySchedulerCommand}>
+                    <span>Copy command</span>
+                  </Button>
+                </div>
+                <code class="command-code">{schedulerApplyCommand}</code>
+              </div>
+            </div>
+          </details>
+        </div>
+
+        <div class="subsection soft-panel">
+          <div class="subsection-header">
+            <h3>Orphan cleanup</h3>
+            <p class="muted">Clean up orphaned articles that no longer have any source feed linkage.</p>
+          </div>
+
+          <div class="maintenance-row">
+            <div>
+              <div class="maintenance-label">Orphan articles</div>
+              <div class="maintenance-value">{orphanCount}</div>
+              {#if orphanSampleArticleIds.length > 0}
+                <p class="muted small">
+                  Sample IDs: {orphanSampleArticleIds.slice(0, 3).join(', ')}{orphanSampleArticleIds.length > 3 ? '…' : ''}
+                </p>
+              {/if}
+            </div>
+            <div class="maintenance-actions">
+              <Button variant="ghost" size="inline" on:click={refreshOrphanPreview} disabled={orphanCleanupLoading}>
+                <IconRefresh size={14} stroke={1.9} />
+                <span>{orphanCleanupLoading ? 'Loading...' : 'Preview'}</span>
+              </Button>
+              <Button
+                variant="danger"
+                size="inline"
+                on:click={runOrphanCleanup}
+                disabled={orphanCleanupLoading || orphanCount === 0}
+              >
+                <IconTrash size={14} stroke={1.9} />
+                <span>{orphanCleanupLoading ? 'Cleaning...' : 'Clean now'}</span>
+              </Button>
+            </div>
+          </div>
+
+          <p class="hint">
+            Batch size: {orphanSuggestedBatchSize} per run. Re-run while “has more” is true.
+            {#if orphanCleanupLastRun}
+              {' '}Last run: deleted {Number(orphanCleanupLastRun?.deleted_articles ?? 0)}, remaining
+              {' '}{Number(orphanCleanupLastRun?.orphan_count_after ?? 0)}, has more:
+              {' '}{orphanCleanupHasMore ? 'yes' : 'no'}.
+            {/if}
+          </p>
+        </div>
+      </div>
+    </SettingsSectionCard>
+  </div>
+
+  <aside class="settings-rail">
+    <Card variant="default" class="overview-card">
+      <div class="overview-header">
+        <div>
+          <h2 class="overview-title">Settings overview</h2>
+          <p class="muted">Use sections to jump straight to the workflow you need.</p>
+        </div>
+        {#if hasUnsavedChanges}
+          <span class="unsaved-badge">
+            {modifiedSectionCount} section{modifiedSectionCount === 1 ? '' : 's'} changed
+          </span>
+        {:else}
+          <span class="overview-status">All changes saved</span>
+        {/if}
+      </div>
+
+      <div class="save-actions">
+        <Button
+          variant="ghost"
+          size="inline"
+          on:click={discardChanges}
+          disabled={!hasUnsavedChanges || isSavingSettings}
+        >
+          <IconRestore size={15} stroke={1.9} />
+          <span>Discard</span>
+        </Button>
+        <Button
+          variant="primary"
+          size="inline"
+          on:click={saveAllChanges}
+          disabled={!hasUnsavedChanges || isSavingSettings}
+        >
+          <IconDeviceFloppy size={15} stroke={1.9} />
+          <span>{isSavingSettings ? 'Saving...' : 'Save changes'}</span>
         </Button>
       </div>
-      <input type="password" placeholder="Paste OpenAI key" bind:value={openaiKey} />
-      <Button size="inline" on:click={() => saveKey('openai')} disabled={!openaiKey}>
-        <IconDeviceFloppy size={15} stroke={1.9} />
-        <span>Save OpenAI key</span>
-      </Button>
-    </div>
 
-    <div class="divider"></div>
-
-    <div class="key-block">
-      <div class="key-row">
-        <div>
-          <strong>Anthropic</strong>
-          <p class="muted small">{data.keyMap.anthropic ? 'Key stored' : 'No key yet'}</p>
-        </div>
-        <Button variant="danger" size="icon" on:click={() => removeKey('anthropic')} title="Remove Anthropic key">
-          <IconTrash size={15} stroke={1.9} />
-        </Button>
-      </div>
-      <input type="password" placeholder="Paste Anthropic key" bind:value={anthropicKey} />
-      <Button size="inline" on:click={() => saveKey('anthropic')} disabled={!anthropicKey}>
-        <IconDeviceFloppy size={15} stroke={1.9} />
-        <span>Save Anthropic key</span>
-      </Button>
-    </div>
-  </Card>
-
-  <!-- Prompts -->
-  <Card id="prompts">
-    <div class="card-title-row">
-      <h2>AI Fit Score Prompts</h2>
-      <Button variant="ghost" size="inline" on:click={resetScorePromptDefaults}>
-        <IconRestore size={14} stroke={1.9} />
-        <span>Reset defaults</span>
-      </Button>
-    </div>
-    <p class="muted">Variables: <code>{'{{profile}}'}</code>, <code>{'{{title}}'}</code>, <code>{'{{url}}'}</code>, <code>{'{{content}}'}</code>.</p>
-    <label>System prompt <textarea rows="4" bind:value={scoreSystemPrompt}></textarea></label>
-    <label>User prompt template <textarea rows="12" bind:value={scoreUserPromptTemplate}></textarea></label>
-  </Card>
-
-  <!-- Profile -->
-  <Card id="profile">
-    <h2>AI Preference Profile</h2>
-    <p class="muted">Version {data.profile.version} · Updated {new Date(data.profile.updated_at).toLocaleString()}</p>
-    <textarea rows="8" bind:value={profileText}></textarea>
-    <p class="muted small">Profile changes are saved with the global Save changes action.</p>
-  </Card>
+      <nav class="overview-shortcuts" aria-label="Settings sections">
+        {#each sectionConfig as section}
+          <button
+            type="button"
+            class="section-shortcut"
+            class:dirty={dirtySections[section.id]}
+            class:open={sectionOpen[section.id]}
+            aria-label={`Open ${section.title} section`}
+            on:click={() => openSection(section.id)}
+          >
+            <span class="shortcut-copy">
+              <span class="shortcut-title-row">
+                <span class="shortcut-title">{section.title}</span>
+                {#if dirtySections[section.id]}
+                  <span class="shortcut-badge">Changed</span>
+                {/if}
+              </span>
+              <span class="shortcut-summary">{sectionSummary(section.id)}</span>
+            </span>
+          </button>
+        {/each}
+      </nav>
+    </Card>
+  </aside>
 </div>
+
+{#if hasUnsavedChanges}
+  <div class="mobile-save-bar">
+    <div class="mobile-save-copy">
+      <strong>{modifiedSectionCount} section{modifiedSectionCount === 1 ? '' : 's'} changed</strong>
+      <span>Save or discard before leaving the page.</span>
+    </div>
+    <div class="mobile-save-actions">
+      <Button
+        variant="ghost"
+        size="inline"
+        on:click={discardChanges}
+        disabled={!hasUnsavedChanges || isSavingSettings}
+      >
+        <span>Discard</span>
+      </Button>
+      <Button
+        variant="primary"
+        size="inline"
+        on:click={saveAllChanges}
+        disabled={!hasUnsavedChanges || isSavingSettings}
+      >
+        <span>{isSavingSettings ? 'Saving...' : 'Save changes'}</span>
+      </Button>
+    </div>
+  </div>
+{/if}
 
 <datalist id="openai-model-options">
   {#each openaiModels as model}
     <option value={model.id}>{model.label ?? model.id}</option>
   {/each}
 </datalist>
+
 <datalist id="anthropic-model-options">
   {#each anthropicModels as model}
     <option value={model.id}>{model.label ?? model.id}</option>
@@ -1074,45 +1758,46 @@
 </datalist>
 
 <style>
-  .settings-stack {
+  .settings-layout {
     display: grid;
+    grid-template-columns: minmax(0, 1fr) 20rem;
     gap: var(--space-5);
+    align-items: start;
   }
 
-  h2 {
+  .settings-main {
+    display: grid;
+    gap: var(--space-5);
+    min-width: 0;
+  }
+
+  .settings-rail {
+    position: sticky;
+    top: var(--space-6);
+    align-self: start;
+  }
+
+  :global(.overview-card) {
+    display: grid;
+    gap: var(--space-4);
+  }
+
+  .overview-header {
+    display: grid;
+    gap: var(--space-2);
+  }
+
+  .overview-title {
     margin: 0;
     font-size: var(--text-xl);
   }
 
-  h3 {
-    margin: 0;
-    font-size: var(--text-base);
-    font-weight: 600;
-  }
-
-  /* Subnav */
-  .settings-subnav {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-1);
-    margin-top: var(--space-3);
-  }
-
-  .settings-subnav a {
-    border-radius: var(--radius-full);
-    padding: 0.2rem 0.75rem;
+  .overview-status {
     font-size: var(--text-sm);
     color: var(--muted-text);
-    background: var(--surface-soft);
-    transition: background var(--transition-fast), color var(--transition-fast);
+    font-weight: 500;
   }
 
-  .settings-subnav a:hover {
-    background: var(--primary-soft);
-    color: var(--primary);
-  }
-
-  /* Save actions */
   .save-actions {
     display: flex;
     align-items: center;
@@ -1121,27 +1806,138 @@
   }
 
   .unsaved-badge {
-    font-size: var(--text-sm);
+    width: fit-content;
+    border-radius: var(--radius-full);
+    padding: 0.25rem 0.7rem;
+    font-size: var(--text-xs);
     color: var(--primary);
-    font-weight: 500;
+    background: var(--primary-soft);
+    font-weight: 600;
   }
 
-  /* Sections */
+  .overview-shortcuts {
+    display: grid;
+    gap: var(--space-2);
+  }
+
+  .section-shortcut {
+    display: block;
+    width: 100%;
+    padding: var(--space-3);
+    border: 1px solid var(--surface-border);
+    border-radius: var(--radius-lg);
+    background: var(--surface-soft);
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition:
+      border-color var(--transition-fast),
+      background var(--transition-fast),
+      transform var(--transition-fast);
+  }
+
+  .section-shortcut:hover {
+    background: var(--primary-soft);
+  }
+
+  .section-shortcut.open {
+    border-color: color-mix(in srgb, var(--primary) 30%, var(--surface-border));
+  }
+
+  .section-shortcut.dirty {
+    border-color: color-mix(in srgb, var(--primary) 40%, var(--surface-border));
+  }
+
+  .shortcut-copy {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .shortcut-title-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+  }
+
+  .shortcut-title {
+    font-size: var(--text-sm);
+    font-weight: 600;
+  }
+
+  .shortcut-summary {
+    font-size: var(--text-xs);
+    line-height: 1.4;
+    color: var(--muted-text);
+  }
+
+  .shortcut-badge {
+    border-radius: var(--radius-full);
+    padding: 0.12rem 0.45rem;
+    background: var(--primary-soft);
+    color: var(--primary);
+    font-size: 0.7rem;
+    font-weight: 600;
+  }
+
   .section-block {
     display: grid;
     gap: var(--space-4);
   }
 
-  .divider {
-    height: 1px;
-    background: var(--surface-border);
+  .subsection {
+    display: grid;
+    gap: var(--space-3);
+    min-width: 0;
   }
 
-  /* Feature lanes */
+  .soft-panel {
+    border-radius: var(--radius-lg);
+    padding: var(--space-4);
+    background: var(--surface-soft);
+  }
+
+  .subsection-header {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .split-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+  }
+
+  h3 {
+    margin: 0;
+    font-size: var(--text-base);
+    font-weight: 600;
+  }
+
+  label {
+    display: grid;
+    gap: 0.4rem;
+    font-size: var(--text-sm);
+    font-weight: 500;
+    min-width: 0;
+  }
+
+  .field {
+    display: grid;
+    gap: 0.4rem;
+  }
+
+  .field-label {
+    font-size: var(--text-sm);
+    font-weight: 500;
+  }
+
   .feature-lanes {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-    gap: var(--space-4);
+    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+    gap: var(--space-3);
   }
 
   .feature-lane {
@@ -1155,42 +1951,32 @@
     font-weight: 500;
   }
 
-  /* Model sections */
-  .model-sections {
+  .model-sections,
+  .key-provider-grid,
+  .two-col {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--space-4);
   }
 
-  .model-section {
+  .field-grid {
     display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--space-4);
-    border-radius: var(--radius-lg);
-    padding: var(--space-5);
-    background: var(--surface-soft);
   }
 
-  .model-tools {
+  .field-grid-compact {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .model-tools,
+  .inline-actions {
     display: grid;
-    gap: 0.3rem;
+    gap: var(--space-2);
   }
 
-  /* Form */
-  label {
-    display: grid;
-    gap: 0.4rem;
-    font-size: var(--text-sm);
-    font-weight: 500;
-  }
-
-  .field {
-    display: grid;
-    gap: 0.4rem;
-  }
-
-  .field-label {
-    font-size: var(--text-sm);
-    font-weight: 500;
+  .inline-actions {
+    align-content: end;
   }
 
   input:not([type='radio']):not([type='checkbox']),
@@ -1207,10 +1993,59 @@
     max-width: 100%;
   }
 
+  .checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-weight: 500;
+  }
+
+  .checkbox-row input[type='checkbox'] {
+    width: 1rem;
+    height: 1rem;
+    margin: 0;
+  }
+
   .hint {
     font-size: var(--text-xs);
     color: var(--muted-text);
     font-weight: 400;
+  }
+
+  .lane-toggle {
+    display: inline-grid;
+    grid-template-columns: 1fr 1fr;
+    border-radius: var(--radius-full);
+    padding: 0.2rem;
+    background: var(--surface-soft);
+    max-width: 22rem;
+    width: 100%;
+  }
+
+  .lane-toggle label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-full);
+    padding: 0.4rem 0.75rem;
+    cursor: pointer;
+    font-weight: 500;
+    font-size: var(--text-sm);
+    color: var(--muted-text);
+    transition: background var(--transition-fast), color var(--transition-fast);
+  }
+
+  .lane-toggle label.active {
+    background: var(--button-bg);
+    color: var(--button-text);
+  }
+
+  .lane-toggle input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+    width: 1px;
+    height: 1px;
   }
 
   .preset-grid {
@@ -1229,7 +2064,9 @@
     background: var(--surface-soft);
     color: var(--text-color);
     cursor: pointer;
-    transition: border-color var(--transition-fast), background var(--transition-fast), box-shadow var(--transition-fast);
+    transition:
+      background var(--transition-fast),
+      box-shadow var(--transition-fast);
   }
 
   .preset-btn:hover {
@@ -1276,22 +2113,11 @@
     margin-top: var(--space-3);
   }
 
-  .checkbox-row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-  }
-
-  .checkbox-row input[type='checkbox'] {
-    width: 1rem;
-    height: 1rem;
-  }
-
   .scheduler-apply {
     display: grid;
     gap: var(--space-2);
     border-radius: var(--radius-lg);
-    background: var(--surface-soft);
+    background: var(--surface);
     padding: var(--space-3);
   }
 
@@ -1312,87 +2138,12 @@
     line-height: 1.4;
   }
 
-  .two-col {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: var(--space-4);
-  }
-
-  .inline-actions {
-    display: grid;
-    align-content: end;
-    gap: var(--space-2);
-  }
-
-  /* Lane toggle */
-  .lane-toggle {
-    display: inline-grid;
-    grid-template-columns: 1fr 1fr;
-    border-radius: var(--radius-full);
-    padding: 0.2rem;
-    background: var(--surface-soft);
-    max-width: 360px;
-    width: 100%;
-  }
-
-  .lane-toggle label {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: var(--radius-full);
-    padding: 0.4rem 0.75rem;
-    cursor: pointer;
-    font-weight: 500;
-    font-size: var(--text-sm);
-    color: var(--muted-text);
-    transition: background var(--transition-fast), color var(--transition-fast);
-  }
-
-  .lane-toggle label.active {
-    background: var(--button-bg);
-    color: var(--button-text);
-  }
-
-  .lane-toggle input {
-    position: absolute;
-    opacity: 0;
-    pointer-events: none;
-    width: 1px;
-    height: 1px;
-  }
-
-  /* Keys */
-  .key-block {
-    display: grid;
-    gap: var(--space-3);
-  }
-
-  .key-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: var(--space-3);
-  }
-
-  .card-title-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-2);
-  }
-
-  .muted {
-    color: var(--muted-text);
-    margin: 0;
-  }
-
-  .small { font-size: var(--text-sm); }
-
+  .key-provider-header,
   .maintenance-row {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    gap: var(--space-4);
+    gap: var(--space-3);
     flex-wrap: wrap;
   }
 
@@ -1416,6 +2167,19 @@
     align-items: center;
   }
 
+  .muted {
+    color: var(--muted-text);
+    margin: 0;
+  }
+
+  .small {
+    font-size: var(--text-sm);
+  }
+
+  .mobile-save-bar {
+    display: none;
+  }
+
   code {
     background: var(--surface-soft);
     border-radius: var(--radius-sm);
@@ -1423,11 +2187,51 @@
     font-size: var(--text-sm);
   }
 
+  @media (max-width: 1100px) {
+    .settings-layout {
+      grid-template-columns: 1fr;
+    }
+
+    .settings-rail {
+      position: static;
+      order: -1;
+    }
+  }
+
   @media (max-width: 800px) {
     .model-sections,
+    .key-provider-grid,
     .two-col,
+    .field-grid,
+    .field-grid-compact,
     .preset-grid {
       grid-template-columns: 1fr;
+    }
+
+    .mobile-save-bar {
+      position: sticky;
+      bottom: var(--space-4);
+      display: grid;
+      gap: var(--space-3);
+      margin-top: var(--space-5);
+      padding: var(--space-4);
+      border: 1px solid var(--surface-border);
+      border-radius: var(--radius-xl);
+      background: color-mix(in srgb, var(--surface-strong) 92%, transparent);
+      box-shadow: var(--shadow-lg);
+      z-index: 10;
+    }
+
+    .mobile-save-copy {
+      display: grid;
+      gap: 0.2rem;
+      font-size: var(--text-sm);
+    }
+
+    .mobile-save-actions {
+      display: flex;
+      gap: var(--space-2);
+      flex-wrap: wrap;
     }
   }
 </style>

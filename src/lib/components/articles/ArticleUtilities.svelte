@@ -69,15 +69,33 @@
   const summaryForFeedback = () => (feedbackCount > 0 ? `${feedbackCount} saved` : 'Not yet rated');
   const summaryForSources = () => (sources.length > 0 ? `${sources.length} source${sources.length === 1 ? '' : 's'}` : 'No source data');
   const scoreDisplay = () => (Number.isFinite(Number(score?.score)) ? `${Math.round(Number(score?.score))}/5` : 'Pending');
+
+  $: utilityHighlights = [
+    { label: 'Tags', value: String(tags.length) },
+    { label: 'Chat', value: summaryForChat() },
+    { label: 'Feedback', value: feedbackCount > 0 ? String(feedbackCount) : '0' },
+    { label: 'Sources', value: String(sources.length) }
+  ];
 </script>
 
 <div class={`utility-panel utility-panel-${layout}`}>
   <div class="panel-header">
-    <div>
-      <p class="panel-kicker">Utilities</p>
-      <h2>{layout === 'sheet' ? 'Article tools' : 'Article inspector'}</h2>
+    <div class="panel-copy">
+      <div>
+        <p class="panel-kicker">Utilities</p>
+        <h2>{layout === 'sheet' ? 'Article tools' : 'Article inspector'}</h2>
+      </div>
+      <p class="panel-summary">Secondary tools stay available without interrupting the reading flow.</p>
     </div>
-    <p class="panel-summary">Secondary tools stay available without interrupting the reading flow.</p>
+
+    <div class="panel-highlights" aria-label="Utility summary">
+      {#each utilityHighlights as item}
+        <span class="highlight-chip">
+          <strong>{item.value}</strong>
+          <span>{item.label}</span>
+        </span>
+      {/each}
+    </div>
   </div>
 
   <ArticleUtilitySection
@@ -89,65 +107,74 @@
   >
     <div class="utility-stack">
       {#if tags.length}
-        <div class="chip-list">
-          {#each tags as tag}
-            <button
-              type="button"
-              class="tag-chip removable"
-              on:click={() => onRemoveTag?.(String(tag.id ?? ''))}
-              disabled={tagBusy}
-              title={`Remove ${String(tag.name ?? 'tag')}`}
-            >
-              <span>{String(tag.name ?? 'Untitled')}</span>
-              {#if tag.source === 'ai'}
-                <span class="chip-badge">AI</span>
-              {/if}
-              <IconX size={12} stroke={2} />
-            </button>
-          {/each}
+        <div class="chip-cluster">
+          <p class="mini-label">Current</p>
+          <div class="chip-list">
+            {#each tags as tag}
+              <button
+                type="button"
+                class="tag-chip removable"
+                on:click={() => onRemoveTag?.(String(tag.id ?? ''))}
+                disabled={tagBusy}
+                title={`Remove ${String(tag.name ?? 'tag')}`}
+              >
+                <span>{String(tag.name ?? 'Untitled')}</span>
+                {#if tag.source === 'ai'}
+                  <span class="chip-badge">AI</span>
+                {/if}
+                <IconX size={12} stroke={2} />
+              </button>
+            {/each}
+          </div>
         </div>
       {:else}
         <p class="utility-note">No tags yet.</p>
       {/if}
 
       {#if tagSuggestions.length}
-        <div class="chip-list suggestions">
-          {#each tagSuggestions as suggestion}
-            <span class="tag-chip suggestion-chip">
-              <span>{String(suggestion.name ?? 'Suggestion')}</span>
-              <button
-                type="button"
-                class="chip-action"
-                on:click={() => onAcceptTagSuggestion?.(suggestion)}
-                aria-label={`Accept ${String(suggestion.name ?? 'suggestion')}`}
-                disabled={tagBusy}
-              >
-                <IconPlus size={12} stroke={2} />
-              </button>
-              <button
-                type="button"
-                class="chip-action"
-                on:click={() => onDismissTagSuggestion?.(suggestion)}
-                aria-label={`Dismiss ${String(suggestion.name ?? 'suggestion')}`}
-                disabled={tagBusy}
-              >
-                <IconX size={12} stroke={2} />
-              </button>
-            </span>
-          {/each}
+        <div class="chip-cluster">
+          <p class="mini-label">Suggested</p>
+          <div class="chip-list suggestions">
+            {#each tagSuggestions as suggestion}
+              <span class="tag-chip suggestion-chip">
+                <span>{String(suggestion.name ?? 'Suggestion')}</span>
+                <button
+                  type="button"
+                  class="chip-action"
+                  on:click={() => onAcceptTagSuggestion?.(suggestion)}
+                  aria-label={`Accept ${String(suggestion.name ?? 'suggestion')}`}
+                  disabled={tagBusy}
+                >
+                  <IconPlus size={12} stroke={2} />
+                </button>
+                <button
+                  type="button"
+                  class="chip-action"
+                  on:click={() => onDismissTagSuggestion?.(suggestion)}
+                  aria-label={`Dismiss ${String(suggestion.name ?? 'suggestion')}`}
+                  disabled={tagBusy}
+                >
+                  <IconX size={12} stroke={2} />
+                </button>
+              </span>
+            {/each}
+          </div>
         </div>
       {/if}
 
-      <div class="input-row">
-        <input
-          list={`article-tag-options-${layout}`}
-          placeholder="Add tags (comma-separated)"
-          bind:value={tagInput}
-          disabled={tagBusy}
-        />
-        <Button variant="ghost" size="icon" on:click={() => onAddTags?.()} disabled={tagBusy} title="Add tags">
-          <IconPlus size={15} stroke={1.9} />
-        </Button>
+      <div class="input-card">
+        <div class="input-row">
+          <input
+            list={`article-tag-options-${layout}`}
+            placeholder="Add tags (comma-separated)"
+            bind:value={tagInput}
+            disabled={tagBusy}
+          />
+          <Button variant="ghost" size="inline" on:click={() => onAddTags?.()} disabled={tagBusy}>
+            <IconPlus size={15} stroke={1.9} />
+            <span>Add tags</span>
+          </Button>
+        </div>
       </div>
 
       {#if tagError}
@@ -184,14 +211,16 @@
         </button>
       </div>
 
-      <div class="meta-list">
-        {#if modelLabel(summary)}
-          <div class="meta-item"><span>Summary</span><strong>{modelLabel(summary)}</strong></div>
-        {/if}
-        {#if modelLabel(keyPoints)}
-          <div class="meta-item"><span>Key points</span><strong>{modelLabel(keyPoints)}</strong></div>
-        {/if}
-        <div class="meta-item"><span>Fit score</span><strong>{scoreDisplay()}</strong></div>
+      <div class="meta-card">
+        <div class="meta-list">
+          {#if modelLabel(summary)}
+            <div class="meta-item"><span>Summary</span><strong>{modelLabel(summary)}</strong></div>
+          {/if}
+          {#if modelLabel(keyPoints)}
+            <div class="meta-item"><span>Key points</span><strong>{modelLabel(keyPoints)}</strong></div>
+          {/if}
+          <div class="meta-item"><span>Fit score</span><strong>{scoreDisplay()}</strong></div>
+        </div>
       </div>
     </div>
   </ArticleUtilitySection>
@@ -215,16 +244,18 @@
           {/each}
         </ul>
       {/if}
-      <ChatBox
-        density="compact"
-        {chatLog}
-        bind:message
-        {sending}
-        disabled={!chatReadiness?.canChat}
-        placeholder={chatReadiness?.canChat ? 'Ask about this article' : 'Complete chat setup first'}
-        error={chatError}
-        on:send={() => onSendMessage?.()}
-      />
+      <div class="chat-card">
+        <ChatBox
+          density="compact"
+          {chatLog}
+          bind:message
+          {sending}
+          disabled={!chatReadiness?.canChat}
+          placeholder={chatReadiness?.canChat ? 'Ask about this article' : 'Complete chat setup first'}
+          error={chatError}
+          on:send={() => onSendMessage?.()}
+        />
+      </div>
     </div>
   </ArticleUtilitySection>
 
@@ -237,15 +268,20 @@
   >
     <div class="utility-stack">
       <p class="utility-note">Capture what the AI missed so future scoring and summaries improve.</p>
-      <label class="field-label">
-        <span>Rating (1–5)</span>
-        <input type="number" min="1" max="5" bind:value={rating} />
-      </label>
-      <textarea rows="4" placeholder="What did the AI miss?" bind:value={comment}></textarea>
-      <Button size="inline" on:click={() => onSubmitFeedback?.()}>
-        <IconCheck size={15} stroke={1.9} />
-        <span>Save feedback</span>
-      </Button>
+      <div class="input-card feedback-card">
+        <label class="field-label">
+          <span>Rating (1–5)</span>
+          <input type="number" min="1" max="5" bind:value={rating} />
+        </label>
+        <label class="field-label">
+          <span>Notes</span>
+          <textarea rows="4" placeholder="What did the AI miss?" bind:value={comment}></textarea>
+        </label>
+        <Button size="inline" on:click={() => onSubmitFeedback?.()}>
+          <IconCheck size={15} stroke={1.9} />
+          <span>Save feedback</span>
+        </Button>
+      </div>
     </div>
   </ArticleUtilitySection>
 
@@ -257,7 +293,7 @@
     on:toggle={() => toggleSection('sources')}
   >
     {#if sources.length}
-      <ul class="source-list">
+      <ul class="source-list source-cards">
         {#each sources as source}
           <li>
             <strong>{String(source.sourceName ?? 'Unknown source')}</strong>
@@ -285,7 +321,9 @@
     padding: clamp(0.95rem, 1.4vw, 1.2rem);
     border-radius: calc(var(--radius-xl) + 0.1rem);
     border: 1px solid color-mix(in srgb, var(--surface-border) 115%, transparent);
-    background: linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 88%, transparent), color-mix(in srgb, var(--surface) 88%, transparent));
+    background:
+      linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 88%, transparent), color-mix(in srgb, var(--surface) 88%, transparent)),
+      radial-gradient(circle at top right, color-mix(in srgb, var(--primary-soft) 80%, transparent), transparent 48%);
     box-shadow: 0 18px 40px color-mix(in srgb, var(--shadow-color) 35%, transparent);
     overflow: clip;
   }
@@ -295,8 +333,26 @@
     top: calc(var(--space-8) + 0.25rem);
   }
 
-  .panel-header {
+  .panel-header,
+  .panel-copy,
+  .panel-highlights,
+  .utility-stack,
+  .chat-head,
+  .chip-cluster,
+  .meta-list,
+  .input-card,
+  .chat-card {
     min-width: 0;
+  }
+
+  .panel-header {
+    display: grid;
+    gap: var(--space-3);
+    padding-bottom: var(--space-3);
+    border-bottom: 1px solid color-mix(in srgb, var(--surface-border) 105%, transparent);
+  }
+
+  .panel-copy {
     display: grid;
     gap: 0.35rem;
   }
@@ -310,7 +366,9 @@
   }
 
   .panel-header h2,
-  .panel-header p {
+  .panel-header p,
+  .utility-note,
+  .mini-label {
     margin: 0;
   }
 
@@ -324,9 +382,32 @@
     overflow-wrap: anywhere;
   }
 
+  .panel-highlights {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+  }
+
+  .highlight-chip {
+    min-width: 0;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.35rem;
+    padding: 0.4rem 0.7rem;
+    border-radius: var(--radius-full);
+    background: color-mix(in srgb, var(--surface-soft) 86%, transparent);
+    border: 1px solid color-mix(in srgb, var(--surface-border) 110%, transparent);
+    font-size: var(--text-xs);
+    color: var(--muted-text);
+  }
+
+  .highlight-chip strong {
+    color: var(--text-color);
+    font-size: var(--text-sm);
+  }
+
   .utility-stack,
   .chat-head {
-    min-width: 0;
     display: grid;
     gap: var(--space-3);
   }
@@ -340,10 +421,21 @@
   }
 
   .utility-note {
-    margin: 0;
     font-size: var(--text-sm);
     color: var(--muted-text);
     line-height: 1.55;
+  }
+
+  .mini-label {
+    font-size: var(--text-xs);
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: var(--muted-text);
+  }
+
+  .chip-cluster {
+    display: grid;
+    gap: 0.55rem;
   }
 
   .chip-list {
@@ -359,7 +451,7 @@
     display: inline-flex;
     align-items: center;
     gap: 0.3rem;
-    padding: 0.32rem 0.62rem;
+    padding: 0.38rem 0.68rem;
     border-radius: var(--radius-full);
     background: color-mix(in srgb, var(--surface-soft) 92%, transparent);
     border: 1px solid color-mix(in srgb, var(--surface-border) 110%, transparent);
@@ -386,8 +478,8 @@
   }
 
   .chip-action {
-    width: 1.25rem;
-    height: 1.25rem;
+    width: 1.3rem;
+    height: 1.3rem;
     padding: 0;
     border: 0;
     border-radius: var(--radius-full);
@@ -406,10 +498,28 @@
     cursor: default;
   }
 
+  .input-card,
+  .meta-card,
+  .chat-card,
+  .feedback-card,
+  .source-cards li {
+    border-radius: calc(var(--radius-lg) + 0.05rem);
+    border: 1px solid color-mix(in srgb, var(--surface-border) 110%, transparent);
+    background: color-mix(in srgb, var(--surface-soft) 78%, transparent);
+  }
+
+  .input-card,
+  .feedback-card,
+  .meta-card,
+  .chat-card {
+    padding: 0.8rem;
+  }
+
   .input-row {
     min-width: 0;
     display: flex;
     gap: var(--space-2);
+    align-items: center;
   }
 
   .input-row :global(input),
@@ -417,7 +527,7 @@
     min-width: 0;
     width: 100%;
     box-sizing: border-box;
-    padding: 0.72rem 0.8rem;
+    padding: 0.76rem 0.85rem;
     border-radius: var(--radius-md);
     border: 1px solid var(--input-border);
     background: var(--input-bg);
@@ -436,6 +546,11 @@
     color: var(--muted-text);
   }
 
+  .feedback-card {
+    display: grid;
+    gap: var(--space-3);
+  }
+
   .utility-error {
     margin: 0;
     color: var(--danger);
@@ -451,22 +566,21 @@
 
   .tool-button {
     min-width: 0;
-    min-height: 44px;
-    padding: 0.75rem 0.8rem;
+    min-height: 48px;
+    padding: 0.85rem 0.9rem;
     border-radius: var(--radius-lg);
     border: 1px solid color-mix(in srgb, var(--surface-border) 115%, transparent);
     background: color-mix(in srgb, var(--surface-soft) 86%, transparent);
     color: var(--text-color);
     display: inline-flex;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.55rem;
     justify-content: flex-start;
     font: inherit;
     overflow-wrap: anywhere;
   }
 
   .meta-list {
-    min-width: 0;
     display: grid;
     gap: 0.55rem;
   }
@@ -497,6 +611,16 @@
     gap: 0.55rem;
   }
 
+  .source-cards {
+    list-style: none;
+    padding-left: 0;
+    gap: 0.7rem;
+  }
+
+  .source-cards li {
+    padding: 0.85rem 0.9rem;
+  }
+
   .source-list strong {
     display: block;
     margin-bottom: 0.15rem;
@@ -520,6 +644,15 @@
     .meta-item {
       grid-template-columns: 1fr;
       display: grid;
+    }
+
+    .panel-highlights {
+      gap: 0.45rem;
+    }
+
+    .highlight-chip {
+      flex: 1 1 8rem;
+      justify-content: space-between;
     }
   }
 </style>

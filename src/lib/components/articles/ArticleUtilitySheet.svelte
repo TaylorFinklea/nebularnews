@@ -61,6 +61,7 @@
       <div class="sheet-handle" aria-hidden="true"></div>
       <div class="sheet-header">
         <div class="sheet-copy">
+          <p class="sheet-kicker">Utilities</p>
           <h2>{title}</h2>
           <p>{description}</p>
         </div>
@@ -128,6 +129,14 @@
     min-width: 0;
     display: grid;
     gap: 0.35rem;
+  }
+
+  .sheet-kicker {
+    margin: 0;
+    color: var(--muted-text);
+    font-size: var(--text-xs);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
   }
 
   .sheet-copy h2 {

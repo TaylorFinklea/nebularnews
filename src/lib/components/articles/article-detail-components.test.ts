@@ -65,7 +65,7 @@ describe('Article detail components', () => {
     });
 
     expect(screen.getByText('2 tags · 1 suggested')).toBeTruthy();
-    expect(screen.getByText('Ready')).toBeTruthy();
+    expect(screen.getAllByText('Ready').length).toBeGreaterThan(0);
     expect(screen.getByText('2 saved')).toBeTruthy();
     expect(screen.getByText('1 source')).toBeTruthy();
   });

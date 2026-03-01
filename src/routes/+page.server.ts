@@ -15,10 +15,22 @@ const EMPTY_MOMENTUM = {
   highFitUnread7d: 0
 };
 
-const buildUnreadHref = (options: { scoreCutoff?: number; sinceDays?: number } = {}) => {
+const DASHBOARD_VISIBLE_REACTIONS = ['up', 'none'];
+
+const buildArticlesHref = (
+  options: {
+    scoreCutoff?: number;
+    sinceDays?: number;
+    unreadOnly?: boolean;
+    reactions?: string[];
+  } = {}
+) => {
   const params = new URLSearchParams();
-  params.set('read', 'unread');
-  params.set('sort', 'unread_first');
+
+  if (options.unreadOnly !== false) {
+    params.set('read', 'unread');
+    params.set('sort', 'unread_first');
+  }
 
   if (options.sinceDays && Number.isFinite(options.sinceDays)) {
     params.set('sinceDays', String(Math.max(1, Math.round(options.sinceDays))));
@@ -31,7 +43,14 @@ const buildUnreadHref = (options: { scoreCutoff?: number; sinceDays?: number } =
     }
   }
 
+  const reactions = options.reactions ?? DASHBOARD_VISIBLE_REACTIONS;
+  for (const r of reactions) params.append('reaction', r);
+
   return `/articles?${params.toString()}`;
+};
+
+const queueArticleHref = (articleId: string, fromPath: string) => {
+  return `/articles/${articleId}?from=${encodeURIComponent(fromPath)}`;
 };
 
 export const load = async ({ platform, request, depends, setHeaders, locals }) => {
@@ -92,17 +111,18 @@ export const load = async ({ platform, request, depends, setHeaders, locals }) =
       windowDays: queueConfig.windowDays,
       limit: queueConfig.limit,
       scoreCutoff: queueConfig.scoreCutoff,
-      hrefUnread: buildUnreadHref(),
-      hrefHighFitUnread: buildUnreadHref({
+      hrefUnread: buildArticlesHref(),
+      hrefHighFitUnread: buildArticlesHref({
         scoreCutoff: queueConfig.scoreCutoff,
         sinceDays: 7
-      })
+      }),
+      fromHref: buildArticlesHref()
     },
     momentumLinks: {
-      unreadTotal: buildUnreadHref(),
-      unread24h: buildUnreadHref({ sinceDays: 1 }),
-      unread7d: buildUnreadHref({ sinceDays: 7 }),
-      highFitUnread7d: buildUnreadHref({
+      unreadTotal: buildArticlesHref(),
+      unread24h: buildArticlesHref({ sinceDays: 1 }),
+      unread7d: buildArticlesHref({ sinceDays: 7 }),
+      highFitUnread7d: buildArticlesHref({
         scoreCutoff: queueConfig.scoreCutoff,
         sinceDays: 7
       })

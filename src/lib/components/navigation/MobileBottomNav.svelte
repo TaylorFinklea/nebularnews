@@ -75,9 +75,11 @@
       class="rail-link"
       class:active
       aria-current={active ? 'page' : undefined}
+      aria-label={item.label}
+      title={item.label}
     >
       <span class="rail-icon"><Icon size={20} stroke={1.9} /></span>
-      <span class="rail-label">{item.label}</span>
+      <span class="sr-only">{item.label}</span>
     </a>
   {/each}
   <button
@@ -89,7 +91,7 @@
     on:click={toggleMore}
   >
     <span class="rail-icon"><IconMenu2 size={20} stroke={1.9} /></span>
-    <span class="rail-label">More</span>
+    <span class="sr-only">More</span>
   </button>
 </nav>
 
@@ -183,13 +185,6 @@
     justify-content: center;
     width: 24px;
     height: 24px;
-  }
-
-  .rail-label {
-    font-size: 0.65rem;
-    font-weight: 500;
-    letter-spacing: 0.02em;
-    line-height: 1;
   }
 
   /* Active top accent line */

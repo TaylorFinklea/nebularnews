@@ -8,6 +8,7 @@
   export let disabled = false;
   export let placeholder = 'Type a message';
   export let error = '';
+  export let density = 'default';
 
   const dispatch = createEventDispatcher();
   let chatContainer;
@@ -26,7 +27,7 @@
   };
 </script>
 
-<div class="chat-wrap">
+<div class="chat-wrap" class:density-compact={density === 'compact'}>
   <div class="chat-box" bind:this={chatContainer}>
     {#if chatLog.length === 0 && !sending}
       <div class="chat-empty">
@@ -192,5 +193,21 @@
     color: var(--danger);
     font-size: var(--text-sm);
     margin: 0;
+  }
+
+  /* Compact density for utility panels */
+  .density-compact .chat-box {
+    min-height: 180px;
+    max-height: 300px;
+    padding: var(--space-3);
+  }
+
+  .density-compact .chat-empty {
+    min-height: 120px;
+  }
+
+  .density-compact .bubble {
+    padding: 0.45rem 0.7rem;
+    font-size: var(--text-sm);
   }
 </style>

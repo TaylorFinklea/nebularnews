@@ -126,6 +126,7 @@
 <style>
   :global(:root) {
     --mobile-nav-height: 64px;
+    --mobile-nav-offset: 12px;
     --bg-gradient-start: #050915;
     --bg-gradient-mid: #0b1638;
     --bg-gradient-end: #1a1640;
@@ -273,7 +274,7 @@
     }
 
     .main-column.with-mobile-nav .content {
-      padding-bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom) + var(--space-6));
+      padding-bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom) + var(--mobile-nav-offset, 0px) + var(--space-6));
     }
   }
 </style>

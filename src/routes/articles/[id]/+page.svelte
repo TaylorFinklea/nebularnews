@@ -4,31 +4,15 @@
   import { onMount } from 'svelte';
   import { resolveArticleImageUrl } from '$lib/article-image';
   import { apiFetch } from '$lib/client/api-fetch';
-  import {
-    IconArrowLeft,
-    IconCheck,
-    IconEye,
-    IconEyeOff,
-    IconExternalLink,
-    IconFileText,
-    IconListDetails,
-    IconPlus,
-    IconSparkles,
-    IconStars,
-    IconTag,
-    IconThumbDown,
-    IconThumbUp,
-    IconX
-  } from '$lib/icons';
   import Card from '$lib/components/Card.svelte';
-  import Button from '$lib/components/Button.svelte';
-  import Pill from '$lib/components/Pill.svelte';
-  import ChatBox from '$lib/components/ChatBox.svelte';
   import { showToast } from '$lib/client/toast';
+  import ArticleDetailLead from '$lib/components/articles/ArticleDetailLead.svelte';
+  import ArticleProse from '$lib/components/articles/ArticleProse.svelte';
+  import ArticleQuickTake from '$lib/components/articles/ArticleQuickTake.svelte';
+  import ArticleUtilities from '$lib/components/articles/ArticleUtilities.svelte';
+
   export let data;
 
-  let rating = 3;
-  let comment = '';
   let threadId = null;
   let message = '';
   let chatLog = [];
@@ -138,13 +122,12 @@
 
   const fromApi = (payload, key, fallback) => payload?.data?.[key] ?? payload?.[key] ?? fallback;
 
-  const submitFeedback = async () => {
+  const submitFeedback = async (ratingValue, commentValue) => {
     await apiFetch(`/api/articles/${data.article.id}/feedback`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ rating, comment, feedId: data.preferredSource?.feedId ?? null })
+      body: JSON.stringify({ rating: ratingValue, comment: commentValue, feedId: data.preferredSource?.feedId ?? null })
     });
-    comment = '';
     await invalidateAll();
   };
 
@@ -361,303 +344,59 @@
 {#if !data.article}
   <p>Article not found.</p>
 {:else}
-  <!-- Back + title -->
-  <div class="article-header">
-    <a class="back-link" href={backHref} data-sveltekit-reload="true">
-      <IconArrowLeft size={16} stroke={1.9} />
-      <span>Back to list</span>
-    </a>
-    <div class="header-row">
-      <div class="header-meta">
-        <h1>{data.article.title ?? 'Untitled article'}</h1>
-        <div class="meta-row">
-          <span>{data.preferredSource?.sourceName ?? 'Unknown source'}</span>
-          {#if data.preferredSource?.feedbackCount}
-            <span>· rep {data.preferredSource.reputation.toFixed(2)} ({data.preferredSource.feedbackCount} votes)</span>
-          {/if}
-          {#if data.article.author}
-            <span>· {data.article.author}</span>
-          {/if}
-        </div>
-      </div>
-      <div class="header-actions">
-        {#if data.article.canonical_url}
-          <a
-            class="open-btn"
-            href={data.article.canonical_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            title="Open original article"
-          >
-            <IconExternalLink size={15} stroke={1.9} />
-            <span>Open article</span>
-          </a>
-        {/if}
-        <Button
-          variant="ghost"
-          size="icon"
-          on:click={() => setReadState(!data.article.is_read)}
-          disabled={readStateBusy}
-          title={data.article.is_read ? 'Mark unread' : 'Mark read'}
-        >
-          {#if data.article.is_read}
-            <IconEyeOff size={16} stroke={1.9} />
-          {:else}
-            <IconEye size={16} stroke={1.9} />
-          {/if}
-        </Button>
-        <Pill variant={data.article.is_read ? 'muted' : 'default'}>
-          {data.article.is_read ? 'Read' : 'Unread'}
-        </Pill>
-      </div>
-    </div>
-  </div>
+  <ArticleDetailLead
+    article={data.article}
+    preferredSource={data.preferredSource}
+    {backHref}
+    {articleImageUrl}
+    isRead={data.article.is_read}
+    {readStateBusy}
+    score={data.score}
+    on:toggleRead={() => setReadState(!data.article.is_read)}
+  />
 
-  <!-- Hero image -->
-  <div class="article-hero">
-    <img class="hero-img" src={articleImageUrl} alt="" decoding="async" />
-  </div>
-
-  <!-- Two-column layout -->
   <div class="article-layout">
-    <!-- LEFT: content -->
     <div class="content-col">
-      {#if data.score}
-        <div class="score-banner">
-          <div class="score-val">
-            <IconStars size={18} stroke={1.9} />
-            <span>{data.score.score} / 5</span>
-            <strong>· {data.score.label}</strong>
-          </div>
-          <p class="score-reason">{data.score.reason_text}</p>
-          {#if data.score.evidence?.length}
-            <ul class="score-evidence">
-              {#each data.score.evidence as evidence}
-                <li>{evidence}</li>
-              {/each}
-            </ul>
-          {/if}
-        </div>
-      {/if}
-
-      <Card>
-        <div class="card-title-row">
-          <h2>Summary</h2>
-          <Button variant="ghost" size="icon" on:click={() => rerunJobs(['summarize'])} disabled={rerunBusy} title="Rebuild summary">
-            <IconFileText size={15} stroke={1.9} />
-          </Button>
-        </div>
-        <p>{data.summary?.summary_text ?? 'Summary pending.'}</p>
-        {#if data.summary?.provider && data.summary?.model}
-          <p class="muted">Model: {data.summary.provider}/{data.summary.model}</p>
-        {/if}
-      </Card>
-
-      {#if data.keyPoints?.points?.length}
-        <Card>
-          <div class="card-title-row">
-            <h2>Key Points</h2>
-            <Button variant="ghost" size="icon" on:click={() => rerunJobs(['key_points'])} disabled={rerunBusy} title="Rebuild key points">
-              <IconListDetails size={15} stroke={1.9} />
-            </Button>
-          </div>
-          <ul class="key-list">
-            {#each data.keyPoints.points as point}
-              <li>{point}</li>
-            {/each}
-          </ul>
-        </Card>
-      {/if}
+      <ArticleQuickTake
+        summary={data.summary}
+        keyPoints={data.keyPoints}
+        {rerunBusy}
+        on:rerun={(e) => rerunJobs(e.detail.types)}
+      />
 
       <Card>
         <h2>Full text</h2>
-        <div class="article-text">
-          {#if articleBlocks.length === 0}
-            <p class="muted">Full text pending.</p>
-          {:else}
-            {#each articleBlocks as block}
-              {#if block.type === 'list'}
-                <ul class="article-list">
-                  {#each block.items as item}<li>{item}</li>{/each}
-                </ul>
-              {:else if block.type === 'heading'}
-                <h3 class="article-heading">{block.text}</h3>
-              {:else if block.type === 'paragraph_group'}
-                {#each block.paragraphs as paragraph}
-                  <p class="article-paragraph">{paragraph}</p>
-                {/each}
-              {:else}
-                <p class="article-paragraph">{block.text}</p>
-              {/if}
-            {/each}
-          {/if}
-        </div>
+        <ArticleProse blocks={articleBlocks} />
       </Card>
     </div>
 
-    <!-- RIGHT: sidebar -->
     <div class="sidebar-col">
-      <!-- Feed vote -->
-      <Card>
-        <h3>Feed vote</h3>
-        <p class="muted small">Tune source reputation without affecting AI score.</p>
-        <div class="reaction-row">
-          <button
-            class="reaction-btn"
-            class:active={data.reaction?.value === 1}
-            on:click={() => setReaction(1)}
-            title="Thumbs up feed"
-            aria-label="Thumbs up this feed"
-          >
-            <IconThumbUp size={16} stroke={1.9} />
-          </button>
-          <button
-            class="reaction-btn"
-            class:active={data.reaction?.value === -1}
-            on:click={() => setReaction(-1)}
-            title="Thumbs down feed"
-            aria-label="Thumbs down this feed"
-          >
-            <IconThumbDown size={16} stroke={1.9} />
-          </button>
-        </div>
-      </Card>
-
-      <!-- Tags -->
-      <Card>
-        <div class="card-title-row">
-          <h3>Tags</h3>
-          <Button variant="ghost" size="icon" on:click={() => rerunJobs(['auto_tag'])} disabled={rerunBusy || tagBusy} title="Run AI tagging">
-            <IconTag size={15} stroke={1.9} />
-          </Button>
-        </div>
-        {#if tags?.length}
-          <div class="tag-row">
-            {#each tags as tag}
-              <button
-                class="tag-chip"
-                on:click={() => removeTag(tag.id)}
-                disabled={tagBusy}
-                title={`Remove ${tag.name}`}
-              >
-                <span>{tag.name}</span>
-                {#if tag.source === 'ai'}<span class="tag-ai">AI</span>{/if}
-                <IconX size={11} stroke={2} />
-              </button>
-            {/each}
-          </div>
-        {:else}
-          <p class="muted small">No tags yet.</p>
-        {/if}
-        {#if tagSuggestions?.length}
-          <div class="suggestion-row">
-            {#each tagSuggestions as suggestion}
-              <span class="suggestion-chip">
-                <span>{suggestion.name}</span>
-                <button
-                  type="button"
-                  class="suggestion-action"
-                  on:click={() => acceptTagSuggestion(suggestion)}
-                  title={`Accept suggested tag ${suggestion.name}`}
-                  aria-label={`Accept suggested tag ${suggestion.name}`}
-                  disabled={tagBusy}
-                >
-                  <IconPlus size={11} stroke={2} />
-                </button>
-                <button
-                  type="button"
-                  class="suggestion-action"
-                  on:click={() => dismissTagSuggestion(suggestion)}
-                  title={`Dismiss suggested tag ${suggestion.name}`}
-                  aria-label={`Dismiss suggested tag ${suggestion.name}`}
-                  disabled={tagBusy}
-                >
-                  <IconX size={11} stroke={2} />
-                </button>
-              </span>
-            {/each}
-          </div>
-        {/if}
-        <div class="input-row">
-          <input
-            list="article-tag-options"
-            placeholder="Add tags (comma-separated)"
-            bind:value={tagInput}
-            disabled={tagBusy}
-          />
-          <Button variant="ghost" size="icon" on:click={addTags} disabled={tagBusy} title="Add tags">
-            <IconPlus size={15} stroke={1.9} />
-          </Button>
-        </div>
-        {#if tagError}<p class="muted small err">{tagError}</p>{/if}
-      </Card>
-
-      <!-- AI Score -->
-      <Card>
-        <div class="card-title-row">
-          <h3>AI Fit Score</h3>
-          <Button variant="ghost" size="icon" on:click={() => rerunJobs(['score'])} disabled={rerunBusy} title="Re-score article">
-            <IconStars size={15} stroke={1.9} />
-          </Button>
-        </div>
-        {#if data.score}
-          <div class="score-display">
-            <span class="score-num">{data.score.score}</span>
-            <span class="score-denom">/ 5</span>
-            <Pill>{data.score.label}</Pill>
-          </div>
-        {:else}
-          <p class="muted small">Score pending.</p>
-        {/if}
-      </Card>
-
-      <!-- Chat -->
-      <Card>
-        <div class="card-title-row">
-          <h3>Chat with article</h3>
-          <Pill variant={data.chatReadiness?.canChat ? 'success' : 'warning'}>
-            {data.chatReadiness?.canChat ? 'Ready' : 'Needs setup'}
-          </Pill>
-        </div>
-        <ChatBox
-          {chatLog}
-          bind:message
-          {sending}
-          disabled={!data.chatReadiness?.canChat}
-          placeholder={data.chatReadiness?.canChat ? 'Ask about this article' : 'Complete chat setup first'}
-          error={chatError}
-          on:send={sendMessage}
-        />
-      </Card>
-
-      <!-- Feedback -->
-      <Card>
-        <h3>Feedback</h3>
-        <label class="form-label">
-          Rating (1–5)
-          <input type="number" min="1" max="5" bind:value={rating} />
-        </label>
-        <textarea rows="3" placeholder="What did the AI miss?" bind:value={comment}></textarea>
-        <Button size="inline" on:click={submitFeedback}>
-          <IconCheck size={15} stroke={1.9} />
-          <span>Save feedback</span>
-        </Button>
-      </Card>
-
-      <!-- Sources -->
-      {#if data.sources?.length}
-        <Card variant="soft">
-          <h3>Source ranking</h3>
-          <ul class="source-list">
-            {#each data.sources as source}
-              <li>
-                <strong>{source.sourceName}</strong>
-                <span class="muted">rep {source.reputation.toFixed(2)} ({source.feedbackCount} votes)</span>
-              </li>
-            {/each}
-          </ul>
-        </Card>
-      {/if}
+      <ArticleUtilities
+        article={data.article}
+        score={data.score}
+        reaction={data.reaction}
+        {tags}
+        {tagSuggestions}
+        availableTags={data.availableTags ?? []}
+        sources={data.sources ?? []}
+        chatReadiness={data.chatReadiness}
+        {chatLog}
+        bind:message
+        {sending}
+        {rerunBusy}
+        {tagBusy}
+        {tagError}
+        bind:tagInput
+        {chatError}
+        on:react={(e) => setReaction(e.detail.value)}
+        on:rerun={(e) => rerunJobs(e.detail.types)}
+        on:addTags={addTags}
+        on:removeTag={(e) => removeTag(e.detail.tagId)}
+        on:acceptTagSuggestion={(e) => acceptTagSuggestion(e.detail.suggestion)}
+        on:dismissTagSuggestion={(e) => dismissTagSuggestion(e.detail.suggestion)}
+        on:submitFeedback={(e) => submitFeedback(e.detail.rating, e.detail.comment)}
+        on:send={sendMessage}
+      />
     </div>
   </div>
 {/if}
@@ -669,88 +408,6 @@
 </datalist>
 
 <style>
-  /* Header */
-  .article-header {
-    margin-bottom: var(--space-4);
-  }
-
-  .back-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    color: var(--muted-text);
-    font-size: var(--text-sm);
-    margin-bottom: var(--space-3);
-    transition: color var(--transition-fast);
-  }
-
-  .back-link:hover { color: var(--primary); }
-
-  .header-row {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: var(--space-4);
-    flex-wrap: wrap;
-  }
-
-  .header-meta {
-    flex: 1 1 0;
-    min-width: 0;
-  }
-
-  h1 {
-    font-size: var(--text-3xl);
-    margin: 0 0 var(--space-2);
-    line-height: 1.2;
-  }
-
-  .meta-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.35rem;
-    font-size: var(--text-sm);
-    color: var(--muted-text);
-  }
-
-  .header-actions {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    flex-shrink: 0;
-  }
-
-  .open-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    background: var(--button-bg);
-    color: var(--button-text);
-    border-radius: var(--radius-full);
-    padding: 0.48rem 0.95rem;
-    font-size: var(--text-sm);
-    font-weight: 500;
-    text-decoration: none;
-  }
-
-  /* Hero image */
-  .article-hero {
-    margin-bottom: var(--space-6);
-    border-radius: var(--radius-xl);
-    overflow: hidden;
-    background: var(--surface-soft);
-    max-height: 340px;
-  }
-
-  .hero-img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    display: block;
-    aspect-ratio: 21/9;
-  }
-
-  /* Two-column layout */
   .article-layout {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 340px;
@@ -763,257 +420,10 @@
     gap: var(--space-5);
   }
 
-  /* Score banner */
-  .score-banner {
-    background: var(--primary-soft);
-    border-radius: var(--radius-xl);
-    padding: var(--space-5);
-    display: grid;
-    gap: var(--space-2);
-  }
-
-  .score-val {
-    display: flex;
-    align-items: center;
-    gap: 0.45rem;
-    font-size: var(--text-lg);
-    color: var(--primary);
-    font-weight: 600;
-  }
-
-  .score-reason {
-    margin: 0;
-    font-size: var(--text-sm);
-    color: var(--text-color);
-  }
-
-  .score-evidence {
-    margin: 0;
-    padding-left: 1.1rem;
-    display: grid;
-    gap: 0.25rem;
-  }
-
-  .score-evidence li {
-    font-size: var(--text-sm);
-    color: var(--muted-text);
-  }
-
-  /* Card internals */
   h2 {
     margin: 0;
     font-size: var(--text-lg);
   }
-
-  h3 {
-    margin: 0;
-    font-size: var(--text-base);
-    font-weight: 600;
-  }
-
-  .card-title-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-2);
-  }
-
-  .muted { color: var(--muted-text); margin: 0; }
-  .small { font-size: var(--text-sm); }
-  .err { color: var(--danger); }
-
-  /* Reaction buttons */
-  .reaction-row {
-    display: flex;
-    gap: var(--space-2);
-  }
-
-  .reaction-btn {
-    background: var(--surface-soft);
-    border: none;
-    border-radius: var(--radius-full);
-    width: 2.2rem;
-    height: 2.2rem;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    color: var(--text-color);
-    transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
-  }
-
-  .reaction-btn.active {
-    background: var(--primary-soft);
-    color: var(--primary);
-  }
-
-  /* Tags */
-  .tag-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem;
-  }
-
-  .tag-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    background: var(--surface-soft);
-    border-radius: var(--radius-full);
-    padding: 0.25rem 0.6rem;
-    font-size: var(--text-sm);
-    cursor: pointer;
-    color: var(--text-color);
-    transition: background var(--transition-fast);
-  }
-
-  .tag-chip:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 15%, transparent); }
-  .tag-chip:disabled { opacity: 0.6; cursor: default; }
-
-  .tag-ai {
-    font-size: 0.68rem;
-    color: var(--muted-text);
-    border-radius: var(--radius-full);
-    background: var(--surface-soft);
-    padding: 0 0.3rem;
-  }
-
-  .suggestion-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem;
-  }
-
-  .suggestion-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.2rem;
-    background: color-mix(in srgb, #4ade80 20%, transparent);
-    border-radius: var(--radius-full);
-    padding: 0.2rem 0.35rem 0.2rem 0.6rem;
-    font-size: var(--text-sm);
-    color: var(--text-color);
-  }
-
-  .suggestion-action {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 1.2rem;
-    height: 1.2rem;
-    border-radius: var(--radius-full);
-    border: 1px solid transparent;
-    background: transparent;
-    color: var(--text-color);
-    cursor: pointer;
-    padding: 0;
-  }
-
-  .suggestion-action:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--surface-strong) 55%, transparent);
-    border-color: var(--surface-border);
-  }
-
-  .suggestion-action:disabled {
-    opacity: 0.6;
-    cursor: default;
-  }
-
-  .input-row {
-    display: flex;
-    gap: var(--space-2);
-  }
-
-  input:not([type='number']),
-  textarea {
-    width: 100%;
-    padding: 0.62rem 0.72rem;
-    border-radius: var(--radius-md);
-    border: 1px solid var(--input-border);
-    background: var(--input-bg);
-    color: var(--text-color);
-    font-family: inherit;
-  }
-
-  input[type='number'] {
-    padding: 0.5rem 0.7rem;
-    border-radius: var(--radius-md);
-    border: 1px solid var(--input-border);
-    background: var(--input-bg);
-    color: var(--text-color);
-    font-family: inherit;
-    width: 100%;
-  }
-
-  .form-label {
-    display: grid;
-    gap: 0.35rem;
-    font-size: var(--text-sm);
-  }
-
-  /* Score in sidebar */
-  .score-display {
-    display: flex;
-    align-items: baseline;
-    gap: 0.4rem;
-    flex-wrap: wrap;
-  }
-
-  .score-num {
-    font-size: 2rem;
-    font-weight: 600;
-    color: var(--primary);
-    line-height: 1;
-  }
-
-  .score-denom {
-    font-size: var(--text-base);
-    color: var(--muted-text);
-  }
-
-  /* Article text */
-  .article-text {
-    display: grid;
-    gap: 0.85rem;
-    line-height: 1.75;
-    color: var(--text-color);
-  }
-
-  .article-paragraph { margin: 0; }
-
-  .article-list {
-    margin: 0;
-    padding-left: 1.2rem;
-    display: grid;
-    gap: 0.35rem;
-  }
-
-  .article-heading {
-    margin: 0.25rem 0 0;
-    font-size: 1.05rem;
-    font-weight: 600;
-  }
-
-  .key-list {
-    margin: 0;
-    padding-left: 1.1rem;
-    display: grid;
-    gap: 0.4rem;
-    font-size: var(--text-sm);
-    line-height: 1.55;
-  }
-
-  /* Source list */
-  .source-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    display: grid;
-    gap: var(--space-2);
-    font-size: var(--text-sm);
-  }
-
-  .source-list strong { display: block; }
 
   @media (max-width: 900px) {
     .article-layout {
@@ -1022,10 +432,6 @@
 
     .sidebar-col {
       order: -1;
-    }
-
-    h1 {
-      font-size: var(--text-2xl);
     }
   }
 </style>

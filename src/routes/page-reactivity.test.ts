@@ -34,8 +34,9 @@ const createData = (overrides = {}) => ({
     windowDays: 7,
     limit: 6,
     scoreCutoff: 3,
-    hrefUnread: '/articles?read=unread&sort=unread_first',
-    hrefHighFitUnread: '/articles?read=unread&sort=unread_first&score=5&score=4&score=3'
+    hrefUnread: '/articles?read=unread&sort=unread_first&reaction=up&reaction=none',
+    hrefHighFitUnread: '/articles?read=unread&sort=unread_first&score=5&score=4&score=3&reaction=up&reaction=none',
+    fromHref: '/articles?read=unread&sort=unread_first&reaction=up&reaction=none'
   },
   readingQueue: [baseQueueArticle],
   momentum: {

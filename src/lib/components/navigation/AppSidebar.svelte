@@ -39,58 +39,64 @@
 
 <aside class="sidebar" class:collapsed aria-label="App sidebar">
   <div class="sidebar-inner">
-    <a
-      class="brand"
-      href="/"
-      aria-label="Nebular News"
-      title={collapsed ? 'Nebular News' : undefined}
-    >
-      <span class="brand-icon">
-        <IconStars size={22} stroke={1.8} />
-      </span>
-      <span class="brand-text">
-        <span class="brand-mark">Nebular</span>
-        <span class="brand-accent">News</span>
-      </span>
-    </a>
+    <div class="sidebar-main">
+      <a
+        class="brand"
+        href="/"
+        aria-label="Nebular News"
+        title={collapsed ? 'Nebular News' : undefined}
+      >
+        <span class="brand-icon">
+          <IconStars size={22} stroke={1.8} />
+        </span>
+        <span class="brand-text">
+          <span class="brand-mark">Nebular</span>
+          <span class="brand-accent">News</span>
+        </span>
+      </a>
 
-    <nav class="nav-group" aria-label="Primary navigation">
-      {#each primaryItems as item}
-        {@const Icon = iconByName[item.icon]}
-        {@const active = isActive(item)}
-        <a
-          href={item.href}
-          class="nav-link"
-          class:active
-          aria-current={active ? 'page' : undefined}
-          aria-label={collapsed ? item.label : undefined}
-          title={collapsed ? item.label : undefined}
-        >
-          <span class="nav-icon"><Icon size={18} stroke={1.9} /></span>
-          <span class="nav-label">{item.label}</span>
-        </a>
-      {/each}
-    </nav>
+      <div class="nav-panel">
+        <nav class="nav-group" aria-label="Primary navigation">
+          {#each primaryItems as item}
+            {@const Icon = iconByName[item.icon]}
+            {@const active = isActive(item)}
+            <a
+              href={item.href}
+              class="nav-link"
+              class:active
+              aria-current={active ? 'page' : undefined}
+              aria-label={collapsed ? item.label : undefined}
+              title={collapsed ? item.label : undefined}
+            >
+              <span class="nav-icon"><Icon size={18} stroke={1.9} /></span>
+              <span class="nav-label">{item.label}</span>
+            </a>
+          {/each}
+        </nav>
+      </div>
 
-    <div class="workspace-block">
-      <div class="block-label">Workspace</div>
-      <nav class="nav-group" aria-label="Workspace navigation">
-        {#each workspaceItems as item}
-          {@const Icon = iconByName[item.icon]}
-          {@const active = isActive(item)}
-          <a
-            href={item.href}
-            class="nav-link"
-            class:active
-            aria-current={active ? 'page' : undefined}
-            aria-label={collapsed ? item.label : undefined}
-            title={collapsed ? item.label : undefined}
-          >
-            <span class="nav-icon"><Icon size={18} stroke={1.9} /></span>
-            <span class="nav-label">{item.label}</span>
-          </a>
-        {/each}
-      </nav>
+      <div class="workspace-block">
+        <div class="block-label">Workspace</div>
+        <div class="nav-panel">
+          <nav class="nav-group" aria-label="Workspace navigation">
+            {#each workspaceItems as item}
+              {@const Icon = iconByName[item.icon]}
+              {@const active = isActive(item)}
+              <a
+                href={item.href}
+                class="nav-link"
+                class:active
+                aria-current={active ? 'page' : undefined}
+                aria-label={collapsed ? item.label : undefined}
+                title={collapsed ? item.label : undefined}
+              >
+                <span class="nav-icon"><Icon size={18} stroke={1.9} /></span>
+                <span class="nav-label">{item.label}</span>
+              </a>
+            {/each}
+          </nav>
+        </div>
+      </div>
     </div>
 
     <div class="sidebar-footer">
@@ -141,10 +147,26 @@
   .sidebar-inner {
     height: 100%;
     padding: var(--space-5) var(--space-3);
-    display: grid;
-    grid-template-rows: auto auto 1fr auto;
+    display: flex;
+    flex-direction: column;
     gap: var(--space-4);
-    overflow: hidden;
+    box-sizing: border-box;
+  }
+
+  .sidebar-main {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .nav-panel {
+    background: color-mix(in srgb, var(--surface-soft) 65%, transparent);
+    border: 1px solid color-mix(in srgb, var(--surface-border) 80%, transparent);
+    border-radius: var(--radius-lg);
+    padding: var(--space-2);
   }
 
   /* ── Brand ── */
@@ -194,7 +216,8 @@
   }
 
   .workspace-block {
-    display: grid;
+    display: flex;
+    flex-direction: column;
     gap: var(--space-2);
   }
 
@@ -285,6 +308,7 @@
 
   /* ── Footer ── */
   .sidebar-footer {
+    margin-top: auto;
     display: grid;
     gap: var(--space-1);
     padding-top: var(--space-3);

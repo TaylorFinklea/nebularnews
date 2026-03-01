@@ -32,6 +32,11 @@
   let pendingReadById = {};
   let hiddenQueueIds = new Set();
 
+  const queueArticleHref = (articleId) => {
+    const from = data.queueConfig?.fromHref ?? '/articles';
+    return `/articles/${articleId}?from=${encodeURIComponent(from)}`;
+  };
+
   let syncInFlight = false;
   let pullTracker = { pending: false, startedAt: null, runId: null };
   let heartbeatTimer = null;
@@ -393,7 +398,7 @@
     <div class="queue-grid">
       {#each queueItems as article}
         <article class="queue-card">
-          <a class="card-img-wrap" href={`/articles/${article.id}`}>
+          <a class="card-img-wrap" href={queueArticleHref(article.id)}>
             <img
               class="card-img"
               src={resolveArticleImageUrl(article)}
@@ -405,7 +410,7 @@
 
           <div class="card-body">
             <div class="card-top-row">
-              <a class="card-title" href={`/articles/${article.id}`}>{article.title ?? 'Untitled article'}</a>
+              <a class="card-title" href={queueArticleHref(article.id)}>{article.title ?? 'Untitled article'}</a>
               <span
                 class={`fit-pill ${fitScoreTone(article.score)}`}
                 title={fitScoreAria(article.score)}
@@ -430,7 +435,7 @@
             </div>
 
             <div class="card-actions">
-              <a class="open-link" href={`/articles/${article.id}`}>Open</a>
+              <a class="open-link" href={queueArticleHref(article.id)}>Open</a>
               <button
                 type="button"
                 class="mark-read"

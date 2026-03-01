@@ -133,14 +133,11 @@
 <style>
   .lead-shell {
     min-width: 0;
-    padding: clamp(1.1rem, 2vw, 1.75rem);
-    border-radius: clamp(1.25rem, 2vw, 1.85rem);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 120%, transparent);
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 92%, transparent), color-mix(in srgb, var(--surface) 90%, transparent)),
-      radial-gradient(circle at top left, color-mix(in srgb, var(--primary-soft) 88%, transparent), transparent 42%),
-      radial-gradient(circle at top right, color-mix(in srgb, var(--nebula-b) 58%, transparent), transparent 44%);
-    box-shadow: 0 24px 55px color-mix(in srgb, var(--shadow-color) 70%, transparent);
+    padding: clamp(1.1rem, 2vw, 1.75rem) 0;
+    border-radius: 0;
+    border: none;
+    border-bottom: 1px solid var(--surface-border);
+    background: transparent;
     overflow: clip;
     position: relative;
   }
@@ -200,19 +197,22 @@
     align-items: center;
     gap: 0.35rem;
     padding: 0.35rem 0.78rem;
-    border-radius: var(--radius-full);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 110%, transparent);
-    background: color-mix(in srgb, var(--surface-soft) 92%, transparent);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--surface-border);
+    background: var(--surface-soft);
     overflow-wrap: anywhere;
   }
 
   .source-pill {
     width: fit-content;
-    color: var(--text-color);
+    color: var(--primary);
     font-size: var(--text-xs);
     font-weight: 700;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
+    background: transparent;
+    border: none;
+    padding: 0;
   }
 
   .meta-row {
@@ -230,7 +230,7 @@
   .meta-row span:not(:first-child)::before {
     content: '•';
     margin-right: 0.5rem;
-    color: color-mix(in srgb, var(--muted-text) 72%, transparent);
+    color: var(--muted-text);
   }
 
   .headline-stack {
@@ -260,8 +260,8 @@
   }
 
   .score-chip {
-    color: var(--primary-contrast);
-    background: linear-gradient(90deg, color-mix(in srgb, var(--primary) 42%, transparent), color-mix(in srgb, var(--primary-soft) 92%, transparent));
+    color: var(--text-color);
+    background: var(--surface-soft);
   }
 
   .chip-separator {
@@ -280,9 +280,9 @@
     align-items: center;
     gap: 0.45rem;
     padding: 0.2rem;
-    border-radius: var(--radius-full);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 112%, transparent);
-    background: color-mix(in srgb, var(--surface-soft) 88%, transparent);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--surface-border);
+    background: var(--surface-soft);
   }
 
   .action-primary,
@@ -290,14 +290,13 @@
   .action-icon {
     min-height: 44px;
     min-width: 44px;
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-md);
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 0.45rem;
     font: inherit;
     transition:
-      transform var(--transition-fast),
       background var(--transition-fast),
       border-color var(--transition-fast),
       color var(--transition-fast),
@@ -315,29 +314,29 @@
   }
 
   .action-primary {
-    background: linear-gradient(90deg, var(--button-bg), color-mix(in srgb, var(--button-bg) 82%, white 18%));
+    background: var(--primary);
     color: var(--button-text);
     border: 0;
   }
 
   .action-secondary,
   .action-icon {
-    border: 1px solid color-mix(in srgb, var(--surface-border) 130%, transparent);
-    background: color-mix(in srgb, var(--surface-soft) 96%, transparent);
+    border: 1px solid var(--surface-border);
+    background: transparent;
     color: var(--text-color);
     cursor: pointer;
   }
 
   .action-icon.active {
     color: var(--primary);
-    background: color-mix(in srgb, var(--primary-soft) 86%, transparent);
-    border-color: color-mix(in srgb, var(--primary) 36%, transparent);
+    background: var(--primary-soft);
+    border-color: var(--primary);
   }
 
   .action-secondary:hover:not(:disabled),
   .action-primary:hover,
   .action-icon:hover:not(:disabled) {
-    transform: translateY(-1px);
+    border-color: var(--primary);
   }
 
   .action-secondary:disabled,
@@ -351,11 +350,10 @@
   }
 
   .hero-wrap {
-    border-radius: calc(var(--radius-xl) + 0.2rem);
+    border-radius: var(--radius-md);
     overflow: hidden;
-    border: 1px solid color-mix(in srgb, var(--surface-border) 110%, transparent);
-    background: color-mix(in srgb, var(--surface-soft) 92%, transparent);
-    box-shadow: inset 0 1px 0 color-mix(in srgb, white 12%, transparent);
+    border: 1px solid var(--surface-border);
+    background: var(--surface-soft);
   }
 
   .hero-image {

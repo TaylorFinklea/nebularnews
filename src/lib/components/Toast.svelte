@@ -51,12 +51,11 @@
     pointer-events: auto;
     padding: 0.7rem 0.9rem;
     border-radius: var(--radius-md);
-    backdrop-filter: blur(12px);
+    border: 1px solid var(--surface-border);
     display: flex;
     align-items: center;
     gap: var(--space-3);
     font-size: var(--text-sm);
-    box-shadow: var(--shadow-md);
   }
 
   .toast-info {
@@ -78,7 +77,7 @@
   .toast-error {
     background: var(--surface-strong);
     color: var(--danger);
-    border-color: color-mix(in srgb, var(--danger) 30%, transparent);
+    border-color: var(--danger);
   }
 
   .toast-message {

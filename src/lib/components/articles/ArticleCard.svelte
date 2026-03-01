@@ -248,23 +248,16 @@
     min-width: 0;
     display: grid;
     grid-template-columns: minmax(0, 1fr);
-    border-radius: clamp(0.95rem, 1.3vw, 1.2rem);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 106%, transparent);
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 96%, transparent), color-mix(in srgb, var(--surface) 94%, transparent)),
-      radial-gradient(circle at top left, color-mix(in srgb, var(--primary-soft) 54%, transparent), transparent 46%);
-    box-shadow: 0 10px 24px color-mix(in srgb, var(--shadow-color) 16%, transparent);
+    border-radius: 0;
+    border: none;
+    border-bottom: 1px solid var(--surface-border);
+    background: transparent;
     overflow: clip;
-    transition:
-      transform var(--transition-fast),
-      box-shadow var(--transition-fast),
-      border-color var(--transition-fast);
+    padding-bottom: var(--space-4);
   }
 
   .article-card:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 14px 28px color-mix(in srgb, var(--shadow-color) 18%, transparent);
-    border-color: color-mix(in srgb, var(--primary) 18%, var(--surface-border));
+    border-color: var(--surface-border);
   }
 
   .article-card.layout-split {
@@ -274,9 +267,9 @@
   .visual-link {
     min-width: 0;
     display: block;
-    background:
-      linear-gradient(160deg, color-mix(in srgb, var(--primary-soft) 92%, transparent), transparent),
-      linear-gradient(180deg, color-mix(in srgb, var(--nebula-b) 28%, transparent), color-mix(in srgb, var(--surface) 90%, transparent));
+    background: var(--surface-soft);
+    border-radius: var(--radius-md);
+    overflow: hidden;
   }
 
   .layout-split .visual-link {
@@ -304,7 +297,7 @@
     display: grid;
     place-items: end start;
     padding: var(--space-5);
-    color: color-mix(in srgb, var(--text-color) 90%, white 10%);
+    color: var(--muted-text);
     font-size: var(--text-xs);
     letter-spacing: 0.12em;
     text-transform: uppercase;
@@ -340,19 +333,22 @@
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
-    min-height: 1.8rem;
-    padding: 0.24rem 0.6rem;
-    border-radius: var(--radius-md);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 104%, transparent);
-    background: color-mix(in srgb, var(--surface-soft) 68%, transparent);
-    color: var(--muted-text);
     font-size: var(--text-xs);
     overflow-wrap: anywhere;
   }
 
   .source-pill {
-    color: var(--text-color);
-    font-weight: 600;
+    color: var(--primary);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 0;
+    background: transparent;
+    border: none;
+  }
+
+  .published-label {
+    color: var(--muted-text);
   }
 
   .headline-row {
@@ -412,9 +408,9 @@
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
-    border-radius: var(--radius-md);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 104%, transparent);
-    background: color-mix(in srgb, var(--surface-soft) 68%, transparent);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--surface-border);
+    background: var(--surface-soft);
     padding: 0.3rem 0.62rem;
     font-size: var(--text-xs);
     overflow-wrap: anywhere;
@@ -462,7 +458,7 @@
 
   .excerpt {
     margin: 0;
-    color: color-mix(in srgb, var(--text-color) 84%, var(--muted-text));
+    color: var(--muted-text);
     font-size: clamp(0.98rem, 1.1vw, 1.05rem);
     line-height: 1.68;
     display: -webkit-box;
@@ -491,7 +487,7 @@
 
   .suggestion-pill {
     padding-right: 0.32rem;
-    background: color-mix(in srgb, #4ade80 12%, var(--surface-soft));
+    background: rgba(74, 222, 128, 0.08);
   }
 
   .suggestion-action {
@@ -503,7 +499,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background: color-mix(in srgb, var(--surface) 90%, transparent);
+    background: var(--surface);
     color: inherit;
     cursor: pointer;
     flex-shrink: 0;
@@ -516,7 +512,7 @@
     gap: var(--space-3);
     flex-wrap: wrap;
     padding-top: var(--space-3);
-    border-top: 1px solid color-mix(in srgb, var(--surface-border) 105%, transparent);
+    border-top: 1px solid var(--surface-border);
   }
 
   .footer-row.pending {
@@ -542,7 +538,6 @@
     gap: 0.45rem;
     font: inherit;
     transition:
-      transform var(--transition-fast),
       background var(--transition-fast),
       border-color var(--transition-fast),
       color var(--transition-fast),
@@ -551,8 +546,8 @@
 
   .icon-button,
   .read-button {
-    border: 1px solid color-mix(in srgb, var(--surface-border) 106%, transparent);
-    background: color-mix(in srgb, var(--surface-soft) 68%, transparent);
+    border: 1px solid var(--surface-border);
+    background: transparent;
     color: var(--text-color);
     cursor: pointer;
   }
@@ -564,8 +559,8 @@
 
   .icon-button.active {
     color: var(--primary);
-    background: color-mix(in srgb, var(--primary-soft) 56%, transparent);
-    border-color: color-mix(in srgb, var(--primary) 18%, transparent);
+    background: var(--primary-soft);
+    border-color: var(--primary);
   }
 
   .read-button {
@@ -574,8 +569,8 @@
 
   .open-link {
     padding: 0.72rem 1rem;
-    border: 1px solid color-mix(in srgb, var(--primary) 18%, transparent);
-    background: color-mix(in srgb, var(--primary-soft) 56%, transparent);
+    border: 1px solid var(--surface-border);
+    background: var(--primary-soft);
     color: var(--text-color);
     text-decoration: none;
     font-weight: 600;
@@ -584,7 +579,7 @@
   .icon-button:hover:not(:disabled),
   .read-button:hover:not(:disabled),
   .open-link:hover {
-    border-color: color-mix(in srgb, var(--primary) 18%, transparent);
+    border-color: var(--primary);
   }
 
   .icon-button:disabled,

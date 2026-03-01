@@ -319,12 +319,9 @@
     display: grid;
     gap: var(--space-4);
     padding: clamp(0.95rem, 1.4vw, 1.2rem);
-    border-radius: var(--radius-xl);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 108%, transparent);
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 94%, transparent), color-mix(in srgb, var(--surface) 94%, transparent)),
-      radial-gradient(circle at top right, color-mix(in srgb, var(--primary-soft) 56%, transparent), transparent 48%);
-    box-shadow: 0 14px 28px color-mix(in srgb, var(--shadow-color) 18%, transparent);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--surface-border);
+    background: var(--surface);
     overflow: clip;
   }
 
@@ -349,7 +346,7 @@
     display: grid;
     gap: var(--space-3);
     padding-bottom: var(--space-3);
-    border-bottom: 1px solid color-mix(in srgb, var(--surface-border) 105%, transparent);
+    border-bottom: 1px solid var(--surface-border);
   }
 
   .panel-copy {
@@ -395,8 +392,8 @@
     gap: 0.35rem;
     padding: 0.35rem 0.6rem;
     border-radius: var(--radius-md);
-    background: color-mix(in srgb, var(--surface-soft) 68%, transparent);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 104%, transparent);
+    background: var(--surface-soft);
+    border: 1px solid var(--surface-border);
     font-size: var(--text-xs);
     color: var(--muted-text);
   }
@@ -453,8 +450,8 @@
     gap: 0.3rem;
     padding: 0.36rem 0.6rem;
     border-radius: var(--radius-md);
-    background: color-mix(in srgb, var(--surface-soft) 72%, transparent);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 104%, transparent);
+    background: var(--surface-soft);
+    border: 1px solid var(--surface-border);
     color: var(--text-color);
     font-size: var(--text-xs);
     overflow-wrap: anywhere;
@@ -469,12 +466,12 @@
   .chip-badge {
     padding: 0.05rem 0.35rem;
     border-radius: var(--radius-sm);
-    background: color-mix(in srgb, var(--surface) 92%, transparent);
+    background: var(--surface);
     color: var(--muted-text);
   }
 
   .suggestion-chip {
-    background: color-mix(in srgb, #4ade80 18%, transparent);
+    background: rgba(74, 222, 128, 0.08);
   }
 
   .chip-action {
@@ -483,7 +480,7 @@
     padding: 0;
     border: 0;
     border-radius: var(--radius-sm);
-    background: color-mix(in srgb, var(--surface) 88%, transparent);
+    background: var(--surface);
     color: inherit;
     display: inline-flex;
     align-items: center;
@@ -503,9 +500,9 @@
   .chat-card,
   .feedback-card,
   .source-cards li {
-    border-radius: var(--radius-lg);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 104%, transparent);
-    background: color-mix(in srgb, var(--surface-soft) 58%, transparent);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--surface-border);
+    background: var(--surface-soft);
   }
 
   .input-card,
@@ -569,8 +566,8 @@
     min-height: 48px;
     padding: 0.85rem 0.9rem;
     border-radius: var(--radius-md);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 104%, transparent);
-    background: color-mix(in srgb, var(--surface-soft) 64%, transparent);
+    border: 1px solid var(--surface-border);
+    background: transparent;
     color: var(--text-color);
     display: inline-flex;
     align-items: center;
@@ -583,8 +580,8 @@
   .tool-button:hover:not(:disabled),
   .tag-chip.removable:hover:not(:disabled),
   .chip-action:hover:not(:disabled) {
-    border-color: color-mix(in srgb, var(--primary) 18%, transparent);
-    background: color-mix(in srgb, var(--surface-soft) 74%, transparent);
+    border-color: var(--primary);
+    background: var(--surface-soft);
   }
 
   .meta-list {

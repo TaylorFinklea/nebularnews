@@ -137,10 +137,7 @@
     top: 0;
     height: 100vh;
     border-right: 1px solid var(--surface-border);
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 96%, transparent), var(--surface) 100%),
-      radial-gradient(220px 180px at 0% 0%, rgba(154, 139, 255, 0.08), transparent 72%);
-    backdrop-filter: blur(12px);
+    background: var(--surface);
     overflow: hidden;
   }
 
@@ -182,7 +179,7 @@
     display: inline-flex;
     align-items: baseline;
     gap: 0.35rem;
-    font-family: 'Source Serif 4', serif;
+    font-family: inherit;
     font-size: 1.32rem;
     letter-spacing: 0.01em;
     white-space: nowrap;
@@ -191,11 +188,11 @@
   }
 
   .brand-mark {
-    font-weight: 600;
+    font-weight: 700;
   }
 
   .brand-accent {
-    color: var(--primary);
+    color: var(--muted-text);
   }
 
   .nav-panel {
@@ -247,13 +244,16 @@
 
   .nav-link:hover,
   .sidebar-action:hover {
-    background: color-mix(in srgb, var(--primary-soft) 62%, transparent);
+    background: var(--surface-soft);
   }
 
   .nav-link.active {
-    background: var(--primary-soft);
-    border-color: var(--ghost-border);
-    color: var(--primary);
+    background: transparent;
+    border-color: transparent;
+    border-left: 3px solid var(--primary);
+    border-radius: 0;
+    padding-left: calc(var(--space-3) - 3px);
+    color: var(--text-color);
   }
 
   .nav-icon {

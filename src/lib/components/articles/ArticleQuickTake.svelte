@@ -91,12 +91,9 @@
     display: grid;
     gap: var(--space-4);
     padding: clamp(1rem, 2vw, 1.45rem);
-    border-radius: calc(var(--radius-xl) + 0.15rem);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 115%, transparent);
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--surface-soft) 92%, transparent), color-mix(in srgb, var(--surface) 88%, transparent)),
-      radial-gradient(circle at top right, color-mix(in srgb, var(--primary-soft) 85%, transparent), transparent 48%);
-    box-shadow: 0 16px 36px color-mix(in srgb, var(--shadow-color) 30%, transparent);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--surface-border);
+    background: var(--surface-soft);
     overflow: clip;
   }
 
@@ -140,13 +137,13 @@
     width: 2.65rem;
     height: 2.65rem;
     flex-shrink: 0;
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-md);
     display: inline-flex;
     align-items: center;
     justify-content: center;
     color: var(--primary);
-    background: color-mix(in srgb, var(--primary-soft) 95%, transparent);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 110%, transparent);
+    background: var(--primary-soft);
+    border: 1px solid var(--surface-border);
   }
 
   .summary-text,
@@ -177,9 +174,9 @@
     display: grid;
     gap: var(--space-3);
     padding: clamp(0.9rem, 1.6vw, 1.05rem);
-    border-radius: calc(var(--radius-lg) + 0.1rem);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 108%, transparent);
-    background: color-mix(in srgb, var(--surface-soft) 72%, transparent);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--surface-border);
+    background: var(--surface);
   }
 
   .fit-copy {
@@ -230,11 +227,11 @@
   .trigger-chevron {
     width: 1.8rem;
     height: 1.8rem;
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-md);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background: color-mix(in srgb, var(--surface) 82%, transparent);
+    background: var(--surface);
     color: var(--muted-text);
     transition: transform var(--transition-normal), color var(--transition-normal), background var(--transition-normal);
   }
@@ -242,6 +239,6 @@
   .trigger-chevron.open {
     transform: rotate(180deg);
     color: var(--primary);
-    background: color-mix(in srgb, var(--primary-soft) 82%, transparent);
+    background: var(--primary-soft);
   }
 </style>

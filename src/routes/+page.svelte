@@ -553,13 +553,11 @@
   }
 
   .surface-panel {
-    padding: clamp(1.05rem, 1.9vw, 1.55rem);
-    border-radius: clamp(0.95rem, 1.3vw, 1.2rem);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 108%, transparent);
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 96%, transparent), color-mix(in srgb, var(--surface) 96%, transparent)),
-      radial-gradient(circle at top right, color-mix(in srgb, var(--primary-soft) 52%, transparent), transparent 48%);
-    box-shadow: 0 12px 28px color-mix(in srgb, var(--shadow-color) 16%, transparent);
+    padding: clamp(1.05rem, 1.9vw, 1.55rem) 0;
+    border-radius: 0;
+    border: none;
+    border-bottom: 1px solid var(--surface-border);
+    background: transparent;
     overflow: clip;
   }
 
@@ -569,9 +567,7 @@
     align-items: flex-start;
     gap: clamp(1rem, 2vw, 2rem);
     flex-wrap: wrap;
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 98%, transparent), color-mix(in srgb, var(--surface) 96%, transparent)),
-      radial-gradient(circle at top left, color-mix(in srgb, var(--primary-soft) 70%, transparent), transparent 42%);
+    background: transparent;
   }
 
   .hero-copy {
@@ -608,7 +604,7 @@
   }
 
   .hero-desc {
-    color: color-mix(in srgb, var(--text-color) 82%, var(--muted-text));
+    color: var(--muted-text);
     line-height: 1.65;
     max-width: 35rem;
     overflow-wrap: anywhere;
@@ -631,8 +627,8 @@
     min-height: 1.8rem;
     padding: 0.22rem 0.58rem;
     border-radius: var(--radius-md);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 104%, transparent);
-    background: color-mix(in srgb, var(--surface-soft) 72%, transparent);
+    border: 1px solid var(--surface-border);
+    background: var(--surface-soft);
     font-size: var(--text-xs);
   }
 
@@ -652,9 +648,9 @@
     display: grid;
     gap: var(--space-3);
     padding: 0.95rem 1rem;
-    border-radius: var(--radius-lg);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 106%, transparent);
-    background: color-mix(in srgb, var(--surface-soft) 60%, transparent);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--surface-border);
+    background: var(--surface);
   }
 
   .pull-copy {
@@ -715,17 +711,17 @@
     min-height: 42px;
     padding: 0.65rem 0.9rem;
     border-radius: var(--radius-md);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 104%, transparent);
+    border: 1px solid var(--surface-border);
     background: transparent;
     color: var(--text-color);
     font-size: var(--text-sm);
     text-decoration: none;
-    transition: transform var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
+    transition: border-color var(--transition-fast), background var(--transition-fast);
   }
 
   .view-all:hover {
-    border-color: color-mix(in srgb, var(--primary) 22%, transparent);
-    background: color-mix(in srgb, var(--surface-soft) 55%, transparent);
+    border-color: var(--primary);
+    background: var(--surface-soft);
   }
 
   .section-cap {
@@ -742,25 +738,21 @@
   .queue-card {
     display: grid;
     grid-template-columns: minmax(210px, 235px) minmax(0, 1fr);
-    border-radius: var(--radius-lg);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 106%, transparent);
-    background: color-mix(in srgb, var(--surface-soft) 56%, transparent);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--surface-border);
+    background: var(--surface);
     overflow: clip;
-    transition: transform var(--transition-fast), box-shadow var(--transition-fast), border-color var(--transition-fast);
+    transition: border-color var(--transition-fast);
   }
 
   .queue-card:hover {
-    transform: translateY(-1px);
-    border-color: color-mix(in srgb, var(--primary) 18%, transparent);
-    box-shadow: 0 10px 22px color-mix(in srgb, var(--shadow-color) 14%, transparent);
+    border-color: var(--primary);
   }
 
   .card-img-wrap {
     display: block;
     min-height: 100%;
-    background:
-      linear-gradient(160deg, color-mix(in srgb, var(--primary-soft) 90%, transparent), transparent),
-      linear-gradient(180deg, color-mix(in srgb, var(--nebula-b) 24%, transparent), color-mix(in srgb, var(--surface) 90%, transparent));
+    background: var(--surface-soft);
   }
 
   .card-img {
@@ -807,8 +799,8 @@
     align-items: center;
     gap: 0.3rem;
     border-radius: var(--radius-md);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 102%, transparent);
-    background: color-mix(in srgb, var(--surface-soft) 68%, transparent);
+    border: 1px solid var(--surface-border);
+    background: var(--surface-soft);
     color: var(--muted-text);
     padding: 0.24rem 0.55rem;
     font-size: 0.75rem;
@@ -857,7 +849,7 @@
 
   .card-excerpt {
     margin: 0;
-    color: color-mix(in srgb, var(--text-color) 78%, var(--muted-text));
+    color: var(--muted-text);
     line-height: 1.65;
     font-size: var(--text-sm);
     display: -webkit-box;
@@ -881,21 +873,21 @@
     font-size: var(--text-sm);
     text-decoration: none;
     font-family: inherit;
-    transition: transform var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast), color var(--transition-fast), opacity var(--transition-fast);
+    transition: border-color var(--transition-fast), background var(--transition-fast), color var(--transition-fast), opacity var(--transition-fast);
   }
 
   .open-link,
   .empty-actions a,
   .empty-actions button,
   .quick-links a {
-    border: 1px solid color-mix(in srgb, var(--surface-border) 105%, transparent);
-    background: color-mix(in srgb, var(--surface-soft) 66%, transparent);
+    border: 1px solid var(--surface-border);
+    background: transparent;
     color: var(--text-color);
   }
 
   .mark-read {
-    border: 1px solid color-mix(in srgb, var(--primary) 18%, transparent);
-    background: color-mix(in srgb, var(--primary-soft) 56%, transparent);
+    border: 1px solid var(--surface-border);
+    background: var(--primary-soft);
     color: var(--text-color);
     cursor: pointer;
   }
@@ -905,7 +897,7 @@
   .empty-actions a:hover,
   .empty-actions button:hover,
   .quick-links a:hover {
-    border-color: color-mix(in srgb, var(--primary) 18%, transparent);
+    border-color: var(--primary);
   }
 
   .mark-read:disabled {
@@ -938,18 +930,16 @@
     display: grid;
     gap: 0.45rem;
     padding: 1rem;
-    border-radius: var(--radius-lg);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 106%, transparent);
-    background: color-mix(in srgb, var(--surface-soft) 60%, transparent);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--surface-border);
+    background: var(--surface);
     text-decoration: none;
     color: inherit;
-    transition: transform var(--transition-fast), box-shadow var(--transition-fast), border-color var(--transition-fast);
+    transition: border-color var(--transition-fast);
   }
 
   .momentum-card:hover {
-    transform: translateY(-1px);
-    border-color: color-mix(in srgb, var(--primary) 18%, transparent);
-    box-shadow: 0 10px 22px color-mix(in srgb, var(--shadow-color) 14%, transparent);
+    border-color: var(--primary);
   }
 
   .momentum-label {
@@ -962,7 +952,7 @@
     line-height: 1;
     font-weight: 700;
     letter-spacing: -0.03em;
-    color: var(--primary);
+    color: var(--text-color);
   }
 
   .momentum-meta {

@@ -195,12 +195,9 @@
     display: grid;
     gap: clamp(1rem, 1.7vw, 1.45rem);
     padding: clamp(1rem, 1.8vw, 1.45rem);
-    border-radius: clamp(0.95rem, 1.3vw, 1.2rem);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 106%, transparent);
-    background:
-      linear-gradient(180deg, color-mix(in srgb, var(--surface-strong) 94%, transparent), color-mix(in srgb, var(--surface) 94%, transparent)),
-      radial-gradient(circle at top right, color-mix(in srgb, var(--primary-soft) 54%, transparent), transparent 48%);
-    box-shadow: 0 12px 28px color-mix(in srgb, var(--shadow-color) 16%, transparent);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--surface-border);
+    background: var(--surface);
     overflow: clip;
   }
 
@@ -282,8 +279,8 @@
   }
 
   .clear-link {
-    border: 1px solid color-mix(in srgb, var(--surface-border) 106%, transparent);
-    background: color-mix(in srgb, var(--surface-soft) 66%, transparent);
+    border: 1px solid var(--surface-border);
+    background: transparent;
     color: var(--muted-text);
     display: inline-flex;
     align-items: center;
@@ -310,8 +307,8 @@
     min-width: 0;
     min-height: 3.15rem;
     border-radius: var(--radius-md);
-    border: 1px solid color-mix(in srgb, var(--input-border) 96%, transparent);
-    background: color-mix(in srgb, var(--input-bg) 95%, transparent);
+    border: 1px solid var(--input-border);
+    background: var(--input-bg);
     color: var(--text-color);
     box-sizing: border-box;
   }
@@ -350,9 +347,9 @@
     display: grid;
     gap: 0.8rem;
     padding: 0.95rem 1rem;
-    border-radius: var(--radius-lg);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 104%, transparent);
-    background: color-mix(in srgb, var(--surface-soft) 60%, transparent);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--surface-border);
+    background: var(--surface-soft);
   }
 
   .compact-cluster {
@@ -369,7 +366,7 @@
   }
 
   .reset-button {
-    border: 1px solid color-mix(in srgb, var(--surface-border) 104%, transparent);
+    border: 1px solid var(--surface-border);
     background: transparent;
     color: var(--muted-text);
     padding: 0.3rem 0.7rem;
@@ -391,15 +388,14 @@
     justify-content: center;
     padding: 0.55rem 0.9rem;
     border-radius: var(--radius-md);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 104%, transparent);
-    background: color-mix(in srgb, var(--surface) 40%, transparent);
+    border: 1px solid var(--surface-border);
+    background: transparent;
     color: var(--muted-text);
     cursor: pointer;
     transition:
       color var(--transition-fast),
       background var(--transition-fast),
-      border-color var(--transition-fast),
-      transform var(--transition-fast);
+      border-color var(--transition-fast);
   }
 
   .choice-chip.compact {
@@ -408,8 +404,8 @@
 
   .choice-chip.active,
   .segment-option.active {
-    background: color-mix(in srgb, var(--primary-soft) 56%, transparent);
-    border-color: color-mix(in srgb, var(--primary) 18%, transparent);
+    background: var(--primary-soft);
+    border-color: var(--primary);
     color: var(--text-color);
   }
 

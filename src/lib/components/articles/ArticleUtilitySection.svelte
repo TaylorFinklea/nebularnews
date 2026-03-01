@@ -42,7 +42,7 @@
 <style>
   .utility-section {
     min-width: 0;
-    border-top: 1px solid color-mix(in srgb, var(--surface-border) 108%, transparent);
+    border-top: 1px solid var(--surface-border);
     padding-top: var(--space-3);
   }
 
@@ -56,7 +56,7 @@
     min-width: 0;
     padding: 0.35rem 0.45rem;
     border: 0;
-    border-radius: calc(var(--radius-lg) - 0.1rem);
+    border-radius: var(--radius-md);
     background: transparent;
     color: inherit;
     cursor: pointer;
@@ -88,20 +88,20 @@
   .trigger-chevron {
     width: 1.9rem;
     height: 1.9rem;
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-md);
     display: inline-flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
     color: var(--muted-text);
-    background: color-mix(in srgb, var(--surface-soft) 65%, transparent);
+    background: var(--surface-soft);
     transition: transform var(--transition-normal), color var(--transition-normal), background var(--transition-normal);
   }
 
   .trigger-chevron.open {
     transform: rotate(180deg);
     color: var(--primary);
-    background: color-mix(in srgb, var(--primary-soft) 80%, transparent);
+    background: var(--primary-soft);
   }
 
   .utility-body {
@@ -112,6 +112,6 @@
   }
 
   .utility-section.open .utility-trigger {
-    background: color-mix(in srgb, var(--surface-soft) 72%, transparent);
+    background: var(--surface-soft);
   }
 </style>

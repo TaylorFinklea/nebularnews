@@ -144,24 +144,19 @@
   /* ── Bottom rail ── */
   .bottom-rail {
     position: fixed;
-    left: 50%;
-    bottom: calc(var(--mobile-nav-offset, 12px) + env(safe-area-inset-bottom));
-    transform: translateX(-50%);
+    left: 0;
+    bottom: 0;
     z-index: 100;
-    width: min(26rem, calc(100vw - 1rem));
+    width: 100%;
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
-    gap: 0.35rem;
-    padding: 0.45rem;
-    border: 1px solid rgba(149, 164, 255, 0.14);
-    border-radius: 999px;
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 55%),
-      var(--surface-strong);
-    backdrop-filter: blur(22px) saturate(145%);
-    box-shadow:
-      0 18px 42px rgba(2, 6, 24, 0.22),
-      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    gap: 0;
+    padding: 0.5rem;
+    padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
+    border: none;
+    border-top: 1px solid var(--surface-border);
+    border-radius: 0;
+    background: var(--surface);
     min-height: var(--mobile-nav-height, 70px);
     box-sizing: border-box;
   }
@@ -174,20 +169,15 @@
     position: relative;
     min-width: 0;
     min-height: 3rem;
-    border: 1px solid transparent;
-    border-radius: 999px;
+    border: none;
+    border-radius: 0;
     background: transparent;
     color: var(--muted-text);
     cursor: pointer;
     padding: 0;
     font: inherit;
     -webkit-tap-highlight-color: transparent;
-    transition:
-      transform 0.15s ease,
-      color 0.15s ease,
-      background 0.15s ease,
-      border-color 0.15s ease,
-      box-shadow 0.18s ease;
+    transition: color var(--transition-fast);
   }
 
   .rail-icon {
@@ -196,40 +186,20 @@
     justify-content: center;
     width: 2.35rem;
     height: 2.35rem;
-    border-radius: 999px;
-    transition:
-      background 0.15s ease,
-      color 0.15s ease,
-      transform 0.15s ease,
-      box-shadow 0.18s ease;
+    border-radius: 0;
   }
 
   .rail-link:hover {
     color: var(--text-color);
-    background: rgba(154, 139, 255, 0.07);
-    border-color: rgba(149, 164, 255, 0.12);
   }
 
   .rail-link.active {
-    color: var(--primary-contrast);
-    border-color: rgba(154, 139, 255, 0.16);
-    background:
-      linear-gradient(135deg, var(--primary) 0%, var(--primary-strong) 100%);
-    box-shadow:
-      0 10px 24px rgba(73, 58, 170, 0.28),
-      inset 0 1px 0 rgba(255, 255, 255, 0.22);
+    color: var(--primary);
+    background: transparent;
   }
 
   .rail-link.active .rail-icon {
-    background: rgba(255, 255, 255, 0.14);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18);
-    transform: scale(1.02);
-  }
-
-  .rail-link:active,
-  .rail-link.active:active {
-    transform: translateY(1px);
-    transition-duration: 0s;
+    background: transparent;
   }
 
   /* ── More overlay ── */
@@ -238,29 +208,22 @@
     inset: 0;
     z-index: 101;
     border: none;
-    background: rgba(4, 8, 24, 0.5);
-    backdrop-filter: blur(6px);
+    background: rgba(0, 0, 0, 0.5);
     cursor: pointer;
   }
 
   /* ── More sheet ── */
   .more-sheet {
     position: fixed;
-    left: 50%;
-    width: min(26rem, calc(100vw - 1rem));
+    left: 0;
+    width: 100%;
     margin: 0;
-    transform: translateX(-50%);
-    bottom: calc(var(--mobile-nav-height, 70px) + var(--mobile-nav-offset, 12px) + env(safe-area-inset-bottom) + var(--space-2));
+    bottom: calc(var(--mobile-nav-height, 70px) + env(safe-area-inset-bottom));
     z-index: 102;
-    border: 1px solid rgba(149, 164, 255, 0.14);
-    border-radius: 1.4rem;
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.06), transparent 36%),
-      var(--surface-strong);
-    backdrop-filter: blur(24px) saturate(145%);
-    box-shadow:
-      0 20px 40px rgba(2, 6, 24, 0.26),
-      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    border: none;
+    border-top: 1px solid var(--surface-border);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    background: var(--surface);
     padding: 0.7rem 0.7rem 0.8rem;
     display: grid;
     gap: 0.8rem;
@@ -270,7 +233,7 @@
     width: 2.35rem;
     height: 0.24rem;
     border-radius: var(--radius-full);
-    background: rgba(149, 164, 255, 0.24);
+    background: var(--surface-border);
     margin: 0.1rem auto 0;
   }
 
@@ -294,7 +257,7 @@
     align-items: center;
     gap: var(--space-3);
     min-height: 3.15rem;
-    border-radius: 1rem;
+    border-radius: var(--radius-md);
     border: 1px solid transparent;
     background: transparent;
     color: var(--text-color);
@@ -302,38 +265,25 @@
     cursor: pointer;
     text-align: left;
     -webkit-tap-highlight-color: transparent;
-    transition:
-      background 0.15s ease,
-      border-color 0.15s ease,
-      color 0.15s ease,
-      transform 0.15s ease;
+    transition: background var(--transition-fast), color var(--transition-fast);
   }
 
   .sheet-link:hover {
-    background: rgba(154, 139, 255, 0.07);
-    border-color: rgba(149, 164, 255, 0.12);
+    background: var(--surface-soft);
   }
 
   .sheet-link :global(svg) {
     color: var(--primary);
   }
 
-  .sheet-link:active {
-    transform: translateY(1px);
-    transition-duration: 0s;
-  }
-
   .sheet-link.active {
     color: var(--text-color);
-    border-color: rgba(154, 139, 255, 0.16);
-    background:
-      linear-gradient(135deg, rgba(154, 139, 255, 0.14), rgba(154, 139, 255, 0.04)),
-      var(--surface-soft);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    background: var(--surface-soft);
+    font-weight: 600;
   }
 
   .sheet-link.active :global(svg) {
-    color: var(--primary-strong);
+    color: var(--primary);
   }
 
   @media (max-width: 420px) {

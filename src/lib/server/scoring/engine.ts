@@ -47,8 +47,7 @@ export function computeAlgorithmicScore(
     const weight = w?.weight ?? DEFAULT_SIGNAL_WEIGHTS[signal.signal] ?? 1.0;
     weightedSum += weight * signal.normalizedValue;
     totalWeight += weight;
-    // A signal is "data-backed" if it's not at the neutral default (0.5)
-    if (signal.normalizedValue !== 0.5 || signal.rawValue !== 0) {
+    if (signal.isDataBacked) {
       dataSignalCount++;
     }
   }
@@ -140,6 +139,7 @@ export async function getArticleSignalScores(
   return rows.map((r) => ({
     signal: r.signal_name as SignalName,
     rawValue: r.raw_value,
-    normalizedValue: r.normalized_value
+    normalizedValue: r.normalized_value,
+    isDataBacked: r.normalized_value !== 0.5 || r.raw_value !== 0
   }));
 }

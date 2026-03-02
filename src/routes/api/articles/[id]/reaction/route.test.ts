@@ -76,7 +76,10 @@ describe('/api/articles/[id]/reaction POST', () => {
     const payload = (await response.json()) as { data: { reaction: { reason_codes: string[] } } };
 
     expect(response.status).toBe(200);
-    expect(processReactionLearning).toHaveBeenCalledWith(expect.anything(), 'article-1', 1);
+    expect(processReactionLearning).toHaveBeenCalledWith(expect.anything(), 'article-1', 1, [
+      'up_interest_match',
+      'up_good_depth'
+    ]);
     expect(payload.data.reaction.reason_codes).toEqual(['up_interest_match', 'up_good_depth']);
     expect(dbRunMock).toHaveBeenCalledWith(
       expect.anything(),
@@ -100,7 +103,10 @@ describe('/api/articles/[id]/reaction POST', () => {
     const response = await POST(createEvent({ value: -1, reasonCodes: ['down_stale', 'down_too_shallow'] }));
 
     expect(response.status).toBe(200);
-    expect(processReactionLearning).toHaveBeenCalledWith(expect.anything(), 'article-1', -1);
+    expect(processReactionLearning).toHaveBeenCalledWith(expect.anything(), 'article-1', -1, [
+      'down_stale',
+      'down_too_shallow'
+    ]);
   });
 
   it('dedupes duplicate reason codes and stores them in canonical order', async () => {

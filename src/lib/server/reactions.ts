@@ -30,6 +30,39 @@ export async function listReactionReasonCodesForArticle(
   return rows.map((row) => row.reason_code);
 }
 
+export async function listReactionReasonCodesForArticles(
+  db: Db,
+  articleIds: readonly string[]
+): Promise<Map<string, ArticleReactionReasonCode[]>> {
+  const uniqueArticleIds = [...new Set(articleIds.filter(Boolean))];
+  if (uniqueArticleIds.length === 0) {
+    return new Map();
+  }
+
+  const placeholders = uniqueArticleIds.map(() => '?').join(', ');
+  const rows = await dbAll<{ article_id: string; reason_code: ArticleReactionReasonCode }>(
+    db,
+    `SELECT article_id, reason_code
+     FROM article_reaction_reasons
+     WHERE article_id IN (${placeholders})
+     ORDER BY article_id, ${REASON_ORDER_SQL}`,
+    uniqueArticleIds
+  );
+
+  const reasonsByArticle = new Map<string, ArticleReactionReasonCode[]>();
+  for (const articleId of uniqueArticleIds) {
+    reasonsByArticle.set(articleId, []);
+  }
+
+  for (const row of rows) {
+    const existing = reasonsByArticle.get(row.article_id) ?? [];
+    existing.push(row.reason_code);
+    reasonsByArticle.set(row.article_id, existing);
+  }
+
+  return reasonsByArticle;
+}
+
 export async function getReactionForArticle(
   db: Db,
   articleId: string

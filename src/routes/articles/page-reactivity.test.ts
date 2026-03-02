@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // @ts-nocheck
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ArticlesPage from './+page.svelte';
 
@@ -20,6 +20,7 @@ const baseArticle = {
   summary_text: 'Article summary',
   is_read: 0,
   reaction_value: null,
+  reaction_reason_codes: [],
   score: null,
   score_label: null,
   source_name: 'Test Feed',
@@ -66,7 +67,7 @@ describe('Articles page reactivity', () => {
         data: {
           article_id: 'article-1',
           is_read: 1,
-          reaction: { value: 1 }
+          reaction: { value: 1, reason_codes: ['up_interest_match'] }
         }
       })
     }));
@@ -78,18 +79,97 @@ describe('Articles page reactivity', () => {
     vi.unstubAllGlobals();
   });
 
-  it('updates thumb reaction state immediately after click', async () => {
+  it('opens the reason dialog before saving a thumbs-up reaction', async () => {
     render(ArticlesPage, { data: createData() });
     const upButton = screen.getByRole('button', { name: 'Thumbs up feed' });
 
     expect(upButton.classList.contains('active')).toBe(false);
     await fireEvent.click(upButton);
 
-    expect(upButton.classList.contains('active')).toBe(true);
-    expect(fetch).toHaveBeenCalledWith(
-      '/api/articles/article-1/reaction',
-      expect.objectContaining({ method: 'POST' })
+    expect(screen.getByRole('dialog', { name: 'Why did you like this article?' })).toBeTruthy();
+    expect(upButton.classList.contains('active')).toBe(false);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('saves selected reason codes from the list reaction dialog', async () => {
+    render(ArticlesPage, { data: createData() });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Thumbs up feed' }));
+    const dialog = screen.getByRole('dialog', { name: 'Why did you like this article?' });
+    await fireEvent.click(within(dialog).getByRole('button', { name: 'Matches my interests' }));
+    await fireEvent.click(within(dialog).getByRole('button', { name: 'Good depth' }));
+    await fireEvent.click(within(dialog).getByRole('button', { name: 'Save reaction' }));
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/articles/article-1/reaction',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            value: 1,
+            feedId: 'feed-1',
+            reasonCodes: ['up_interest_match', 'up_good_depth']
+          })
+        })
+      );
+    });
+  });
+
+  it('saves an empty reason list when the user skips the dialog', async () => {
+    render(ArticlesPage, { data: createData() });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Thumbs down feed' }));
+    const dialog = screen.getByRole('dialog', { name: "Why didn't this work for you?" });
+    await fireEvent.click(within(dialog).getByRole('button', { name: 'Skip' }));
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/articles/article-1/reaction',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            value: -1,
+            feedId: 'feed-1',
+            reasonCodes: []
+          })
+        })
+      );
+    });
+  });
+
+  it('leaves the list row unchanged when the dialog is closed', async () => {
+    render(ArticlesPage, { data: createData() });
+    const upButton = screen.getByRole('button', { name: 'Thumbs up feed' });
+
+    await fireEvent.click(upButton);
+    const dialog = screen.getByRole('dialog', { name: 'Why did you like this article?' });
+    await fireEvent.click(within(dialog).getAllByRole('button', { name: 'Close reaction reason dialog' })[0]);
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(upButton.classList.contains('active')).toBe(false);
+  });
+
+  it('reopens an active reaction with saved reasons preselected', async () => {
+    render(ArticlesPage, {
+      data: createData({
+        articles: [
+          {
+            ...baseArticle,
+            reaction_value: 1,
+            reaction_reason_codes: ['up_source_trust', 'up_good_timing']
+          }
+        ]
+      })
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Thumbs up feed' }));
+    const dialog = screen.getByRole('dialog', { name: 'Why did you like this article?' });
+
+    expect(within(dialog).getByRole('button', { name: 'Trust this source' }).getAttribute('aria-pressed')).toBe(
+      'true'
     );
+    expect(within(dialog).getByRole('button', { name: 'Good timing' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getAllByText('Trust this source')).toHaveLength(1);
   });
 
   it('updates read state immediately after marking read', async () => {
@@ -140,8 +220,9 @@ describe('Articles page reactivity', () => {
     render(ArticlesPage, { data: createData() });
     const upButton = screen.getByRole('button', { name: 'Thumbs up feed' });
 
-    expect(upButton.classList.contains('active')).toBe(false);
     await fireEvent.click(upButton);
+    const dialog = screen.getByRole('dialog', { name: 'Why did you like this article?' });
+    await fireEvent.click(within(dialog).getByRole('button', { name: 'Save reaction' }));
 
     await waitFor(() => expect(upButton.classList.contains('active')).toBe(false));
     expect(screen.getByRole('status').textContent ?? '').toContain('Unable to save feed reaction');
@@ -163,6 +244,8 @@ describe('Articles page reactivity', () => {
     const upButton = screen.getByRole('button', { name: 'Thumbs up feed' });
 
     await fireEvent.click(upButton);
+    const dialog = screen.getByRole('dialog', { name: 'Why did you like this article?' });
+    await fireEvent.click(within(dialog).getByRole('button', { name: 'Save reaction' }));
     await fireEvent.click(upButton);
 
     expect(fetch).toHaveBeenCalledTimes(1);
@@ -172,7 +255,7 @@ describe('Articles page reactivity', () => {
       status: 200,
       json: async () => ({
         ok: true,
-        data: { reaction: { value: 1 } }
+        data: { reaction: { value: 1, reason_codes: [] } }
       })
     });
     await waitFor(() => expect(upButton.hasAttribute('disabled')).toBe(false));

@@ -19,6 +19,7 @@ export type SignalResult = {
   signal: SignalName;
   rawValue: number;
   normalizedValue: number; // 0.0 - 1.0
+  isDataBacked: boolean;
 };
 
 export type SignalWeight = {

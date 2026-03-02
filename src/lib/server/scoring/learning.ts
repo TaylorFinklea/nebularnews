@@ -1,6 +1,15 @@
+import type { ArticleReactionReasonCode } from '$lib/article-reactions';
+import {
+  getTargetSignalsForReactionReasons,
+  hasAuthorReactionReason,
+  hasTopicReactionReason
+} from '$lib/article-reactions';
 import { dbAll, dbGet, dbRun, now, type Db } from '../db';
 import { getScoringLearningRate } from '../settings';
-import { DAMPING_FACTOR, type SignalName } from './types';
+import { DAMPING_FACTOR } from './types';
+
+const TARGETED_REASON_SIGNAL_MULTIPLIER = 1.5;
+const BACKGROUND_REASON_SIGNAL_MULTIPLIER = 0.25;
 
 // ─── EMA weight update ──────────────────────────────────────────────
 
@@ -30,7 +39,8 @@ export async function updateWeightsFromReaction(
   db: Db,
   articleId: string,
   direction: 1 | -1,
-  learningRate?: number
+  learningRate?: number,
+  reasonCodes: readonly ArticleReactionReasonCode[] = []
 ): Promise<void> {
   // Load the article's signal scores
   const signals = await dbAll<{ signal_name: string; normalized_value: number }>(
@@ -43,6 +53,8 @@ export async function updateWeightsFromReaction(
 
   const ts = now();
   const resolvedLearningRate = learningRate ?? (await getScoringLearningRate(db));
+  const targetedSignals = new Set<string>(getTargetSignalsForReactionReasons(reasonCodes));
+  const useReasonTargeting = targetedSignals.size > 0;
 
   for (const signal of signals) {
     const row = await dbGet<{ weight: number; sample_count: number }>(
@@ -67,7 +79,13 @@ export async function updateWeightsFromReaction(
       error = -signal.normalized_value;
     }
 
-    const newWeight = Math.max(0.01, row.weight + alpha * error);
+    const multiplier = useReasonTargeting
+      ? targetedSignals.has(signal.signal_name)
+        ? TARGETED_REASON_SIGNAL_MULTIPLIER
+        : BACKGROUND_REASON_SIGNAL_MULTIPLIER
+      : 1;
+
+    const newWeight = Math.max(0.01, row.weight + alpha * error * multiplier);
 
     await dbRun(
       db,
@@ -210,14 +228,22 @@ export async function updateAuthorAffinityForArticle(
 export async function processReactionLearning(
   db: Db,
   articleId: string,
-  reactionValue: 1 | -1
+  reactionValue: 1 | -1,
+  reasonCodes: readonly ArticleReactionReasonCode[] = []
 ): Promise<void> {
   const learningRate = await getScoringLearningRate(db);
-  await Promise.all([
-    updateWeightsFromReaction(db, articleId, reactionValue, learningRate),
-    updateTopicAffinitiesForArticle(db, articleId, reactionValue, learningRate),
-    updateAuthorAffinityForArticle(db, articleId, reactionValue, learningRate)
-  ]);
+  const updates = [
+    updateWeightsFromReaction(db, articleId, reactionValue, learningRate, reasonCodes)
+  ];
+
+  if (reasonCodes.length === 0 || hasTopicReactionReason(reasonCodes)) {
+    updates.push(updateTopicAffinitiesForArticle(db, articleId, reactionValue, learningRate));
+  }
+  if (reasonCodes.length === 0 || hasAuthorReactionReason(reasonCodes)) {
+    updates.push(updateAuthorAffinityForArticle(db, articleId, reactionValue, learningRate));
+  }
+
+  await Promise.all(updates);
 }
 
 /**

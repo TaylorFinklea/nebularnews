@@ -32,21 +32,38 @@ export const ALL_REACTION_REASON_OPTIONS = [
 
 export const ALL_REACTION_REASON_CODES = ALL_REACTION_REASON_OPTIONS.map((option) => option.code);
 
-// Future-facing reason-to-signal mapping. This is stored for later learning work, but not applied in v1.
 export const REACTION_REASON_SIGNAL_MAP = {
-  up_interest_match: 'topic_affinity',
-  down_off_topic: 'topic_affinity',
-  up_source_trust: 'source_reputation',
-  down_source_distrust: 'source_reputation',
-  up_good_timing: 'content_freshness',
-  down_stale: 'content_freshness',
-  up_good_depth: 'content_depth',
-  down_too_shallow: 'content_depth',
-  up_author_like: 'author_affinity',
-  down_avoid_author: 'author_affinity'
+  up_interest_match: ['topic_affinity', 'tag_match_ratio'],
+  down_off_topic: ['topic_affinity', 'tag_match_ratio'],
+  up_source_trust: ['source_reputation'],
+  down_source_distrust: ['source_reputation'],
+  up_good_timing: ['content_freshness'],
+  down_stale: ['content_freshness'],
+  up_good_depth: ['content_depth'],
+  down_too_shallow: ['content_depth'],
+  up_author_like: ['author_affinity'],
+  down_avoid_author: ['author_affinity']
 } as const;
 
+export const TOPIC_REACTION_REASON_CODES = [
+  'up_interest_match',
+  'down_off_topic'
+] as const satisfies readonly ArticleReactionReasonCode[];
+
+export const SOURCE_REPUTATION_REASON_CODES = [
+  'up_source_trust',
+  'down_source_distrust'
+] as const satisfies readonly ArticleReactionReasonCode[];
+
+export const AUTHOR_REACTION_REASON_CODES = [
+  'up_author_like',
+  'down_avoid_author'
+] as const satisfies readonly ArticleReactionReasonCode[];
+
 const ALL_REASON_CODE_SET = new Set<string>(ALL_REACTION_REASON_CODES);
+const TOPIC_REASON_CODE_SET = new Set<string>(TOPIC_REACTION_REASON_CODES);
+const SOURCE_REASON_CODE_SET = new Set<string>(SOURCE_REPUTATION_REASON_CODES);
+const AUTHOR_REASON_CODE_SET = new Set<string>(AUTHOR_REACTION_REASON_CODES);
 const REASON_LABEL_BY_CODE = new Map<string, string>(
   ALL_REACTION_REASON_OPTIONS.map((option) => [option.code, option.label])
 );
@@ -61,6 +78,31 @@ export const getReasonOptionsForReaction = (value: ReactionValue) =>
 
 export const getReactionReasonLabel = (code: ArticleReactionReasonCode) =>
   REASON_LABEL_BY_CODE.get(code) ?? code;
+
+export const getTargetSignalsForReactionReason = (code: ArticleReactionReasonCode) =>
+  [...REACTION_REASON_SIGNAL_MAP[code]];
+
+export const getTargetSignalsForReactionReasons = (
+  reasonCodes: readonly ArticleReactionReasonCode[]
+) => {
+  const selectedSignals = new Set<string>();
+  for (const reasonCode of reasonCodes) {
+    for (const signal of getTargetSignalsForReactionReason(reasonCode)) {
+      selectedSignals.add(signal);
+    }
+  }
+  return [...selectedSignals];
+};
+
+export const hasTopicReactionReason = (reasonCodes: readonly ArticleReactionReasonCode[]) =>
+  reasonCodes.some((code) => TOPIC_REASON_CODE_SET.has(code));
+
+export const hasSourceReputationReactionReason = (
+  reasonCodes: readonly ArticleReactionReasonCode[]
+) => reasonCodes.some((code) => SOURCE_REASON_CODE_SET.has(code));
+
+export const hasAuthorReactionReason = (reasonCodes: readonly ArticleReactionReasonCode[]) =>
+  reasonCodes.some((code) => AUTHOR_REASON_CODE_SET.has(code));
 
 export const canonicalizeReasonCodesForReaction = (
   value: ReactionValue,

@@ -79,7 +79,7 @@ export const POST = async (event) => {
 
   if (shouldApplyLearning) {
     // Update scoring weights and affinities based on reaction changes.
-    processReactionLearning(platform.env.DB, articleId, value as 1 | -1).catch(() => {
+    processReactionLearning(platform.env.DB, articleId, value as 1 | -1, reasonCodes).catch(() => {
       // Learning updates are non-critical — don't block the response
     });
   }

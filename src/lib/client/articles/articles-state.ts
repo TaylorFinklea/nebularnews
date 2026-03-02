@@ -1,3 +1,4 @@
+import type { ArticleReactionReasonCode } from '$lib/article-reactions';
 import { get, writable, type Writable } from 'svelte/store';
 import { apiFetch } from '$lib/client/api-fetch';
 import { runOptimisticMutation } from '$lib/client/mutations';
@@ -23,6 +24,7 @@ export const normalizeArticle = (article: ArticleListItem): ArticleListItem => (
   ...article,
   is_read: normalizeReadValue(article?.is_read),
   reaction_value: reactionNumber(article?.reaction_value),
+  reaction_reason_codes: Array.isArray(article?.reaction_reason_codes) ? article.reaction_reason_codes : [],
   tags: Array.isArray(article?.tags) ? article.tags : [],
   tag_suggestions: Array.isArray(article?.tag_suggestions) ? article.tag_suggestions : []
 });
@@ -202,6 +204,7 @@ export const createArticlesState = (initialArticles: ArticleListItem[]) => {
     articleId: string,
     value: 1 | -1,
     feedId: string | null | undefined,
+    reasonCodes: readonly ArticleReactionReasonCode[] = [],
     options?: { optimisticEnabled?: boolean }
   ) => {
     if (isPending(articleId)) return;
@@ -210,6 +213,9 @@ export const createArticlesState = (initialArticles: ArticleListItem[]) => {
 
     const optimisticEnabled = options?.optimisticEnabled !== false;
     const previous = reactionNumber(currentArticle.reaction_value);
+    const previousReasonCodes = Array.isArray(currentArticle.reaction_reason_codes)
+      ? [...currentArticle.reaction_reason_codes]
+      : [];
     setPending(articleId, true);
 
     if (!optimisticEnabled) {
@@ -217,13 +223,24 @@ export const createArticlesState = (initialArticles: ArticleListItem[]) => {
         const res = await apiFetch(`/api/articles/${articleId}/reaction`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ value, feedId })
+          body: JSON.stringify({ value, feedId, reasonCodes })
         });
         if (!res.ok) throw new Error('reaction_failed');
-        updateServerArticle(articleId, { reaction_value: value });
+        const payload = (await res.json().catch(() => ({}))) as {
+          data?: { reaction?: { value?: number; reason_codes?: ArticleReactionReasonCode[] } };
+        };
+        updateServerArticle(articleId, {
+          reaction_value: reactionNumber(payload?.data?.reaction?.value ?? value),
+          reaction_reason_codes: Array.isArray(payload?.data?.reaction?.reason_codes)
+            ? payload.data.reaction.reason_codes
+            : [...reasonCodes]
+        });
       } catch {
-        setOptimisticPatch(articleId, { reaction_value: previous });
-        clearOptimisticFields(articleId, ['reaction_value']);
+        setOptimisticPatch(articleId, {
+          reaction_value: previous,
+          reaction_reason_codes: previousReasonCodes
+        });
+        clearOptimisticFields(articleId, ['reaction_value', 'reaction_reason_codes']);
         setUiMessage('Unable to save feed reaction. Reverted to previous state.');
       } finally {
         setPending(articleId, false);
@@ -234,23 +251,38 @@ export const createArticlesState = (initialArticles: ArticleListItem[]) => {
     const mutation = await runOptimisticMutation({
       key: `article:${articleId}:reaction`,
       fallbackErrorMessage: 'Unable to save feed reaction',
-      applyOptimistic: () => setOptimisticPatch(articleId, { reaction_value: value }),
+      applyOptimistic: () =>
+        setOptimisticPatch(articleId, {
+          reaction_value: value,
+          reaction_reason_codes: [...reasonCodes]
+        }),
       revertOptimistic: () => {
-        setOptimisticPatch(articleId, { reaction_value: previous });
-        clearOptimisticFields(articleId, ['reaction_value']);
+        setOptimisticPatch(articleId, {
+          reaction_value: previous,
+          reaction_reason_codes: previousReasonCodes
+        });
+        clearOptimisticFields(articleId, ['reaction_value', 'reaction_reason_codes']);
       },
       request: () =>
         apiFetch(`/api/articles/${articleId}/reaction`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ value, feedId })
+          body: JSON.stringify({ value, feedId, reasonCodes })
         })
     });
 
     if (mutation.ok) {
-      const reactionValue = Number((mutation.data as { reaction?: { value?: number } } | undefined)?.reaction?.value ?? value);
-      updateServerArticle(articleId, { reaction_value: reactionValue });
-      clearOptimisticFields(articleId, ['reaction_value']);
+      const payload = mutation.data as
+        | { reaction?: { value?: number; reason_codes?: ArticleReactionReasonCode[] } }
+        | undefined;
+      const reactionValue = reactionNumber(payload?.reaction?.value ?? value);
+      updateServerArticle(articleId, {
+        reaction_value: reactionValue,
+        reaction_reason_codes: Array.isArray(payload?.reaction?.reason_codes)
+          ? payload.reaction.reason_codes
+          : [...reasonCodes]
+      });
+      clearOptimisticFields(articleId, ['reaction_value', 'reaction_reason_codes']);
     } else if (!mutation.skipped) {
       setUiMessage(`${mutation.error?.message ?? 'Unable to save feed reaction'}. Reverted to previous state.`);
     }

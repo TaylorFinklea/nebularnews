@@ -1,4 +1,5 @@
 import { dbAll, dbGet, type Db } from './db';
+import { listReactionReasonCodesForArticles } from './reactions';
 import { getPreferredSourcesForArticles } from './sources';
 import { listTagSuggestionsForArticles, listTagsForArticles } from './tags';
 
@@ -175,12 +176,14 @@ export const listArticlesWithFilters = async (db: Db, input: ArticleQueryInput) 
   const sourceByArticle = await getPreferredSourcesForArticles(db, articleIds);
   const tagsByArticle = await listTagsForArticles(db, articleIds);
   const suggestionsByArticle = await listTagSuggestionsForArticles(db, articleIds);
+  const reactionReasonsByArticle = await listReactionReasonCodesForArticles(db, articleIds);
 
   const articles = rows.map((row) => {
     const source = sourceByArticle.get(row.id);
     return {
       ...row,
       image_url: row.image_url ?? null,
+      reaction_reason_codes: reactionReasonsByArticle.get(row.id) ?? [],
       tags: tagsByArticle.get(row.id) ?? [],
       tag_suggestions: suggestionsByArticle.get(row.id) ?? [],
       source: source

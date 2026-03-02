@@ -1,3 +1,5 @@
+import type { ArticleReactionReasonCode } from '$lib/article-reactions';
+
 export type ArticleTag = {
   id: string;
   name: string;
@@ -27,6 +29,7 @@ export type ArticleListItem = {
   summary_text?: string | null;
   is_read?: number | boolean | null;
   reaction_value?: number | null;
+  reaction_reason_codes?: ArticleReactionReasonCode[];
   score?: number | null;
   score_label?: string | null;
   source_name?: string | null;

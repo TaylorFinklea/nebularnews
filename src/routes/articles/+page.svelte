@@ -19,6 +19,7 @@
   import Button from '$lib/components/Button.svelte';
   import Pill from '$lib/components/Pill.svelte';
   import Pagination from '$lib/components/Pagination.svelte';
+  import ReactionReasonDialog from '$lib/components/articles/ReactionReasonDialog.svelte';
   import { showToast } from '$lib/client/toast';
   export let data;
 
@@ -54,6 +55,7 @@
     ...article,
     is_read: normalizeReadValue(article?.is_read),
     reaction_value: reactionNumber(article?.reaction_value),
+    reaction_reason_codes: Array.isArray(article?.reaction_reason_codes) ? article.reaction_reason_codes : [],
     tags: Array.isArray(article?.tags) ? article.tags : [],
     tag_suggestions: Array.isArray(article?.tag_suggestions) ? article.tag_suggestions : []
   });
@@ -78,6 +80,10 @@
   let lastServerArticlesKey = '';
   let filtersOpen = false;
   let statusMessage = '';
+  let reactionDialogOpen = false;
+  let reactionDialogArticleId = null;
+  let reactionDialogValue = 1;
+  let reactionDialogReasonCodes = [];
 
   const syncFilterStateFromData = () => {
     const nextState = { q: data.q ?? '', selectedScores: data.selectedScores ?? DEFAULT_SCORE_FILTER, readFilter: data.readFilter ?? 'all', sinceDays: data.sinceDays ?? null, sort: data.sort ?? 'newest', view: data.view ?? 'list', layout: data.layout ?? 'split', selectedReactions: data.selectedReactions ?? DEFAULT_REACTION_FILTER, selectedTagIds: data.selectedTagIds ?? [] };
@@ -143,25 +149,78 @@
   const refreshInBackground = async () => { try { await invalidateAll(); return true; } catch { return false; } };
   const responseField = (payload, key, fallback) => payload?.data?.[key] ?? payload?.[key] ?? fallback;
 
-  const reactToArticle = async (articleId, value, feedId) => {
+  const reactToArticle = async (articleId, value, feedId, reasonCodes = []) => {
     if (isPending(articleId)) return;
     const current = findMergedArticle(articleId);
     if (!current) return;
     const previous = reactionNumber(current.reaction_value);
-    setOptimisticPatch(articleId, { reaction_value: value });
+    const previousReasonCodes = Array.isArray(current.reaction_reason_codes)
+      ? [...current.reaction_reason_codes]
+      : [];
+    setOptimisticPatch(articleId, {
+      reaction_value: value,
+      reaction_reason_codes: [...reasonCodes]
+    });
     setPending(articleId, true);
     try {
-      const res = await apiFetch(`/api/articles/${articleId}/reaction`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ value, feedId }) });
+      const res = await apiFetch(`/api/articles/${articleId}/reaction`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ value, feedId, reasonCodes })
+      });
       if (!res.ok) throw new Error('reaction_failed');
+      const payload = await res.json().catch(() => ({}));
+      const savedReaction = payload?.data?.reaction ?? payload?.reaction ?? null;
+      setOptimisticPatch(articleId, {
+        reaction_value: reactionNumber(savedReaction?.value ?? value),
+        reaction_reason_codes: Array.isArray(savedReaction?.reason_codes)
+          ? savedReaction.reason_codes
+          : [...reasonCodes]
+      });
       void refreshInBackground();
     } catch {
-      setOptimisticPatch(articleId, { reaction_value: previous });
-      clearOptimisticFields(articleId, ['reaction_value']);
+      setOptimisticPatch(articleId, {
+        reaction_value: previous,
+        reaction_reason_codes: previousReasonCodes
+      });
+      clearOptimisticFields(articleId, ['reaction_value', 'reaction_reason_codes']);
       statusMessage = 'Unable to save feed reaction. Reverted.';
       showToast('Unable to save feed reaction. Reverted.', 'error');
     } finally {
       setPending(articleId, false);
     }
+  };
+
+  const openReactionDialog = (articleId, value) => {
+    if (isPending(articleId)) return;
+    const current = findMergedArticle(articleId);
+    if (!current) return;
+    reactionDialogArticleId = articleId;
+    reactionDialogValue = value;
+    reactionDialogReasonCodes =
+      reactionNumber(current.reaction_value) === value &&
+      Array.isArray(current.reaction_reason_codes)
+        ? [...current.reaction_reason_codes]
+        : [];
+    reactionDialogOpen = true;
+  };
+
+  const closeReactionDialog = () => {
+    reactionDialogOpen = false;
+    reactionDialogArticleId = null;
+    reactionDialogReasonCodes = [];
+  };
+
+  const submitReactionDialog = (reasonCodes) => {
+    if (!reactionDialogArticleId) {
+      closeReactionDialog();
+      return;
+    }
+    const article = findMergedArticle(reactionDialogArticleId);
+    const articleId = reactionDialogArticleId;
+    const feedId = article?.source_feed_id ?? null;
+    closeReactionDialog();
+    void reactToArticle(articleId, reactionDialogValue, feedId, reasonCodes);
   };
 
   const setReadState = async (articleId, isRead) => {
@@ -577,7 +636,7 @@
               type="button"
               class="reaction-btn"
               class:active={reactionNumber(article.reaction_value) === 1}
-              on:click={() => reactToArticle(article.id, 1, article.source_feed_id)}
+              on:click={() => openReactionDialog(article.id, 1)}
               title="Thumbs up feed"
               aria-label="Thumbs up feed"
               disabled={pending}
@@ -588,7 +647,7 @@
               type="button"
               class="reaction-btn"
               class:active={reactionNumber(article.reaction_value) === -1}
-              on:click={() => reactToArticle(article.id, -1, article.source_feed_id)}
+              on:click={() => openReactionDialog(article.id, -1)}
               title="Thumbs down feed"
               aria-label="Thumbs down feed"
               disabled={pending}
@@ -620,6 +679,15 @@
 <Pagination
   pagination={data.pagination}
   hrefBuilder={pageHref}
+/>
+
+<ReactionReasonDialog
+  open={reactionDialogOpen}
+  value={reactionDialogValue}
+  initialReasonCodes={reactionDialogReasonCodes}
+  on:close={closeReactionDialog}
+  on:save={(event) => submitReactionDialog(event.detail.reasonCodes ?? [])}
+  on:skip={() => submitReactionDialog([])}
 />
 
 <style>

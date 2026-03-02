@@ -1,9 +1,12 @@
+import { SOURCE_REPUTATION_REASON_CODES } from '$lib/article-reactions';
 import { dbAll, dbGet, type Db } from './db';
 
 const REPUTATION_PRIOR_WEIGHT = 5;
+export const SOURCE_REPUTATION_VOTE_WEIGHT = 1.5;
 
 export type FeedReputation = {
   feedbackCount: number;
+  weightedFeedbackCount: number;
   ratingSum: number;
   score: number;
 };
@@ -20,7 +23,8 @@ type SourceCandidateRow = {
 type FeedReputationRow = {
   feed_id: string;
   reaction_count: number;
-  reaction_sum: number;
+  weighted_feedback_count: number;
+  weighted_reaction_sum: number;
 };
 
 export type PreferredSource = {
@@ -112,23 +116,45 @@ async function getFeedReputations(db: Db, feedIds: string[]) {
   if (feedIds.length === 0) return new Map<string, FeedReputation>();
   const rows = await dbAll<FeedReputationRow>(
     db,
-    `SELECT feed_id, COUNT(*) as reaction_count, COALESCE(SUM(value), 0) as reaction_sum
-    FROM article_reactions
-    WHERE feed_id IN (${placeholders(feedIds.length)})
+    `WITH weighted_reactions AS (
+      SELECT
+        ar.feed_id,
+        ar.value,
+        CASE
+          WHEN EXISTS (
+            SELECT 1
+            FROM article_reaction_reasons rr
+            WHERE rr.article_id = ar.article_id
+              AND rr.reason_code IN (${placeholders(SOURCE_REPUTATION_REASON_CODES.length)})
+          ) THEN ${SOURCE_REPUTATION_VOTE_WEIGHT}
+          ELSE 1.0
+        END AS vote_weight
+      FROM article_reactions ar
+      WHERE ar.feed_id IN (${placeholders(feedIds.length)})
+    )
+    SELECT
+      feed_id,
+      COUNT(*) as reaction_count,
+      COALESCE(SUM(vote_weight), 0) as weighted_feedback_count,
+      COALESCE(SUM(value * vote_weight), 0) as weighted_reaction_sum
+    FROM weighted_reactions
     GROUP BY feed_id`,
-    feedIds
+    [...SOURCE_REPUTATION_REASON_CODES, ...feedIds]
   );
 
   const reputations = new Map<string, FeedReputation>();
   for (const row of rows) {
     reputations.set(row.feed_id, {
       feedbackCount: row.reaction_count,
-      ratingSum: row.reaction_sum,
-      score: computeFeedReputation(row.reaction_sum, row.reaction_count)
+      weightedFeedbackCount: row.weighted_feedback_count,
+      ratingSum: row.weighted_reaction_sum,
+      score: computeFeedReputation(row.weighted_reaction_sum, row.weighted_feedback_count)
     });
   }
   return reputations;
 }
+
+export { getFeedReputations };
 
 export async function getPreferredSourcesForArticles(db: Db, articleIds: string[]) {
   const uniqueArticleIds = [...new Set(articleIds.filter(Boolean))];

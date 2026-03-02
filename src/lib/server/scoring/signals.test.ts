@@ -57,6 +57,53 @@ describe('extractSignals', () => {
     expect(sourceSignal?.isDataBacked).toBe(true);
   });
 
+  it('keeps missing content depth neutral when content text is absent', async () => {
+    dbAllMock.mockResolvedValue([]);
+    getFeedReputationsMock.mockResolvedValue(new Map());
+
+    const signals = await extractSignals({} as D1Database, {
+      id: 'article-1',
+      title: 'Story',
+      author: null,
+      content_text: null,
+      published_at: null,
+      source_feed_id: null
+    });
+
+    const contentDepth = signals.find((signal) => signal.signal === 'content_depth');
+    expect(contentDepth).toMatchObject({
+      rawValue: 0,
+      normalizedValue: 0.5,
+      isDataBacked: false
+    });
+  });
+
+  it('keeps articles with no tags neutral for tag match ratio', async () => {
+    dbAllMock.mockImplementation(async (_db, sql) => {
+      if (sql.includes('FROM article_tags')) {
+        return [];
+      }
+      return [];
+    });
+    getFeedReputationsMock.mockResolvedValue(new Map());
+
+    const signals = await extractSignals({} as D1Database, {
+      id: 'article-1',
+      title: 'Story',
+      author: null,
+      content_text: 'Some content',
+      published_at: null,
+      source_feed_id: null
+    });
+
+    const tagSignal = signals.find((signal) => signal.signal === 'tag_match_ratio');
+    expect(tagSignal).toMatchObject({
+      rawValue: 0,
+      normalizedValue: 0.5,
+      isDataBacked: false
+    });
+  });
+
   it('turns negatively affined tags into a negative tag-match ratio', async () => {
     dbAllMock.mockImplementation(async (_db, sql) => {
       if (sql.includes('FROM article_tags')) {
@@ -88,6 +135,43 @@ describe('extractSignals', () => {
     expect(tagSignal).toMatchObject({
       rawValue: -1,
       normalizedValue: 0,
+      isDataBacked: true
+    });
+  });
+
+  it('treats positively affined tags as fully matched', async () => {
+    dbAllMock.mockImplementation(async (_db, sql) => {
+      if (sql.includes('FROM article_tags')) {
+        return [{ name_normalized: 'ai' }, { name_normalized: 'policy' }];
+      }
+      if (sql.includes('SELECT affinity FROM topic_affinities')) {
+        return [{ affinity: 0.5 }, { affinity: 0.3 }];
+      }
+      if (sql.includes('SELECT tag_name_normalized, affinity')) {
+        return [
+          { tag_name_normalized: 'ai', affinity: 0.5 },
+          { tag_name_normalized: 'policy', affinity: 0.3 }
+        ];
+      }
+      return [];
+    });
+    getFeedReputationsMock.mockResolvedValue(new Map());
+
+    const signals = await extractSignals({} as D1Database, {
+      id: 'article-1',
+      title: 'Story',
+      author: null,
+      content_text: 'Some content',
+      published_at: null,
+      source_feed_id: null
+    });
+
+    const topicSignal = signals.find((signal) => signal.signal === 'topic_affinity');
+    const tagSignal = signals.find((signal) => signal.signal === 'tag_match_ratio');
+    expect(topicSignal?.isDataBacked).toBe(true);
+    expect(tagSignal).toMatchObject({
+      rawValue: 1,
+      normalizedValue: 1,
       isDataBacked: true
     });
   });

@@ -101,7 +101,7 @@ function extractContentFreshness(publishedAt: number | null): SignalResult {
 
 function extractContentDepth(contentText: string | null): SignalResult {
   if (!contentText) {
-    return { signal: 'content_depth', rawValue: 0, normalizedValue: 0, isDataBacked: false };
+    return { signal: 'content_depth', rawValue: 0, normalizedValue: 0.5, isDataBacked: false };
   }
 
   const wordCount = contentText.split(/\s+/).filter(Boolean).length;
@@ -152,7 +152,7 @@ async function extractTagMatchRatio(db: Db, articleId: string): Promise<SignalRe
   );
 
   if (tags.length === 0) {
-    return { signal: 'tag_match_ratio', rawValue: 0, normalizedValue: 0, isDataBacked: false };
+    return { signal: 'tag_match_ratio', rawValue: 0, normalizedValue: 0.5, isDataBacked: false };
   }
 
   const placeholders = tags.map(() => '?').join(',');

@@ -219,8 +219,8 @@
     const article = findMergedArticle(reactionDialogArticleId);
     const articleId = reactionDialogArticleId;
     const feedId = article?.source_feed_id ?? null;
-    closeReactionDialog();
     void reactToArticle(articleId, reactionDialogValue, feedId, reasonCodes);
+    closeReactionDialog();
   };
 
   const setReadState = async (articleId, isRead) => {

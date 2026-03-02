@@ -118,6 +118,7 @@ describe('Articles page reactivity', () => {
   it('saves an empty reason list when the user skips the dialog', async () => {
     render(ArticlesPage, { data: createData() });
 
+    const downButton = screen.getByRole('button', { name: 'Thumbs down feed' });
     await fireEvent.click(screen.getByRole('button', { name: 'Thumbs down feed' }));
     const dialog = screen.getByRole('dialog', { name: "Why didn't this work for you?" });
     await fireEvent.click(within(dialog).getByRole('button', { name: 'Skip' }));
@@ -134,6 +135,7 @@ describe('Articles page reactivity', () => {
           })
         })
       );
+      expect(downButton.classList.contains('active')).toBe(true);
     });
   });
 

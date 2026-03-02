@@ -34,6 +34,39 @@ export const GET = async ({ platform, request }) => {
       let lastMutationAt = 0;
       let tickCount = 0;
       let totalTickDurationMs = 0;
+      let timer: ReturnType<typeof setInterval> | null = null;
+      let timeout: ReturnType<typeof setTimeout> | null = null;
+
+      const close = () => {
+        if (stopped) return;
+        stopped = true;
+        if (timer) clearInterval(timer);
+        if (timeout) clearTimeout(timeout);
+        try {
+          controller.close();
+        } catch {
+          // Ignore stream close races.
+        }
+        if (tickCount > 0) {
+          logInfo('events.stream.closed', {
+            poll_ms: pollMs,
+            ticks: tickCount,
+            avg_tick_ms: Math.round(totalTickDurationMs / tickCount)
+          });
+        }
+      };
+
+      const safeEnqueue = (event: string, data: unknown) => {
+        if (stopped) return false;
+        try {
+          controller.enqueue(sseEvent(event, data));
+          return true;
+        } catch {
+          close();
+          return false;
+        }
+      };
+
       const sendSnapshot = async () => {
         if (stopped || inFlight) return;
         inFlight = true;
@@ -72,22 +105,22 @@ export const GET = async ({ platform, request }) => {
           };
 
           if (eventsV2Enabled) {
-            controller.enqueue(
-              sseEvent('pull.status', {
+            if (
+              !safeEnqueue('pull.status', {
                 type: 'pull.status',
                 ts,
                 throttled,
                 pull: pullPayload
               })
-            );
-            controller.enqueue(
-              sseEvent('jobs.counts', {
+            ) return;
+            if (
+              !safeEnqueue('jobs.counts', {
                 type: 'jobs.counts',
                 ts,
                 throttled,
                 jobs: jobsPayload
               })
-            );
+            ) return;
 
             const latestMutation = await dbGet<{ article_id: string | null; mutated_at: number | null }>(
               db,
@@ -110,8 +143,8 @@ export const GET = async ({ platform, request }) => {
             );
             if (latestMutation?.article_id && Number(latestMutation.mutated_at ?? 0) > lastMutationAt) {
               lastMutationAt = Number(latestMutation.mutated_at);
-              controller.enqueue(
-                sseEvent('article.mutated', {
+              if (
+                !safeEnqueue('article.mutated', {
                   type: 'article.mutated',
                   ts,
                   throttled,
@@ -121,24 +154,20 @@ export const GET = async ({ platform, request }) => {
                     mutated_at: lastMutationAt
                   }
                 })
-              );
+              ) return;
             }
           }
 
-          controller.enqueue(
-            sseEvent('state', {
-              ts,
-              throttled,
-              pull: pullPayload,
-              jobs: jobsPayload
-            })
-          );
+          safeEnqueue('state', {
+            ts,
+            throttled,
+            pull: pullPayload,
+            jobs: jobsPayload
+          });
         } catch (error) {
-          controller.enqueue(
-            sseEvent('error', {
-              message: error instanceof Error ? error.message : 'SSE refresh failed'
-            })
-          );
+          safeEnqueue('error', {
+            message: error instanceof Error ? error.message : 'SSE refresh failed'
+          });
         } finally {
           tickCount += 1;
           totalTickDurationMs += Date.now() - tickStartedAt;
@@ -147,31 +176,12 @@ export const GET = async ({ platform, request }) => {
       };
 
       void sendSnapshot();
-      const timer = setInterval(() => {
+      timer = setInterval(() => {
         void sendSnapshot();
       }, pollMs);
-      const timeout = setTimeout(() => {
+      timeout = setTimeout(() => {
         close();
       }, STREAM_MAX_MS);
-
-      const close = () => {
-        if (stopped) return;
-        stopped = true;
-        clearInterval(timer);
-        clearTimeout(timeout);
-        try {
-          controller.close();
-        } catch {
-          // Ignore stream close races.
-        }
-        if (tickCount > 0) {
-          logInfo('events.stream.closed', {
-            poll_ms: pollMs,
-            ticks: tickCount,
-            avg_tick_ms: Math.round(totalTickDurationMs / tickCount)
-          });
-        }
-      };
 
       request.signal.addEventListener('abort', close);
     }

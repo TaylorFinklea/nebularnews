@@ -138,9 +138,11 @@
   }
 
   h1 {
-    font-size: var(--text-3xl);
+    font-size: 2.6rem;
+    font-weight: 700;
     margin: 0 0 var(--space-2);
-    line-height: 1.2;
+    line-height: var(--leading-tight);
+    letter-spacing: var(--tracking-tight);
   }
 
   .meta-row {
@@ -164,7 +166,7 @@
     gap: 0.35rem;
     background: var(--button-bg);
     color: var(--button-text);
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-md);
     padding: 0.48rem 0.95rem;
     font-size: var(--text-sm);
     font-weight: 500;
@@ -194,6 +196,8 @@
     display: grid;
     gap: var(--space-2);
     margin-bottom: var(--space-5);
+    backdrop-filter: blur(var(--blur-md));
+    -webkit-backdrop-filter: blur(var(--blur-md));
   }
 
   .learning-banner {
@@ -206,7 +210,7 @@
     gap: 0.45rem;
     font-size: var(--text-lg);
     color: var(--primary);
-    font-weight: 600;
+    font-weight: 700;
   }
 
   .score-reason {

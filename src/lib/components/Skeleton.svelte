@@ -24,10 +24,10 @@
     background: linear-gradient(
       90deg,
       transparent,
-      rgba(255, 255, 255, 0.04),
+      rgba(200, 210, 255, 0.03),
       transparent
     );
-    animation: shimmer 1.5s infinite;
+    animation: shimmer 2s infinite;
   }
 
   :global(:root[data-theme='light']) .shimmer {

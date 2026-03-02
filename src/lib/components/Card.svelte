@@ -11,13 +11,20 @@
 
 <style>
   .card {
-    padding: var(--space-5);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-sm);
+    padding: var(--space-6);
+    border-radius: var(--radius-xl);
+    box-shadow: none;
     border: 1px solid var(--surface-border);
+    backdrop-filter: blur(var(--blur-md));
+    -webkit-backdrop-filter: blur(var(--blur-md));
     display: grid;
-    gap: var(--space-3);
+    gap: var(--space-4);
     align-content: start;
+    transition: box-shadow var(--transition-normal);
+  }
+
+  .card:hover {
+    box-shadow: var(--shadow-md);
   }
   .card-strong {
     background: var(--surface-strong);

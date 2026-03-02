@@ -138,8 +138,9 @@
     top: 0;
     height: 100vh;
     border-right: 1px solid var(--surface-border);
-    background: var(--surface);
-    backdrop-filter: blur(12px);
+    background: var(--surface-strong);
+    backdrop-filter: blur(var(--blur-lg));
+    -webkit-backdrop-filter: blur(var(--blur-lg));
     overflow: hidden;
   }
 
@@ -162,10 +163,10 @@
   }
 
   .nav-panel {
-    background: color-mix(in srgb, var(--surface-soft) 65%, transparent);
-    border: 1px solid color-mix(in srgb, var(--surface-border) 80%, transparent);
-    border-radius: var(--radius-lg);
-    padding: var(--space-2);
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    padding: 0;
   }
 
   /* ── Brand ── */
@@ -200,16 +201,16 @@
     display: inline-flex;
     align-items: baseline;
     gap: 0.35rem;
-    font-family: 'Space Grotesk', system-ui, sans-serif;
-    font-size: 1.35rem;
-    letter-spacing: 0.02em;
+    font-family: var(--font-body);
+    font-size: 1.3rem;
+    letter-spacing: 0;
     white-space: nowrap;
     opacity: 1;
     transition: opacity 0.2s ease 0.05s;
   }
 
   .brand-mark {
-    font-weight: 600;
+    font-weight: 700;
   }
 
   .brand-accent {
@@ -229,13 +230,13 @@
   }
 
   .block-label {
-    font-size: var(--text-xs);
-    letter-spacing: 0.08em;
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--muted-text);
     padding: 0 var(--space-2);
     white-space: nowrap;
-    opacity: 1;
+    opacity: 0.7;
     transition: opacity 0.12s ease;
   }
 
@@ -273,8 +274,8 @@
     left: 0;
     top: 6px;
     bottom: 6px;
-    width: 3px;
-    border-radius: 0 3px 3px 0;
+    width: 2px;
+    border-radius: 0 2px 2px 0;
     background: var(--primary);
     opacity: 0;
     transform: scaleY(0.4);
@@ -289,7 +290,7 @@
   }
 
   .nav-link.active {
-    color: var(--primary);
+    color: var(--text-color);
     background: var(--primary-soft);
     font-weight: 500;
   }

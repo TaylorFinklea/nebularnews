@@ -151,7 +151,8 @@
     padding: var(--space-1) var(--space-2) calc(var(--space-1) + env(safe-area-inset-bottom));
     border-top: 1px solid var(--surface-border);
     background: var(--surface-strong);
-    backdrop-filter: blur(14px);
+    backdrop-filter: blur(var(--blur-lg));
+    -webkit-backdrop-filter: blur(var(--blur-lg));
     height: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom));
     box-sizing: border-box;
   }
@@ -193,7 +194,7 @@
     top: 0;
     left: 25%;
     right: 25%;
-    height: 2.5px;
+    height: 2px;
     border-radius: 0 0 2px 2px;
     background: var(--primary);
     opacity: 0;
@@ -204,7 +205,7 @@
   }
 
   .rail-link.active {
-    color: var(--primary);
+    color: var(--text-color);
   }
 
   .rail-link.active::before {
@@ -238,7 +239,8 @@
     border: 1px solid var(--surface-border);
     border-radius: var(--radius-lg);
     background: var(--surface-strong);
-    backdrop-filter: blur(16px);
+    backdrop-filter: blur(var(--blur-lg));
+    -webkit-backdrop-filter: blur(var(--blur-lg));
     box-shadow: var(--shadow-lg);
     padding: var(--space-3) var(--space-4) var(--space-4);
     display: grid;
@@ -290,7 +292,7 @@
   }
 
   .sheet-link.active {
-    color: var(--primary);
+    color: var(--text-color);
     font-weight: 500;
   }
 

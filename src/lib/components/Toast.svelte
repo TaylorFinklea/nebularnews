@@ -49,14 +49,17 @@
 
   .toast {
     pointer-events: auto;
-    padding: 0.7rem 0.9rem;
-    border-radius: var(--radius-md);
-    backdrop-filter: blur(12px);
+    padding: 0.65rem 0.85rem;
+    border-radius: var(--radius-lg);
+    backdrop-filter: blur(var(--blur-lg));
+    -webkit-backdrop-filter: blur(var(--blur-lg));
+    background: var(--surface-strong);
+    border: 1px solid var(--surface-border);
     display: flex;
     align-items: center;
     gap: var(--space-3);
     font-size: var(--text-sm);
-    box-shadow: var(--shadow-md);
+    box-shadow: var(--shadow-lg);
   }
 
   .toast-info {
@@ -65,14 +68,13 @@
   }
 
   .toast-success {
-    background: var(--surface-strong);
-    color: #91f0cd;
-    border-color: rgba(114, 236, 200, 0.3);
+    color: #7aded0;
+    border-color: rgba(90, 200, 170, 0.2);
   }
 
   :global(:root[data-theme='light']) .toast-success {
     color: #0f8a65;
-    border-color: rgba(22, 163, 120, 0.3);
+    border-color: rgba(22, 163, 120, 0.2);
   }
 
   .toast-error {
@@ -99,7 +101,7 @@
     background: transparent;
     border: none;
     color: var(--primary);
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-sm);
     padding: 0.2rem 0.55rem;
     font-size: var(--text-xs);
     font-weight: 500;

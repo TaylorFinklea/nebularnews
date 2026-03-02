@@ -29,8 +29,9 @@
   .article-text {
     display: grid;
     gap: 0.85rem;
-    line-height: 1.75;
+    line-height: var(--leading-relaxed);
     color: var(--text-color);
+    max-width: 65ch;
   }
 
   .article-paragraph { margin: 0; }
@@ -45,7 +46,7 @@
   .article-heading {
     margin: 0.25rem 0 0;
     font-size: 1.05rem;
-    font-weight: 600;
+    font-weight: 700;
   }
 
   .muted { color: var(--muted-text); margin: 0; }

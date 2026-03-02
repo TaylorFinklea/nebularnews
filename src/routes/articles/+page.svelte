@@ -704,7 +704,7 @@
     gap: 0.4rem;
     background: var(--surface-strong);
     border: none;
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-md);
     padding: 0.45rem 0.9rem;
     font-family: inherit;
     font-size: var(--text-sm);
@@ -765,6 +765,8 @@
     margin-bottom: var(--space-5);
     display: grid;
     gap: var(--space-5);
+    backdrop-filter: blur(var(--blur-md));
+    -webkit-backdrop-filter: blur(var(--blur-md));
   }
 
   .filter-row {
@@ -831,7 +833,7 @@
     font-size: var(--text-sm);
     cursor: pointer;
     padding: 0.2rem 0.5rem;
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-sm);
     background: var(--surface-soft);
   }
 
@@ -849,7 +851,7 @@
     font-size: var(--text-sm);
     cursor: pointer;
     padding: 0.2rem 0.5rem;
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-sm);
     background: var(--surface-soft);
   }
 
@@ -859,7 +861,7 @@
     background: var(--surface-soft);
     border: none;
     color: var(--ghost-color);
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-sm);
     padding: 0.18rem 0.55rem;
     font-size: var(--text-xs);
     cursor: pointer;
@@ -882,16 +884,17 @@
   .card {
     background: var(--surface-strong);
     border-radius: var(--radius-xl);
-    box-shadow: var(--shadow-sm);
+    box-shadow: none;
     display: grid;
     gap: var(--space-4);
     align-items: start;
-    transition: box-shadow var(--transition-fast);
+    transition: box-shadow var(--transition-normal), transform var(--transition-fast);
     overflow: hidden;
   }
 
   .card:hover {
-    box-shadow: var(--shadow-lg, 0 20px 40px var(--shadow-color));
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
   }
 
   .card.layout-split {
@@ -1002,11 +1005,11 @@
     display: inline-flex;
     align-items: center;
     gap: 0.3rem;
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-sm);
     background: var(--surface-soft);
     color: var(--muted-text);
-    padding: 0.26rem 0.58rem;
-    font-size: 0.75rem;
+    padding: 0.22rem 0.5rem;
+    font-size: 0.7rem;
     font-weight: 500;
     line-height: 1;
   }
@@ -1018,28 +1021,28 @@
   }
 
   .fit-pill.fit-1 {
-    color: #fca5a5;
-    background: rgba(252, 165, 165, 0.12);
+    color: #e8a0a0;
+    background: rgba(232, 160, 160, 0.10);
   }
 
   .fit-pill.fit-2 {
-    color: #fdba74;
-    background: rgba(253, 186, 116, 0.12);
+    color: #e0b080;
+    background: rgba(224, 176, 128, 0.10);
   }
 
   .fit-pill.fit-3 {
-    color: #c4b5fd;
-    background: rgba(196, 181, 253, 0.14);
+    color: #b8aae8;
+    background: rgba(184, 170, 232, 0.10);
   }
 
   .fit-pill.fit-4 {
-    color: #67e8f9;
-    background: rgba(103, 232, 249, 0.14);
+    color: #70d0e0;
+    background: rgba(112, 208, 224, 0.10);
   }
 
   .fit-pill.fit-5 {
-    color: #86efac;
-    background: rgba(134, 239, 172, 0.14);
+    color: #7aded0;
+    background: rgba(122, 222, 208, 0.10);
   }
 
   .card-meta {
@@ -1064,9 +1067,9 @@
 
   .tag-chip {
     background: var(--surface-soft);
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-sm);
     padding: 0.15rem 0.5rem;
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     color: var(--muted-text);
   }
 
@@ -1080,10 +1083,10 @@
     display: inline-flex;
     align-items: center;
     gap: 0.2rem;
-    border-radius: var(--radius-full);
-    background: color-mix(in srgb, #4ade80 18%, transparent);
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, #4ade80 14%, transparent);
     padding: 0.12rem 0.3rem 0.12rem 0.52rem;
-    font-size: 0.75rem;
+    font-size: 0.7rem;
     color: var(--text-color);
   }
 

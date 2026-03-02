@@ -419,7 +419,7 @@
 
   .count {
     background: var(--surface-soft);
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-sm);
     padding: 0.1rem 0.55rem;
     font-size: var(--text-sm);
     color: var(--muted-text);

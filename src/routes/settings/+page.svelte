@@ -2035,7 +2035,7 @@
 
   .unsaved-badge {
     width: fit-content;
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-sm);
     padding: 0.25rem 0.7rem;
     font-size: var(--text-xs);
     color: var(--primary);
@@ -2100,7 +2100,7 @@
   }
 
   .shortcut-badge {
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-sm);
     padding: 0.12rem 0.45rem;
     background: var(--primary-soft);
     color: var(--primary);
@@ -2266,7 +2266,7 @@
   .lane-toggle {
     display: inline-grid;
     grid-template-columns: 1fr 1fr;
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-md);
     padding: 0.2rem;
     background: var(--surface-soft);
     max-width: 22rem;
@@ -2277,7 +2277,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-sm);
     padding: 0.4rem 0.75rem;
     cursor: pointer;
     font-weight: 500;
@@ -2406,7 +2406,7 @@
 
   .maintenance-value {
     font-size: var(--text-2xl);
-    font-weight: 600;
+    font-weight: 700;
     line-height: 1.1;
     margin-top: 0.15rem;
   }

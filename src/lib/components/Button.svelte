@@ -24,15 +24,17 @@
 
 <style>
   .btn {
-    font-family: inherit;
-    font-size: var(--text-base);
+    font-family: var(--font-body);
+    font-size: var(--text-sm);
+    font-weight: 500;
     border: none;
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-md);
     cursor: pointer;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.35rem;
+    gap: 0.4rem;
+    letter-spacing: 0.01em;
     transition:
       background var(--transition-fast),
       transform var(--transition-fast),
@@ -46,20 +48,24 @@
   }
 
   .btn:not(:disabled):active {
-    transform: scale(0.97);
+    transform: scale(0.98);
   }
 
   /* Variants */
   .btn-primary {
     background: var(--button-bg);
     color: var(--button-text);
-    font-weight: 500;
+  }
+
+  .btn-primary:not(:disabled):hover {
+    box-shadow: 0 2px 12px rgba(124, 106, 239, 0.25);
   }
 
   .btn-ghost {
     background: transparent;
     color: var(--ghost-color);
     border: 1px solid var(--ghost-border);
+    border-radius: var(--radius-md);
   }
 
   .btn-ghost:not(:disabled):hover {
@@ -73,22 +79,23 @@
   }
 
   .btn-danger:not(:disabled):hover {
-    background: rgba(255, 110, 150, 0.12);
+    background: rgba(255, 110, 150, 0.10);
   }
 
   /* Sizes */
   .btn-default {
-    padding: 0.6rem 1rem;
+    padding: 0.55rem 1.1rem;
   }
 
   .btn-icon {
     width: 2.2rem;
     height: 2.2rem;
     padding: 0;
+    border-radius: var(--radius-md);
   }
 
   .btn-inline {
-    padding: 0.5rem 0.9rem;
+    padding: 0.45rem 0.85rem;
     width: fit-content;
   }
 </style>

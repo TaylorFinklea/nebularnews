@@ -449,7 +449,7 @@
 
   .stat-val {
     font-size: var(--text-2xl);
-    font-weight: 600;
+    font-weight: 700;
     color: var(--primary);
     line-height: 1;
   }
@@ -501,7 +501,7 @@
     align-items: center;
     gap: 0.35rem;
     padding: 0.3rem 0.75rem;
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-sm);
     background: var(--surface-soft);
     text-transform: capitalize;
     font-size: var(--text-sm);

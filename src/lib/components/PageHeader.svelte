@@ -25,19 +25,22 @@
     justify-content: space-between;
     align-items: flex-start;
     gap: var(--space-4);
-    margin-bottom: var(--space-6);
+    margin-bottom: var(--space-8);
   }
 
   h1 {
     font-size: var(--text-3xl);
-    font-weight: 600;
+    font-weight: 700;
     margin: 0 0 var(--space-2);
-    line-height: 1.2;
+    line-height: var(--leading-tight);
+    letter-spacing: var(--tracking-tight);
   }
 
   .description {
     color: var(--muted-text);
     margin: 0;
+    font-size: var(--text-base);
+    line-height: var(--leading-normal);
   }
 
   .page-header-actions {

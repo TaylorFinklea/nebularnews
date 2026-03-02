@@ -105,7 +105,7 @@
 
   .bubble {
     padding: 0.6rem 0.9rem;
-    border-radius: 14px;
+    border-radius: var(--radius-lg);
     max-width: 80%;
     line-height: 1.5;
     word-break: break-word;
@@ -115,11 +115,14 @@
     justify-self: end;
     background: var(--button-bg);
     color: var(--button-text);
+    border-radius: var(--radius-lg) var(--radius-lg) 4px var(--radius-lg);
   }
 
   .bubble.assistant {
     justify-self: start;
     background: var(--surface-strong);
+    border: 1px solid var(--surface-border);
+    border-radius: var(--radius-lg) var(--radius-lg) var(--radius-lg) 4px;
   }
 
   .bubble.thinking {
@@ -173,7 +176,7 @@
     height: 2.2rem;
     padding: 0;
     border: none;
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-md);
     background: var(--button-bg);
     color: var(--button-text);
     cursor: pointer;

@@ -84,7 +84,7 @@
   h3 {
     margin: 0;
     font-size: var(--text-base);
-    font-weight: 600;
+    font-weight: 700;
   }
 
   .chevron {

@@ -76,7 +76,7 @@
     justify-content: center;
     min-width: 3rem;
     border: none;
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-md);
     padding: 0.25rem 0.7rem;
     color: var(--ghost-color);
     background: var(--surface-soft);

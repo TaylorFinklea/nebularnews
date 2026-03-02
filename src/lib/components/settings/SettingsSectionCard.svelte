@@ -86,10 +86,11 @@
   h2 {
     margin: 0;
     font-size: var(--text-xl);
+    font-weight: 700;
   }
 
   .dirty-badge {
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-sm);
     padding: 0.18rem 0.6rem;
     background: var(--primary-soft);
     color: var(--primary);

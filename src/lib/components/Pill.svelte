@@ -11,11 +11,12 @@
   .pill {
     display: inline-flex;
     align-items: center;
-    gap: 0.3rem;
-    padding: 0.2rem 0.55rem;
-    border-radius: var(--radius-full);
-    font-size: var(--text-xs);
+    gap: 0.25rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.7rem;
     font-weight: 500;
+    letter-spacing: 0.02em;
     white-space: nowrap;
   }
 
@@ -25,32 +26,32 @@
   }
 
   .pill-success {
-    background: rgba(114, 236, 200, 0.18);
-    color: #91f0cd;
+    background: rgba(90, 200, 170, 0.10);
+    color: #7aded0;
   }
 
   :global(:root[data-theme='light']) .pill-success {
-    background: rgba(22, 163, 120, 0.14);
+    background: rgba(22, 163, 120, 0.10);
     color: #0f8a65;
   }
 
   .pill-warning {
-    background: rgba(255, 110, 150, 0.2);
-    color: #ff9dbc;
+    background: rgba(220, 90, 130, 0.10);
+    color: #e8889e;
   }
 
   :global(:root[data-theme='light']) .pill-warning {
-    background: rgba(200, 50, 90, 0.12);
-    color: #c12f5d;
+    background: rgba(200, 50, 90, 0.10);
+    color: #b82850;
   }
 
   .pill-info {
-    background: rgba(88, 174, 255, 0.2);
-    color: #72c3ff;
+    background: rgba(70, 150, 230, 0.10);
+    color: #6ab0e8;
   }
 
   :global(:root[data-theme='light']) .pill-info {
-    background: rgba(30, 120, 220, 0.14);
+    background: rgba(30, 120, 220, 0.10);
     color: #1a6fba;
   }
 
@@ -60,17 +61,17 @@
   }
 
   .pill-running {
-    background: rgba(88, 174, 255, 0.2);
-    color: #72c3ff;
+    background: rgba(70, 150, 230, 0.10);
+    color: #6ab0e8;
   }
 
   :global(:root[data-theme='light']) .pill-running {
-    background: rgba(30, 120, 220, 0.14);
+    background: rgba(30, 120, 220, 0.10);
     color: #1a6fba;
   }
 
   .pill-cancelled {
-    background: rgba(130, 142, 190, 0.2);
+    background: rgba(130, 142, 190, 0.12);
     color: var(--muted-text);
   }
 </style>

@@ -410,8 +410,8 @@
 <style>
   .article-layout {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 340px;
-    gap: var(--space-6);
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: var(--space-8);
     align-items: start;
   }
 

@@ -279,7 +279,7 @@
 
   .count {
     background: var(--surface-soft);
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-sm);
     padding: 0.1rem 0.55rem;
     font-size: var(--text-sm);
     color: var(--muted-text);
@@ -301,7 +301,7 @@
     gap: 0.35rem;
     background: var(--button-bg);
     color: var(--button-text);
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-md);
     padding: 0.5rem 1rem;
     font-size: var(--text-sm);
     font-weight: 500;

@@ -287,7 +287,7 @@
     align-items: center;
     gap: 0.3rem;
     background: var(--surface-soft);
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-sm);
     padding: 0.2rem 0.55rem;
     font-size: var(--text-xs);
     font-weight: 500;
@@ -345,7 +345,7 @@
     align-items: center;
     gap: 0.3rem;
     background: var(--surface-soft);
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-sm);
     padding: 0.25rem 0.6rem;
     font-size: var(--text-sm);
     cursor: pointer;
@@ -361,7 +361,7 @@
   .tag-ai {
     font-size: 0.68rem;
     color: var(--muted-text);
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-sm);
     background: var(--surface-soft);
     padding: 0 0.3rem;
   }
@@ -376,8 +376,8 @@
     display: inline-flex;
     align-items: center;
     gap: 0.2rem;
-    background: color-mix(in srgb, #4ade80 20%, transparent);
-    border-radius: var(--radius-full);
+    background: color-mix(in srgb, #4ade80 14%, transparent);
+    border-radius: var(--radius-sm);
     padding: 0.2rem 0.35rem 0.2rem 0.6rem;
     font-size: var(--text-sm);
     color: var(--text-color);
@@ -448,7 +448,7 @@
 
   .score-num {
     font-size: 2rem;
-    font-weight: 600;
+    font-weight: 700;
     color: var(--primary);
     line-height: 1;
   }

@@ -174,7 +174,7 @@
     border: 1px solid var(--surface-border);
     background: var(--surface-soft);
     color: var(--text-color);
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-sm);
     padding: 0.55rem 0.8rem;
     font: inherit;
     cursor: pointer;

@@ -483,19 +483,22 @@
   .hero-utility {
     background: var(--surface);
     border-radius: var(--radius-xl);
-    padding: var(--space-5) var(--space-6);
+    padding: var(--space-6) var(--space-8);
     display: flex;
     justify-content: space-between;
     align-items: center;
     gap: var(--space-5);
     margin-bottom: var(--space-6);
+    backdrop-filter: blur(var(--blur-md));
+    -webkit-backdrop-filter: blur(var(--blur-md));
   }
 
   h1 {
     font-size: 2.2rem;
-    font-weight: 600;
+    font-weight: 700;
     margin: 0 0 var(--space-2);
-    line-height: 1.08;
+    line-height: var(--leading-tight);
+    letter-spacing: var(--tracking-tight);
   }
 
   .hero-desc {
@@ -536,7 +539,7 @@
   }
 
   .live-badge.live {
-    color: #91f0cd;
+    color: #7aded0;
   }
 
   .reading-queue {
@@ -557,7 +560,7 @@
   .section-head h2 {
     margin: 0;
     font-size: var(--text-lg);
-    font-weight: 600;
+    font-weight: 700;
   }
 
   .view-all {
@@ -585,6 +588,12 @@
     overflow: hidden;
     display: grid;
     grid-template-columns: 180px 1fr;
+    transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+  }
+
+  .queue-card:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
   }
 
   .card-img-wrap {
@@ -629,11 +638,11 @@
     display: inline-flex;
     align-items: center;
     gap: 0.3rem;
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-sm);
     background: var(--surface-soft);
     color: var(--muted-text);
-    padding: 0.26rem 0.58rem;
-    font-size: 0.75rem;
+    padding: 0.22rem 0.5rem;
+    font-size: 0.7rem;
     font-weight: 500;
     line-height: 1;
     flex-shrink: 0;
@@ -646,28 +655,28 @@
   }
 
   .fit-pill.fit-1 {
-    color: #fca5a5;
-    background: rgba(252, 165, 165, 0.12);
+    color: #e8a0a0;
+    background: rgba(232, 160, 160, 0.10);
   }
 
   .fit-pill.fit-2 {
-    color: #fdba74;
-    background: rgba(253, 186, 116, 0.12);
+    color: #e0b080;
+    background: rgba(224, 176, 128, 0.10);
   }
 
   .fit-pill.fit-3 {
-    color: #c4b5fd;
-    background: rgba(196, 181, 253, 0.14);
+    color: #b8aae8;
+    background: rgba(184, 170, 232, 0.10);
   }
 
   .fit-pill.fit-4 {
-    color: #67e8f9;
-    background: rgba(103, 232, 249, 0.14);
+    color: #70d0e0;
+    background: rgba(112, 208, 224, 0.10);
   }
 
   .fit-pill.fit-5 {
-    color: #86efac;
-    background: rgba(134, 239, 172, 0.14);
+    color: #7aded0;
+    background: rgba(122, 222, 208, 0.10);
   }
 
   .reason-row {
@@ -676,10 +685,10 @@
   }
 
   .reason-chip {
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-sm);
     background: var(--surface-soft);
     color: var(--muted-text);
-    font-size: 0.72rem;
+    font-size: 0.68rem;
     font-weight: 600;
     letter-spacing: 0.03em;
     text-transform: uppercase;
@@ -687,8 +696,8 @@
   }
 
   .reason-chip.high {
-    color: #86efac;
-    background: rgba(134, 239, 172, 0.12);
+    color: #7aded0;
+    background: rgba(122, 222, 208, 0.10);
   }
 
   .card-excerpt {
@@ -734,7 +743,7 @@
     border: none;
     background: var(--surface-soft);
     color: var(--ghost-color);
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-md);
     padding: 0.35rem 0.75rem;
     font-family: inherit;
     font-size: var(--text-sm);
@@ -767,7 +776,7 @@
   .empty-actions a,
   .empty-actions button {
     border: none;
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-md);
     background: var(--surface-soft);
     color: var(--text-color);
     padding: 0.38rem 0.78rem;
@@ -808,13 +817,14 @@
   }
 
   .momentum-card.is-link:hover {
+    transform: translateY(-1px);
     box-shadow: var(--shadow-md);
   }
 
   .momentum-num {
-    font-size: 1.7rem;
+    font-size: 2rem;
     line-height: 1;
-    font-weight: 600;
+    font-weight: 700;
     color: var(--primary);
   }
 
@@ -833,7 +843,7 @@
   .quick-links a {
     border: none;
     background: var(--surface-soft);
-    border-radius: var(--radius-full);
+    border-radius: var(--radius-md);
     padding: 0.35rem 0.78rem;
     text-decoration: none;
     font-size: var(--text-sm);

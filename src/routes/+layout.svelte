@@ -80,7 +80,7 @@
   <link rel="icon" href="/nebularnews-logo-tight.svg" type="image/svg+xml" />
   <link
     rel="stylesheet"
-    href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap"
   />
   <script>
     (() => {
@@ -115,7 +115,7 @@
   <div class="main-column" class:with-mobile-nav={!isLoginRoute}>
     <main class="content">
       {#key currentPath}
-        <div in:fade={{ duration: 120, delay: 40 }}>
+        <div in:fade={{ duration: 150, delay: 60 }}>
           <slot />
         </div>
       {/key}
@@ -133,72 +133,86 @@
   :global(:root) {
     --mobile-nav-height: 64px;
     --mobile-nav-offset: 12px;
-    --bg-gradient-start: #050915;
-    --bg-gradient-mid: #0b1638;
-    --bg-gradient-end: #1a1640;
-    --nebula-a: rgba(120, 95, 255, 0.28);
-    --nebula-b: rgba(53, 147, 255, 0.22);
-    --text-color: #ecf0ff;
-    --muted-text: rgba(225, 232, 255, 0.72);
-    --surface: rgba(14, 22, 52, 0.78);
-    --surface-strong: rgba(10, 16, 40, 0.88);
-    --surface-soft: rgba(20, 28, 60, 0.7);
-    --surface-border: rgba(149, 164, 255, 0.10);
-    --shadow-color: rgba(2, 6, 24, 0.45);
-    --primary: #9a8bff;
-    --primary-strong: #8573ff;
-    --primary-soft: rgba(154, 139, 255, 0.2);
-    --primary-contrast: #f6f8ff;
+    --bg-gradient-start: #030711;
+    --bg-gradient-mid: #080e24;
+    --bg-gradient-end: #110d2e;
+    --nebula-a: rgba(99, 72, 255, 0.18);
+    --nebula-b: rgba(40, 100, 200, 0.12);
+    --text-color: #e8ecf4;
+    --muted-text: rgba(200, 210, 235, 0.58);
+    --surface: rgba(10, 14, 36, 0.72);
+    --surface-strong: rgba(8, 11, 28, 0.85);
+    --surface-soft: rgba(16, 20, 48, 0.55);
+    --surface-border: rgba(120, 130, 200, 0.07);
+    --shadow-color: rgba(0, 2, 12, 0.5);
+    --primary: #7c6aef;
+    --primary-strong: #6b57e8;
+    --primary-soft: rgba(124, 106, 239, 0.12);
+    --primary-contrast: #f4f5ff;
     --button-bg: var(--primary);
-    --button-text: #f6f8ff;
-    --ghost-color: #b5a7ff;
-    --ghost-border: rgba(154, 139, 255, 0.42);
-    --input-bg: rgba(8, 13, 34, 0.7);
-    --input-border: rgba(149, 164, 255, 0.26);
-    --danger: #ff8ca1;
+    --button-text: #f4f5ff;
+    --ghost-color: #a598f0;
+    --ghost-border: rgba(124, 106, 239, 0.28);
+    --input-bg: rgba(6, 8, 22, 0.6);
+    --input-border: rgba(120, 130, 200, 0.15);
+    --danger: #f47a94;
   }
 
   :global(:root[data-theme='light']) {
-    --bg-gradient-start: #f6f8ff;
-    --bg-gradient-mid: #e9ecff;
-    --bg-gradient-end: #dde4ff;
-    --nebula-a: rgba(129, 107, 255, 0.2);
-    --nebula-b: rgba(80, 179, 255, 0.18);
-    --text-color: #171e41;
-    --muted-text: rgba(22, 30, 65, 0.66);
-    --surface: rgba(255, 255, 255, 0.92);
-    --surface-strong: rgba(255, 255, 255, 0.96);
-    --surface-soft: rgba(244, 247, 255, 0.90);
-    --surface-border: rgba(98, 112, 191, 0.10);
-    --shadow-color: rgba(35, 49, 122, 0.16);
-    --primary: #6351ef;
-    --primary-strong: #5442d8;
-    --primary-soft: rgba(99, 81, 239, 0.14);
-    --primary-contrast: #f8f9ff;
+    --bg-gradient-start: #f8f7fc;
+    --bg-gradient-mid: #eee9f8;
+    --bg-gradient-end: #e4ddf5;
+    --nebula-a: rgba(110, 80, 220, 0.10);
+    --nebula-b: rgba(60, 140, 220, 0.08);
+    --text-color: #1a1430;
+    --muted-text: rgba(26, 20, 48, 0.52);
+    --surface: rgba(255, 255, 255, 0.88);
+    --surface-strong: rgba(255, 255, 255, 0.94);
+    --surface-soft: rgba(246, 242, 255, 0.85);
+    --surface-border: rgba(80, 60, 150, 0.06);
+    --shadow-color: rgba(40, 20, 100, 0.10);
+    --primary: #5a3ed6;
+    --primary-strong: #4c30c4;
+    --primary-soft: rgba(90, 62, 214, 0.08);
+    --primary-contrast: #faf9ff;
     --button-bg: var(--primary);
-    --button-text: #f8f9ff;
-    --ghost-color: #5543da;
-    --ghost-border: rgba(86, 67, 218, 0.35);
-    --input-bg: rgba(255, 255, 255, 0.84);
-    --input-border: rgba(93, 107, 187, 0.34);
-    --danger: #c12f5d;
+    --button-text: #faf9ff;
+    --ghost-color: #4a36b8;
+    --ghost-border: rgba(74, 54, 184, 0.20);
+    --input-bg: rgba(255, 255, 255, 0.78);
+    --input-border: rgba(80, 60, 150, 0.16);
+    --danger: #b82850;
   }
 
   :global(body) {
     margin: 0;
-    font-family: 'Space Grotesk', system-ui, sans-serif;
-    background:
-      radial-gradient(1200px 620px at 8% -10%, var(--nebula-a), transparent 62%),
-      radial-gradient(950px 560px at 95% 0%, var(--nebula-b), transparent 60%),
-      linear-gradient(160deg, var(--bg-gradient-start), var(--bg-gradient-mid) 45%, var(--bg-gradient-end));
+    font-family: var(--font-body);
     color: var(--text-color);
     min-height: 100vh;
+    background-color: var(--bg-gradient-start);
+    background-image:
+      radial-gradient(1px 1px at 20% 30%, rgba(200, 210, 255, 0.15), transparent),
+      radial-gradient(1px 1px at 80% 10%, rgba(200, 210, 255, 0.12), transparent),
+      radial-gradient(1.5px 1.5px at 65% 50%, rgba(180, 190, 255, 0.18), transparent),
+      radial-gradient(1px 1px at 10% 85%, rgba(200, 210, 255, 0.10), transparent),
+      radial-gradient(900px 500px at 5% -8%, var(--nebula-a), transparent 55%),
+      radial-gradient(700px 400px at 92% 5%, var(--nebula-b), transparent 50%),
+      radial-gradient(600px 350px at 50% 100%, rgba(80, 50, 180, 0.06), transparent 50%),
+      linear-gradient(170deg, var(--bg-gradient-start), var(--bg-gradient-mid) 40%, var(--bg-gradient-end));
+    background-attachment: fixed;
   }
 
   :global(h1),
-  :global(h2),
+  :global(h2) {
+    font-family: var(--font-body);
+    font-weight: 700;
+    letter-spacing: var(--tracking-tight);
+    line-height: var(--leading-tight);
+  }
+
   :global(h3) {
-    font-family: 'Space Grotesk', system-ui, sans-serif;
+    font-family: var(--font-body);
+    font-weight: 600;
   }
 
   :global(a) {
@@ -207,16 +221,28 @@
   }
 
   :global(button) {
-    font-family: inherit;
+    font-family: var(--font-body);
   }
 
   :global(input),
   :global(select),
   :global(textarea) {
-    font-family: inherit;
+    font-family: var(--font-body);
     color: var(--text-color);
     background: var(--input-bg);
     border: 1px solid var(--input-border);
+    border-radius: var(--radius-md);
+    padding: 0.55rem 0.75rem;
+    font-size: var(--text-sm);
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  }
+
+  :global(input:focus),
+  :global(select:focus),
+  :global(textarea:focus) {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--primary-soft);
+    outline: none;
   }
 
   :global(input::placeholder),

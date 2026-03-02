@@ -332,6 +332,7 @@
   .sidebar.collapsed .brand {
     justify-content: center;
     padding: var(--space-1) 0;
+    gap: 0;
   }
 
   .sidebar.collapsed .brand-text {
@@ -365,6 +366,7 @@
     justify-content: center;
     padding-left: var(--space-2);
     padding-right: var(--space-2);
+    gap: 0;
   }
 
   /* ── Hide on mobile ── */

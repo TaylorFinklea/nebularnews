@@ -1,20 +1,50 @@
 import { nanoid } from 'nanoid';
+import {
+  areReasonCodesValidForReaction,
+  canonicalizeReasonCodesForReaction,
+  isReactionValue,
+  isValidReactionReasonCode,
+  type ArticleReactionReasonCode
+} from '$lib/article-reactions';
 import { dbGet, dbRun, now } from '$lib/server/db';
 import { getPreferredSourceForArticle, isFeedLinkedToArticle } from '$lib/server/sources';
 import { apiError, apiOkWithAliases } from '$lib/server/api';
 import { logInfo } from '$lib/server/log';
+import { replaceReactionReasonCodes } from '$lib/server/reactions';
 import { processReactionLearning } from '$lib/server/scoring/learning';
 
 export const POST = async (event) => {
   const { params, request, platform } = event;
   const articleId = params.id;
-  const body = await request.json().catch(() => ({}));
+  const body = (await request.json().catch(() => ({}))) as {
+    value?: unknown;
+    feedId?: unknown;
+    reasonCodes?: unknown;
+  };
   const value = Number(body?.value);
   const feedIdInput = typeof body?.feedId === 'string' ? body.feedId.trim() : '';
+  const rawReasonCodes = Array.isArray(body?.reasonCodes) ? body.reasonCodes : [];
 
-  if (![1, -1].includes(value)) {
+  if (!isReactionValue(value)) {
     return apiError(event, 400, 'validation_error', 'Invalid reaction value');
   }
+  if (!rawReasonCodes.every((code) => typeof code === 'string')) {
+    return apiError(event, 400, 'validation_error', 'Invalid reaction reason codes');
+  }
+
+  const uniqueReasonCodes = [...new Set(rawReasonCodes)];
+  if (uniqueReasonCodes.length > 5) {
+    return apiError(event, 400, 'validation_error', 'Too many reaction reason codes');
+  }
+  if (!uniqueReasonCodes.every((code) => isValidReactionReasonCode(code))) {
+    return apiError(event, 400, 'validation_error', 'Invalid reaction reason codes');
+  }
+
+  const typedReasonCodes = uniqueReasonCodes as ArticleReactionReasonCode[];
+  if (!areReasonCodesValidForReaction(value, typedReasonCodes)) {
+    return apiError(event, 400, 'validation_error', 'Reaction reasons do not match the selected reaction');
+  }
+  const reasonCodes = canonicalizeReasonCodesForReaction(value, typedReasonCodes);
 
   let feedId: string | null = null;
   if (feedIdInput && (await isFeedLinkedToArticle(platform.env.DB, articleId, feedIdInput))) {
@@ -45,6 +75,7 @@ export const POST = async (event) => {
        created_at = excluded.created_at`,
     [nanoid(), articleId, feedId, value, timestamp]
   );
+  await replaceReactionReasonCodes(platform.env.DB, articleId, reasonCodes, timestamp);
 
   if (shouldApplyLearning) {
     // Update scoring weights and affinities based on reaction changes.
@@ -57,14 +88,16 @@ export const POST = async (event) => {
     request_id: event.locals.requestId,
     article_id: articleId,
     feed_id: feedId,
-    value
+    value,
+    reason_codes: reasonCodes
   });
 
   const reaction = {
     article_id: articleId,
     feed_id: feedId,
     value,
-    created_at: timestamp
+    created_at: timestamp,
+    reason_codes: reasonCodes
   };
 
   return apiOkWithAliases(
@@ -77,7 +110,8 @@ export const POST = async (event) => {
         articleId,
         feedId,
         value,
-        createdAt: timestamp
+        createdAt: timestamp,
+        reasonCodes
       }
     }
   );

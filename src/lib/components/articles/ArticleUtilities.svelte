@@ -1,5 +1,6 @@
 <script>
   import { createEventDispatcher } from 'svelte';
+  import { getReactionReasonLabel } from '$lib/article-reactions';
   import {
     IconCheck,
     IconPlus,
@@ -13,6 +14,7 @@
   import Pill from '$lib/components/Pill.svelte';
   import ChatBox from '$lib/components/ChatBox.svelte';
   import ArticleUtilitySection from './ArticleUtilitySection.svelte';
+  import ReactionReasonDialog from './ReactionReasonDialog.svelte';
 
   export let article;
   export let score = null;
@@ -35,6 +37,9 @@
 
   let rating = 3;
   let comment = '';
+  let reactionDialogOpen = false;
+  let pendingReactionValue = 1;
+  let pendingReactionReasonCodes = [];
 
   const dispatch = createEventDispatcher();
 
@@ -53,6 +58,26 @@
     feedback.length > 0 && { label: 'Feedback', count: feedback.length },
     sources.length > 0 && { label: 'Sources', count: sources.length }
   ].filter(Boolean);
+
+  const openReactionDialog = (value) => {
+    pendingReactionValue = value;
+    pendingReactionReasonCodes =
+      reaction?.value === value && Array.isArray(reaction?.reason_codes) ? [...reaction.reason_codes] : [];
+    reactionDialogOpen = true;
+  };
+
+  const closeReactionDialog = () => {
+    reactionDialogOpen = false;
+  };
+
+  const saveReaction = (reasonCodes) => {
+    dispatch('react', { value: pendingReactionValue, reasonCodes });
+    closeReactionDialog();
+  };
+
+  $: savedReactionReasonLabels = Array.isArray(reaction?.reason_codes)
+    ? reaction.reason_codes.map((reasonCode) => getReactionReasonLabel(reasonCode))
+    : [];
 </script>
 
 <div class="utilities-panel" class:compact={density === 'compact'}>
@@ -65,13 +90,13 @@
   {/if}
 
   <!-- Feed vote -->
-  <ArticleUtilitySection id="tags" title="Feed vote" summary="Tune source reputation" open={true} on:toggle={() => {}}>
+  <ArticleUtilitySection id="reaction" title="Feed vote" summary="Tune source reputation" open={true} on:toggle={() => {}}>
     <p class="muted small">Tune source reputation without affecting AI score.</p>
     <div class="reaction-row">
       <button
         class="reaction-btn"
         class:active={reaction?.value === 1}
-        on:click={() => dispatch('react', { value: 1 })}
+        on:click={() => openReactionDialog(1)}
         title="Thumbs up feed"
         aria-label="Thumbs up this feed"
       >
@@ -80,13 +105,20 @@
       <button
         class="reaction-btn"
         class:active={reaction?.value === -1}
-        on:click={() => dispatch('react', { value: -1 })}
+        on:click={() => openReactionDialog(-1)}
         title="Thumbs down feed"
         aria-label="Thumbs down this feed"
       >
         <IconThumbDown size={16} stroke={1.9} />
       </button>
     </div>
+    {#if savedReactionReasonLabels.length > 0}
+      <div class="reaction-reason-row" aria-label="Saved reaction reasons">
+        {#each savedReactionReasonLabels as label}
+          <Pill variant="muted">{label}</Pill>
+        {/each}
+      </div>
+    {/if}
   </ArticleUtilitySection>
 
   <!-- Tags -->
@@ -220,6 +252,15 @@
       </ul>
     </ArticleUtilitySection>
   {/if}
+
+  <ReactionReasonDialog
+    open={reactionDialogOpen}
+    value={pendingReactionValue}
+    initialReasonCodes={pendingReactionReasonCodes}
+    on:close={closeReactionDialog}
+    on:skip={() => saveReaction([])}
+    on:save={(e) => saveReaction(e.detail.reasonCodes ?? [])}
+  />
 </div>
 
 <style>
@@ -260,6 +301,13 @@
   .reaction-row {
     display: flex;
     gap: var(--space-2);
+  }
+
+  .reaction-reason-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    margin-top: var(--space-2);
   }
 
   .reaction-btn {

@@ -4,7 +4,7 @@ let schemaReady = false;
 let schemaInitPromise: Promise<void> | null = null;
 
 const MAX_PUBLISHED_FUTURE_MS = 1000 * 60 * 60 * 24;
-export const EXPECTED_SCHEMA_VERSION = 6;
+export const EXPECTED_SCHEMA_VERSION = 7;
 
 const runSafe = async (db: Db, sql: string, params: unknown[] = []) => {
   try {
@@ -420,6 +420,23 @@ const applyV6 = async (db: Db) => {
   }
 };
 
+const applyV7 = async (db: Db) => {
+  await runSafe(
+    db,
+    `CREATE TABLE IF NOT EXISTS article_reaction_reasons (
+      article_id TEXT NOT NULL,
+      reason_code TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (article_id, reason_code),
+      FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE
+    )`
+  );
+  await runSafe(
+    db,
+    'CREATE INDEX IF NOT EXISTS idx_article_reaction_reasons_code ON article_reaction_reasons(reason_code)'
+  );
+};
+
 export async function ensureSchema(db: Db) {
   if (schemaReady) return;
   if (schemaInitPromise) return schemaInitPromise;
@@ -450,6 +467,10 @@ export async function ensureSchema(db: Db) {
     if (currentVersion < 6) {
       await applyV6(db);
       await markVersionApplied(db, 6, 'v6_hybrid_scoring');
+    }
+    if (currentVersion < 7) {
+      await applyV7(db);
+      await markVersionApplied(db, 7, 'v7_reaction_reason_chips');
     }
     schemaReady = true;
   })();
@@ -519,6 +540,12 @@ const assertRequiredV5Objects = async (db: Db) => {
   }
 };
 
+const assertRequiredV7Objects = async (db: Db) => {
+  if (!(await tableExists(db, 'article_reaction_reasons'))) {
+    throw new Error('Missing required table: article_reaction_reasons');
+  }
+};
+
 export async function assertSchemaVersion(db: Db, expected = EXPECTED_SCHEMA_VERSION) {
   const version = await getSchemaVersion(db);
   if (version < expected) {
@@ -534,6 +561,9 @@ export async function assertSchemaVersion(db: Db, expected = EXPECTED_SCHEMA_VER
   }
   if (expected >= 5) {
     await assertRequiredV5Objects(db);
+  }
+  if (expected >= 7) {
+    await assertRequiredV7Objects(db);
   }
   return version;
 }

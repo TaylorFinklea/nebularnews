@@ -1,6 +1,7 @@
 import { error } from '@sveltejs/kit';
 import { dbAll, dbGet } from '$lib/server/db';
 import { getPreferredSourceForArticle, listSourcesForArticle } from '$lib/server/sources';
+import { getReactionForArticle } from '$lib/server/reactions';
 import { getAutoReadDelayMs, getFeatureModelLane, getFeatureProviderModel } from '$lib/server/settings';
 import { listTagSuggestionsForArticle, listTags, listTagsForArticle } from '$lib/server/tags';
 import { logWarn, summarizeError } from '$lib/server/log';
@@ -31,7 +32,17 @@ export const load = async ({ params, platform }) => {
     }
   };
 
-  const article = await dbGet(
+  const article = await dbGet<{
+    id: string;
+    canonical_url: string | null;
+    image_url: string | null;
+    title: string | null;
+    author: string | null;
+    published_at: number | null;
+    content_html: string | null;
+    content_text: string | null;
+    is_read: number;
+  }>(
     db,
     `SELECT
       id,
@@ -141,12 +152,7 @@ export const load = async ({ params, platform }) => {
   const reaction = await safeLoad(
     'reaction',
     null,
-    () =>
-      dbGet(
-        db,
-        'SELECT value, feed_id, created_at FROM article_reactions WHERE article_id = ? LIMIT 1',
-        [params.id]
-      )
+    () => getReactionForArticle(db, params.id)
   );
 
   const preferredSource = await safeLoad('preferred_source', null, () => getPreferredSourceForArticle(db, params.id));

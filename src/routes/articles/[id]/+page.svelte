@@ -131,11 +131,11 @@
     await invalidateAll();
   };
 
-  const setReaction = async (value) => {
+  const setReaction = async (value, reasonCodes = []) => {
     await apiFetch(`/api/articles/${data.article.id}/reaction`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ value, feedId: data.preferredSource?.feedId ?? null })
+      body: JSON.stringify({ value, feedId: data.preferredSource?.feedId ?? null, reasonCodes })
     });
     await invalidateAll();
   };
@@ -388,7 +388,7 @@
         {tagError}
         bind:tagInput
         {chatError}
-        on:react={(e) => setReaction(e.detail.value)}
+        on:react={(e) => setReaction(e.detail.value, e.detail.reasonCodes ?? [])}
         on:rerun={(e) => rerunJobs(e.detail.types)}
         on:addTags={addTags}
         on:removeTag={(e) => removeTag(e.detail.tagId)}

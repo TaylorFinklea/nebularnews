@@ -646,6 +646,67 @@ export async function getSchedulerJobBudgetWhilePullMs(db: Db) {
   return clampSchedulerJobBudgetWhilePullMs(raw);
 }
 
+// ─── Scoring method settings ────────────────────────────────────────
+
+export type ScoringMethod = 'ai' | 'algorithmic' | 'hybrid';
+
+const DEFAULT_SCORING_METHOD: ScoringMethod = 'hybrid';
+const DEFAULT_SCORING_AI_ENHANCEMENT_THRESHOLD = 0.5;
+const MIN_SCORING_AI_ENHANCEMENT_THRESHOLD = 0;
+const MAX_SCORING_AI_ENHANCEMENT_THRESHOLD = 1;
+const DEFAULT_SCORING_LEARNING_RATE = 0.1;
+
+const toScoringMethod = (value: string | null): ScoringMethod => {
+  if (value === 'ai' || value === 'algorithmic' || value === 'hybrid') return value;
+  return DEFAULT_SCORING_METHOD;
+};
+
+export const clampScoringAiEnhancementThreshold = (value: unknown) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return DEFAULT_SCORING_AI_ENHANCEMENT_THRESHOLD;
+  return Math.min(
+    MAX_SCORING_AI_ENHANCEMENT_THRESHOLD,
+    Math.max(MIN_SCORING_AI_ENHANCEMENT_THRESHOLD, parsed)
+  );
+};
+
+export async function getScoringMethod(db: Db): Promise<ScoringMethod> {
+  return toScoringMethod(await getSetting(db, 'scoring_method'));
+}
+
+export async function setScoringMethod(db: Db, method: ScoringMethod) {
+  await setSetting(db, 'scoring_method', method);
+}
+
+export async function getScoringAiEnhancementThreshold(db: Db): Promise<number> {
+  const raw = await getSetting(db, 'scoring_ai_enhancement_threshold');
+  return clampScoringAiEnhancementThreshold(raw);
+}
+
+export async function setScoringAiEnhancementThreshold(db: Db, threshold: number) {
+  await setSetting(db, 'scoring_ai_enhancement_threshold', String(clampScoringAiEnhancementThreshold(threshold)));
+}
+
+export async function getScoringLearningRate(db: Db): Promise<number> {
+  const raw = await getSetting(db, 'scoring_learning_rate');
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 1) return DEFAULT_SCORING_LEARNING_RATE;
+  return parsed;
+}
+
+export async function setScoringLearningRate(db: Db, rate: number) {
+  const clamped = Math.max(0.01, Math.min(1, rate));
+  await setSetting(db, 'scoring_learning_rate', String(clamped));
+}
+
+export {
+  DEFAULT_SCORING_METHOD,
+  DEFAULT_SCORING_AI_ENHANCEMENT_THRESHOLD,
+  DEFAULT_SCORING_LEARNING_RATE
+};
+
+// ─────────────────────────────────────────────────────────────────────
+
 export async function getSchedulerAutoQueueTodayMissing(db: Db) {
   const raw = await getSetting(db, 'scheduler_auto_queue_today_missing');
   return parseBooleanSetting(raw, DEFAULT_SCHEDULER_AUTO_QUEUE_TODAY_MISSING);

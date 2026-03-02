@@ -1,4 +1,5 @@
 import { dbAll } from '$lib/server/db';
+import { loadSignalWeights } from '$lib/server/scoring/engine';
 import {
   DEFAULT_SCORE_SYSTEM_PROMPT,
   DEFAULT_SCORE_USER_PROMPT_TEMPLATE,
@@ -80,7 +81,13 @@ import {
   getMaxItemsPerPoll,
   getRetentionConfig,
   getScorePromptConfig,
-  getSetting
+  getSetting,
+  getScoringMethod,
+  getScoringAiEnhancementThreshold,
+  getScoringLearningRate,
+  DEFAULT_SCORING_METHOD,
+  DEFAULT_SCORING_AI_ENHANCEMENT_THRESHOLD,
+  DEFAULT_SCORING_LEARNING_RATE
 } from '$lib/server/settings';
 import { ensurePreferenceProfile } from '$lib/server/profile';
 import {
@@ -139,7 +146,10 @@ export const load = async ({ platform }) => {
     articleCardLayout: await getArticleCardLayout(db),
     dashboardQueueWindowDays: dashboardQueue.windowDays,
     dashboardQueueLimit: dashboardQueue.limit,
-    dashboardQueueScoreCutoff: dashboardQueue.scoreCutoff
+    dashboardQueueScoreCutoff: dashboardQueue.scoreCutoff,
+    scoringMethod: await getScoringMethod(db),
+    scoringAiEnhancementThreshold: await getScoringAiEnhancementThreshold(db),
+    scoringLearningRate: await getScoringLearningRate(db)
   };
 
   const keys = await dbAll<{ provider: string }>(db, 'SELECT provider FROM provider_keys');
@@ -149,6 +159,7 @@ export const load = async ({ platform }) => {
   }
 
   const profile = await ensurePreferenceProfile(db);
+  const signalWeights = await loadSignalWeights(db);
   const [orphanCount, orphanSampleIds] = await Promise.all([
     countOrphanArticles(db),
     listOrphanArticleIds(db, ORPHAN_PREVIEW_SAMPLE_SIZE)
@@ -264,6 +275,18 @@ export const load = async ({ platform }) => {
       orphanCount,
       sampleArticleIds: orphanSampleIds,
       suggestedBatchSize: DEFAULT_MANUAL_ORPHAN_CLEANUP_LIMIT
+    },
+    scoring: {
+      signalWeights: signalWeights.map((w) => ({
+        name: w.signalName,
+        weight: w.weight,
+        sampleCount: w.sampleCount
+      })),
+      defaults: {
+        method: DEFAULT_SCORING_METHOD,
+        aiEnhancementThreshold: DEFAULT_SCORING_AI_ENHANCEMENT_THRESHOLD,
+        learningRate: DEFAULT_SCORING_LEARNING_RATE
+      }
     }
   };
 };

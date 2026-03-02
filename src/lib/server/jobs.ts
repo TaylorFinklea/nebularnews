@@ -1,6 +1,7 @@
 import { nanoid } from 'nanoid';
 import { dbAll, dbGet, dbRun, now, type Db } from './db';
 import {
+  enhanceScore,
   generateArticleKeyPoints,
   generateArticleTagDecisions,
   refreshPreferenceProfile,
@@ -15,9 +16,13 @@ import {
   getJobProcessorBatchSize,
   getProviderKey,
   getScorePromptConfig,
+  getScoringMethod,
+  getScoringAiEnhancementThreshold,
   getSummaryConfig
 } from './settings';
 import { ensurePreferenceProfile } from './profile';
+import { scoreArticleAlgorithmic } from './scoring/engine';
+import type { ScoringMethod } from './scoring/types';
 import {
   attachTagToArticle,
   listDismissedSuggestionNamesForArticle,
@@ -525,6 +530,92 @@ async function runAutoTagJob(db: Db, env: App.Platform['env'], articleId: string
 
 
 async function runScoreJob(db: Db, env: App.Platform['env'], articleId: string): Promise<{ provider: string; model: string }> {
+  const scoringMethod: ScoringMethod = await getScoringMethod(db);
+
+  // ── AI-only path (legacy behavior) ──────────────────────────────
+  if (scoringMethod === 'ai') {
+    return runScoreJobAiOnly(db, env, articleId);
+  }
+
+  // ── Algorithmic (+ optional AI enhancement) ─────────────────────
+  const algoResult = await scoreArticleAlgorithmic(db, articleId);
+
+  let finalScore = algoResult.score;
+  let label = `Algorithmic (${(algoResult.confidence * 100).toFixed(0)}% confidence)`;
+  let reason = `Weighted average: ${algoResult.weightedAverage.toFixed(3)}`;
+  let evidence: string[] = algoResult.signals.map(
+    (s) => `${s.signal}: ${s.normalizedValue.toFixed(3)} (raw: ${s.rawValue.toFixed(2)})`
+  );
+  let method: ScoringMethod = 'algorithmic';
+  let usedProvider = 'algorithmic';
+  let usedModel = 'none';
+
+  // AI enhancement: only when hybrid mode and confidence below threshold
+  if (scoringMethod === 'hybrid') {
+    const threshold = await getScoringAiEnhancementThreshold(db);
+    if (algoResult.confidence < threshold) {
+      try {
+        const profile = await ensurePreferenceProfile(db);
+        const { provider, model, reasoningEffort } = await getFeatureProviderModel(db, env, 'scoring');
+        const apiKey = await getProviderKey(db, env, provider);
+        if (apiKey) {
+          const article = await dbGet<{ title: string | null; content_text: string | null }>(
+            db,
+            'SELECT title, content_text FROM articles WHERE id = ?',
+            [articleId]
+          );
+          const signalSummary = algoResult.signals
+            .map((s) => `${s.signal}=${s.normalizedValue.toFixed(2)}`)
+            .join(', ');
+
+          const enhanced = await enhanceScore(provider, apiKey, model, {
+            title: article?.title ?? null,
+            algoScore: algoResult.score,
+            confidence: algoResult.confidence,
+            signalSummary,
+            profile: profile.profile_text,
+            contentExcerpt: (article?.content_text ?? '').slice(0, 3000)
+          }, { reasoningEffort });
+
+          finalScore = enhanced.score;
+          if (enhanced.adjustmentReason) {
+            reason = enhanced.adjustmentReason;
+          }
+          label = `AI-enhanced (algo: ${algoResult.score}, AI: ${enhanced.score})`;
+          method = 'hybrid';
+          usedProvider = provider;
+          usedModel = model;
+        }
+      } catch {
+        // AI enhancement failed — fall back to algorithmic score silently
+        logInfo('scoring.ai_enhancement_failed', { article_id: articleId });
+      }
+    }
+  }
+
+  const profile = await ensurePreferenceProfile(db);
+  await dbRun(
+    db,
+    `INSERT INTO article_scores (id, article_id, score, label, reason_text, evidence_json, created_at, profile_version, scoring_method)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      nanoid(),
+      articleId,
+      finalScore,
+      label,
+      reason,
+      JSON.stringify(evidence),
+      now(),
+      profile.version,
+      method
+    ]
+  );
+
+  return { provider: usedProvider, model: usedModel };
+}
+
+/** Legacy AI-only scoring path */
+async function runScoreJobAiOnly(db: Db, env: App.Platform['env'], articleId: string): Promise<{ provider: string; model: string }> {
   const article = await dbGet<{
     title: string | null;
     canonical_url: string | null;
@@ -548,7 +639,8 @@ async function runScoreJob(db: Db, env: App.Platform['env'], articleId: string):
 
   await dbRun(
     db,
-    'INSERT INTO article_scores (id, article_id, score, label, reason_text, evidence_json, created_at, profile_version) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    `INSERT INTO article_scores (id, article_id, score, label, reason_text, evidence_json, created_at, profile_version, scoring_method)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ai')`,
     [
       nanoid(),
       articleId,

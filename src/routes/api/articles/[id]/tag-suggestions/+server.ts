@@ -9,6 +9,7 @@ import {
   normalizeTagSuggestionKey,
   undoDismissTagSuggestion
 } from '$lib/server/tags';
+import { updateTopicAffinity } from '$lib/server/scoring/learning';
 
 const pickSuggestion = async (
   db: D1Database,
@@ -72,6 +73,8 @@ export const POST = async (event) => {
       'DELETE FROM article_tag_suggestion_dismissals WHERE article_id = ? AND name_normalized = ?',
       [params.id, suggestion.name_normalized]
     );
+    // Positive affinity signal for accepted tag
+    updateTopicAffinity(platform.env.DB, suggestion.name_normalized, 1).catch(() => {});
   } else if (action === 'dismiss') {
     const suggestion = await pickSuggestion(platform.env.DB, params.id, {
       suggestionId: suggestionId || null,
@@ -79,6 +82,8 @@ export const POST = async (event) => {
     });
     if (!suggestion) return apiError(event, 404, 'not_found', 'Tag suggestion not found');
     await dismissTagSuggestion(platform.env.DB, params.id, suggestion.name);
+    // Negative affinity signal for dismissed tag
+    updateTopicAffinity(platform.env.DB, suggestion.name_normalized, -1).catch(() => {});
   } else if (action === 'undo_dismiss') {
     const name = suggestionName;
     if (!name) return apiError(event, 400, 'bad_request', 'Missing suggestion name');

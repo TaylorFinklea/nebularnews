@@ -558,3 +558,44 @@ export async function refreshPreferenceProfile(
 
   return content.trim();
 }
+
+export type EnhanceScoreInput = {
+  title: string | null;
+  algoScore: number;
+  confidence: number;
+  signalSummary: string;
+  profile: string;
+  contentExcerpt: string;
+};
+
+const ENHANCE_SCORE_SYSTEM_PROMPT =
+  'You are a relevance scorer. You receive an article\'s algorithmic score and signal breakdown. ' +
+  'Adjust the score only if your judgment differs meaningfully from the algorithmic assessment, ' +
+  'or confirm it. Respond with JSON: { "score": <1-5 integer>, "adjustment_reason": <string or null> }';
+
+export async function enhanceScore(
+  provider: Provider,
+  apiKey: string,
+  model: string,
+  input: EnhanceScoreInput,
+  options?: LlmOptions
+) {
+  const prompt = `Article: ${input.title ?? 'Untitled'}
+Algorithmic score: ${input.algoScore}/5 (confidence: ${(input.confidence * 100).toFixed(0)}%)
+Signal breakdown: ${input.signalSummary}
+User profile: ${input.profile}
+
+Content excerpt:
+${input.contentExcerpt}`;
+
+  const { content, usage } = await runChat(provider, apiKey, model, [
+    { role: 'system', content: ENHANCE_SCORE_SYSTEM_PROMPT },
+    { role: 'user', content: prompt }
+  ], options);
+
+  const parsed = parseJson(content) ?? {};
+  const score = Math.min(5, Math.max(1, Number(parsed.score) || input.algoScore));
+  const adjustmentReason = parsed.adjustment_reason ?? null;
+
+  return { score, adjustmentReason, usage };
+}

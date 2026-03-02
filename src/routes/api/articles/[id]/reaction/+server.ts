@@ -3,6 +3,7 @@ import { dbRun, now } from '$lib/server/db';
 import { getPreferredSourceForArticle, isFeedLinkedToArticle } from '$lib/server/sources';
 import { apiError, apiOkWithAliases } from '$lib/server/api';
 import { logInfo } from '$lib/server/log';
+import { processReactionLearning } from '$lib/server/scoring/learning';
 
 export const POST = async (event) => {
   const { params, request, platform } = event;
@@ -37,6 +38,11 @@ export const POST = async (event) => {
        created_at = excluded.created_at`,
     [nanoid(), articleId, feedId, value, timestamp]
   );
+
+  // Update scoring weights and affinities based on reaction
+  processReactionLearning(platform.env.DB, articleId, value as 1 | -1).catch(() => {
+    // Learning updates are non-critical — don't block the response
+  });
 
   logInfo('article.reaction.updated', {
     request_id: event.locals.requestId,

@@ -47,7 +47,11 @@ import {
   getRetentionConfig,
   getScorePromptConfig,
   getSetting,
-  setSetting
+  setSetting,
+  getScoringMethod,
+  getScoringAiEnhancementThreshold,
+  getScoringLearningRate,
+  clampScoringAiEnhancementThreshold
 } from '$lib/server/settings';
 import { recordAuditEvent } from '$lib/server/audit';
 
@@ -101,7 +105,10 @@ export const GET = async ({ platform }) => {
     articleCardLayout: await getArticleCardLayout(db),
     dashboardQueueWindowDays: dashboardQueue.windowDays,
     dashboardQueueLimit: dashboardQueue.limit,
-    dashboardQueueScoreCutoff: dashboardQueue.scoreCutoff
+    dashboardQueueScoreCutoff: dashboardQueue.scoreCutoff,
+    scoringMethod: await getScoringMethod(db),
+    scoringAiEnhancementThreshold: await getScoringAiEnhancementThreshold(db),
+    scoringLearningRate: await getScoringLearningRate(db)
   };
 
   const keys = await dbAll<{ provider: string }>(db, 'SELECT provider FROM provider_keys');
@@ -268,6 +275,24 @@ export const POST = async ({ request, platform, locals }) => {
       entries.push(['dashboard_top_rated_cutoff', normalizedCutoff]);
     }
   }
+  // Scoring method settings
+  const validScoringMethods = new Set(['ai', 'algorithmic', 'hybrid']);
+  if (body?.scoringMethod && validScoringMethods.has(body.scoringMethod)) {
+    entries.push(['scoring_method', body.scoringMethod]);
+  }
+  if (body?.scoringAiEnhancementThreshold !== undefined && body?.scoringAiEnhancementThreshold !== null) {
+    entries.push([
+      'scoring_ai_enhancement_threshold',
+      String(clampScoringAiEnhancementThreshold(body.scoringAiEnhancementThreshold))
+    ]);
+  }
+  if (body?.scoringLearningRate !== undefined && body?.scoringLearningRate !== null) {
+    const rate = Number(body.scoringLearningRate);
+    if (Number.isFinite(rate) && rate > 0 && rate <= 1) {
+      entries.push(['scoring_learning_rate', String(rate)]);
+    }
+  }
+
   if (typeof body?.scoreSystemPrompt === 'string' && body.scoreSystemPrompt.trim()) {
     entries.push(['score_system_prompt', body.scoreSystemPrompt.trim()]);
   }

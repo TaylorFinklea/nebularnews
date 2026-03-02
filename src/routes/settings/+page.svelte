@@ -11,13 +11,19 @@
 
   export let data;
 
-  /** @typedef {'ai' | 'reading' | 'profile' | 'keys' | 'intake' | 'operations'} SettingsSectionId */
+  /** @typedef {'ai' | 'scoring' | 'reading' | 'profile' | 'keys' | 'intake' | 'operations'} SettingsSectionId */
 
   const sectionConfig = [
     {
       id: 'ai',
       title: 'AI setup',
       description: 'Route features between model lanes and tune auto-tagging.',
+      defaultOpen: true
+    },
+    {
+      id: 'scoring',
+      title: 'Scoring engine',
+      description: 'Choose between algorithmic, AI, or hybrid scoring and tune learning.',
       defaultOpen: true
     },
     {
@@ -70,6 +76,11 @@
       'chatReasoningEffort',
       'autoTaggingEnabled',
       'autoTagMaxPerArticle'
+    ],
+    scoring: [
+      'scoringMethod',
+      'scoringAiEnhancementThreshold',
+      'scoringLearningRate'
     ],
     reading: [
       'summaryStyle',
@@ -174,6 +185,15 @@
   let dashboardQueueScoreCutoff = Number(
     data.settings.dashboardQueueScoreCutoff ?? data.dashboardQueueRange?.scoreCutoff?.default ?? 3
   );
+  let scoringMethod = data.settings.scoringMethod ?? data.scoring?.defaults?.method ?? 'hybrid';
+  let scoringAiEnhancementThreshold = Number(
+    data.settings.scoringAiEnhancementThreshold ?? data.scoring?.defaults?.aiEnhancementThreshold ?? 0.5
+  );
+  let scoringLearningRate = Number(
+    data.settings.scoringLearningRate ?? data.scoring?.defaults?.learningRate ?? 0.1
+  );
+  let signalWeights = data.scoring?.signalWeights ?? [];
+  let isResettingWeights = false;
   let orphanCount = Number(data.orphanCleanup?.orphanCount ?? 0);
   let orphanSampleArticleIds = Array.isArray(data.orphanCleanup?.sampleArticleIds)
     ? data.orphanCleanup.sampleArticleIds
@@ -519,7 +539,10 @@
     dashboardQueueScoreCutoff: Number(dashboardQueueScoreCutoff ?? 0),
     scoreSystemPrompt,
     scoreUserPromptTemplate,
-    profileText
+    profileText,
+    scoringMethod,
+    scoringAiEnhancementThreshold: Number(scoringAiEnhancementThreshold ?? 0.5),
+    scoringLearningRate: Number(scoringLearningRate ?? 0.1)
   });
 
   let savedSnapshot = initialSnapshot();
@@ -564,7 +587,10 @@
     dashboardQueueScoreCutoff: Number(dashboardQueueScoreCutoff ?? 0),
     scoreSystemPrompt,
     scoreUserPromptTemplate,
-    profileText
+    profileText,
+    scoringMethod,
+    scoringAiEnhancementThreshold: Number(scoringAiEnhancementThreshold ?? 0.5),
+    scoringLearningRate: Number(scoringLearningRate ?? 0.1)
   };
   $: hasUnsavedChanges = JSON.stringify(currentSnapshot) !== JSON.stringify(savedSnapshot);
   $: dirtySections = Object.fromEntries(
@@ -616,6 +642,31 @@
     scoreSystemPrompt = snapshot.scoreSystemPrompt;
     scoreUserPromptTemplate = snapshot.scoreUserPromptTemplate;
     profileText = snapshot.profileText;
+    scoringMethod = snapshot.scoringMethod;
+    scoringAiEnhancementThreshold = Number(snapshot.scoringAiEnhancementThreshold ?? 0.5);
+    scoringLearningRate = Number(snapshot.scoringLearningRate ?? 0.1);
+  };
+
+  const resetScoringWeights = async () => {
+    if (isResettingWeights) return;
+    isResettingWeights = true;
+    try {
+      const res = await apiFetch('/api/settings/scoring/reset', {
+        method: 'POST',
+        body: JSON.stringify({})
+      });
+      if (res.ok) {
+        const result = await res.json();
+        signalWeights = result.signalWeights ?? [];
+        showToast('Scoring weights reset to defaults.', 'success');
+      } else {
+        showToast('Failed to reset scoring weights.', 'error');
+      }
+    } catch {
+      showToast('Failed to reset scoring weights.', 'error');
+    } finally {
+      isResettingWeights = false;
+    }
   };
 
   const readApiError = async (res, fallback) => {
@@ -687,7 +738,10 @@
           dashboardQueueLimit,
           dashboardQueueScoreCutoff,
           scoreSystemPrompt,
-          scoreUserPromptTemplate
+          scoreUserPromptTemplate,
+          scoringMethod,
+          scoringAiEnhancementThreshold,
+          scoringLearningRate
         })
       });
       if (!settingsRes.ok) {
@@ -880,6 +934,8 @@
     switch (sectionId) {
       case 'ai':
         return `Pipeline: ${ingestProvider}/${ingestModel} · Chat: ${chatProvider}/${chatModel} · Auto-tagging ${autoTaggingEnabled ? 'on' : 'off'}`;
+      case 'scoring':
+        return `${scoringMethod} · threshold ${scoringAiEnhancementThreshold} · ${signalWeights.length} signal${signalWeights.length === 1 ? '' : 's'}`;
       case 'reading':
         return `${summaryStyle} / ${summaryLength} · ${articleCardLayout} cards · Queue ${dashboardQueueLimit}`;
       case 'profile':
@@ -1137,10 +1193,128 @@
     </SettingsSectionCard>
 
     <SettingsSectionCard
+      id="scoring"
+      title="Scoring engine"
+      summary={sectionSummary('scoring')}
+      description={sectionConfig[1].description}
+      open={sectionOpen.scoring}
+      dirty={dirtySections.scoring}
+      onToggle={() => toggleSection('scoring')}
+    >
+      <div class="section-block">
+        <div class="subsection">
+          <div class="subsection-header">
+            <h3>Scoring method</h3>
+            <p class="muted">Choose how article fit scores are computed.</p>
+          </div>
+          <label>
+            Method
+            <select bind:value={scoringMethod}>
+              <option value="algorithmic">Algorithmic only</option>
+              <option value="hybrid">Hybrid (algorithmic + AI)</option>
+              <option value="ai">AI only (legacy)</option>
+            </select>
+            <span class="hint">
+              {#if scoringMethod === 'algorithmic'}
+                Fast, deterministic scoring using learned signal weights. No LLM calls.
+              {:else if scoringMethod === 'hybrid'}
+                Algorithmic base score with optional AI refinement when confidence is low.
+              {:else}
+                Legacy single-prompt LLM scoring. Higher cost and latency.
+              {/if}
+            </span>
+          </label>
+        </div>
+
+        {#if scoringMethod === 'hybrid'}
+          <div class="subsection soft-panel">
+            <div class="subsection-header">
+              <h3>AI enhancement</h3>
+              <p class="muted">AI refines the algorithmic score when confidence is below this threshold.</p>
+            </div>
+            <label>
+              Confidence threshold
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                bind:value={scoringAiEnhancementThreshold}
+              />
+              <span class="hint">
+                Current: {scoringAiEnhancementThreshold.toFixed(2)}. Lower = fewer AI calls. 0 = always enhance. 1 = always enhance.
+              </span>
+            </label>
+          </div>
+        {/if}
+
+        <div class="subsection soft-panel">
+          <div class="subsection-header">
+            <h3>Learning rate</h3>
+            <p class="muted">How quickly signal weights adapt to your feedback.</p>
+          </div>
+          <label>
+            EMA learning rate
+            <input
+              type="range"
+              min="0.01"
+              max="0.5"
+              step="0.01"
+              bind:value={scoringLearningRate}
+            />
+            <span class="hint">
+              Current: {scoringLearningRate.toFixed(2)}. Lower = slower adaptation, more stable. Higher = faster adaptation, more volatile.
+            </span>
+          </label>
+        </div>
+
+        <div class="subsection">
+          <div class="split-header">
+            <div class="subsection-header">
+              <h3>Signal weights</h3>
+              <p class="muted">Learned weights from your reactions and feedback. Higher weight = more influence on score.</p>
+            </div>
+            <Button
+              variant="ghost"
+              size="inline"
+              on:click={resetScoringWeights}
+              disabled={isResettingWeights}
+            >
+              <IconRestore size={14} stroke={1.9} />
+              <span>{isResettingWeights ? 'Resetting...' : 'Reset to defaults'}</span>
+            </Button>
+          </div>
+
+          {#if signalWeights.length > 0}
+            <div class="signal-weights-table">
+              <div class="signal-header">
+                <span>Signal</span>
+                <span>Weight</span>
+                <span>Samples</span>
+              </div>
+              {#each signalWeights as sw}
+                <div class="signal-row">
+                  <span class="signal-name">{sw.name.replace(/_/g, ' ')}</span>
+                  <span class="signal-weight">
+                    <span class="weight-bar" style="width: {Math.min(100, (sw.weight / 2) * 100)}%"></span>
+                    <span class="weight-value">{sw.weight.toFixed(2)}</span>
+                  </span>
+                  <span class="signal-samples">{sw.sampleCount}</span>
+                </div>
+              {/each}
+            </div>
+          {:else}
+            <p class="muted small">No signal weights loaded. Weights are seeded on first migration.</p>
+          {/if}
+        </div>
+      </div>
+    </SettingsSectionCard>
+
+    <SettingsSectionCard
       id="reading"
       title="Reading defaults"
       summary={sectionSummary('reading')}
-      description={sectionConfig[1].description}
+      description={sectionConfig[2].description}
       open={sectionOpen.reading}
       dirty={dirtySections.reading}
       onToggle={() => toggleSection('reading')}
@@ -1238,7 +1412,7 @@
       id="profile"
       title="Profile & prompts"
       summary={sectionSummary('profile')}
-      description={sectionConfig[2].description}
+      description={sectionConfig[3].description}
       open={sectionOpen.profile}
       dirty={dirtySections.profile}
       onToggle={() => toggleSection('profile')}
@@ -1286,7 +1460,7 @@
       id="keys"
       title="Provider keys"
       summary={sectionSummary('keys')}
-      description={sectionConfig[3].description}
+      description={sectionConfig[4].description}
       open={sectionOpen.keys}
       dirty={dirtySections.keys}
       onToggle={() => toggleSection('keys')}
@@ -1361,7 +1535,7 @@
       id="intake"
       title="Intake & retention"
       summary={sectionSummary('intake')}
-      description={sectionConfig[4].description}
+      description={sectionConfig[5].description}
       open={sectionOpen.intake}
       dirty={dirtySections.intake}
       onToggle={() => toggleSection('intake')}
@@ -1467,7 +1641,7 @@
       id="operations"
       title="Operations"
       summary={sectionSummary('operations')}
-      description={sectionConfig[5].description}
+      description={sectionConfig[6].description}
       open={sectionOpen.operations}
       dirty={dirtySections.operations}
       onToggle={() => toggleSection('operations')}
@@ -2233,5 +2407,78 @@
       gap: var(--space-2);
       flex-wrap: wrap;
     }
+  }
+
+  /* ─── Signal weights table ──────────────────────────── */
+
+  .signal-weights-table {
+    display: grid;
+    gap: 0;
+    border: 1px solid var(--surface-border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+
+  .signal-header {
+    display: grid;
+    grid-template-columns: 1fr 1fr 4rem;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted-text);
+    background: var(--surface-raised);
+    border-bottom: 1px solid var(--surface-border);
+  }
+
+  .signal-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 4rem;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    align-items: center;
+    font-size: var(--text-sm);
+    border-bottom: 1px solid var(--surface-border);
+  }
+
+  .signal-row:last-child {
+    border-bottom: none;
+  }
+
+  .signal-name {
+    text-transform: capitalize;
+  }
+
+  .signal-weight {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    position: relative;
+  }
+
+  .weight-bar {
+    display: block;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--accent);
+    min-width: 2px;
+    flex-shrink: 0;
+  }
+
+  .weight-value {
+    font-variant-numeric: tabular-nums;
+    font-size: var(--text-xs);
+    color: var(--muted-text);
+    min-width: 2.5rem;
+    text-align: right;
+  }
+
+  .signal-samples {
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    font-size: var(--text-xs);
+    color: var(--muted-text);
   }
 </style>

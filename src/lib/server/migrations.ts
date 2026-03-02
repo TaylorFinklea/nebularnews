@@ -4,7 +4,7 @@ let schemaReady = false;
 let schemaInitPromise: Promise<void> | null = null;
 
 const MAX_PUBLISHED_FUTURE_MS = 1000 * 60 * 60 * 24;
-export const EXPECTED_SCHEMA_VERSION = 5;
+export const EXPECTED_SCHEMA_VERSION = 6;
 
 const runSafe = async (db: Db, sql: string, params: unknown[] = []) => {
   try {
@@ -345,6 +345,81 @@ const applyV5 = async (db: Db) => {
   await runSafe(db, "DELETE FROM article_tags WHERE source = 'ai'");
 };
 
+const applyV6 = async (db: Db) => {
+  // Signal weights — stores learned weights per signal
+  await runSafe(
+    db,
+    `CREATE TABLE IF NOT EXISTS signal_weights (
+      signal_name TEXT PRIMARY KEY,
+      weight REAL NOT NULL DEFAULT 1.0,
+      sample_count INTEGER NOT NULL DEFAULT 0,
+      updated_at INTEGER NOT NULL
+    )`
+  );
+
+  // Article signal scores — per-article signal breakdown for transparency
+  await runSafe(
+    db,
+    `CREATE TABLE IF NOT EXISTS article_signal_scores (
+      id TEXT PRIMARY KEY,
+      article_id TEXT NOT NULL,
+      signal_name TEXT NOT NULL,
+      raw_value REAL NOT NULL,
+      normalized_value REAL NOT NULL,
+      created_at INTEGER NOT NULL,
+      UNIQUE(article_id, signal_name),
+      FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE
+    )`
+  );
+  await runSafe(
+    db,
+    'CREATE INDEX IF NOT EXISTS idx_article_signal_scores_article ON article_signal_scores(article_id)'
+  );
+
+  // Topic affinities — tracks user preference per tag/topic
+  await runSafe(
+    db,
+    `CREATE TABLE IF NOT EXISTS topic_affinities (
+      tag_name_normalized TEXT PRIMARY KEY,
+      affinity REAL NOT NULL DEFAULT 0.0,
+      interaction_count INTEGER NOT NULL DEFAULT 0,
+      updated_at INTEGER NOT NULL
+    )`
+  );
+
+  // Author affinities — tracks user preference per author
+  await runSafe(
+    db,
+    `CREATE TABLE IF NOT EXISTS author_affinities (
+      author_normalized TEXT PRIMARY KEY,
+      affinity REAL NOT NULL DEFAULT 0.0,
+      interaction_count INTEGER NOT NULL DEFAULT 0,
+      updated_at INTEGER NOT NULL
+    )`
+  );
+
+  // Add scoring_method to article_scores
+  await runSafe(db, "ALTER TABLE article_scores ADD COLUMN scoring_method TEXT NOT NULL DEFAULT 'ai'");
+
+  // Seed default signal weights
+  const defaultWeights: [string, number][] = [
+    ['topic_affinity', 1.0],
+    ['source_reputation', 0.8],
+    ['content_freshness', 0.6],
+    ['content_depth', 0.5],
+    ['author_affinity', 0.7],
+    ['tag_match_ratio', 0.9]
+  ];
+  const ts = Date.now();
+  for (const [name, weight] of defaultWeights) {
+    await runSafe(
+      db,
+      'INSERT OR IGNORE INTO signal_weights (signal_name, weight, sample_count, updated_at) VALUES (?, ?, 0, ?)',
+      [name, weight, ts]
+    );
+  }
+};
+
 export async function ensureSchema(db: Db) {
   if (schemaReady) return;
   if (schemaInitPromise) return schemaInitPromise;
@@ -371,6 +446,10 @@ export async function ensureSchema(db: Db) {
     if (currentVersion < 5) {
       await applyV5(db);
       await markVersionApplied(db, 5, 'v5_tagging_v2_suggestions');
+    }
+    if (currentVersion < 6) {
+      await applyV6(db);
+      await markVersionApplied(db, 6, 'v6_hybrid_scoring');
     }
     schemaReady = true;
   })();

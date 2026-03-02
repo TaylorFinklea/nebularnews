@@ -2,6 +2,7 @@ import { json } from '@sveltejs/kit';
 import { nanoid } from 'nanoid';
 import { dbRun, now } from '$lib/server/db';
 import { getPreferredSourceForArticle, isFeedLinkedToArticle } from '$lib/server/sources';
+import { processFeedbackLearning } from '$lib/server/scoring/learning';
 
 export const POST = async ({ params, request, platform }) => {
   const { id } = params;
@@ -54,6 +55,11 @@ export const POST = async ({ params, request, platform }) => {
        updated_at = excluded.updated_at`,
     [nanoid(), 'refresh_profile', 'profile', 'pending', 0, 100, now(), now(), now()]
   );
+
+  // Update scoring weights based on feedback rating
+  processFeedbackLearning(platform.env.DB, id, rating).catch(() => {
+    // Learning updates are non-critical — don't block the response
+  });
 
   return json({ ok: true, feedId });
 };

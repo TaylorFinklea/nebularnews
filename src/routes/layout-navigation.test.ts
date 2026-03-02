@@ -5,26 +5,29 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import Layout from './+layout.svelte';
 
 const mockedPage = vi.hoisted(() => {
-  const listeners = new Set<(value: { url: URL }) => void>();
-  let value = { url: new URL('https://example.com/') };
+  const afterNavigateCallbacks = new Set<(navigation: { to: { url: URL } | null }) => void>();
+  const page = { url: new URL('https://example.com/') };
 
   return {
-    page: {
-      subscribe(run: (value: { url: URL }) => void) {
-        run(value);
-        listeners.add(run);
-        return () => listeners.delete(run);
-      }
+    page,
+    afterNavigate(callback: (navigation: { to: { url: URL } | null }) => void) {
+      afterNavigateCallbacks.add(callback);
     },
     setPath(pathname: string) {
-      value = { url: new URL(`https://example.com${pathname}`) };
-      for (const run of listeners) run(value);
+      page.url = new URL(`https://example.com${pathname}`);
+      for (const callback of afterNavigateCallbacks) {
+        callback({ to: { url: page.url } });
+      }
     }
   };
 });
 
-vi.mock('$app/stores', () => ({
+vi.mock('$app/state', () => ({
   page: mockedPage.page
+}));
+
+vi.mock('$app/navigation', () => ({
+  afterNavigate: mockedPage.afterNavigate
 }));
 
 const setPath = (pathname: string) => mockedPage.setPath(pathname);
@@ -125,6 +128,29 @@ describe('Layout navigation shell', () => {
     const sidebar = await screen.findByLabelText('App sidebar');
     const settingsLink = within(sidebar).getByRole('link', { name: 'Settings' });
     expect(settingsLink.getAttribute('aria-current')).toBe('page');
+  });
+
+  it('updates the active sidebar link after client-side navigation', async () => {
+    render(Layout);
+
+    const sidebar = await screen.findByLabelText('App sidebar');
+    const sidebarScope = within(sidebar);
+
+    expect(sidebarScope.getByRole('link', { name: 'Dashboard' }).getAttribute('aria-current')).toBe(
+      'page'
+    );
+    expect(sidebarScope.getByRole('link', { name: 'Articles' }).getAttribute('aria-current')).toBeNull();
+
+    setPath('/articles');
+
+    await waitFor(() => {
+      expect(
+        sidebarScope.getByRole('link', { name: 'Dashboard' }).getAttribute('aria-current')
+      ).toBeNull();
+      expect(sidebarScope.getByRole('link', { name: 'Articles' }).getAttribute('aria-current')).toBe(
+        'page'
+      );
+    });
   });
 
   it('opens and closes mobile more sheet with management links', async () => {

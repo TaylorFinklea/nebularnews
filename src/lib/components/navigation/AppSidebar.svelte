@@ -34,7 +34,6 @@
   const workspaceItems = APP_NAV_ITEMS.filter((item) => item.group === 'workspace');
   const themeLabel = () => (theme === 'dark' ? 'Light mode' : 'Dark mode');
   const collapseLabel = () => (collapsed ? 'Expand sidebar' : 'Collapse sidebar');
-  const isActive = (item: AppNavItem) => isAppNavItemActive(item, currentPath);
 </script>
 
 <aside class="sidebar" class:collapsed aria-label="App sidebar">
@@ -59,7 +58,7 @@
         <nav class="nav-group" aria-label="Primary navigation">
           {#each primaryItems as item}
             {@const Icon = iconByName[item.icon]}
-            {@const active = isActive(item)}
+            {@const active = isAppNavItemActive(item, currentPath)}
             <a
               href={item.href}
               class="nav-link"
@@ -81,7 +80,7 @@
           <nav class="nav-group" aria-label="Workspace navigation">
             {#each workspaceItems as item}
               {@const Icon = iconByName[item.icon]}
-              {@const active = isActive(item)}
+              {@const active = isAppNavItemActive(item, currentPath)}
               <a
                 href={item.href}
                 class="nav-link"

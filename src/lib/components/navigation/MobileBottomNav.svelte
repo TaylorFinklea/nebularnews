@@ -36,7 +36,6 @@
 
   const primaryItems = APP_NAV_ITEMS.filter((item) => item.mobilePrimary);
   const moreItems = APP_NAV_ITEMS.filter((item) => item.group === 'workspace');
-  const isActive = (item: AppNavItem) => isAppNavItemActive(item, currentPath);
   const themeLabel = () => (theme === 'dark' ? 'Light mode' : 'Dark mode');
 
   const closeMore = () => {
@@ -69,7 +68,7 @@
 <nav class="bottom-rail" aria-label="Bottom navigation">
   {#each primaryItems as item}
     {@const Icon = iconByName[item.icon]}
-    {@const active = isActive(item)}
+    {@const active = isAppNavItemActive(item, currentPath)}
     <a
       href={item.href}
       class="rail-link"
@@ -114,7 +113,7 @@
     <div class="sheet-links">
       {#each moreItems as item, index}
         {@const Icon = iconByName[item.icon]}
-        {@const active = isActive(item)}
+        {@const active = isAppNavItemActive(item, currentPath)}
         <a
           bind:this={moreItemRefs[index]}
           href={item.href}

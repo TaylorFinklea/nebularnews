@@ -1,6 +1,7 @@
 <script>
+  import { afterNavigate } from '$app/navigation';
+  import { page } from '$app/state';
   import { onMount } from 'svelte';
-  import { page } from '$app/stores';
   import { fade } from 'svelte/transition';
   import '$lib/styles/tokens.css';
   import AppSidebar from '$lib/components/navigation/AppSidebar.svelte';
@@ -12,9 +13,13 @@
 
   let theme = 'dark';
   let sidebarCollapsed = false;
+  let currentPath = page.url.pathname;
 
-  $: currentPath = $page.url.pathname;
   $: isLoginRoute = currentPath === '/login';
+
+  afterNavigate((navigation) => {
+    currentPath = navigation.to?.url.pathname ?? page.url.pathname;
+  });
 
   const resolveInitialTheme = () => {
     try {

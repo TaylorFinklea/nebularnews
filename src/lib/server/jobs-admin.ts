@@ -1,7 +1,6 @@
 import { dbAll, dbGet, dbRun, now, type Db } from './db';
 import { processJobs } from './jobs';
 import { dayRangeForTimezoneOffset } from './time';
-import { getAutoTaggingEnabled } from './settings';
 
 const JOB_FILTERS = ['all', 'pending', 'running', 'failed', 'done', 'cancelled'] as const;
 const MAX_LIMIT = 250;
@@ -146,7 +145,6 @@ export async function queueMissingTodayArticleJobs(
   db: Db,
   options?: { referenceAt?: number; tzOffsetMinutes?: number }
 ) {
-  const autoTaggingEnabled = await getAutoTaggingEnabled(db);
   const referenceAt = options?.referenceAt ?? now();
   const range = dayRangeForTimezoneOffset(referenceAt, options?.tzOffsetMinutes ?? 0);
   const { dayStart, dayEnd } = range;
@@ -200,42 +198,40 @@ export async function queueMissingTodayArticleJobs(
     [runAfter, timestamp, timestamp, dayStart, dayEnd]
   );
 
-  const autoTagResult = autoTaggingEnabled
-    ? await dbRun(
-        db,
-        `INSERT INTO jobs (id, type, article_id, status, attempts, priority, run_after, last_error, provider, model, created_at, updated_at)
-         SELECT lower(hex(randomblob(16))), 'auto_tag', a.id, 'pending', 0, 100, ?, NULL, NULL, NULL, ?, ?
-         FROM articles a
-         WHERE COALESCE(a.published_at, a.fetched_at) >= ?
-           AND COALESCE(a.published_at, a.fetched_at) < ?
-           AND NOT EXISTS (
-             SELECT 1
-             FROM article_tags t
-             WHERE t.article_id = a.id
-               AND t.source = 'ai'
-           )
-           AND NOT EXISTS (
-             SELECT 1
-             FROM jobs j
-             WHERE j.article_id = a.id
-               AND j.type = 'auto_tag'
-               AND j.status = 'done'
-           )
-         ON CONFLICT(type, article_id) DO UPDATE SET
-           status = excluded.status,
-           attempts = 0,
-           priority = excluded.priority,
-           run_after = excluded.run_after,
-           last_error = NULL,
-           provider = NULL,
-           model = NULL,
-           locked_by = NULL,
-           locked_at = NULL,
-           lease_expires_at = NULL,
-           updated_at = excluded.updated_at`,
-        [runAfter, timestamp, timestamp, dayStart, dayEnd]
-      )
-    : { meta: { changes: 0 } };
+  const autoTagResult = await dbRun(
+    db,
+    `INSERT INTO jobs (id, type, article_id, status, attempts, priority, run_after, last_error, provider, model, created_at, updated_at)
+     SELECT lower(hex(randomblob(16))), 'auto_tag', a.id, 'pending', 0, 100, ?, NULL, NULL, NULL, ?, ?
+     FROM articles a
+     WHERE COALESCE(a.published_at, a.fetched_at) >= ?
+       AND COALESCE(a.published_at, a.fetched_at) < ?
+       AND NOT EXISTS (
+         SELECT 1
+         FROM article_tags t
+         WHERE t.article_id = a.id
+           AND t.source IN ('ai', 'system')
+       )
+       AND NOT EXISTS (
+         SELECT 1
+         FROM jobs j
+         WHERE j.article_id = a.id
+           AND j.type = 'auto_tag'
+           AND j.status = 'done'
+       )
+     ON CONFLICT(type, article_id) DO UPDATE SET
+       status = excluded.status,
+       attempts = 0,
+       priority = excluded.priority,
+       run_after = excluded.run_after,
+       last_error = NULL,
+       provider = NULL,
+       model = NULL,
+       locked_by = NULL,
+       locked_at = NULL,
+       lease_expires_at = NULL,
+       updated_at = excluded.updated_at`,
+    [runAfter, timestamp, timestamp, dayStart, dayEnd]
+  );
 
   const imageBackfillResult = await dbRun(
     db,

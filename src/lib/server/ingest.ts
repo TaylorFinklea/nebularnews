@@ -5,7 +5,6 @@ import { extractMainContent, computeWordCount } from './text';
 import { normalizeUrl } from './urls';
 import { extractLeadImageUrlFromHtml, normalizeImageUrl } from './images';
 import {
-  getAutoTaggingEnabled,
   clampInitialFeedLookbackDays,
   getInitialFeedLookbackDays,
   getMaxFeedsPerPoll,
@@ -107,7 +106,6 @@ export async function pollFeeds(
   const initialFeedLookbackDays = clampInitialFeedLookbackDays(
     options.initialFeedLookbackDays ?? (await getInitialFeedLookbackDays(db))
   );
-  const autoTaggingEnabled = await getAutoTaggingEnabled(db);
   const dueFeeds = await dbAll<{
     id: string;
     url: string;
@@ -171,7 +169,7 @@ export async function pollFeeds(
       );
 
       for (const item of itemsForFeed) {
-        if (await ingestFeedItem(db, feed.id, item, { autoTaggingEnabled })) {
+        if (await ingestFeedItem(db, feed.id, item)) {
           summary.itemsProcessed += 1;
         }
       }
@@ -239,8 +237,7 @@ async function queueImageBackfillJob(
 async function ingestFeedItem(
   db: Db,
   feedId: string,
-  item: FeedItem,
-  options: { autoTaggingEnabled: boolean }
+  item: FeedItem
 ): Promise<boolean> {
   const url = normalizeUrl(item.url ?? null);
   if (!url) return false;
@@ -353,12 +350,10 @@ async function ingestFeedItem(
             params: [nanoid(), 'score', articleId, 'pending', 0, 100, queuedAt, queuedAt, queuedAt]
           }
         ];
-        if (options.autoTaggingEnabled) {
-          jobs.push({
-            sql: 'INSERT OR IGNORE INTO jobs (id, type, article_id, status, attempts, priority, run_after, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            params: [nanoid(), 'auto_tag', articleId, 'pending', 0, 100, queuedAt, queuedAt, queuedAt]
-          });
-        }
+        jobs.push({
+          sql: 'INSERT OR IGNORE INTO jobs (id, type, article_id, status, attempts, priority, run_after, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          params: [nanoid(), 'auto_tag', articleId, 'pending', 0, 100, queuedAt, queuedAt, queuedAt]
+        });
         await dbBatch(db, jobs);
       }
     }

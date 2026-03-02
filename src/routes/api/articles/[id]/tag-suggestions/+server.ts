@@ -4,11 +4,14 @@ import {
   attachTagToArticle,
   dismissTagSuggestion,
   ensureTagByName,
+  listTagLinksForArticle,
   listTagSuggestionsForArticle,
   listTagsForArticle,
   normalizeTagSuggestionKey,
+  serializeArticleTagLinkState,
   undoDismissTagSuggestion
 } from '$lib/server/tags';
+import { enqueueScoreJob } from '$lib/server/job-queue';
 import { updateTopicAffinity } from '$lib/server/scoring/learning';
 
 const pickSuggestion = async (
@@ -54,6 +57,7 @@ export const POST = async (event) => {
   if (!action) return apiError(event, 400, 'bad_request', 'Missing action');
 
   if (action === 'accept') {
+    const beforeState = serializeArticleTagLinkState(await listTagLinksForArticle(platform.env.DB, params.id));
     const suggestion = await pickSuggestion(platform.env.DB, params.id, {
       suggestionId: suggestionId || null,
       name: suggestionName || null
@@ -75,6 +79,10 @@ export const POST = async (event) => {
     );
     // Positive affinity signal for accepted tag
     updateTopicAffinity(platform.env.DB, suggestion.name_normalized, 1).catch(() => {});
+    const afterState = serializeArticleTagLinkState(await listTagLinksForArticle(platform.env.DB, params.id));
+    if (beforeState !== afterState) {
+      await enqueueScoreJob(platform.env.DB, params.id);
+    }
   } else if (action === 'dismiss') {
     const suggestion = await pickSuggestion(platform.env.DB, params.id, {
       suggestionId: suggestionId || null,

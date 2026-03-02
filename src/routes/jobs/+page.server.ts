@@ -3,7 +3,6 @@ import { getJobCounts, listJobs, normalizeJobFilter } from '$lib/server/jobs-adm
 import { parse as parseCookie } from 'cookie';
 import { clampTimezoneOffsetMinutes, dayRangeForTimezoneOffset } from '$lib/server/time';
 import { isEventsV2Enabled } from '$lib/server/flags';
-import { getAutoTaggingEnabled } from '$lib/server/settings';
 
 export const load = async ({ platform, url, request, depends }) => {
   depends('app:jobs');
@@ -42,12 +41,7 @@ export const load = async ({ platform, url, request, depends }) => {
          SELECT 1
          FROM article_tags t
          WHERE t.article_id = a.id
-           AND t.source = 'ai'
-       )
-       AND NOT EXISTS (
-         SELECT 1
-         FROM article_tag_suggestions ts
-         WHERE ts.article_id = a.id
+           AND t.source IN ('ai', 'system')
        )
        AND NOT EXISTS (
          SELECT 1
@@ -58,7 +52,6 @@ export const load = async ({ platform, url, request, depends }) => {
        )`,
     [dayStart, dayEnd]
   );
-  const autoTaggingEnabled = await getAutoTaggingEnabled(platform.env.DB);
 
   return {
     jobs,
@@ -68,8 +61,7 @@ export const load = async ({ platform, url, request, depends }) => {
     today: {
       missingSummaries: todayMissingSummaries?.count ?? 0,
       missingScores: todayMissingScores?.count ?? 0,
-      missingAutoTags: autoTaggingEnabled ? todayMissingAutoTags?.count ?? 0 : 0,
-      autoTaggingEnabled,
+      missingAutoTags: todayMissingAutoTags?.count ?? 0,
       tzOffsetMinutes
     }
   };

@@ -23,6 +23,12 @@ export type ArticleTag = Tag & {
   attached_updated_at: number;
 };
 
+export type ArticleTagLink = {
+  tagId: string;
+  source: TagSource;
+  confidence: number | null;
+};
+
 export type ArticleTagSuggestion = {
   id: string;
   article_id: string;
@@ -307,6 +313,44 @@ export async function listTagsForArticle(db: Db, articleId: string) {
   const byArticle = await listTagsForArticles(db, [articleId]);
   return byArticle.get(articleId) ?? [];
 }
+
+export async function listTagLinksForArticle(
+  db: Db,
+  articleId: string,
+  options?: { sources?: TagSource[] }
+) {
+  const sources = [...new Set((options?.sources ?? []).filter(Boolean))];
+  const whereSource =
+    sources.length > 0 ? `AND source IN (${placeholders(sources.length)})` : '';
+  const rows = await dbAll<{ tag_id: string; source: TagSource; confidence: number | null }>(
+    db,
+    `SELECT tag_id, source, confidence
+     FROM article_tags
+     WHERE article_id = ?
+     ${whereSource}
+     ORDER BY tag_id ASC`,
+    [articleId, ...sources]
+  );
+
+  return rows.map((row) => ({
+    tagId: row.tag_id,
+    source: row.source,
+    confidence: row.confidence
+  })) satisfies ArticleTagLink[];
+}
+
+export const roundTagConfidenceForState = (value: number | null | undefined) =>
+  value === null || value === undefined || !Number.isFinite(Number(value))
+    ? 'null'
+    : Number(value).toFixed(3);
+
+export const serializeArticleTagLinkState = (
+  links: Array<Pick<ArticleTagLink, 'tagId' | 'source' | 'confidence'>>
+) =>
+  [...links]
+    .map((link) => `${link.tagId}:${link.source}:${roundTagConfidenceForState(link.confidence)}`)
+    .sort()
+    .join('|');
 
 export async function listTagSuggestionsForArticles(db: Db, articleIds: string[]) {
   const deduped = [...new Set(articleIds.filter(Boolean))];

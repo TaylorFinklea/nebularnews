@@ -3,7 +3,6 @@ import { dbAll, dbGet, dbRun, now, type Db } from './db';
 import {
   enhanceScore,
   generateArticleKeyPoints,
-  generateArticleTagDecisions,
   refreshPreferenceProfile,
   scoreArticle,
   summarizeArticle
@@ -12,7 +11,6 @@ import { extractLeadImageUrlFromHtml } from './images';
 import {
   getAutoTagMaxPerArticle,
   getFeatureProviderModel,
-  getAutoTaggingEnabled,
   getJobProcessorBatchSize,
   getProviderKey,
   getScorePromptConfig,
@@ -24,12 +22,10 @@ import { ensurePreferenceProfile } from './profile';
 import { scoreArticleAlgorithmic } from './scoring/engine';
 import type { ScoringMethod } from './scoring/types';
 import {
-  attachTagToArticle,
-  listDismissedSuggestionNamesForArticle,
-  listExistingTagCandidatesForArticle,
-  normalizeTagSuggestionKey,
-  replaceTagSuggestionsForArticle
-} from './tags';
+  applyDeterministicTagDecisions,
+  generateDeterministicTagDecisions
+} from './tagging/rules';
+import { enqueueScoreJob } from './job-queue';
 import { logInfo } from './log';
 import { isJobBatchV2Enabled } from './flags';
 
@@ -451,81 +447,59 @@ async function runKeyPointsJob(db: Db, env: App.Platform['env'], articleId: stri
   return { provider, model };
 }
 
-async function runAutoTagJob(db: Db, env: App.Platform['env'], articleId: string): Promise<JobRunMetadata> {
-  const autoTaggingEnabled = await getAutoTaggingEnabled(db);
-  if (!autoTaggingEnabled) {
-    return null;
-  }
-
+export async function runAutoTagJob(db: Db, _env: App.Platform['env'], articleId: string): Promise<JobRunMetadata> {
   const article = await dbGet<{
     title: string | null;
     canonical_url: string | null;
     content_text: string | null;
-  }>(db, 'SELECT title, canonical_url, content_text FROM articles WHERE id = ?', [articleId]);
-  if (!article?.content_text) throw new Error('Missing article content');
-
-  const { provider, model, reasoningEffort } = await getFeatureProviderModel(db, env, 'auto_tagging');
-  const apiKey = await getProviderKey(db, env, provider);
-  if (!apiKey) throw new Error('No provider key');
-  const maxTags = await getAutoTagMaxPerArticle(db);
-  const existingCandidates = await listExistingTagCandidatesForArticle(db, {
-    title: article.title,
-    contentText: article.content_text,
-    limit: 50
-  });
-  const dismissedSuggestionNames = await listDismissedSuggestionNamesForArticle(db, articleId);
-
-  const generated = await generateArticleTagDecisions(
-    provider,
-    apiKey,
-    model,
-    {
-      title: article.title,
-      url: article.canonical_url,
-      contentText: article.content_text.slice(0, 12000),
-      maxTags,
-      existingCandidates: existingCandidates.map((candidate) => ({
-        id: candidate.id,
-        name: candidate.name
-      }))
-    },
-    { reasoningEffort }
-  );
-  const remainingSlots = Math.max(0, maxTags - generated.matchedExistingTagIds.length);
-  const filteredSuggestions = generated.newSuggestions
-    .filter((candidate) => !dismissedSuggestionNames.has(normalizeTagSuggestionKey(candidate.name)))
-    .slice(0, remainingSlots);
-
-  // Replace previous AI-generated tags only. Manual/system tags are retained.
-  await dbRun(db, 'DELETE FROM article_tags WHERE article_id = ? AND source = ?', [articleId, 'ai']);
-  const existingLinks = await dbAll<{ tag_id: string }>(
+    source_feed_id: string | null;
+  }>(
     db,
-    'SELECT tag_id FROM article_tags WHERE article_id = ?',
+    `SELECT
+      a.title,
+      a.canonical_url,
+      a.content_text,
+      (
+        SELECT src.feed_id
+        FROM article_sources src
+        WHERE src.article_id = a.id
+        ORDER BY src.published_at DESC NULLS LAST, src.id DESC
+        LIMIT 1
+      ) AS source_feed_id
+     FROM articles a
+     WHERE a.id = ?`,
     [articleId]
   );
-  const existingTagIds = new Set(existingLinks.map((row) => row.tag_id));
-
-  for (const tagId of generated.matchedExistingTagIds) {
-    if (existingTagIds.has(tagId)) {
-      continue;
-    }
-    await attachTagToArticle(db, {
-      articleId,
-      tagId,
-      source: 'ai',
-      confidence: null
-    });
-    existingTagIds.add(tagId);
+  if (!article) {
+    throw new Error(`Article not found: ${articleId}`);
   }
 
-  await replaceTagSuggestionsForArticle(db, {
+  const maxTags = await getAutoTagMaxPerArticle(db);
+  const decisions = await generateDeterministicTagDecisions(db, {
     articleId,
-    sourceProvider: provider,
-    sourceModel: model,
-    suggestions: filteredSuggestions
+    title: article.title,
+    canonicalUrl: article.canonical_url,
+    contentText: article.content_text,
+    sourceFeedId: article.source_feed_id,
+    maxTags
+  });
+  const applied = await applyDeterministicTagDecisions(db, articleId, decisions);
+
+  logInfo('tagging.deterministic.completed', {
+    article_id: articleId,
+    candidate_count: decisions.length,
+    changed: applied.changed,
+    attached_tag_ids: applied.attachedTagIds,
+    updated_tag_ids: applied.updatedTagIds,
+    removed_tag_ids: applied.removedTagIds,
+    skipped_existing_tag_ids: applied.skippedExistingTagIds
   });
 
-  return { provider, model };
+  if (applied.changed) {
+    await enqueueScoreJob(db, articleId);
+  }
+
+  return null;
 }
 
 

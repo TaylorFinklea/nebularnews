@@ -3,11 +3,14 @@ import {
   attachTagToArticle,
   ensureTagByName,
   detachTagFromArticle,
+  listTagLinksForArticle,
   listTagsForArticle,
   resolveTagsByTokens,
+  serializeArticleTagLinkState,
   type TagSource
 } from '$lib/server/tags';
 import { apiError, apiOkWithAliases } from '$lib/server/api';
+import { enqueueScoreJob } from '$lib/server/job-queue';
 import { logInfo } from '$lib/server/log';
 
 const normalizeSource = (value: unknown): TagSource => {
@@ -64,6 +67,7 @@ export const POST = async (event) => {
 
   const removeRows = await resolveTagsByTokens(platform.env.DB, removeTagIds);
   const removeIds = new Set(removeRows.map((row) => row.id));
+  const beforeState = serializeArticleTagLinkState(await listTagLinksForArticle(platform.env.DB, params.id));
 
   if (replace) {
     const current = await listTagsForArticle(platform.env.DB, params.id);
@@ -86,6 +90,11 @@ export const POST = async (event) => {
 
   for (const tagId of removeIds) {
     await detachTagFromArticle(platform.env.DB, params.id, tagId);
+  }
+
+  const afterState = serializeArticleTagLinkState(await listTagLinksForArticle(platform.env.DB, params.id));
+  if (beforeState !== afterState) {
+    await enqueueScoreJob(platform.env.DB, params.id);
   }
 
   const tags = await listTagsForArticle(platform.env.DB, params.id);

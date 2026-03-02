@@ -8,10 +8,10 @@
     IconMoonStars,
     IconRss,
     IconSettings,
+    IconStars,
     IconSun,
     IconTag
   } from '$lib/icons';
-  import NebularLogo from '$lib/components/brand/NebularLogo.svelte';
   import { APP_NAV_ITEMS, isAppNavItemActive, type AppNavItem, type AppNavItemIcon } from '$lib/navigation/app-nav';
 
   export let currentPath = '/';
@@ -47,7 +47,7 @@
         title={collapsed ? 'Nebular News' : undefined}
       >
         <span class="brand-icon">
-          <NebularLogo />
+          <IconStars size={22} stroke={1.8} />
         </span>
         <span class="brand-text">
           <span class="brand-mark">Nebular</span>
@@ -181,12 +181,12 @@
 
   .brand-icon {
     flex-shrink: 0;
-    width: 2.25rem;
-    height: 1.65rem;
+    width: 2rem;
+    height: 2rem;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--primary-strong);
+    color: var(--primary);
   }
 
   .brand-text {

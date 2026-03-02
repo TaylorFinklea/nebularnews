@@ -32,7 +32,7 @@ export const getFitScoreAria = (score: unknown, status?: FitScoreStatus) => {
 };
 
 export const getScoreToken = (score: unknown, status?: FitScoreStatus) => {
-  if (status === 'insufficient_signal') return 'unscored';
+  if (status === 'insufficient_signal') return 'learning';
   const value = getFitScoreValue(score, status);
   return value === null ? 'unscored' : String(value);
 };

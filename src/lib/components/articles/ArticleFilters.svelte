@@ -37,13 +37,17 @@
       <span>1</span>
     </label>
     <label>
+      <input type="checkbox" name="score" value="learning" bind:group={selectedScores} />
+      <span>Learning</span>
+    </label>
+    <label>
       <input type="checkbox" name="score" value="unscored" bind:group={selectedScores} />
       <span>Unscored</span>
     </label>
     <button
       type="button"
       class="score-all ghost"
-      on:click={() => (selectedScores = ['5', '4', '3', '2', '1', 'unscored'])}
+      on:click={() => (selectedScores = ['5', '4', '3', '2', '1', 'learning', 'unscored'])}
     >
       All
     </button>

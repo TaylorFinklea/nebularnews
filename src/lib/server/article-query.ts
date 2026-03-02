@@ -3,7 +3,7 @@ import { listReactionReasonCodesForArticles } from './reactions';
 import { getPreferredSourcesForArticles } from './sources';
 import { listTagSuggestionsForArticles, listTagsForArticles } from './tags';
 
-export const SCORE_VALUES = ['5', '4', '3', '2', '1', 'unscored'] as const;
+export const SCORE_VALUES = ['5', '4', '3', '2', '1', 'learning', 'unscored'] as const;
 export const REACTION_VALUES = ['up', 'down', 'none'] as const;
 export const SORT_VALUES = ['newest', 'oldest', 'score_desc', 'score_asc', 'unread_first', 'title_az'] as const;
 
@@ -82,13 +82,18 @@ const buildWhere = (input: ArticleQueryInput) => {
 
   if (input.selectedScores.length < SCORE_VALUES.length) {
     const scoreConditions: string[] = [];
-    const numericScores = input.selectedScores.filter((value) => value !== 'unscored').map((value) => Number(value));
+    const numericScores = input.selectedScores
+      .filter((value) => value !== 'learning' && value !== 'unscored')
+      .map((value) => Number(value));
     if (numericScores.length > 0) {
       scoreConditions.push(`${effectiveScoreExpr} IN (${placeholders(numericScores.length)})`);
       params.push(...numericScores);
     }
+    if (input.selectedScores.includes('learning')) {
+      scoreConditions.push(`${latestScoreStatusExpr} = 'insufficient_signal'`);
+    }
     if (input.selectedScores.includes('unscored')) {
-      scoreConditions.push(`${effectiveScoreExpr} IS NULL`);
+      scoreConditions.push(`(${effectiveScoreExpr} IS NULL AND COALESCE(${latestScoreStatusExpr}, '') != 'insufficient_signal')`);
     }
     if (scoreConditions.length > 0) conditions.push(`(${scoreConditions.join(' OR ')})`);
   }

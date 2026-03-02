@@ -25,7 +25,7 @@
   export let data;
 
   const TOAST_TIMEOUT_MS = 4000;
-  const DEFAULT_SCORE_FILTER = ['5', '4', '3', '2', '1', 'unscored'];
+  const DEFAULT_SCORE_FILTER = ['5', '4', '3', '2', '1', 'learning', 'unscored'];
   const DEFAULT_REACTION_FILTER = ['up', 'down', 'none'];
 
   const toInt = (value, fallback = 0) => { const n = Number(value); return Number.isFinite(n) ? n : fallback; };
@@ -371,11 +371,11 @@
     return `/articles/${articleId}?from=${encodeURIComponent(from)}`;
   };
 
-  $: hasActiveFilters = (data.q || data.sinceDays || (data.selectedScores?.length ?? 0) < 6 || data.readFilter !== 'all' || (data.selectedReactions?.length ?? 0) < 3 || (data.selectedTagIds?.length ?? 0) > 0);
+  $: hasActiveFilters = (data.q || data.sinceDays || (data.selectedScores?.length ?? 0) < 7 || data.readFilter !== 'all' || (data.selectedReactions?.length ?? 0) < 3 || (data.selectedTagIds?.length ?? 0) > 0);
   $: activeFilterCount = [
     data.q ? 1 : 0,
     data.sinceDays ? 1 : 0,
-    (data.selectedScores?.length ?? 6) < 6 ? 1 : 0,
+    (data.selectedScores?.length ?? 7) < 7 ? 1 : 0,
     data.readFilter && data.readFilter !== 'all' ? 1 : 0,
     (data.selectedReactions?.length ?? 3) < 3 ? 1 : 0,
     (data.selectedTagIds?.length ?? 0) > 0 ? 1 : 0
@@ -464,7 +464,7 @@
       <div class="filter-group">
         <span class="filter-label">AI Score</span>
         <div class="check-row">
-          {#each [['5','Perfect'], ['4','Strong'], ['3','Okay'], ['2','Weak'], ['1','Poor'], ['unscored','Unscored']] as [val, lbl]}
+          {#each [['5','Perfect'], ['4','Strong'], ['3','Okay'], ['2','Weak'], ['1','Poor'], ['learning','Learning'], ['unscored','Unscored']] as [val, lbl]}
             <label class="check-opt">
               <input type="checkbox" name="score" value={val} bind:group={selectedScores} />
               <span>{lbl}</span>

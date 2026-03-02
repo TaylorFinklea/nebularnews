@@ -16,7 +16,7 @@ describe('mcp handler utilities', () => {
   it('normalizes score filters with aliases', () => {
     expect(normalizeScores(['4plus'])).toEqual(['5', '4']);
     expect(normalizeScores(['3plus', 'unscored'])).toEqual(['5', '4', '3', 'unscored']);
-    expect(normalizeScores(['unknown'])).toEqual(['5', '4', '3', '2', '1', 'unscored']);
+    expect(normalizeScores(['unknown'])).toEqual(['5', '4', '3', '2', '1', 'learning', 'unscored']);
   });
 
   it('normalizes reaction filters with defaults', () => {

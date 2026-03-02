@@ -50,7 +50,7 @@ describe('articles-state', () => {
 
     const snapshot = get(state as unknown as Readable<ArticlesUiState>);
     const visible = getVisibleArticles(snapshot, {
-      selectedScores: ['5', '4', '3', '2', '1', 'unscored'],
+      selectedScores: ['5', '4', '3', '2', '1', 'learning', 'unscored'],
       selectedReactions: ['up', 'down', 'none'],
       selectedTagIds: [],
       readFilter: 'unread'
@@ -109,7 +109,7 @@ describe('articles-state', () => {
     expect(merged.reaction_reason_codes).toEqual(['up_interest_match', 'up_good_depth']);
   });
 
-  it('treats insufficient-signal scores as unscored in client-side filters', () => {
+  it('treats insufficient-signal scores as learning in client-side filters', () => {
     const state = createArticlesState([
       {
         ...baseArticle,
@@ -120,7 +120,7 @@ describe('articles-state', () => {
 
     const snapshot = get(state as unknown as Readable<ArticlesUiState>);
     const visible = getVisibleArticles(snapshot, {
-      selectedScores: ['unscored'],
+      selectedScores: ['learning'],
       selectedReactions: ['up', 'down', 'none'],
       selectedTagIds: [],
       readFilter: 'all'

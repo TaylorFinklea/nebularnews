@@ -7,7 +7,7 @@ import { normalizeUrl } from '$lib/server/urls';
 import { recordAuditEvent } from '$lib/server/audit';
 import { listArticlesWithFilters } from '$lib/server/article-query';
 
-const SCORE_VALUES = ['5', '4', '3', '2', '1', 'unscored'] as const;
+const SCORE_VALUES = ['5', '4', '3', '2', '1', 'learning', 'unscored'] as const;
 const REACTION_VALUES = ['up', 'down', 'none'] as const;
 const SORT_VALUES = ['newest', 'oldest', 'score_desc', 'score_asc', 'unread_first', 'title_az'] as const;
 const READ_VALUES = ['all', 'read', 'unread'] as const;

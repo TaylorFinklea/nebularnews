@@ -4,7 +4,7 @@ let schemaReady = false;
 let schemaInitPromise: Promise<void> | null = null;
 
 const MAX_PUBLISHED_FUTURE_MS = 1000 * 60 * 60 * 24;
-export const EXPECTED_SCHEMA_VERSION = 8;
+export const EXPECTED_SCHEMA_VERSION = 9;
 
 const runSafe = async (db: Db, sql: string, params: unknown[] = []) => {
   try {
@@ -451,6 +451,40 @@ const applyV8 = async (db: Db) => {
   );
 };
 
+const rebuildArticleSearchIndex = async (db: Db) => {
+  await runSafe(
+    db,
+    `CREATE VIRTUAL TABLE IF NOT EXISTS article_search USING fts5(
+      article_id UNINDEXED,
+      title,
+      content_text,
+      summary_text,
+      tokenize = 'porter'
+    )`
+  );
+  await runSafe(db, 'DELETE FROM article_search');
+  await runSafe(
+    db,
+    `INSERT INTO article_search (article_id, title, content_text, summary_text)
+     SELECT
+       a.id,
+       COALESCE(a.title, ''),
+       COALESCE(a.content_text, ''),
+       COALESCE((
+         SELECT s.summary_text
+         FROM article_summaries s
+         WHERE s.article_id = a.id
+         ORDER BY s.created_at DESC
+         LIMIT 1
+       ), '')
+     FROM articles a`
+  );
+};
+
+const applyV9 = async (db: Db) => {
+  await rebuildArticleSearchIndex(db);
+};
+
 export async function ensureSchema(db: Db) {
   if (schemaReady) return;
   if (schemaInitPromise) return schemaInitPromise;
@@ -489,6 +523,10 @@ export async function ensureSchema(db: Db) {
     if (currentVersion < 8) {
       await applyV8(db);
       await markVersionApplied(db, 8, 'v8_score_status_metadata');
+    }
+    if (currentVersion < 9) {
+      await applyV9(db);
+      await markVersionApplied(db, 9, 'v9_article_search_backfill');
     }
     schemaReady = true;
   })();
@@ -573,6 +611,12 @@ const assertRequiredV8Objects = async (db: Db) => {
   }
 };
 
+const assertRequiredV9Objects = async (db: Db) => {
+  if (!(await tableExists(db, 'article_search'))) {
+    throw new Error('Missing required table: article_search');
+  }
+};
+
 export async function assertSchemaVersion(db: Db, expected = EXPECTED_SCHEMA_VERSION) {
   const version = await getSchemaVersion(db);
   if (version < expected) {
@@ -594,6 +638,9 @@ export async function assertSchemaVersion(db: Db, expected = EXPECTED_SCHEMA_VER
   }
   if (expected >= 8) {
     await assertRequiredV8Objects(db);
+  }
+  if (expected >= 9) {
+    await assertRequiredV9Objects(db);
   }
   return version;
 }

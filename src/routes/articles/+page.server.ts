@@ -25,6 +25,7 @@ const normalizeScores = (values: string[]): ScoreValue[] => {
     if (value === '4plus') return ['5', '4'] as ScoreValue[];
     if (value === '3plus') return ['5', '4', '3'] as ScoreValue[];
     if (value === 'low') return ['2', '1'] as ScoreValue[];
+    if (value === 'learning') return ['learning'] as ScoreValue[];
     if (value === 'unscored') return ['unscored'] as ScoreValue[];
     return [value];
   });

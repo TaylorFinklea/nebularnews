@@ -129,7 +129,7 @@ export function createNebularMcpServer(input: {
         offset: z.number().int().min(0).max(10000).default(0),
         read: z.enum(['all', 'read', 'unread']).default('all'),
         sort: z.enum(['newest', 'oldest', 'score_desc', 'score_asc', 'unread_first', 'title_az']).default('newest'),
-        scores: z.array(z.string()).default(['5', '4', '3', '2', '1', 'unscored']),
+        scores: z.array(z.string()).default(['5', '4', '3', '2', '1', 'learning', 'unscored']),
         reactions: z.array(z.string()).default(['up', 'down', 'none']),
         tags_all: z.array(z.string()).default([])
       }
@@ -282,7 +282,7 @@ export function createNebularMcpServer(input: {
         offset: 0,
         read: 'all',
         sort: 'newest',
-        scores: ['5', '4', '3', '2', '1', 'unscored'],
+        scores: ['5', '4', '3', '2', '1', 'learning', 'unscored'],
         reactions: ['up', 'down', 'none'],
         tags_all: []
       });

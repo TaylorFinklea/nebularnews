@@ -251,6 +251,22 @@ CREATE VIRTUAL TABLE IF NOT EXISTS article_search USING fts5(
   tokenize = 'porter'
 );
 
+DELETE FROM article_search;
+
+INSERT INTO article_search (article_id, title, content_text, summary_text)
+SELECT
+  a.id,
+  COALESCE(a.title, ''),
+  COALESCE(a.content_text, ''),
+  COALESCE((
+    SELECT s.summary_text
+    FROM article_summaries s
+    WHERE s.article_id = a.id
+    ORDER BY s.created_at DESC
+    LIMIT 1
+  ), '')
+FROM articles a;
+
 CREATE TABLE IF NOT EXISTS pull_runs (
   id TEXT PRIMARY KEY,
   status TEXT NOT NULL,

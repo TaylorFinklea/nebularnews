@@ -33,7 +33,7 @@ const baseArticle = {
 const createData = (overrides: Record<string, unknown> = {}) => ({
   articles: [baseArticle],
   q: '',
-  selectedScores: ['5', '4', '3', '2', '1', 'unscored'],
+  selectedScores: ['5', '4', '3', '2', '1', 'learning', 'unscored'],
   readFilter: 'all',
   sort: 'newest',
   view: 'list',
@@ -189,6 +189,13 @@ describe('Articles page reactivity', () => {
 
     expect(screen.getByText('Learning')).toBeTruthy();
     expect(screen.queryByText('3/5')).toBeNull();
+  });
+
+  it('renders a dedicated learning score filter option', async () => {
+    render(ArticlesPage, { data: createData() });
+
+    await fireEvent.click(screen.getByRole('button', { name: /Filters/i }));
+    expect(screen.getByLabelText('Learning')).toBeTruthy();
   });
 
   it('updates read state immediately after marking read', async () => {

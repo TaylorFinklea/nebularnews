@@ -72,7 +72,7 @@
 
 <svelte:head>
   <title>Nebular News</title>
-  <link rel="icon" href="/nebularnews-logo-tight.png" type="image/png" />
+  <link rel="icon" href="/nebularnews-logo-tight.svg" type="image/svg+xml" />
   <link
     rel="stylesheet"
     href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&display=swap"

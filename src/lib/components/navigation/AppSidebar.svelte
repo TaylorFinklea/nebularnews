@@ -47,7 +47,7 @@
         title={collapsed ? 'Nebular News' : undefined}
       >
         <span class="brand-icon">
-          <img class="brand-logo" src="/nebularnews-logo-tight.png" alt="" aria-hidden="true" />
+          <img class="brand-logo" src="/nebularnews-logo-tight.svg" alt="" aria-hidden="true" />
         </span>
         <span class="brand-text">
           <span class="brand-mark">Nebular</span>

@@ -128,4 +128,36 @@ describe('Dashboard page reactivity', () => {
       expect(invalidateMock).toHaveBeenCalledWith('app:dashboard');
     });
   });
+
+  it('uses the immediate dev pull endpoint locally', async () => {
+    render(DashboardPage, { data: createData({ isDev: true }) });
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    const pullButton = screen.getByRole('button', { name: 'Pull feeds now' });
+    await fireEvent.click(pullButton);
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/dev/pull',
+        expect.objectContaining({ method: 'POST' })
+      );
+    });
+  });
+
+  it('keeps the queued pull endpoint outside development', async () => {
+    render(DashboardPage, { data: createData({ isDev: false }) });
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    const pullButton = screen.getByRole('button', { name: 'Pull feeds now' });
+    await fireEvent.click(pullButton);
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/pull',
+        expect.objectContaining({ method: 'POST' })
+      );
+    });
+  });
 });

@@ -294,9 +294,10 @@
     pullTracker = { pending: true, startedAt: Date.now(), runId: null };
     writePullTracker(pullTracker);
     const cycles = data.isDev ? 3 : 1;
+    const pullEndpoint = data.isDev ? '/api/dev/pull' : '/api/pull';
 
     try {
-      const res = await apiFetch('/api/pull', {
+      const res = await apiFetch(pullEndpoint, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ cycles })

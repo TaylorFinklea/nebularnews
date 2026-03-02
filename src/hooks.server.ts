@@ -1,22 +1,10 @@
 import { json, redirect, type Handle, type HandleServerError } from '@sveltejs/kit';
 import { getSessionFromRequest } from '$lib/server/auth';
-import { pollFeeds } from '$lib/server/ingest';
-import { processJobs } from '$lib/server/jobs';
-import { processPullRuns, recoverStalePullRuns } from '$lib/server/manual-pull';
-import { queueMissingTodayArticleJobs } from '$lib/server/jobs-admin';
-import { assertSchemaVersion, ensureSchema } from '$lib/server/migrations';
+import { assertSchemaVersion } from '$lib/server/migrations';
 import { createRequestId } from '$lib/server/api';
 import { assertRuntimeConfig } from '$lib/server/runtime-config';
-import { logError, logInfo, logWarn, summarizeError } from '$lib/server/log';
-import { runRetentionCleanup } from '$lib/server/retention';
-import {
-  DEFAULT_SCHEDULED_ORPHAN_CLEANUP_LIMIT,
-  deleteOrphanArticlesBatch
-} from '$lib/server/orphan-cleanup';
-import {
-  getSchedulerRuntimeConfig,
-  intervalMinutesToCronExpression
-} from '$lib/server/settings';
+import { logError, logWarn, summarizeError } from '$lib/server/log';
+import { runScheduledTasks } from '$lib/server/scheduler';
 import {
   applySecurityHeaders,
   buildCsrfCookie,
@@ -38,13 +26,9 @@ const publicPaths = [
 let runtimeWarningLogged = false;
 const SCHEMA_ASSERT_CACHE_MS = 1000 * 60 * 5;
 let schemaAssertedAt = 0;
-const RETENTION_CRON = '30 3 * * *';
-const LEGACY_JOBS_CRON = '*/5 * * * *';
-const LEGACY_POLL_CRON = '0 * * * *';
 
 export const handle: Handle = async ({ event, resolve }) => {
   const { pathname } = event.url;
-  const isPublic = publicPaths.some((path) => pathname.startsWith(path)) || pathname.startsWith('/_app');
   event.locals.requestId = createRequestId();
   let runtimeReport: ReturnType<typeof assertRuntimeConfig>;
   try {
@@ -67,6 +51,12 @@ export const handle: Handle = async ({ event, resolve }) => {
     });
     runtimeWarningLogged = true;
   }
+  const isDevScheduledHandlerPath =
+    pathname === '/cdn-cgi/handler/scheduled' && runtimeReport.stage === 'development';
+  const isPublic =
+    publicPaths.some((path) => pathname.startsWith(path)) ||
+    isDevScheduledHandlerPath ||
+    pathname.startsWith('/_app');
   const secureCookie = event.url.protocol === 'https:';
 
   event.locals.user = await getSessionFromRequest(event.request, event.platform.env.SESSION_SECRET);
@@ -119,89 +109,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 };
 
 export const scheduled: ExportedHandlerScheduledHandler = async (event, env, ctx) => {
-  ctx.waitUntil(
-    (async () => {
-      const report = assertRuntimeConfig(env);
-      if (!report.ok && report.stage === 'production') {
-        logError('scheduled.runtime_config.invalid', {
-          stage: report.stage,
-          errors: report.errors
-        });
-        return;
-      }
-      await ensureSchema(env.DB);
-      const scheduler = await getSchedulerRuntimeConfig(env.DB);
-      const jobsCron = intervalMinutesToCronExpression(scheduler.jobsIntervalMinutes);
-      const pollCron = intervalMinutesToCronExpression(scheduler.pollIntervalMinutes);
-      const isJobsTick = event.cron === jobsCron || event.cron === LEGACY_JOBS_CRON;
-      const isPollTick = event.cron === pollCron || event.cron === LEGACY_POLL_CRON;
-
-      if (isJobsTick) {
-        const startedAt = Date.now();
-        await recoverStalePullRuns(env.DB);
-        const pull = await processPullRuns(env, {
-          maxSlices: scheduler.pullSlicesPerTick,
-          timeBudgetMs: scheduler.pullSliceBudgetMs
-        });
-        const latestPullSlice = pull.slices.length > 0 ? pull.slices[pull.slices.length - 1] : null;
-        const pullRunning = latestPullSlice?.status === 'running';
-        let queuedToday = null;
-        if (!pullRunning && scheduler.autoQueueTodayMissing) {
-          queuedToday = await queueMissingTodayArticleJobs(env.DB, { tzOffsetMinutes: 0 });
-        }
-        await processJobs(env, {
-          timeBudgetMs: pullRunning ? scheduler.jobBudgetWhilePullMs : scheduler.jobBudgetIdleMs
-        });
-        let orphanCleanup = null;
-        if (!pullRunning) {
-          const orphanCleanupStartedAt = Date.now();
-          orphanCleanup = await deleteOrphanArticlesBatch(env.DB, DEFAULT_SCHEDULED_ORPHAN_CLEANUP_LIMIT, {
-            dryRun: false
-          });
-          logInfo('scheduled.orphans.cleanup', {
-            cron: event.cron,
-            duration_ms: Date.now() - orphanCleanupStartedAt,
-            targeted: orphanCleanup.targeted,
-            deleted_articles: orphanCleanup.deleted_articles,
-            orphan_count_after: orphanCleanup.orphan_count_after,
-            has_more: orphanCleanup.has_more
-          });
-        }
-        logInfo('scheduled.jobs.completed', {
-          cron: event.cron,
-          duration_ms: Date.now() - startedAt,
-          pull_processed: pull.processed,
-          pull_slices: pull.slices.length,
-          pull_status: latestPullSlice?.status ?? null,
-          jobs_processed: true,
-          scheduler,
-          queued_today: queuedToday,
-          orphan_cleanup: orphanCleanup
-        });
-      }
-      if (event.cron === RETENTION_CRON) {
-        const startedAt = Date.now();
-        const stats = await runRetentionCleanup(env);
-        logInfo('scheduled.retention.completed', {
-          cron: event.cron,
-          duration_ms: Date.now() - startedAt,
-          stats
-        });
-        return;
-      }
-
-      if (isPollTick) {
-        const startedAt = Date.now();
-        const poll = await pollFeeds(env);
-        logInfo('scheduled.poll.completed', {
-          cron: event.cron,
-          duration_ms: Date.now() - startedAt,
-          scheduler,
-          poll
-        });
-      }
-    })()
-  );
+  ctx.waitUntil(runScheduledTasks(env, { cron: event.cron }));
 };
 
 export const handleError: HandleServerError = ({ error, event, status, message }) => {

@@ -1,0 +1,42 @@
+<svg
+  viewBox="0 0 256 180"
+  xmlns="http://www.w3.org/2000/svg"
+  color="#8573ff"
+>
+  <g
+    transform="translate(0 6) rotate(-18 128 84)"
+    fill="none"
+    stroke="currentColor"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  >
+    <ellipse
+      cx="128"
+      cy="84"
+      rx="108"
+      ry="52"
+      stroke-width="18"
+      stroke-dasharray="330 88 104 176"
+      stroke-dashoffset="42"
+    />
+    <ellipse
+      cx="132"
+      cy="84"
+      rx="74"
+      ry="35"
+      stroke-width="18"
+      stroke-dasharray="242 82 76 148"
+      stroke-dashoffset="34"
+    />
+    <ellipse
+      cx="136"
+      cy="84"
+      rx="44"
+      ry="20"
+      stroke-width="16"
+      stroke-dasharray="146 48 44 112"
+      stroke-dashoffset="30"
+    />
+  </g>
+  <circle cx="129" cy="96" r="16" fill="currentColor" />
+</svg>

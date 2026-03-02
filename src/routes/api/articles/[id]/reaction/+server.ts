@@ -1,5 +1,5 @@
 import { nanoid } from 'nanoid';
-import { dbRun, now } from '$lib/server/db';
+import { dbGet, dbRun, now } from '$lib/server/db';
 import { getPreferredSourceForArticle, isFeedLinkedToArticle } from '$lib/server/sources';
 import { apiError, apiOkWithAliases } from '$lib/server/api';
 import { logInfo } from '$lib/server/log';
@@ -27,6 +27,13 @@ export const POST = async (event) => {
     return apiError(event, 400, 'bad_request', 'No source feed found for article');
   }
 
+  const existingReaction = await dbGet<{ value: number | null }>(
+    platform.env.DB,
+    'SELECT value FROM article_reactions WHERE article_id = ? LIMIT 1',
+    [articleId]
+  );
+  const previousValue = Number(existingReaction?.value);
+  const shouldApplyLearning = ![1, -1].includes(previousValue) || previousValue !== value;
   const timestamp = now();
   await dbRun(
     platform.env.DB,
@@ -39,10 +46,12 @@ export const POST = async (event) => {
     [nanoid(), articleId, feedId, value, timestamp]
   );
 
-  // Update scoring weights and affinities based on reaction
-  processReactionLearning(platform.env.DB, articleId, value as 1 | -1).catch(() => {
-    // Learning updates are non-critical — don't block the response
-  });
+  if (shouldApplyLearning) {
+    // Update scoring weights and affinities based on reaction changes.
+    processReactionLearning(platform.env.DB, articleId, value as 1 | -1).catch(() => {
+      // Learning updates are non-critical — don't block the response
+    });
+  }
 
   logInfo('article.reaction.updated', {
     request_id: event.locals.requestId,

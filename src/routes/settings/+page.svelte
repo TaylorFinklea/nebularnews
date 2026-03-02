@@ -1242,7 +1242,7 @@
                 bind:value={scoringAiEnhancementThreshold}
               />
               <span class="hint">
-                Current: {scoringAiEnhancementThreshold.toFixed(2)}. Lower = fewer AI calls. 0 = always enhance. 1 = always enhance.
+                Current: {scoringAiEnhancementThreshold.toFixed(2)}. Lower = fewer AI calls. 0 = never enhance. 1 = almost always enhance.
               </span>
             </label>
           </div>

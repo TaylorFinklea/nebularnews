@@ -458,4 +458,14 @@ describe('Settings page reactivity', () => {
       expect(screen.getByText('5')).toBeTruthy();
     });
   });
+
+  it('describes the hybrid threshold direction correctly', () => {
+    const data = createData();
+    data.settings.scoringMethod = 'hybrid';
+    data.settings.scoringAiEnhancementThreshold = 0.5;
+
+    render(SettingsPage, { data });
+
+    expect(screen.getByText(/0 = never enhance\. 1 = almost always enhance\./)).toBeTruthy();
+  });
 });

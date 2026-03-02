@@ -1,5 +1,6 @@
 import { dbAll, dbGet, dbRun, now, type Db } from '../db';
-import { DAMPING_FACTOR, LEARNING_RATE, type SignalName } from './types';
+import { getScoringLearningRate } from '../settings';
+import { DAMPING_FACTOR, type SignalName } from './types';
 
 // ─── EMA weight update ──────────────────────────────────────────────
 
@@ -8,8 +9,8 @@ import { DAMPING_FACTOR, LEARNING_RATE, type SignalName } from './types';
  * As sample_count grows, the effective alpha shrinks — early interactions
  * have more influence than later ones, achieving stability.
  */
-function effectiveAlpha(sampleCount: number): number {
-  return LEARNING_RATE / (1 + sampleCount / DAMPING_FACTOR);
+function effectiveAlpha(learningRate: number, sampleCount: number): number {
+  return learningRate / (1 + sampleCount / DAMPING_FACTOR);
 }
 
 // ─── Signal weight updates ──────────────────────────────────────────
@@ -28,7 +29,8 @@ function effectiveAlpha(sampleCount: number): number {
 export async function updateWeightsFromReaction(
   db: Db,
   articleId: string,
-  direction: 1 | -1
+  direction: 1 | -1,
+  learningRate?: number
 ): Promise<void> {
   // Load the article's signal scores
   const signals = await dbAll<{ signal_name: string; normalized_value: number }>(
@@ -40,6 +42,7 @@ export async function updateWeightsFromReaction(
   if (signals.length === 0) return;
 
   const ts = now();
+  const resolvedLearningRate = learningRate ?? (await getScoringLearningRate(db));
 
   for (const signal of signals) {
     const row = await dbGet<{ weight: number; sample_count: number }>(
@@ -50,7 +53,7 @@ export async function updateWeightsFromReaction(
 
     if (!row) continue;
 
-    const alpha = effectiveAlpha(row.sample_count);
+    const alpha = effectiveAlpha(resolvedLearningRate, row.sample_count);
 
     // Error signal: how much did this signal contribute to the prediction?
     // For positive feedback: reward signals proportional to their contribution
@@ -84,9 +87,11 @@ export async function updateWeightsFromReaction(
 export async function updateTopicAffinity(
   db: Db,
   tagNameNormalized: string,
-  direction: 1 | -1
+  direction: 1 | -1,
+  learningRate?: number
 ): Promise<void> {
   const ts = now();
+  const resolvedLearningRate = learningRate ?? (await getScoringLearningRate(db));
   const existing = await dbGet<{ affinity: number; interaction_count: number }>(
     db,
     'SELECT affinity, interaction_count FROM topic_affinities WHERE tag_name_normalized = ?',
@@ -94,7 +99,7 @@ export async function updateTopicAffinity(
   );
 
   if (existing) {
-    const alpha = effectiveAlpha(existing.interaction_count);
+    const alpha = effectiveAlpha(resolvedLearningRate, existing.interaction_count);
     const newAffinity = existing.affinity + alpha * direction;
 
     await dbRun(
@@ -104,7 +109,7 @@ export async function updateTopicAffinity(
     );
   } else {
     // First interaction creates the entry
-    const initialAffinity = LEARNING_RATE * direction;
+    const initialAffinity = resolvedLearningRate * direction;
     await dbRun(
       db,
       'INSERT INTO topic_affinities (tag_name_normalized, affinity, interaction_count, updated_at) VALUES (?, ?, 1, ?)',
@@ -119,8 +124,10 @@ export async function updateTopicAffinity(
 export async function updateTopicAffinitiesForArticle(
   db: Db,
   articleId: string,
-  direction: 1 | -1
+  direction: 1 | -1,
+  learningRate?: number
 ): Promise<void> {
+  const resolvedLearningRate = learningRate ?? (await getScoringLearningRate(db));
   const tags = await dbAll<{ name_normalized: string }>(
     db,
     `SELECT t.name_normalized
@@ -131,7 +138,7 @@ export async function updateTopicAffinitiesForArticle(
   );
 
   for (const tag of tags) {
-    await updateTopicAffinity(db, tag.name_normalized, direction);
+    await updateTopicAffinity(db, tag.name_normalized, direction, resolvedLearningRate);
   }
 }
 
@@ -144,9 +151,11 @@ export async function updateTopicAffinitiesForArticle(
 export async function updateAuthorAffinity(
   db: Db,
   authorNormalized: string,
-  direction: 1 | -1
+  direction: 1 | -1,
+  learningRate?: number
 ): Promise<void> {
   const ts = now();
+  const resolvedLearningRate = learningRate ?? (await getScoringLearningRate(db));
   const existing = await dbGet<{ affinity: number; interaction_count: number }>(
     db,
     'SELECT affinity, interaction_count FROM author_affinities WHERE author_normalized = ?',
@@ -154,7 +163,7 @@ export async function updateAuthorAffinity(
   );
 
   if (existing) {
-    const alpha = effectiveAlpha(existing.interaction_count);
+    const alpha = effectiveAlpha(resolvedLearningRate, existing.interaction_count);
     const newAffinity = existing.affinity + alpha * direction;
 
     await dbRun(
@@ -163,7 +172,7 @@ export async function updateAuthorAffinity(
       [newAffinity, ts, authorNormalized]
     );
   } else {
-    const initialAffinity = LEARNING_RATE * direction;
+    const initialAffinity = resolvedLearningRate * direction;
     await dbRun(
       db,
       'INSERT INTO author_affinities (author_normalized, affinity, interaction_count, updated_at) VALUES (?, ?, 1, ?)',
@@ -178,7 +187,8 @@ export async function updateAuthorAffinity(
 export async function updateAuthorAffinityForArticle(
   db: Db,
   articleId: string,
-  direction: 1 | -1
+  direction: 1 | -1,
+  learningRate?: number
 ): Promise<void> {
   const row = await dbGet<{ author: string | null }>(
     db,
@@ -187,7 +197,7 @@ export async function updateAuthorAffinityForArticle(
   );
 
   if (row?.author?.trim()) {
-    await updateAuthorAffinity(db, row.author.trim().toLowerCase(), direction);
+    await updateAuthorAffinity(db, row.author.trim().toLowerCase(), direction, learningRate);
   }
 }
 
@@ -202,10 +212,11 @@ export async function processReactionLearning(
   articleId: string,
   reactionValue: 1 | -1
 ): Promise<void> {
+  const learningRate = await getScoringLearningRate(db);
   await Promise.all([
-    updateWeightsFromReaction(db, articleId, reactionValue),
-    updateTopicAffinitiesForArticle(db, articleId, reactionValue),
-    updateAuthorAffinityForArticle(db, articleId, reactionValue)
+    updateWeightsFromReaction(db, articleId, reactionValue, learningRate),
+    updateTopicAffinitiesForArticle(db, articleId, reactionValue, learningRate),
+    updateAuthorAffinityForArticle(db, articleId, reactionValue, learningRate)
   ]);
 }
 

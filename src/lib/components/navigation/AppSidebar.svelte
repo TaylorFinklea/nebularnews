@@ -47,7 +47,7 @@
         title={collapsed ? 'Nebular News' : undefined}
       >
         <span class="brand-icon">
-          <IconStars size={22} stroke={1.8} />
+          <img class="brand-logo" src="/nebularnews-logo-tight.png" alt="" aria-hidden="true" />
         </span>
         <span class="brand-text">
           <span class="brand-mark">Nebular</span>
@@ -181,12 +181,20 @@
 
   .brand-icon {
     flex-shrink: 0;
-    width: 2rem;
+    width: 2.75rem;
     height: 2rem;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--primary);
+    overflow: visible;
+  }
+
+  .brand-logo {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    pointer-events: none;
   }
 
   .brand-text {

@@ -19,6 +19,7 @@
   export let score = null;
 
   const dispatch = createEventDispatcher();
+  $: isLearningScore = score?.status === 'insufficient_signal';
 </script>
 
 <div class="article-header">
@@ -79,21 +80,31 @@
 {/if}
 
 {#if score}
-  <div class="score-banner">
-    <div class="score-val">
-      <IconStars size={18} stroke={1.9} />
-      <span>{score.score} / 5</span>
-      <strong>· {score.label}</strong>
+  {#if isLearningScore}
+    <div class="score-banner learning-banner">
+      <div class="score-val">
+        <IconStars size={18} stroke={1.9} />
+        <span>Learning your preferences</span>
+      </div>
+      <p class="score-reason">Not enough preference signals yet. React to articles or refine tags to improve scoring.</p>
     </div>
-    <p class="score-reason">{score.reason_text}</p>
-    {#if score.evidence?.length}
-      <ul class="score-evidence">
-        {#each score.evidence as evidence}
-          <li>{evidence}</li>
-        {/each}
-      </ul>
-    {/if}
-  </div>
+  {:else}
+    <div class="score-banner">
+      <div class="score-val">
+        <IconStars size={18} stroke={1.9} />
+        <span>{score.score} / 5</span>
+        <strong>· {score.label}</strong>
+      </div>
+      <p class="score-reason">{score.reason_text}</p>
+      {#if score.evidence?.length}
+        <ul class="score-evidence">
+          {#each score.evidence as evidence}
+            <li>{evidence}</li>
+          {/each}
+        </ul>
+      {/if}
+    </div>
+  {/if}
 {/if}
 
 <style>
@@ -183,6 +194,10 @@
     display: grid;
     gap: var(--space-2);
     margin-bottom: var(--space-5);
+  }
+
+  .learning-banner {
+    background: var(--surface-soft);
   }
 
   .score-val {

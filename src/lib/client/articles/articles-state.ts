@@ -2,6 +2,7 @@ import type { ArticleReactionReasonCode } from '$lib/article-reactions';
 import { get, writable, type Writable } from 'svelte/store';
 import { apiFetch } from '$lib/client/api-fetch';
 import { runOptimisticMutation } from '$lib/client/mutations';
+import { getScoreToken } from '$lib/fit-score';
 import type { ArticleListItem, ArticlesFilters, ArticlesUiState } from './types';
 
 const TOAST_TIMEOUT_MS = 4000;
@@ -25,6 +26,14 @@ export const normalizeArticle = (article: ArticleListItem): ArticleListItem => (
   is_read: normalizeReadValue(article?.is_read),
   reaction_value: reactionNumber(article?.reaction_value),
   reaction_reason_codes: Array.isArray(article?.reaction_reason_codes) ? article.reaction_reason_codes : [],
+  score_status:
+    article?.score_status === 'insufficient_signal' || article?.score_status === 'ready'
+      ? article.score_status
+      : null,
+  score_confidence: Number.isFinite(Number(article?.score_confidence)) ? Number(article?.score_confidence) : null,
+  score_preference_confidence: Number.isFinite(Number(article?.score_preference_confidence))
+    ? Number(article?.score_preference_confidence)
+    : null,
   tags: Array.isArray(article?.tags) ? article.tags : [],
   tag_suggestions: Array.isArray(article?.tag_suggestions) ? article.tag_suggestions : []
 });
@@ -41,12 +50,6 @@ export const scoreLabel = (score: unknown) => {
   return 'Not a fit';
 };
 
-const scoreToken = (score: unknown) => {
-  const numeric = toInt(score, Number.NaN);
-  if (Number.isNaN(numeric) || numeric < 1 || numeric > 5) return 'unscored';
-  return String(numeric);
-};
-
 const reactionFilterValue = (reactionValue: unknown) => {
   const normalized = reactionNumber(reactionValue);
   if (normalized === 1) return 'up';
@@ -61,7 +64,7 @@ const articleHasSelectedTags = (article: ArticleListItem, selectedTagIds: string
 };
 
 const matchesClientFilters = (article: ArticleListItem, filters: ArticlesFilters) => {
-  if (!filters.selectedScores.includes(scoreToken(article.score))) return false;
+  if (!filters.selectedScores.includes(getScoreToken(article.score, article.score_status))) return false;
   if (filters.readFilter === 'read' && !isArticleRead(article)) return false;
   if (filters.readFilter === 'unread' && isArticleRead(article)) return false;
   if (filters.selectedReactions.length === 0) return false;

@@ -1,6 +1,7 @@
 <script>
   import { createEventDispatcher } from 'svelte';
   import { resolveArticleImageUrl } from '$lib/article-image';
+  import { getFitScoreAria, getFitScoreText, getFitScoreTone } from '$lib/fit-score';
   import { IconEye, IconEyeOff, IconStars, IconThumbDown, IconThumbUp } from '$lib/icons';
   import { isArticleRead, reactionNumber } from '$lib/client/articles/articles-state';
 
@@ -31,26 +32,6 @@
     dispatch('imageError', { articleId: article.id });
   };
 
-  const fitScoreValue = (score) => {
-    const n = Number(score);
-    return Number.isFinite(n) && n >= 1 && n <= 5 ? Math.round(n) : null;
-  };
-
-  const fitScoreTone = (score) => {
-    const value = fitScoreValue(score);
-    if (value === null) return 'fit-none';
-    return `fit-${value}`;
-  };
-
-  const fitScoreText = (score) => {
-    const value = fitScoreValue(score);
-    return value === null ? '--' : `${value}/5`;
-  };
-
-  const fitScoreAria = (score) => {
-    const value = fitScoreValue(score);
-    return value === null ? 'AI fit score not available yet' : `AI fit score ${value} out of 5`;
-  };
 </script>
 
 <article class={`card layout-${cardLayout}`} id={`article-${article.id}`}>
@@ -82,12 +63,12 @@
       </h2>
       <div class="pills">
         <span
-          class={`fit-pill ${fitScoreTone(article.score)}`}
-          title={fitScoreAria(article.score)}
-          aria-label={fitScoreAria(article.score)}
+          class={`fit-pill ${getFitScoreTone(article.score, article.score_status)}`}
+          title={getFitScoreAria(article.score, article.score_status)}
+          aria-label={getFitScoreAria(article.score, article.score_status)}
         >
           <IconStars size={13} stroke={1.9} />
-          <span>{fitScoreText(article.score)}</span>
+          <span>{getFitScoreText(article.score, article.score_status)}</span>
         </span>
         <span class={`pill ${isArticleRead(article) ? 'read' : 'unread'}`}>
           {isArticleRead(article) ? 'Read' : 'Unread'}
@@ -275,7 +256,8 @@
     line-height: 1;
   }
 
-  .fit-pill.fit-none {
+  .fit-pill.fit-none,
+  .fit-pill.fit-learning {
     color: var(--muted-text);
     border-color: var(--input-border);
   }

@@ -174,6 +174,23 @@ describe('Articles page reactivity', () => {
     expect(screen.getAllByText('Trust this source')).toHaveLength(1);
   });
 
+  it('renders insufficient-signal rows as learning instead of showing a numeric fit score', () => {
+    render(ArticlesPage, {
+      data: createData({
+        articles: [
+          {
+            ...baseArticle,
+            score: 3,
+            score_status: 'insufficient_signal'
+          }
+        ]
+      })
+    });
+
+    expect(screen.getByText('Learning')).toBeTruthy();
+    expect(screen.queryByText('3/5')).toBeNull();
+  });
+
   it('updates read state immediately after marking read', async () => {
     render(ArticlesPage, { data: createData() });
 

@@ -50,9 +50,26 @@ export const GET = async ({ params, platform }) => {
     reason_text: string | null;
     evidence_json: string | null;
     created_at: number;
+    score_status: 'ready' | 'insufficient_signal' | null;
+    confidence: number | null;
+    preference_confidence: number | null;
+    weighted_average: number | null;
   }>(
     platform.env.DB,
-    'SELECT score, label, reason_text, evidence_json, created_at FROM article_scores WHERE article_id = ? ORDER BY created_at DESC LIMIT 1',
+    `SELECT
+      score,
+      label,
+      reason_text,
+      evidence_json,
+      created_at,
+      score_status,
+      confidence,
+      preference_confidence,
+      weighted_average
+     FROM article_scores
+     WHERE article_id = ?
+     ORDER BY created_at DESC
+     LIMIT 1`,
     [id]
   );
   const score = scoreOverride
@@ -62,12 +79,17 @@ export const GET = async ({ params, platform }) => {
         reason_text: scoreOverride.comment ?? 'User-set rating override',
         evidence_json: null,
         created_at: scoreOverride.updated_at,
-        source: 'user'
+        source: 'user',
+        status: 'ready',
+        confidence: 1,
+        preference_confidence: 1,
+        weighted_average: null
       }
     : aiScore
       ? {
           ...aiScore,
-          source: 'ai'
+          source: 'ai',
+          status: aiScore.score_status ?? 'ready'
         }
       : null;
 

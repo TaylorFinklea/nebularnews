@@ -27,9 +27,18 @@ export type ArticleQueryInput = {
 const sanitizeQuery = (value: string) => (value.toLowerCase().match(/\w+/g) ?? []).join(' ');
 const placeholders = (count: number) => Array.from({ length: count }, () => '?').join(', ');
 
+const latestScoreExpr = `(SELECT score FROM article_scores WHERE article_id = a.id ORDER BY created_at DESC LIMIT 1)`;
+const latestScoreLabelExpr = `(SELECT label FROM article_scores WHERE article_id = a.id ORDER BY created_at DESC LIMIT 1)`;
+const latestScoreStatusExpr = `(SELECT score_status FROM article_scores WHERE article_id = a.id ORDER BY created_at DESC LIMIT 1)`;
+const latestScoreConfidenceExpr = `(SELECT confidence FROM article_scores WHERE article_id = a.id ORDER BY created_at DESC LIMIT 1)`;
+const latestScorePreferenceConfidenceExpr = `(SELECT preference_confidence FROM article_scores WHERE article_id = a.id ORDER BY created_at DESC LIMIT 1)`;
+const overrideExistsExpr = `EXISTS (SELECT 1 FROM article_score_overrides WHERE article_id = a.id)`;
 const effectiveScoreExpr = `COALESCE(
   (SELECT score FROM article_score_overrides WHERE article_id = a.id LIMIT 1),
-  (SELECT score FROM article_scores WHERE article_id = a.id ORDER BY created_at DESC LIMIT 1)
+  CASE
+    WHEN ${latestScoreStatusExpr} = 'ready' THEN ${latestScoreExpr}
+    ELSE NULL
+  END
 )`;
 const effectiveReadExpr = `COALESCE(
   (SELECT is_read FROM article_read_state WHERE article_id = a.id LIMIT 1),
@@ -144,6 +153,9 @@ export const listArticlesWithFilters = async (db: Db, input: ArticleQueryInput) 
     summary_text: string | null;
     score: number | null;
     score_label: string | null;
+    score_status: 'ready' | 'insufficient_signal' | null;
+    score_confidence: number | null;
+    score_preference_confidence: number | null;
   }>(
     db,
     `SELECT
@@ -161,9 +173,21 @@ export const listArticlesWithFilters = async (db: Db, input: ArticleQueryInput) 
       (SELECT summary_text FROM article_summaries WHERE article_id = a.id ORDER BY created_at DESC LIMIT 1) as summary_text,
       ${effectiveScoreExpr} as score,
       CASE
-        WHEN EXISTS (SELECT 1 FROM article_score_overrides WHERE article_id = a.id) THEN 'User corrected'
-        ELSE (SELECT label FROM article_scores WHERE article_id = a.id ORDER BY created_at DESC LIMIT 1)
-      END as score_label
+        WHEN ${overrideExistsExpr} THEN 'User corrected'
+        ELSE ${latestScoreLabelExpr}
+      END as score_label,
+      CASE
+        WHEN ${overrideExistsExpr} THEN 'ready'
+        ELSE ${latestScoreStatusExpr}
+      END as score_status,
+      CASE
+        WHEN ${overrideExistsExpr} THEN 1.0
+        ELSE ${latestScoreConfidenceExpr}
+      END as score_confidence,
+      CASE
+        WHEN ${overrideExistsExpr} THEN 1.0
+        ELSE ${latestScorePreferenceConfidenceExpr}
+      END as score_preference_confidence
     FROM articles a
     ${join}
     ${clauses.where}

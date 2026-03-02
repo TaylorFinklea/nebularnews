@@ -16,6 +16,7 @@ export type AiModelLane = 'pipeline' | 'chat';
 export type ArticleCardLayout = 'split' | 'stacked';
 export type DashboardTopRatedLayout = 'split' | 'stacked';
 export type RetentionMode = 'archive' | 'delete';
+export type TaggingMethod = 'algorithmic' | 'hybrid';
 export type AiFeature =
   | 'summaries'
   | 'scoring'
@@ -75,6 +76,7 @@ const MIN_JOB_PROCESSOR_BATCH_SIZE = 1;
 const MAX_JOB_PROCESSOR_BATCH_SIZE = 100;
 const DEFAULT_AUTO_TAGGING_ENABLED = true;
 const DEFAULT_AUTO_TAG_MAX_PER_ARTICLE = 2;
+const DEFAULT_TAGGING_METHOD: TaggingMethod = 'algorithmic';
 const MIN_AUTO_TAG_MAX_PER_ARTICLE = 1;
 const MAX_AUTO_TAG_MAX_PER_ARTICLE = 5;
 const DEFAULT_SCHEDULER_JOBS_INTERVAL_MIN = 5;
@@ -154,6 +156,7 @@ export {
   DEFAULT_JOB_PROCESSOR_BATCH_SIZE,
   MIN_JOB_PROCESSOR_BATCH_SIZE,
   MAX_JOB_PROCESSOR_BATCH_SIZE,
+  DEFAULT_TAGGING_METHOD,
   DEFAULT_AUTO_TAGGING_ENABLED,
   DEFAULT_AUTO_TAG_MAX_PER_ARTICLE,
   MIN_AUTO_TAG_MAX_PER_ARTICLE,
@@ -219,6 +222,11 @@ const toDashboardTopRatedLayout = (value: string | null): DashboardTopRatedLayou
 const toRetentionMode = (value: string | null): RetentionMode => {
   if (value === 'archive' || value === 'delete') return value;
   return DEFAULT_RETENTION_MODE;
+};
+
+const toTaggingMethod = (value: string | null): TaggingMethod => {
+  if (value === 'algorithmic' || value === 'hybrid') return value;
+  return DEFAULT_TAGGING_METHOD;
 };
 
 export type ProviderModelConfig = {
@@ -609,6 +617,19 @@ export async function getJobProcessorBatchSize(db: Db, env?: App.Platform['env']
 export async function getAutoTaggingEnabled(db: Db) {
   const raw = await getSetting(db, 'auto_tagging_enabled');
   return parseBooleanSetting(raw, DEFAULT_AUTO_TAGGING_ENABLED);
+}
+
+export async function getTaggingMethod(db: Db): Promise<TaggingMethod> {
+  const explicit = await getSetting(db, 'tagging_method');
+  if (explicit) {
+    return toTaggingMethod(explicit);
+  }
+  return (await getAutoTaggingEnabled(db)) ? 'hybrid' : 'algorithmic';
+}
+
+export async function setTaggingMethod(db: Db, method: TaggingMethod) {
+  await setSetting(db, 'tagging_method', toTaggingMethod(method));
+  await setSetting(db, 'auto_tagging_enabled', method === 'hybrid' ? '1' : '0');
 }
 
 export async function getAutoTagMaxPerArticle(db: Db) {

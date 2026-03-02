@@ -84,6 +84,11 @@ CREATE TABLE IF NOT EXISTS article_scores (
   evidence_json TEXT,
   created_at INTEGER NOT NULL,
   profile_version INTEGER,
+  scoring_method TEXT NOT NULL DEFAULT 'ai',
+  score_status TEXT NOT NULL DEFAULT 'ready' CHECK (score_status IN ('ready', 'insufficient_signal')),
+  confidence REAL,
+  preference_confidence REAL,
+  weighted_average REAL,
   FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE
 );
 

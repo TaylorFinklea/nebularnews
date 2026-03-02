@@ -110,4 +110,20 @@ describe('ArticleUtilities reaction reasons', () => {
     );
     expect(within(dialog).getByRole('button', { name: 'Good depth' }).getAttribute('aria-pressed')).toBe('true');
   });
+
+  it('shows a learning state instead of a numeric score when preference signals are insufficient', () => {
+    render(ArticleUtilities, {
+      props: {
+        ...baseProps,
+        score: {
+          score: 3,
+          label: 'Algorithmic (17% confidence)',
+          status: 'insufficient_signal'
+        }
+      }
+    });
+
+    expect(screen.getByText('Learning your preferences. React to articles or refine tags to improve scoring.')).toBeTruthy();
+    expect(screen.queryByText('/ 5')).toBeNull();
+  });
 });

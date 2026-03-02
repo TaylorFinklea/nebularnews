@@ -15,6 +15,7 @@
     IconX
   } from '$lib/icons';
   import { resolveArticleImageUrl } from '$lib/article-image';
+  import { getFitScoreAria, getFitScoreText, getFitScoreTone, getScoreToken } from '$lib/fit-score';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import Button from '$lib/components/Button.svelte';
   import Pill from '$lib/components/Pill.svelte';
@@ -27,27 +28,6 @@
   const DEFAULT_SCORE_FILTER = ['5', '4', '3', '2', '1', 'unscored'];
   const DEFAULT_REACTION_FILTER = ['up', 'down', 'none'];
 
-  const fitScoreValue = (score) => {
-    const n = Number(score);
-    return Number.isFinite(n) && n >= 1 && n <= 5 ? Math.round(n) : null;
-  };
-
-  const fitScoreTone = (score) => {
-    const value = fitScoreValue(score);
-    if (value === null) return 'fit-none';
-    return `fit-${value}`;
-  };
-
-  const fitScoreText = (score) => {
-    const value = fitScoreValue(score);
-    return value === null ? '--' : `${value}/5`;
-  };
-
-  const fitScoreAria = (score) => {
-    const value = fitScoreValue(score);
-    return value === null ? 'AI fit score not available yet' : `AI fit score ${value} out of 5`;
-  };
-
   const toInt = (value, fallback = 0) => { const n = Number(value); return Number.isFinite(n) ? n : fallback; };
   const normalizeReadValue = (value) => (toInt(value, 0) === 1 ? 1 : 0);
   const reactionNumber = (value) => { const n = Number(value); if (n === 1) return 1; if (n === -1) return -1; return null; };
@@ -56,6 +36,14 @@
     is_read: normalizeReadValue(article?.is_read),
     reaction_value: reactionNumber(article?.reaction_value),
     reaction_reason_codes: Array.isArray(article?.reaction_reason_codes) ? article.reaction_reason_codes : [],
+    score_status:
+      article?.score_status === 'insufficient_signal' || article?.score_status === 'ready'
+        ? article.score_status
+        : null,
+    score_confidence: Number.isFinite(Number(article?.score_confidence)) ? Number(article.score_confidence) : null,
+    score_preference_confidence: Number.isFinite(Number(article?.score_preference_confidence))
+      ? Number(article.score_preference_confidence)
+      : null,
     tags: Array.isArray(article?.tags) ? article.tags : [],
     tag_suggestions: Array.isArray(article?.tag_suggestions) ? article.tag_suggestions : []
   });
@@ -129,11 +117,10 @@
   $: mergedArticles = serverArticles.map((a) => ({ ...a, ...(optimisticById[a.id] ?? {}) }));
 
   const isArticleRead = (article) => normalizeReadValue(article?.is_read) === 1;
-  const scoreToken = (score) => { const n = toInt(score, NaN); if (Number.isNaN(n) || n < 1 || n > 5) return 'unscored'; return String(n); };
   const articleHasSelectedTags = (article) => { if (selectedTagIds.length === 0) return true; const tagIds = new Set((article.tags ?? []).map((t) => String(t?.id ?? t))); return selectedTagIds.every((id) => tagIds.has(String(id))); };
   const reactionFilterValue = (rv) => { const n = reactionNumber(rv); if (n === 1) return 'up'; if (n === -1) return 'down'; return 'none'; };
   const matchesClientFilters = (article) => {
-    if (!selectedScores.includes(scoreToken(article.score))) return false;
+    if (!selectedScores.includes(getScoreToken(article.score, article.score_status))) return false;
     if (readFilter === 'read' && !isArticleRead(article)) return false;
     if (readFilter === 'unread' && isArticleRead(article)) return false;
     if (selectedReactions.length === 0) return false;
@@ -573,12 +560,12 @@
             </h3>
             <div class="pills">
               <span
-                class={`fit-pill ${fitScoreTone(article.score)}`}
-                title={fitScoreAria(article.score)}
-                aria-label={fitScoreAria(article.score)}
+                class={`fit-pill ${getFitScoreTone(article.score, article.score_status)}`}
+                title={getFitScoreAria(article.score, article.score_status)}
+                aria-label={getFitScoreAria(article.score, article.score_status)}
               >
                 <IconStars size={13} stroke={1.9} />
-                <span>{fitScoreText(article.score)}</span>
+                <span>{getFitScoreText(article.score, article.score_status)}</span>
               </span>
               <Pill variant={isArticleRead(article) ? 'muted' : 'default'}>
                 {isArticleRead(article) ? 'Read' : 'Unread'}
@@ -1022,6 +1009,12 @@
     font-size: 0.75rem;
     font-weight: 500;
     line-height: 1;
+  }
+
+  .fit-pill.fit-none,
+  .fit-pill.fit-learning {
+    color: var(--muted-text);
+    background: var(--surface-soft);
   }
 
   .fit-pill.fit-1 {

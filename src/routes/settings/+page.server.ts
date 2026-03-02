@@ -1,5 +1,6 @@
 import { dbAll } from '$lib/server/db';
 import { loadSignalWeights } from '$lib/server/scoring/engine';
+import { getScoringObservabilitySummary } from '$lib/server/scoring-observability';
 import {
   DEFAULT_SCORE_SYSTEM_PROMPT,
   DEFAULT_SCORE_USER_PROMPT_TEMPLATE,
@@ -61,8 +62,8 @@ import {
   MAX_AUTO_READ_DELAY_MS,
   MIN_AUTO_READ_DELAY_MS,
   getAutoReadDelayMs,
-  getAutoTaggingEnabled,
   getAutoTagMaxPerArticle,
+  getTaggingMethod,
   getArticleCardLayout,
   getConfiguredChatProviderModel,
   getDashboardRefreshMinMs,
@@ -105,6 +106,7 @@ export const load = async ({ platform }) => {
   const scorePrompt = await getScorePromptConfig(db);
   const dashboardQueue = await getDashboardQueueConfig(db);
   const retention = await getRetentionConfig(db);
+  const taggingMethod = await getTaggingMethod(db);
   const settings = {
     featureLanes: {
       summaries: featureLanes.summaries,
@@ -133,7 +135,8 @@ export const load = async ({ platform }) => {
     retentionDays: retention.days,
     retentionMode: retention.mode,
     autoReadDelayMs: await getAutoReadDelayMs(db),
-    autoTaggingEnabled: await getAutoTaggingEnabled(db),
+    taggingMethod,
+    autoTaggingEnabled: taggingMethod === 'hybrid',
     autoTagMaxPerArticle: await getAutoTagMaxPerArticle(db),
     jobProcessorBatchSize: await getJobProcessorBatchSize(db, platform.env),
     jobsIntervalMinutes: await getSchedulerJobsIntervalMinutes(db),
@@ -160,6 +163,7 @@ export const load = async ({ platform }) => {
 
   const profile = await ensurePreferenceProfile(db);
   const signalWeights = await loadSignalWeights(db);
+  const scoringObservability = await getScoringObservabilitySummary(db);
   const [orphanCount, orphanSampleIds] = await Promise.all([
     countOrphanArticles(db),
     listOrphanArticleIds(db, ORPHAN_PREVIEW_SAMPLE_SIZE)
@@ -287,6 +291,7 @@ export const load = async ({ platform }) => {
         aiEnhancementThreshold: DEFAULT_SCORING_AI_ENHANCEMENT_THRESHOLD,
         learningRate: DEFAULT_SCORING_LEARNING_RATE
       }
-    }
+    },
+    scoringObservability
   };
 };

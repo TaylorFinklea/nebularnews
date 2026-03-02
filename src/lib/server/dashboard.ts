@@ -83,7 +83,7 @@ export async function getDashboardStats(db: Db, range: DashboardDayRange): Promi
          AND COALESCE(published_at, fetched_at) < ?
      ),
      latest_scores AS (
-       SELECT sc.article_id, sc.score
+       SELECT sc.article_id, sc.score, sc.score_status
        FROM article_scores sc
        JOIN (
          SELECT article_id, MAX(created_at) as created_at
@@ -108,7 +108,10 @@ export async function getDashboardStats(db: Db, range: DashboardDayRange): Promi
          FROM day_articles d
          LEFT JOIN article_score_overrides o ON o.article_id = d.id
          LEFT JOIN latest_scores ls ON ls.article_id = d.id
-         WHERE COALESCE(o.score, ls.score) IS NOT NULL
+         WHERE COALESCE(
+           o.score,
+           CASE WHEN ls.score_status = 'ready' THEN ls.score ELSE NULL END
+         ) IS NOT NULL
        ) as today_scores_count,
        (
          SELECT COUNT(*)
@@ -129,7 +132,10 @@ export async function getDashboardStats(db: Db, range: DashboardDayRange): Promi
          FROM day_articles d
          LEFT JOIN article_score_overrides o ON o.article_id = d.id
          LEFT JOIN latest_scores ls ON ls.article_id = d.id
-         WHERE COALESCE(o.score, ls.score) IS NULL
+         WHERE COALESCE(
+           o.score,
+           CASE WHEN ls.score_status = 'ready' THEN ls.score ELSE NULL END
+         ) IS NULL
        ) as today_missing_scores_count`,
     [range.dayStart, range.dayEnd]
   );
@@ -198,7 +204,7 @@ export async function getDashboardUnreadQueue(
         AND latest.created_at = s.created_at
      ),
      latest_scores AS (
-       SELECT sc.article_id, sc.score, sc.label
+       SELECT sc.article_id, sc.score, sc.label, sc.score_status
        FROM article_scores sc
        JOIN (
          SELECT article_id, MAX(created_at) as created_at
@@ -217,7 +223,10 @@ export async function getDashboardUnreadQueue(
        a.fetched_at,
        a.excerpt,
        ls.summary_text,
-       COALESCE(o.score, lsc.score) as score,
+       COALESCE(
+         o.score,
+         CASE WHEN lsc.score_status = 'ready' THEN lsc.score ELSE NULL END
+       ) as score,
        CASE
          WHEN o.article_id IS NOT NULL THEN 'User corrected'
          ELSE lsc.label
@@ -232,9 +241,9 @@ export async function getDashboardUnreadQueue(
          0
        ) = 0
      ORDER BY
-       CASE WHEN COALESCE(o.score, lsc.score) >= ? THEN 0 ELSE 1 END ASC,
-       CASE WHEN COALESCE(o.score, lsc.score) IS NULL THEN 1 ELSE 0 END ASC,
-       COALESCE(o.score, lsc.score) DESC,
+       CASE WHEN COALESCE(o.score, CASE WHEN lsc.score_status = 'ready' THEN lsc.score ELSE NULL END) >= ? THEN 0 ELSE 1 END ASC,
+       CASE WHEN COALESCE(o.score, CASE WHEN lsc.score_status = 'ready' THEN lsc.score ELSE NULL END) IS NULL THEN 1 ELSE 0 END ASC,
+       COALESCE(o.score, CASE WHEN lsc.score_status = 'ready' THEN lsc.score ELSE NULL END) DESC,
        COALESCE(a.published_at, a.fetched_at) DESC
      LIMIT ?`,
     [windowStart, scoreCutoff, safeLimit]
@@ -275,7 +284,7 @@ export async function getDashboardReadingMomentum(
   }>(
     db,
     `WITH latest_scores AS (
-       SELECT sc.article_id, sc.score
+       SELECT sc.article_id, sc.score, sc.score_status
        FROM article_scores sc
        JOIN (
          SELECT article_id, MAX(created_at) as created_at
@@ -289,7 +298,10 @@ export async function getDashboardReadingMomentum(
        SELECT
          a.id,
          COALESCE(a.published_at, a.fetched_at) as article_at,
-         COALESCE(o.score, lsc.score) as score
+         COALESCE(
+           o.score,
+           CASE WHEN lsc.score_status = 'ready' THEN lsc.score ELSE NULL END
+         ) as score
        FROM articles a
        LEFT JOIN article_score_overrides o ON o.article_id = a.id
        LEFT JOIN latest_scores lsc ON lsc.article_id = a.id

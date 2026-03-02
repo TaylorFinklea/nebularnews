@@ -17,7 +17,7 @@
     {
       id: 'ai',
       title: 'AI setup',
-      description: 'Route features between model lanes and tune auto-tagging.',
+      description: 'Route features between model lanes and choose deterministic or hybrid tagging.',
       defaultOpen: true
     },
     {
@@ -74,7 +74,7 @@
       'chatProvider',
       'chatModel',
       'chatReasoningEffort',
-      'autoTaggingEnabled',
+      'taggingMethod',
       'autoTagMaxPerArticle'
     ],
     scoring: [
@@ -145,7 +145,7 @@
   let retentionDays = Number(data.settings.retentionDays ?? data.retentionRange?.default ?? 0);
   let retentionMode = data.settings.retentionMode ?? 'archive';
   let autoReadDelayMs = Number(data.settings.autoReadDelayMs ?? 4000);
-  let autoTaggingEnabled = Boolean(data.settings.autoTaggingEnabled ?? data.autoTagging?.default ?? true);
+  let taggingMethod = data.settings.taggingMethod ?? (data.settings.autoTaggingEnabled ? 'hybrid' : 'algorithmic');
   let autoTagMaxPerArticle = Number(
     data.settings.autoTagMaxPerArticle ?? data.autoTagging?.maxPerArticle?.default ?? 2
   );
@@ -523,7 +523,7 @@
     retentionDays: Number(retentionDays ?? 0),
     retentionMode,
     autoReadDelayMs: Number(autoReadDelayMs ?? 0),
-    autoTaggingEnabled: Boolean(autoTaggingEnabled),
+    taggingMethod,
     autoTagMaxPerArticle: Number(autoTagMaxPerArticle ?? 0),
     jobProcessorBatchSize: Number(jobProcessorBatchSize ?? 0),
     jobsIntervalMinutes: Number(jobsIntervalMinutes ?? 0),
@@ -571,7 +571,7 @@
     retentionDays: Number(retentionDays ?? 0),
     retentionMode,
     autoReadDelayMs: Number(autoReadDelayMs ?? 0),
-    autoTaggingEnabled: Boolean(autoTaggingEnabled),
+    taggingMethod,
     autoTagMaxPerArticle: Number(autoTagMaxPerArticle ?? 0),
     jobProcessorBatchSize: Number(jobProcessorBatchSize ?? 0),
     jobsIntervalMinutes: Number(jobsIntervalMinutes ?? 0),
@@ -625,7 +625,7 @@
     retentionDays = Number(snapshot.retentionDays ?? 0);
     retentionMode = snapshot.retentionMode;
     autoReadDelayMs = Number(snapshot.autoReadDelayMs ?? 0);
-    autoTaggingEnabled = Boolean(snapshot.autoTaggingEnabled);
+    taggingMethod = snapshot.taggingMethod;
     autoTagMaxPerArticle = Number(snapshot.autoTagMaxPerArticle ?? 0);
     jobProcessorBatchSize = Number(snapshot.jobProcessorBatchSize ?? 0);
     jobsIntervalMinutes = Number(snapshot.jobsIntervalMinutes ?? 0);
@@ -723,7 +723,7 @@
           retentionDays,
           retentionMode,
           autoReadDelayMs,
-          autoTaggingEnabled,
+          taggingMethod,
           autoTagMaxPerArticle,
           jobProcessorBatchSize,
           jobsIntervalMinutes,
@@ -933,7 +933,7 @@
   const sectionSummary = (sectionId) => {
     switch (sectionId) {
       case 'ai':
-        return `Pipeline: ${ingestProvider}/${ingestModel} · Chat: ${chatProvider}/${chatModel} · Auto-tagging ${autoTaggingEnabled ? 'on' : 'off'}`;
+        return `Pipeline: ${ingestProvider}/${ingestModel} · Chat: ${chatProvider}/${chatModel} · Tagging ${taggingMethod}`;
       case 'scoring':
         return `${scoringMethod} · threshold ${scoringAiEnhancementThreshold} · ${signalWeights.length} signal${signalWeights.length === 1 ? '' : 's'}`;
       case 'reading':
@@ -1068,16 +1068,26 @@
 
         <div class="subsection">
           <div class="subsection-header">
-            <h3>Auto-tagging</h3>
-            <p class="muted">Control whether AI tag suggestions are generated and how many can be applied.</p>
+            <h3>Tagging engine</h3>
+            <p class="muted">Choose a deterministic baseline or add AI augmentation on top.</p>
           </div>
-          <label class="checkbox-row">
-            <input type="checkbox" bind:checked={autoTaggingEnabled} />
-            <span>Enable AI auto-tagging</span>
+          <label>
+            Method
+            <select bind:value={taggingMethod}>
+              <option value="algorithmic">Algorithmic only</option>
+              <option value="hybrid">Hybrid (algorithmic + AI)</option>
+            </select>
+            <span class="hint">
+              {#if taggingMethod === 'algorithmic'}
+                Deterministic tagging only. Works without provider keys and writes system tags.
+              {:else}
+                Deterministic tagging first, then AI augments with existing canonical tags and suggestions when keys are available.
+              {/if}
+            </span>
           </label>
           <div class="two-col">
             <label>
-              Max AI tags per article
+              Max tags per article
               <input
                 type="number"
                 min={data.autoTagging?.maxPerArticle?.min ?? 1}
@@ -1085,7 +1095,7 @@
                 step="1"
                 bind:value={autoTagMaxPerArticle}
               />
-              <span class="hint">Applies to combined existing-tag matches plus new suggestions.</span>
+              <span class="hint">Applies across deterministic tags, AI-applied tags, and suggestions.</span>
             </label>
             <div class="inline-actions">
               <p class="muted small">Dismissed AI suggestions</p>
@@ -1306,6 +1316,50 @@
           {:else}
             <p class="muted small">No signal weights loaded. Weights are seeded on first migration.</p>
           {/if}
+        </div>
+
+        <div class="subsection soft-panel">
+          <div class="subsection-header">
+            <h3>Scoring QA</h3>
+            <p class="muted">Read-only health checks for score readiness and tag coverage.</p>
+          </div>
+          <div class="qa-grid">
+            <div class="qa-card">
+              <span class="qa-label">Score status</span>
+              <strong>{data.scoringObservability?.scoreStatusCounts?.ready ?? 0} ready</strong>
+              <span class="muted small">{data.scoringObservability?.scoreStatusCounts?.insufficientSignal ?? 0} learning</span>
+            </div>
+            <div class="qa-card">
+              <span class="qa-label">Confidence buckets</span>
+              <strong>
+                {data.scoringObservability?.confidenceBuckets?.low ?? 0} low ·
+                {data.scoringObservability?.confidenceBuckets?.medium ?? 0} medium ·
+                {data.scoringObservability?.confidenceBuckets?.high ?? 0} high
+              </strong>
+              <span class="muted small">Latest score rows only</span>
+            </div>
+            <div class="qa-card">
+              <span class="qa-label">Tag sources</span>
+              <strong>
+                {data.scoringObservability?.tagSourceCounts?.manual ?? 0} manual ·
+                {data.scoringObservability?.tagSourceCounts?.system ?? 0} system ·
+                {data.scoringObservability?.tagSourceCounts?.ai ?? 0} AI
+              </strong>
+              <span class="muted small">Current article tag rows</span>
+            </div>
+            <div class="qa-card">
+              <span class="qa-label">Recent tag coverage</span>
+              <strong>{data.scoringObservability?.recentCoverage?.taggedArticlePercent ?? 0}% tagged</strong>
+              <span class="muted small">Across the last {data.scoringObservability?.recentCoverage?.windowDays ?? 30} days</span>
+            </div>
+            <div class="qa-card">
+              <span class="qa-label">Preference-backed scores</span>
+              <strong>{data.scoringObservability?.recentCoverage?.preferenceBackedScorePercent ?? 0}% with taste signals</strong>
+              <span class="muted small">
+                {data.scoringObservability?.recentCoverage?.recentScoredArticles ?? 0} recent scored article{(data.scoringObservability?.recentCoverage?.recentScoredArticles ?? 0) === 1 ? '' : 's'}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
     </SettingsSectionCard>
@@ -2137,6 +2191,29 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--space-4);
+  }
+
+  .qa-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+    gap: var(--space-3);
+  }
+
+  .qa-card {
+    display: grid;
+    gap: 0.35rem;
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
+    background: var(--surface-bg);
+    border: 1px solid var(--surface-border);
+  }
+
+  .qa-label {
+    font-size: var(--text-xs);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--muted-text);
   }
 
   .field-grid-compact {

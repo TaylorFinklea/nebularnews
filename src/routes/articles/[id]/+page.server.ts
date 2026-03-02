@@ -116,9 +116,30 @@ export const load = async ({ params, platform }) => {
     'score',
     null,
     () =>
-      dbGet<{ score: number; label: string | null; reason_text: string | null; evidence_json: string | null }>(
+      dbGet<{
+        score: number;
+        label: string | null;
+        reason_text: string | null;
+        evidence_json: string | null;
+        score_status: 'ready' | 'insufficient_signal' | null;
+        confidence: number | null;
+        preference_confidence: number | null;
+        weighted_average: number | null;
+      }>(
         db,
-        'SELECT score, label, reason_text, evidence_json FROM article_scores WHERE article_id = ? ORDER BY created_at DESC LIMIT 1',
+        `SELECT
+          score,
+          label,
+          reason_text,
+          evidence_json,
+          score_status,
+          confidence,
+          preference_confidence,
+          weighted_average
+         FROM article_scores
+         WHERE article_id = ?
+         ORDER BY created_at DESC
+         LIMIT 1`,
         [params.id]
       )
   );
@@ -129,13 +150,18 @@ export const load = async ({ params, platform }) => {
         reason_text: scoreOverride.comment ?? 'User-set rating override',
         evidence_json: null,
         evidence: [] as string[],
-        source: 'user'
+        source: 'user',
+        status: 'ready' as const,
+        confidence: 1,
+        preference_confidence: 1,
+        weighted_average: null
       }
     : aiScore
       ? {
           ...aiScore,
           evidence: parseStringList(aiScore.evidence_json),
-          source: 'ai'
+          source: 'ai',
+          status: aiScore.score_status ?? 'ready'
         }
       : null;
 

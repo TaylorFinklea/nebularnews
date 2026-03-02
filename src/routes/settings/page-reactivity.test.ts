@@ -39,6 +39,7 @@ const createData = (overrides = {}) => ({
     retentionDays: 0,
     retentionMode: 'archive',
     autoReadDelayMs: 4000,
+    taggingMethod: 'hybrid',
     autoTaggingEnabled: true,
     autoTagMaxPerArticle: 2,
     jobProcessorBatchSize: 6,
@@ -170,6 +171,29 @@ const createData = (overrides = {}) => ({
     orphanCount: 2,
     sampleArticleIds: ['article-1', 'article-2', 'article-3'],
     suggestedBatchSize: 200
+  },
+  scoringObservability: {
+    scoreStatusCounts: {
+      ready: 12,
+      insufficientSignal: 5
+    },
+    confidenceBuckets: {
+      low: 4,
+      medium: 8,
+      high: 5
+    },
+    tagSourceCounts: {
+      manual: 7,
+      system: 11,
+      ai: 3
+    },
+    recentCoverage: {
+      windowDays: 30,
+      recentArticles: 20,
+      recentScoredArticles: 10,
+      taggedArticlePercent: 75,
+      preferenceBackedScorePercent: 60
+    }
   },
   ...overrides
 });
@@ -411,6 +435,39 @@ describe('Settings page reactivity', () => {
 
     expect(screen.getByRole('button', { name: 'Collapse Profile & prompts' })).toBeTruthy();
     expect(screen.queryByText(/section changed/)).toBeNull();
+  });
+
+  it('persists tagging method changes and renders the scoring QA summary', async () => {
+    render(SettingsPage, { data: createData() });
+
+    expect(screen.getByText('12 ready')).toBeTruthy();
+    expect(screen.getByText('75% tagged')).toBeTruthy();
+
+    await fireEvent.change(
+      screen.getByRole('combobox', {
+        name: /Method Deterministic tagging first, then AI augments/
+      }),
+      {
+      target: { value: 'algorithmic' }
+      }
+    );
+
+    let saveButton;
+    await waitFor(() => {
+      saveButton = getEnabledSaveButton();
+      expect(saveButton).toBeTruthy();
+    });
+    await fireEvent.click(saveButton);
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/settings',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('"taggingMethod":"algorithmic"')
+        })
+      );
+    });
   });
 
   it('keeps immediate key actions independent from the global save flow', async () => {

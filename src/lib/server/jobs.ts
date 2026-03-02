@@ -2,6 +2,7 @@ import { nanoid } from 'nanoid';
 import { dbAll, dbGet, dbRun, now, type Db } from './db';
 import {
   enhanceScore,
+  generateArticleTagDecisions,
   generateArticleKeyPoints,
   refreshPreferenceProfile,
   scoreArticle,
@@ -16,7 +17,8 @@ import {
   getScorePromptConfig,
   getScoringMethod,
   getScoringAiEnhancementThreshold,
-  getSummaryConfig
+  getSummaryConfig,
+  getTaggingMethod
 } from './settings';
 import { ensurePreferenceProfile } from './profile';
 import { scoreArticleAlgorithmic } from './scoring/engine';
@@ -26,6 +28,13 @@ import {
   generateDeterministicTagDecisions
 } from './tagging/rules';
 import { enqueueScoreJob } from './job-queue';
+import {
+  attachTagToArticle,
+  listDismissedSuggestionNamesForArticle,
+  listExistingTagCandidatesForArticle,
+  normalizeTagSuggestionKey,
+  replaceTagSuggestionsForArticle
+} from './tags';
 import { logInfo } from './log';
 import { isJobBatchV2Enabled } from './flags';
 
@@ -448,6 +457,7 @@ async function runKeyPointsJob(db: Db, env: App.Platform['env'], articleId: stri
 }
 
 export async function runAutoTagJob(db: Db, _env: App.Platform['env'], articleId: string): Promise<JobRunMetadata> {
+  const taggingMethod = await getTaggingMethod(db);
   const article = await dbGet<{
     title: string | null;
     canonical_url: string | null;
@@ -499,11 +509,90 @@ export async function runAutoTagJob(db: Db, _env: App.Platform['env'], articleId
     await enqueueScoreJob(db, articleId);
   }
 
-  return null;
+  if (taggingMethod !== 'hybrid') {
+    return null;
+  }
+
+  const { provider, model, reasoningEffort } = await getFeatureProviderModel(db, _env, 'auto_tagging');
+  const apiKey = await getProviderKey(db, _env, provider);
+  if (!apiKey) {
+    logInfo('tagging.ai.fallback', {
+      article_id: articleId,
+      reason: 'missing_provider_key'
+    });
+    return null;
+  }
+
+  const existingCandidates = await listExistingTagCandidatesForArticle(db, {
+    title: article.title,
+    contentText: article.content_text,
+    limit: 50
+  });
+  const dismissedSuggestionNames = await listDismissedSuggestionNamesForArticle(db, articleId);
+  const generated = await generateArticleTagDecisions(
+    provider,
+    apiKey,
+    model,
+    {
+      title: article.title,
+      url: article.canonical_url,
+      contentText: String(article.content_text ?? '').slice(0, 12000),
+      maxTags,
+      existingCandidates: existingCandidates.map((candidate) => ({
+        id: candidate.id,
+        name: candidate.name
+      }))
+    },
+    { reasoningEffort }
+  );
+
+  // Replace previous AI-generated tags only. Manual/system tags are retained.
+  await dbRun(db, 'DELETE FROM article_tags WHERE article_id = ? AND source = ?', [articleId, 'ai']);
+  const existingLinks = await dbAll<{ tag_id: string }>(
+    db,
+    'SELECT tag_id FROM article_tags WHERE article_id = ?',
+    [articleId]
+  );
+  const existingTagIds = new Set(existingLinks.map((row) => row.tag_id));
+  const remainingSlots = Math.max(0, maxTags - existingTagIds.size);
+  const aiTagIds = generated.matchedExistingTagIds
+    .filter((tagId) => !existingTagIds.has(tagId))
+    .slice(0, remainingSlots);
+  const filteredSuggestions = generated.newSuggestions
+    .filter((candidate) => !dismissedSuggestionNames.has(normalizeTagSuggestionKey(candidate.name)))
+    .slice(0, Math.max(0, maxTags - existingTagIds.size - aiTagIds.length));
+
+  let aiTagsChanged = false;
+  for (const tagId of aiTagIds) {
+    if (existingTagIds.has(tagId)) {
+      continue;
+    }
+    await attachTagToArticle(db, {
+      articleId,
+      tagId,
+      source: 'ai',
+      confidence: null
+    });
+    existingTagIds.add(tagId);
+    aiTagsChanged = true;
+  }
+
+  await replaceTagSuggestionsForArticle(db, {
+    articleId,
+    sourceProvider: provider,
+    sourceModel: model,
+    suggestions: filteredSuggestions
+  });
+
+  if (aiTagsChanged) {
+    await enqueueScoreJob(db, articleId);
+  }
+
+  return { provider, model };
 }
 
 
-async function runScoreJob(db: Db, env: App.Platform['env'], articleId: string): Promise<{ provider: string; model: string }> {
+export async function runScoreJob(db: Db, env: App.Platform['env'], articleId: string): Promise<{ provider: string; model: string }> {
   const scoringMethod: ScoringMethod = await getScoringMethod(db);
 
   // ── AI-only path (legacy behavior) ──────────────────────────────
@@ -570,8 +659,22 @@ async function runScoreJob(db: Db, env: App.Platform['env'], articleId: string):
   const profile = await ensurePreferenceProfile(db);
   await dbRun(
     db,
-    `INSERT INTO article_scores (id, article_id, score, label, reason_text, evidence_json, created_at, profile_version, scoring_method)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO article_scores (
+      id,
+      article_id,
+      score,
+      label,
+      reason_text,
+      evidence_json,
+      created_at,
+      profile_version,
+      scoring_method,
+      score_status,
+      confidence,
+      preference_confidence,
+      weighted_average
+     )
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       nanoid(),
       articleId,
@@ -581,7 +684,11 @@ async function runScoreJob(db: Db, env: App.Platform['env'], articleId: string):
       JSON.stringify(evidence),
       now(),
       profile.version,
-      method
+      method,
+      algoResult.status,
+      algoResult.confidence,
+      algoResult.preferenceConfidence,
+      algoResult.weightedAverage
     ]
   );
 
@@ -613,8 +720,22 @@ async function runScoreJobAiOnly(db: Db, env: App.Platform['env'], articleId: st
 
   await dbRun(
     db,
-    `INSERT INTO article_scores (id, article_id, score, label, reason_text, evidence_json, created_at, profile_version, scoring_method)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ai')`,
+    `INSERT INTO article_scores (
+      id,
+      article_id,
+      score,
+      label,
+      reason_text,
+      evidence_json,
+      created_at,
+      profile_version,
+      scoring_method,
+      score_status,
+      confidence,
+      preference_confidence,
+      weighted_average
+     )
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ai', 'ready', ?, ?, ?)`,
     [
       nanoid(),
       articleId,
@@ -623,7 +744,10 @@ async function runScoreJobAiOnly(db: Db, env: App.Platform['env'], articleId: st
       scored.reason,
       JSON.stringify(scored.evidence),
       now(),
-      profile.version
+      profile.version,
+      1,
+      1,
+      null
     ]
   );
   return { provider, model };

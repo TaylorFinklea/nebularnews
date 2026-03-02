@@ -131,4 +131,27 @@ describe('Article detail reaction reason flow', () => {
     expect(screen.getByText("Don't trust this source")).toBeTruthy();
     expect(screen.getByText('Too shallow')).toBeTruthy();
   });
+
+  it('shows the inline learning banner when the latest score is insufficient', () => {
+    render(
+      ArticleDetailPage,
+      {
+        data: createData({
+          score: {
+            score: 3,
+            label: 'Algorithmic (17% confidence)',
+            reason_text: 'Weighted average: 0.500',
+            evidence: [],
+            status: 'insufficient_signal'
+          }
+        })
+      }
+    );
+
+    expect(screen.getByText('Learning your preferences')).toBeTruthy();
+    expect(
+      screen.getByText('Not enough preference signals yet. React to articles or refine tags to improve scoring.')
+    ).toBeTruthy();
+    expect(screen.queryByText('3 / 5')).toBeNull();
+  });
 });

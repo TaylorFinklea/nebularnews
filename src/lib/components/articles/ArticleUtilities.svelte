@@ -78,6 +78,7 @@
   $: savedReactionReasonLabels = Array.isArray(reaction?.reason_codes)
     ? reaction.reason_codes.map((reasonCode) => getReactionReasonLabel(reasonCode))
     : [];
+  $: scoreSummary = score ? (score.status === 'insufficient_signal' ? 'Learning' : `${score.score}/5`) : '';
 </script>
 
 <div class="utilities-panel" class:compact={density === 'compact'}>
@@ -190,18 +191,22 @@
   </ArticleUtilitySection>
 
   <!-- AI Score -->
-  <ArticleUtilitySection id="ai_tools" title="AI Fit Score" summary={score ? `${score.score}/5` : ''} open={openSections.ai_tools} on:toggle={toggleSection}>
+  <ArticleUtilitySection id="ai_tools" title="AI Fit Score" summary={scoreSummary} open={openSections.ai_tools} on:toggle={toggleSection}>
     <div class="section-header-row">
       <Button variant="ghost" size="icon" on:click={() => dispatch('rerun', { types: ['score'] })} disabled={rerunBusy} title="Re-score article">
         <IconStars size={15} stroke={1.9} />
       </Button>
     </div>
     {#if score}
-      <div class="score-display">
-        <span class="score-num">{score.score}</span>
-        <span class="score-denom">/ 5</span>
-        <Pill>{score.label}</Pill>
-      </div>
+      {#if score.status === 'insufficient_signal'}
+        <p class="muted small">Learning your preferences. React to articles or refine tags to improve scoring.</p>
+      {:else}
+        <div class="score-display">
+          <span class="score-num">{score.score}</span>
+          <span class="score-denom">/ 5</span>
+          <Pill>{score.label}</Pill>
+        </div>
+      {/if}
     {:else}
       <p class="muted small">Score pending.</p>
     {/if}

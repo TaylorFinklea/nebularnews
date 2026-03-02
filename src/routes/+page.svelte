@@ -3,6 +3,7 @@
   import { onDestroy, onMount } from 'svelte';
   import { apiFetch } from '$lib/client/api-fetch';
   import { showToast } from '$lib/client/toast';
+  import { getFitScoreAria, getFitScoreText, getFitScoreTone } from '$lib/fit-score';
   import { IconClockPlay, IconExternalLink, IconStars } from '$lib/icons';
   import { resolveArticleImageUrl } from '$lib/article-image';
   import Card from '$lib/components/Card.svelte';
@@ -213,27 +214,6 @@
     }
   });
 
-  const fitScoreValue = (score) => {
-    const n = Number(score);
-    return Number.isFinite(n) && n >= 1 && n <= 5 ? Math.round(n) : null;
-  };
-
-  const fitScoreTone = (score) => {
-    const value = fitScoreValue(score);
-    if (value === null) return 'fit-none';
-    return `fit-${value}`;
-  };
-
-  const fitScoreText = (score) => {
-    const value = fitScoreValue(score);
-    return value === null ? '--' : `${value}/5`;
-  };
-
-  const fitScoreAria = (score) => {
-    const value = fitScoreValue(score);
-    return value === null ? 'AI fit score not available yet' : `AI fit score ${value} out of 5`;
-  };
-
   const articleSnippet = (article) => {
     const text = article.summary_text ?? article.excerpt ?? '';
     return text.length > 200 ? `${text.slice(0, 200)}...` : text;
@@ -413,12 +393,12 @@
             <div class="card-top-row">
               <a class="card-title" href={queueArticleHref(article.id)}>{article.title ?? 'Untitled article'}</a>
               <span
-                class={`fit-pill ${fitScoreTone(article.score)}`}
-                title={fitScoreAria(article.score)}
-                aria-label={fitScoreAria(article.score)}
+                class={`fit-pill ${getFitScoreTone(article.score, article.score_status)}`}
+                title={getFitScoreAria(article.score, article.score_status)}
+                aria-label={getFitScoreAria(article.score, article.score_status)}
               >
                 <IconStars size={13} stroke={1.9} />
-                <span>{fitScoreText(article.score)}</span>
+                <span>{getFitScoreText(article.score, article.score_status)}</span>
               </span>
             </div>
 
@@ -657,6 +637,12 @@
     font-weight: 500;
     line-height: 1;
     flex-shrink: 0;
+  }
+
+  .fit-pill.fit-none,
+  .fit-pill.fit-learning {
+    color: var(--muted-text);
+    background: var(--surface-soft);
   }
 
   .fit-pill.fit-1 {

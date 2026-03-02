@@ -3,6 +3,9 @@ import { dbAll, dbGet, dbRun, now, type Db } from '../db';
 import { extractSignals, type ArticleForScoring } from './signals';
 import {
   DEFAULT_SIGNAL_WEIGHTS,
+  MIN_DATA_BACKED_SIGNALS_TO_PUBLISH,
+  MIN_PREFERENCE_BACKED_SIGNALS_TO_PUBLISH,
+  PREFERENCE_BACKED_SIGNAL_NAMES,
   SIGNAL_NAMES,
   type AlgorithmicScore,
   type SignalName,
@@ -37,10 +40,13 @@ export function computeAlgorithmicScore(
   weights: SignalWeight[]
 ): AlgorithmicScore {
   const weightMap = new Map(weights.map((w) => [w.signalName, w]));
+  const preferenceSignalNames = new Set(PREFERENCE_BACKED_SIGNAL_NAMES);
 
   let weightedSum = 0;
   let totalWeight = 0;
   let dataSignalCount = 0;
+  let preferenceSignalCount = 0;
+  let preferenceBackedSignalCount = 0;
 
   for (const signal of signals) {
     const w = weightMap.get(signal.signal);
@@ -49,6 +55,12 @@ export function computeAlgorithmicScore(
     totalWeight += weight;
     if (signal.isDataBacked) {
       dataSignalCount++;
+      if (preferenceSignalNames.has(signal.signal)) {
+        preferenceBackedSignalCount++;
+      }
+    }
+    if (preferenceSignalNames.has(signal.signal)) {
+      preferenceSignalCount++;
     }
   }
 
@@ -60,13 +72,23 @@ export function computeAlgorithmicScore(
 
   // Confidence: proportion of signals with actual data (not defaults)
   const confidence = signals.length > 0 ? dataSignalCount / signals.length : 0;
+  const preferenceConfidence = preferenceSignalCount > 0 ? preferenceBackedSignalCount / preferenceSignalCount : 0;
+  const status =
+    dataSignalCount >= MIN_DATA_BACKED_SIGNALS_TO_PUBLISH &&
+    preferenceBackedSignalCount >= MIN_PREFERENCE_BACKED_SIGNALS_TO_PUBLISH
+      ? 'ready'
+      : 'insufficient_signal';
 
   return {
     score,
     signals,
     weights,
     confidence,
-    weightedAverage
+    preferenceConfidence,
+    dataBackedSignalCount: dataSignalCount,
+    preferenceBackedSignalCount,
+    weightedAverage,
+    status
   };
 }
 

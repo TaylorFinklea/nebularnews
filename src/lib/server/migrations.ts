@@ -4,7 +4,7 @@ let schemaReady = false;
 let schemaInitPromise: Promise<void> | null = null;
 
 const MAX_PUBLISHED_FUTURE_MS = 1000 * 60 * 60 * 24;
-export const EXPECTED_SCHEMA_VERSION = 7;
+export const EXPECTED_SCHEMA_VERSION = 8;
 
 const runSafe = async (db: Db, sql: string, params: unknown[] = []) => {
   try {
@@ -437,6 +437,20 @@ const applyV7 = async (db: Db) => {
   );
 };
 
+const applyV8 = async (db: Db) => {
+  await runSafe(
+    db,
+    "ALTER TABLE article_scores ADD COLUMN score_status TEXT NOT NULL DEFAULT 'ready'"
+  );
+  await runSafe(db, 'ALTER TABLE article_scores ADD COLUMN confidence REAL');
+  await runSafe(db, 'ALTER TABLE article_scores ADD COLUMN preference_confidence REAL');
+  await runSafe(db, 'ALTER TABLE article_scores ADD COLUMN weighted_average REAL');
+  await runSafe(
+    db,
+    "UPDATE article_scores SET score_status = 'ready' WHERE score_status IS NULL OR TRIM(score_status) = ''"
+  );
+};
+
 export async function ensureSchema(db: Db) {
   if (schemaReady) return;
   if (schemaInitPromise) return schemaInitPromise;
@@ -471,6 +485,10 @@ export async function ensureSchema(db: Db) {
     if (currentVersion < 7) {
       await applyV7(db);
       await markVersionApplied(db, 7, 'v7_reaction_reason_chips');
+    }
+    if (currentVersion < 8) {
+      await applyV8(db);
+      await markVersionApplied(db, 8, 'v8_score_status_metadata');
     }
     schemaReady = true;
   })();
@@ -546,6 +564,15 @@ const assertRequiredV7Objects = async (db: Db) => {
   }
 };
 
+const assertRequiredV8Objects = async (db: Db) => {
+  const requiredScoreColumns = ['score_status', 'confidence', 'preference_confidence', 'weighted_average'];
+  for (const columnName of requiredScoreColumns) {
+    if (!(await columnExists(db, 'article_scores', columnName))) {
+      throw new Error(`Missing required article_scores column: ${columnName}`);
+    }
+  }
+};
+
 export async function assertSchemaVersion(db: Db, expected = EXPECTED_SCHEMA_VERSION) {
   const version = await getSchemaVersion(db);
   if (version < expected) {
@@ -564,6 +591,9 @@ export async function assertSchemaVersion(db: Db, expected = EXPECTED_SCHEMA_VER
   }
   if (expected >= 7) {
     await assertRequiredV7Objects(db);
+  }
+  if (expected >= 8) {
+    await assertRequiredV8Objects(db);
   }
   return version;
 }

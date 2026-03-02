@@ -28,12 +28,25 @@ export type SignalWeight = {
   sampleCount: number;
 };
 
+export type ScoreStatus = 'ready' | 'insufficient_signal';
+
+export const PREFERENCE_BACKED_SIGNAL_NAMES: SignalName[] = [
+  'topic_affinity',
+  'source_reputation',
+  'author_affinity',
+  'tag_match_ratio'
+];
+
 export type AlgorithmicScore = {
   score: number; // 1-5
   signals: SignalResult[];
   weights: SignalWeight[];
   confidence: number; // 0.0 - 1.0 based on data availability
+  preferenceConfidence: number; // 0.0 - 1.0 based on preference-backed signal coverage
+  dataBackedSignalCount: number;
+  preferenceBackedSignalCount: number;
   weightedAverage: number; // 0.0 - 1.0 raw weighted average before mapping
+  status: ScoreStatus;
 };
 
 export type ScoringMethod = 'ai' | 'algorithmic' | 'hybrid';
@@ -50,3 +63,5 @@ export const DEFAULT_SIGNAL_WEIGHTS: Record<SignalName, number> = {
 export const LEARNING_RATE = 0.1;
 export const DAMPING_FACTOR = 50;
 export const DEFAULT_AI_ENHANCEMENT_THRESHOLD = 0.5;
+export const MIN_DATA_BACKED_SIGNALS_TO_PUBLISH = 2;
+export const MIN_PREFERENCE_BACKED_SIGNALS_TO_PUBLISH = 1;

@@ -108,4 +108,24 @@ describe('articles-state', () => {
     expect(merged.reaction_value).toBe(1);
     expect(merged.reaction_reason_codes).toEqual(['up_interest_match', 'up_good_depth']);
   });
+
+  it('treats insufficient-signal scores as unscored in client-side filters', () => {
+    const state = createArticlesState([
+      {
+        ...baseArticle,
+        score: 3,
+        score_status: 'insufficient_signal'
+      }
+    ]);
+
+    const snapshot = get(state as unknown as Readable<ArticlesUiState>);
+    const visible = getVisibleArticles(snapshot, {
+      selectedScores: ['unscored'],
+      selectedReactions: ['up', 'down', 'none'],
+      selectedTagIds: [],
+      readFilter: 'all'
+    });
+
+    expect(visible).toHaveLength(1);
+  });
 });

@@ -32,6 +32,9 @@ export type ArticleListItem = {
   reaction_reason_codes?: ArticleReactionReasonCode[];
   score?: number | null;
   score_label?: string | null;
+  score_status?: 'ready' | 'insufficient_signal' | null;
+  score_confidence?: number | null;
+  score_preference_confidence?: number | null;
   source_name?: string | null;
   source_feed_id?: string | null;
   source_reputation?: number;

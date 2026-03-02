@@ -27,6 +27,10 @@ describe('computeAlgorithmicScore', () => {
     );
 
     expect(result.confidence).toBeCloseTo(2 / 6);
+    expect(result.preferenceConfidence).toBeCloseTo(1 / 4);
+    expect(result.dataBackedSignalCount).toBe(2);
+    expect(result.preferenceBackedSignalCount).toBe(1);
+    expect(result.status).toBe('ready');
   });
 
   it('keeps missing tags and content neutral instead of depressing the score', () => {
@@ -41,6 +45,7 @@ describe('computeAlgorithmicScore', () => {
 
     expect(result.weightedAverage).toBeCloseTo(0.6542222222, 6);
     expect(result.score).toBe(4);
+    expect(result.status).toBe('ready');
   });
 
   it('scores a no-content, no-tag article as neutral instead of low by default', () => {
@@ -56,6 +61,8 @@ describe('computeAlgorithmicScore', () => {
     expect(result.weightedAverage).toBeCloseTo(0.5, 6);
     expect(result.score).toBe(3);
     expect(result.confidence).toBe(0);
+    expect(result.preferenceConfidence).toBe(0);
+    expect(result.status).toBe('insufficient_signal');
   });
 
   it('rewards positively tagged articles with strong source and freshness signals', () => {
@@ -71,6 +78,8 @@ describe('computeAlgorithmicScore', () => {
     expect(result.weightedAverage).toBeCloseTo(0.8268888889, 6);
     expect(result.score).toBe(4);
     expect(result.confidence).toBe(1);
+    expect(result.preferenceConfidence).toBe(1);
+    expect(result.status).toBe('ready');
   });
 
   it('penalizes negatively affined tagged articles', () => {
@@ -85,6 +94,7 @@ describe('computeAlgorithmicScore', () => {
 
     expect(result.weightedAverage).toBeCloseTo(0.3095555556, 6);
     expect(result.score).toBe(2);
+    expect(result.status).toBe('ready');
   });
 
   it('supports source-driven scoring even without topic or author data', () => {
@@ -100,5 +110,7 @@ describe('computeAlgorithmicScore', () => {
     expect(result.weightedAverage).toBeCloseTo(0.6271111111, 6);
     expect(result.score).toBe(4);
     expect(result.confidence).toBeCloseTo(0.5);
+    expect(result.preferenceConfidence).toBeCloseTo(0.25);
+    expect(result.status).toBe('ready');
   });
 });

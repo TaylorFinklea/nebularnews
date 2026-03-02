@@ -26,6 +26,7 @@ import {
   intervalMinutesToCronExpression,
   parseBooleanSetting,
   getDashboardQueueConfig,
+  getTaggingMethod,
   DEFAULT_INITIAL_FEED_LOOKBACK_DAYS,
   DEFAULT_RETENTION_DAYS,
   DEFAULT_DASHBOARD_TOP_RATED_CUTOFF,
@@ -181,6 +182,23 @@ describe('dashboard and scheduler settings', () => {
     expect(clampAutoTagMaxPerArticle(9)).toBe(5);
     expect(clampAutoTagMaxPerArticle(3)).toBe(3);
     expect(clampAutoTagMaxPerArticle('bad')).toBe(DEFAULT_AUTO_TAG_MAX_PER_ARTICLE);
+  });
+
+  it('falls back to the legacy auto-tagging flag when tagging_method is unset', async () => {
+    mockSettings({
+      auto_tagging_enabled: 1
+    });
+
+    await expect(getTaggingMethod({} as D1Database)).resolves.toBe('hybrid');
+  });
+
+  it('prefers explicit tagging_method over the legacy auto-tagging flag', async () => {
+    mockSettings({
+      tagging_method: 'algorithmic',
+      auto_tagging_enabled: 1
+    });
+
+    await expect(getTaggingMethod({} as D1Database)).resolves.toBe('algorithmic');
   });
 
   it('parses scheduler booleans and cron values', () => {

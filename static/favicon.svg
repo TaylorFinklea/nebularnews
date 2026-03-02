@@ -2,41 +2,33 @@
   viewBox="0 0 256 180"
   xmlns="http://www.w3.org/2000/svg"
   color="#8573ff"
+  preserveAspectRatio="xMidYMid meet"
 >
-  <g
-    transform="translate(0 6) rotate(-18 128 84)"
-    fill="none"
-    stroke="currentColor"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-  >
-    <ellipse
-      cx="128"
-      cy="84"
-      rx="108"
-      ry="52"
-      stroke-width="18"
-      stroke-dasharray="330 88 104 176"
-      stroke-dashoffset="42"
-    />
-    <ellipse
-      cx="132"
-      cy="84"
-      rx="74"
-      ry="35"
-      stroke-width="18"
-      stroke-dasharray="242 82 76 148"
-      stroke-dashoffset="34"
-    />
-    <ellipse
-      cx="136"
-      cy="84"
-      rx="44"
-      ry="20"
-      stroke-width="16"
-      stroke-dasharray="146 48 44 112"
-      stroke-dashoffset="30"
-    />
-  </g>
+  <defs>
+    <mask id="nebular-logo-outer">
+      <rect width="256" height="180" fill="black" />
+      <ellipse cx="128" cy="90" rx="109" ry="52" transform="rotate(-18 128 90)" fill="white" />
+      <ellipse cx="128" cy="90" rx="81" ry="31" transform="rotate(-18 128 90)" fill="black" />
+      <path d="M141 36 L190 36 L153 53 Z" fill="black" />
+      <path d="M94 148 L137 142 L120 171 Z" fill="black" />
+      <path d="M36 98 L67 67 L76 74 L48 109 Z" fill="black" />
+    </mask>
+    <mask id="nebular-logo-mid">
+      <rect width="256" height="180" fill="black" />
+      <ellipse cx="132" cy="92" rx="73" ry="34" transform="rotate(-18 132 92)" fill="white" />
+      <ellipse cx="132" cy="92" rx="47" ry="18" transform="rotate(-18 132 92)" fill="black" />
+      <path d="M88 98 L112 70 L120 78 L95 108 Z" fill="black" />
+      <path d="M172 112 L204 101 L191 128 L161 125 Z" fill="black" />
+    </mask>
+    <mask id="nebular-logo-inner">
+      <rect width="256" height="180" fill="black" />
+      <ellipse cx="138" cy="94" rx="40" ry="19" transform="rotate(-18 138 94)" fill="white" />
+      <ellipse cx="138" cy="94" rx="18" ry="8" transform="rotate(-18 138 94)" fill="black" />
+      <path d="M151 103 L183 96 L170 122 L145 118 Z" fill="black" />
+    </mask>
+  </defs>
+  <rect width="256" height="180" fill="currentColor" mask="url(#nebular-logo-outer)" />
+  <rect width="256" height="180" fill="currentColor" mask="url(#nebular-logo-mid)" />
+  <rect width="256" height="180" fill="currentColor" mask="url(#nebular-logo-inner)" />
   <circle cx="129" cy="96" r="16" fill="currentColor" />
 </svg>

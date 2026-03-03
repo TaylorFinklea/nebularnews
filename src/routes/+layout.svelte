@@ -104,6 +104,9 @@
 
 <svelte:head>
   <title>Nebular News</title>
+  <meta name="apple-mobile-web-app-title" content="Nebular News" />
+  <link rel="apple-touch-icon" href="/nebularnews-logo.png" />
+  <link rel="icon" href="/nebularnews-logo.png" type="image/png" />
   <link rel="icon" href="/nebularnews-logo-tight.svg" type="image/svg+xml" />
   <link
     rel="stylesheet"

@@ -214,4 +214,14 @@ describe('Layout navigation shell', () => {
       expect(localStorage.getItem('nebular-theme')).toBe('light');
     });
   });
+
+  it('registers an apple touch icon for iOS home screen saves', () => {
+    render(Layout);
+
+    const appleTouchIcon = document.querySelector('link[rel="apple-touch-icon"]');
+    expect(appleTouchIcon?.getAttribute('href')).toBe('/nebularnews-logo.png');
+    expect(
+      document.querySelector('meta[name="apple-mobile-web-app-title"]')?.getAttribute('content')
+    ).toBe('Nebular News');
+  });
 });

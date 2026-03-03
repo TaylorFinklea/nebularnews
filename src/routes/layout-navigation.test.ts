@@ -181,4 +181,37 @@ describe('Layout navigation shell', () => {
     expect(screen.queryByLabelText('App sidebar')).toBeNull();
     expect(screen.queryByRole('navigation', { name: 'Bottom navigation' })).toBeNull();
   });
+
+  it('keeps browser theme metadata in sync with the active theme', async () => {
+    localStorage.setItem('nebular-theme', 'dark');
+    render(Layout);
+
+    await waitFor(() => {
+      expect(document.querySelector('meta[name="theme-color"]')?.getAttribute('content')).toBe(
+        '#030711'
+      );
+      expect(document.querySelector('meta[name="color-scheme"]')?.getAttribute('content')).toBe(
+        'dark light'
+      );
+      expect(document.documentElement.style.colorScheme).toBe('dark');
+    });
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Light mode' }));
+
+    await waitFor(() => {
+      expect(document.querySelector('meta[name="theme-color"]')?.getAttribute('content')).toBe(
+        '#f8f7fc'
+      );
+      expect(document.querySelector('meta[name="color-scheme"]')?.getAttribute('content')).toBe(
+        'light dark'
+      );
+      expect(
+        document
+          .querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')
+          ?.getAttribute('content')
+      ).toBe('default');
+      expect(document.documentElement.style.colorScheme).toBe('light');
+      expect(localStorage.getItem('nebular-theme')).toBe('light');
+    });
+  });
 });

@@ -10,6 +10,8 @@
 
   const THEME_KEY = 'nebular-theme';
   const SIDEBAR_COLLAPSED_KEY = 'nebular-sidebar-collapsed';
+  const DARK_THEME_COLOR = '#030711';
+  const LIGHT_THEME_COLOR = '#f8f7fc';
 
   let theme = 'dark';
   let sidebarCollapsed = false;
@@ -31,9 +33,34 @@
     }
   };
 
+  const getThemeColor = (nextTheme) => (nextTheme === 'light' ? LIGHT_THEME_COLOR : DARK_THEME_COLOR);
+
+  const upsertMeta = (name, content) => {
+    if (typeof document === 'undefined') return;
+    let element = document.head.querySelector(`meta[name="${name}"]`);
+    if (!element) {
+      element = document.createElement('meta');
+      element.setAttribute('name', name);
+      document.head.appendChild(element);
+    }
+    element.setAttribute('content', content);
+  };
+
+  const syncThemeChrome = (nextTheme) => {
+    if (typeof document === 'undefined') return;
+    document.documentElement.dataset.theme = nextTheme;
+    document.documentElement.style.colorScheme = nextTheme;
+    upsertMeta('theme-color', getThemeColor(nextTheme));
+    upsertMeta('color-scheme', nextTheme === 'dark' ? 'dark light' : 'light dark');
+    upsertMeta(
+      'apple-mobile-web-app-status-bar-style',
+      nextTheme === 'dark' ? 'black-translucent' : 'default'
+    );
+  };
+
   const setTheme = (nextTheme, persist = true) => {
     theme = nextTheme;
-    document.documentElement.dataset.theme = nextTheme;
+    syncThemeChrome(nextTheme);
     if (!persist) return;
     try {
       localStorage.setItem(THEME_KEY, nextTheme);
@@ -93,9 +120,40 @@
             : window.matchMedia('(prefers-color-scheme: dark)').matches
               ? 'dark'
               : 'light';
+        const themeColor = resolved === 'light' ? '#f8f7fc' : '#030711';
         document.documentElement.dataset.theme = resolved;
+        document.documentElement.style.colorScheme = resolved;
+        const themeMeta =
+          document.head.querySelector('meta[name="theme-color"]') ??
+          document.head.appendChild(Object.assign(document.createElement('meta'), { name: 'theme-color' }));
+        themeMeta.setAttribute('content', themeColor);
+        const colorSchemeMeta =
+          document.head.querySelector('meta[name="color-scheme"]') ??
+          document.head.appendChild(
+            Object.assign(document.createElement('meta'), { name: 'color-scheme' })
+          );
+        colorSchemeMeta.setAttribute('content', resolved === 'dark' ? 'dark light' : 'light dark');
+        const statusBarMeta =
+          document.head.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]') ??
+          document.head.appendChild(
+            Object.assign(document.createElement('meta'), {
+              name: 'apple-mobile-web-app-status-bar-style'
+            })
+          );
+        statusBarMeta.setAttribute('content', resolved === 'dark' ? 'black-translucent' : 'default');
       } catch {
         document.documentElement.dataset.theme = 'dark';
+        document.documentElement.style.colorScheme = 'dark';
+        const themeMeta =
+          document.head.querySelector('meta[name="theme-color"]') ??
+          document.head.appendChild(Object.assign(document.createElement('meta'), { name: 'theme-color' }));
+        themeMeta.setAttribute('content', '#030711');
+        const colorSchemeMeta =
+          document.head.querySelector('meta[name="color-scheme"]') ??
+          document.head.appendChild(
+            Object.assign(document.createElement('meta'), { name: 'color-scheme' })
+          );
+        colorSchemeMeta.setAttribute('content', 'dark light');
       }
     })();
   </script>
@@ -131,6 +189,7 @@
 
 <style>
   :global(:root) {
+    color-scheme: dark;
     --mobile-nav-height: 64px;
     --mobile-nav-offset: 12px;
     --bg-gradient-start: #030711;
@@ -159,6 +218,7 @@
   }
 
   :global(:root[data-theme='light']) {
+    color-scheme: light;
     --bg-gradient-start: #f8f7fc;
     --bg-gradient-mid: #eee9f8;
     --bg-gradient-end: #e4ddf5;
@@ -200,6 +260,10 @@
       radial-gradient(600px 350px at 50% 100%, rgba(80, 50, 180, 0.06), transparent 50%),
       linear-gradient(170deg, var(--bg-gradient-start), var(--bg-gradient-mid) 40%, var(--bg-gradient-end));
     background-attachment: fixed;
+  }
+
+  :global(html) {
+    background-color: var(--bg-gradient-start);
   }
 
   :global(h1),

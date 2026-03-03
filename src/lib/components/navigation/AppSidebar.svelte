@@ -116,19 +116,20 @@
         <span class="nav-label">{themeLabel()}</span>
       </button>
 
-      <button
-        type="button"
-        class="sidebar-action"
-        on:click={onToggleCollapse}
-        aria-label={collapseLabel()}
-        title={collapseLabel()}
-      >
-        <span class="nav-icon collapse-icon" class:is-collapsed={collapsed}>
-          <IconArrowLeft size={18} stroke={1.9} />
-        </span>
-        <span class="nav-label">{collapseLabel()}</span>
-      </button>
     </div>
+
+    <button
+      type="button"
+      class="sidebar-action sidebar-collapse"
+      on:click={onToggleCollapse}
+      aria-label={collapseLabel()}
+      title={collapseLabel()}
+    >
+      <span class="nav-icon collapse-icon" class:is-collapsed={collapsed}>
+        <IconArrowLeft size={18} stroke={1.9} />
+      </span>
+      <span class="nav-label">{collapseLabel()}</span>
+    </button>
   </div>
 </aside>
 
@@ -318,11 +319,14 @@
 
   /* ── Footer ── */
   .sidebar-footer {
-    margin-top: auto;
     display: grid;
     gap: var(--space-1);
     padding-top: var(--space-3);
     border-top: 1px solid var(--surface-border);
+  }
+
+  .sidebar-collapse {
+    margin-top: var(--space-6);
   }
 
   .collapse-icon {

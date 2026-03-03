@@ -193,7 +193,10 @@ describe('news brief scheduling and queries', () => {
       bullets_json: JSON.stringify([
         {
           text: 'OpenAI released a new model family.',
-          sources: [{ articleId: 'article-1', title: 'OpenAI release', canonicalUrl: 'https://example.com/1' }]
+          sources: [
+            { articleId: 'article-1', title: 'OpenAI release', canonicalUrl: 'https://example.com/1' },
+            { articleId: 'article-2', title: 'Second source', canonicalUrl: 'https://example.com/2' }
+          ]
         }
       ]),
       source_article_ids_json: '["article-1"]',

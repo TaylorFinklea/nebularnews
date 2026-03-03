@@ -15,7 +15,7 @@ import { getPreferredSourcesForArticles } from './sources';
 export const NEWS_BRIEF_TITLE = 'News Brief';
 export const NEWS_BRIEF_MAX_CANDIDATES = 20;
 export const NEWS_BRIEF_MAX_BULLETS = 5;
-export const NEWS_BRIEF_MAX_SOURCES_PER_BULLET = 3;
+export const NEWS_BRIEF_MAX_SOURCES_PER_BULLET = 1;
 
 const MAX_NEWS_BRIEF_ATTEMPTS = 3;
 const NEWS_BRIEF_LEASE_MS = 1000 * 60 * 3;
@@ -188,7 +188,30 @@ const parseBullets = (value: string | null | undefined) => {
   if (!value) return [] as NewsBriefBullet[];
   try {
     const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? (parsed as NewsBriefBullet[]) : [];
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((entry) => {
+        const row = entry as {
+          text?: unknown;
+          sources?: Array<{ articleId?: unknown; title?: unknown; canonicalUrl?: unknown }>;
+        };
+        const text = String(row.text ?? '').trim();
+        const source = Array.isArray(row.sources) ? row.sources[0] : null;
+        const articleId = String(source?.articleId ?? '').trim();
+        const title = String(source?.title ?? '').trim();
+        if (!text || !articleId || !title) return null;
+        return {
+          text,
+          sources: [
+            {
+              articleId,
+              title,
+              canonicalUrl: source?.canonicalUrl ? String(source.canonicalUrl) : null
+            }
+          ]
+        } satisfies NewsBriefBullet;
+      })
+      .filter(Boolean) as NewsBriefBullet[];
   } catch {
     return [];
   }

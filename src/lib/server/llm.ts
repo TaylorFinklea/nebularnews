@@ -458,7 +458,7 @@ export async function generateNewsBrief(
   options?: LlmOptions
 ): Promise<NewsBriefGeneration> {
   const maxBullets = Math.min(8, Math.max(1, Math.floor(Number(input.maxBullets ?? 5))));
-  const maxSourcesPerBullet = Math.min(5, Math.max(1, Math.floor(Number(input.maxSourcesPerBullet ?? 3))));
+  const maxSourcesPerBullet = 1;
   const allowedIds = new Set(input.candidates.map((candidate) => candidate.id));
   const candidateText = input.candidates
     .map((candidate) => {
@@ -485,13 +485,14 @@ Requirements:
     "bullets": [
       {
         "text": "concise factual bullet",
-        "source_article_ids": ["candidate-id-1", "candidate-id-2"]
+        "source_article_ids": ["candidate-id-1"]
       }
     ]
   }
 - Provide up to ${maxBullets} bullets.
-- Each bullet must be <= 18 words and should synthesize developments, not restate every article.
-- Each bullet must cite 1-${maxSourcesPerBullet} source_article_ids selected only from the article IDs provided below.
+- Each bullet must be <= 18 words.
+- Each bullet must summarize exactly one notable article from the candidate list.
+- Each bullet must cite exactly one source_article_id selected only from the article IDs provided below.
 - Favor the highest-fit and most recent developments.
 - Do not invent facts, article IDs, or entities not supported by the supplied context.
 
@@ -506,7 +507,7 @@ ${candidateText}`;
       {
         role: 'system',
         content:
-          'You write polished newsroom briefings. Follow the JSON schema exactly and only use provided article IDs.'
+          'You write polished newsroom briefings. Follow the JSON schema exactly. Each bullet must map to exactly one provided article ID.'
       },
       { role: 'user', content: prompt }
     ],

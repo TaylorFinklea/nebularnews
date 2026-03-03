@@ -77,7 +77,9 @@ describe('dashboard queries', () => {
     const [_db, sql, params] = dbAllMock.mock.calls[0];
     expect(sql).toContain('COALESCE(a.published_at, a.fetched_at, 0) >= ?');
     expect(sql).toContain('SELECT rs.is_read FROM article_read_state rs');
-    expect(sql).toContain('CASE WHEN COALESCE(o.score, lsc.score) >= ? THEN 0 ELSE 1 END ASC');
+    expect(sql).toContain(
+      "CASE WHEN COALESCE(o.score, CASE WHEN lsc.score_status = 'ready' THEN lsc.score ELSE NULL END) >= ? THEN 0 ELSE 1 END ASC"
+    );
     expect(params).toEqual([referenceAt - 7 * DAY_MS, 3, 6]);
 
     expect(result).toEqual([

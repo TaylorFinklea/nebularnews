@@ -156,22 +156,44 @@ describe('Layout navigation shell', () => {
   it('opens and closes mobile more sheet with management links', async () => {
     render(Layout);
 
+    const bottomNav = await screen.findByRole('navigation', { name: 'Bottom navigation' });
+    expect(within(bottomNav).queryByRole('link', { name: 'Settings' })).toBeNull();
+
     const moreButton = await screen.findByRole('button', { name: 'More navigation' });
     await fireEvent.click(moreButton);
 
     const dialog = await screen.findByRole('dialog', { name: 'More navigation' });
+    expect(within(dialog).getByRole('link', { name: 'Settings' })).toBeTruthy();
     expect(within(dialog).getByRole('link', { name: 'Tags' })).toBeTruthy();
     expect(within(dialog).getByRole('link', { name: 'Feeds' })).toBeTruthy();
     expect(within(dialog).getByRole('link', { name: 'Jobs' })).toBeTruthy();
 
     await waitFor(() => {
-      expect(document.activeElement?.getAttribute('href')).toBe('/tags');
+      expect(document.activeElement?.getAttribute('href')).toBe('/settings');
     });
 
     await fireEvent.keyDown(window, { key: 'Escape' });
     await waitFor(() => {
       expect(screen.queryByRole('dialog', { name: 'More navigation' })).toBeNull();
     });
+  });
+
+  it('marks the more trigger active on settings-family routes', async () => {
+    setPath('/tags');
+    render(Layout);
+
+    const moreButton = await screen.findByRole('button', { name: 'More navigation' });
+    expect(moreButton.classList.contains('active')).toBe(true);
+
+    await fireEvent.click(moreButton);
+
+    const dialog = await screen.findByRole('dialog', { name: 'More navigation' });
+    expect(within(dialog).getByRole('link', { name: 'Tags' }).getAttribute('aria-current')).toBe(
+      'page'
+    );
+    expect(
+      within(dialog).getByRole('link', { name: 'Settings' }).getAttribute('aria-current')
+    ).toBeNull();
   });
 
   it('hides sidebar and bottom rail on login route', () => {

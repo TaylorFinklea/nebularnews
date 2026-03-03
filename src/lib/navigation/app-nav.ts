@@ -63,7 +63,7 @@ export const APP_NAV_ITEMS: readonly AppNavItem[] = [
     icon: 'settings',
     activePrefixes: ['/settings', '/tags', '/feeds', '/jobs'],
     group: 'primary',
-    mobilePrimary: true
+    mobilePrimary: false
   },
   {
     id: 'tags',

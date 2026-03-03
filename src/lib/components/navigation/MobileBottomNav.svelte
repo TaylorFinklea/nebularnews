@@ -35,8 +35,15 @@
   };
 
   const primaryItems = APP_NAV_ITEMS.filter((item) => item.mobilePrimary);
-  const moreItems = APP_NAV_ITEMS.filter((item) => item.group === 'workspace');
+  const moreItems = APP_NAV_ITEMS.filter((item) => !item.mobilePrimary);
+  const moreRailActive = () => moreOpen || moreItems.some((item) => isAppNavItemActive(item, currentPath));
   const themeLabel = () => (theme === 'dark' ? 'Light mode' : 'Dark mode');
+  const isMoreItemActive = (item: AppNavItem) => {
+    if (item.id === 'settings') {
+      return currentPath === item.href || currentPath.startsWith(`${item.href}/`);
+    }
+    return isAppNavItemActive(item, currentPath);
+  };
 
   const closeMore = () => {
     moreOpen = false;
@@ -65,7 +72,7 @@
 
 <svelte:window on:keydown={handleKeydown} />
 
-<nav class="bottom-rail" aria-label="Bottom navigation">
+<nav class="bottom-rail" aria-label="Bottom navigation" style={`--mobile-nav-columns: ${primaryItems.length + 1};`}>
   {#each primaryItems as item}
     {@const Icon = iconByName[item.icon]}
     {@const active = isAppNavItemActive(item, currentPath)}
@@ -84,7 +91,7 @@
   <button
     type="button"
     class="rail-link more-trigger"
-    class:active={moreOpen}
+    class:active={moreRailActive()}
     aria-label="More navigation"
     aria-expanded={moreOpen}
     on:click={toggleMore}
@@ -113,7 +120,7 @@
     <div class="sheet-links">
       {#each moreItems as item, index}
         {@const Icon = iconByName[item.icon]}
-        {@const active = isAppNavItemActive(item, currentPath)}
+        {@const active = isMoreItemActive(item)}
         <a
           bind:this={moreItemRefs[index]}
           href={item.href}
@@ -147,7 +154,7 @@
     bottom: 0;
     z-index: 100;
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(var(--mobile-nav-columns), minmax(0, 1fr));
     padding: var(--space-1) var(--space-2) calc(var(--space-1) + env(safe-area-inset-bottom));
     border-top: 1px solid var(--surface-border);
     background: var(--surface-strong);

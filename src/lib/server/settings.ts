@@ -1,4 +1,5 @@
 import { nanoid } from 'nanoid';
+import { IANAZone } from 'luxon';
 import { dbAll, dbGet, dbRun, type Db } from './db';
 import { decryptString, encryptString } from './crypto';
 import {
@@ -17,6 +18,14 @@ export type ArticleCardLayout = 'split' | 'stacked';
 export type DashboardTopRatedLayout = 'split' | 'stacked';
 export type RetentionMode = 'archive' | 'delete';
 export type TaggingMethod = 'algorithmic' | 'hybrid';
+export type NewsBriefConfig = {
+  enabled: boolean;
+  timezone: string;
+  morningTime: string;
+  eveningTime: string;
+  lookbackHours: number;
+  scoreCutoff: number;
+};
 export type AiFeature =
   | 'summaries'
   | 'scoring'
@@ -52,6 +61,16 @@ const MAX_DASHBOARD_QUEUE_LIMIT = 20;
 const DEFAULT_DASHBOARD_QUEUE_SCORE_CUTOFF = 3;
 const MIN_DASHBOARD_QUEUE_SCORE_CUTOFF = 1;
 const MAX_DASHBOARD_QUEUE_SCORE_CUTOFF = 5;
+const DEFAULT_NEWS_BRIEF_ENABLED = true;
+const DEFAULT_NEWS_BRIEF_TIMEZONE = 'America/Chicago';
+const DEFAULT_NEWS_BRIEF_MORNING_TIME = '08:00';
+const DEFAULT_NEWS_BRIEF_EVENING_TIME = '17:00';
+const DEFAULT_NEWS_BRIEF_LOOKBACK_HOURS = 48;
+const MIN_NEWS_BRIEF_LOOKBACK_HOURS = 6;
+const MAX_NEWS_BRIEF_LOOKBACK_HOURS = 168;
+const DEFAULT_NEWS_BRIEF_SCORE_CUTOFF = 3;
+const MIN_NEWS_BRIEF_SCORE_CUTOFF = 1;
+const MAX_NEWS_BRIEF_SCORE_CUTOFF = 5;
 const DEFAULT_INITIAL_FEED_LOOKBACK_DAYS = 45;
 const MIN_INITIAL_FEED_LOOKBACK_DAYS = 0;
 const MAX_INITIAL_FEED_LOOKBACK_DAYS = 3650;
@@ -135,6 +154,16 @@ export {
   DEFAULT_DASHBOARD_QUEUE_SCORE_CUTOFF,
   MIN_DASHBOARD_QUEUE_SCORE_CUTOFF,
   MAX_DASHBOARD_QUEUE_SCORE_CUTOFF,
+  DEFAULT_NEWS_BRIEF_ENABLED,
+  DEFAULT_NEWS_BRIEF_TIMEZONE,
+  DEFAULT_NEWS_BRIEF_MORNING_TIME,
+  DEFAULT_NEWS_BRIEF_EVENING_TIME,
+  DEFAULT_NEWS_BRIEF_LOOKBACK_HOURS,
+  MIN_NEWS_BRIEF_LOOKBACK_HOURS,
+  MAX_NEWS_BRIEF_LOOKBACK_HOURS,
+  DEFAULT_NEWS_BRIEF_SCORE_CUTOFF,
+  MIN_NEWS_BRIEF_SCORE_CUTOFF,
+  MAX_NEWS_BRIEF_SCORE_CUTOFF,
   DEFAULT_INITIAL_FEED_LOOKBACK_DAYS,
   MIN_INITIAL_FEED_LOOKBACK_DAYS,
   MAX_INITIAL_FEED_LOOKBACK_DAYS,
@@ -280,6 +309,39 @@ export const clampDashboardQueueScoreCutoff = (value: unknown) => {
   return Math.min(
     MAX_DASHBOARD_QUEUE_SCORE_CUTOFF,
     Math.max(MIN_DASHBOARD_QUEUE_SCORE_CUTOFF, Math.round(parsed))
+  );
+};
+
+export const validateNewsBriefTimezone = (value: unknown) => {
+  const normalized = String(value ?? '').trim();
+  if (!normalized) return null;
+  return IANAZone.isValidZone(normalized) ? normalized : null;
+};
+
+export const validateNewsBriefTime = (value: unknown) => {
+  const normalized = String(value ?? '').trim();
+  const match = normalized.match(/^([01]\d|2[0-3]):([0-5]\d)$/);
+  if (!match) return null;
+  return `${match[1]}:${match[2]}`;
+};
+
+export const clampNewsBriefLookbackHours = (value: unknown) => {
+  if (value === null || value === undefined || value === '') return DEFAULT_NEWS_BRIEF_LOOKBACK_HOURS;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return DEFAULT_NEWS_BRIEF_LOOKBACK_HOURS;
+  return Math.min(
+    MAX_NEWS_BRIEF_LOOKBACK_HOURS,
+    Math.max(MIN_NEWS_BRIEF_LOOKBACK_HOURS, Math.round(parsed))
+  );
+};
+
+export const clampNewsBriefScoreCutoff = (value: unknown) => {
+  if (value === null || value === undefined || value === '') return DEFAULT_NEWS_BRIEF_SCORE_CUTOFF;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return DEFAULT_NEWS_BRIEF_SCORE_CUTOFF;
+  return Math.min(
+    MAX_NEWS_BRIEF_SCORE_CUTOFF,
+    Math.max(MIN_NEWS_BRIEF_SCORE_CUTOFF, Math.round(parsed))
   );
 };
 
@@ -575,6 +637,27 @@ export async function getDashboardQueueConfig(db: Db) {
     windowDays: clampDashboardQueueWindowDays(windowDaysRaw),
     limit: clampDashboardQueueLimit(queueLimitRaw ?? legacyLimitRaw),
     scoreCutoff: clampDashboardQueueScoreCutoff(queueCutoffRaw ?? legacyCutoffRaw)
+  };
+}
+
+export async function getNewsBriefConfig(db: Db): Promise<NewsBriefConfig> {
+  const [enabledRaw, timezoneRaw, morningTimeRaw, eveningTimeRaw, lookbackHoursRaw, scoreCutoffRaw] =
+    await Promise.all([
+      getSetting(db, 'news_brief_enabled'),
+      getSetting(db, 'news_brief_timezone'),
+      getSetting(db, 'news_brief_morning_time'),
+      getSetting(db, 'news_brief_evening_time'),
+      getSetting(db, 'news_brief_lookback_hours'),
+      getSetting(db, 'news_brief_score_cutoff')
+    ]);
+
+  return {
+    enabled: parseBooleanSetting(enabledRaw, DEFAULT_NEWS_BRIEF_ENABLED),
+    timezone: validateNewsBriefTimezone(timezoneRaw) ?? DEFAULT_NEWS_BRIEF_TIMEZONE,
+    morningTime: validateNewsBriefTime(morningTimeRaw) ?? DEFAULT_NEWS_BRIEF_MORNING_TIME,
+    eveningTime: validateNewsBriefTime(eveningTimeRaw) ?? DEFAULT_NEWS_BRIEF_EVENING_TIME,
+    lookbackHours: clampNewsBriefLookbackHours(lookbackHoursRaw),
+    scoreCutoff: clampNewsBriefScoreCutoff(scoreCutoffRaw)
   };
 }
 

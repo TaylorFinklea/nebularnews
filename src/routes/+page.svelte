@@ -38,6 +38,8 @@
     return `/articles/${articleId}?from=${encodeURIComponent(from)}`;
   };
 
+  const newsBriefArticleHref = (articleId) => `/articles/${articleId}?from=${encodeURIComponent('/')}`;
+
   let syncInFlight = false;
   let pullTracker = { pending: false, startedAt: null, runId: null };
   let heartbeatTimer = null;
@@ -226,6 +228,12 @@
     return Number.isNaN(parsed.getTime()) ? 'No date' : parsed.toLocaleString();
   };
 
+  const formatDateTime = (value) => {
+    if (!value) return '';
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? '' : parsed.toLocaleString();
+  };
+
   const setPendingRead = (articleId, value) => {
     if (value) {
       pendingReadById = { ...pendingReadById, [articleId]: true };
@@ -354,6 +362,66 @@
     </span>
   </div>
 </section>
+
+{#if data.newsBrief}
+  <section class="news-brief">
+    <div class="section-head">
+      <div>
+        <div class="news-brief-heading-row">
+          <h2>{data.newsBrief.title}</h2>
+          {#if data.newsBrief.stale}
+            <span class="news-brief-badge">Stale</span>
+          {/if}
+        </div>
+        <p class="section-cap">
+          {data.newsBrief.editionLabel} · Last {data.newsBrief.windowHours} hours · {data.newsBrief.scoreCutoff}+ fit
+          {#if data.newsBrief.generatedAt}
+            · Updated {formatDateTime(data.newsBrief.generatedAt)}
+          {/if}
+        </p>
+      </div>
+      <a href="/settings#reading" class="view-all">
+        <IconExternalLink size={13} stroke={1.9} />
+        <span>Configure</span>
+      </a>
+    </div>
+
+    {#if data.newsBrief.state === 'ready'}
+      <ul class="news-brief-list">
+        {#each data.newsBrief.bullets as bullet}
+          <li class="news-brief-item">
+            <p class="news-brief-text">{bullet.text}</p>
+            <div class="news-brief-sources">
+              {#each bullet.sources as source}
+                <a class="news-brief-source" href={newsBriefArticleHref(source.articleId)}>
+                  {source.title}
+                </a>
+              {/each}
+            </div>
+          </li>
+        {/each}
+      </ul>
+    {:else if data.newsBrief.state === 'empty'}
+      <div class="news-brief-empty">
+        <p>No high-fit developments in the last {data.newsBrief.windowHours} hours.</p>
+      </div>
+    {:else if data.newsBrief.state === 'pending'}
+      <div class="news-brief-empty">
+        <p>The next News Brief is being generated.</p>
+        {#if data.newsBrief.nextScheduledAt}
+          <p class="muted-text">Next scheduled slot: {formatDateTime(data.newsBrief.nextScheduledAt)}</p>
+        {/if}
+      </div>
+    {:else}
+      <div class="news-brief-empty">
+        <p>News Brief will appear here once AI briefing is configured and generated.</p>
+        {#if data.newsBrief.nextScheduledAt}
+          <p class="muted-text">Next scheduled slot: {formatDateTime(data.newsBrief.nextScheduledAt)}</p>
+        {/if}
+      </div>
+    {/if}
+  </section>
+{/if}
 
 <section class="reading-queue">
   <div class="section-head">
@@ -540,6 +608,91 @@
 
   .live-badge.live {
     color: #7aded0;
+  }
+
+  .news-brief {
+    background: var(--surface);
+    border-radius: var(--radius-xl);
+    padding: var(--space-6);
+    margin-bottom: var(--space-6);
+  }
+
+  .news-brief-heading-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .news-brief-badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: var(--radius-sm);
+    padding: 0.18rem 0.45rem;
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: #f6d28b;
+    background: rgba(246, 210, 139, 0.12);
+  }
+
+  .news-brief-list {
+    display: grid;
+    gap: var(--space-4);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .news-brief-item {
+    padding: var(--space-4);
+    border-radius: var(--radius-lg);
+    background: var(--surface-strong);
+  }
+
+  .news-brief-text {
+    margin: 0;
+    font-size: var(--text-base);
+    line-height: 1.5;
+    color: var(--text-color);
+  }
+
+  .news-brief-sources {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: var(--space-3);
+  }
+
+  .news-brief-source {
+    display: inline-flex;
+    align-items: center;
+    border-radius: var(--radius-sm);
+    padding: 0.3rem 0.55rem;
+    background: var(--surface-soft);
+    color: var(--primary);
+    font-size: var(--text-xs);
+    text-decoration: none;
+  }
+
+  .news-brief-source:hover {
+    color: var(--text-color);
+  }
+
+  .news-brief-empty {
+    border-radius: var(--radius-lg);
+    padding: var(--space-4);
+    background: var(--surface-strong);
+  }
+
+  .news-brief-empty p {
+    margin: 0;
+    color: var(--text-color);
+    line-height: 1.5;
+  }
+
+  .news-brief-empty .muted-text {
+    margin-top: var(--space-2);
+    color: var(--muted-text);
+    font-size: var(--text-sm);
   }
 
   .reading-queue {

@@ -38,6 +38,7 @@ const createData = (overrides = {}) => ({
     hrefHighFitUnread: '/articles?read=unread&sort=unread_first&score=5&score=4&score=3&reaction=up&reaction=none',
     fromHref: '/articles?read=unread&sort=unread_first&reaction=up&reaction=none'
   },
+  newsBrief: null,
   readingQueue: [baseQueueArticle],
   momentum: {
     unreadTotal: 7,
@@ -159,5 +160,41 @@ describe('Dashboard page reactivity', () => {
         expect.objectContaining({ method: 'POST' })
       );
     });
+  });
+
+  it('renders a ready News Brief above the unread queue with source links', async () => {
+    render(
+      DashboardPage,
+      {
+        data: createData({
+          newsBrief: {
+            state: 'ready',
+            title: 'News Brief',
+            editionLabel: 'Morning edition',
+            generatedAt: Date.UTC(2026, 2, 3, 14, 5, 0),
+            windowHours: 48,
+            scoreCutoff: 3,
+            stale: false,
+            nextScheduledAt: Date.UTC(2026, 2, 3, 23, 0, 0),
+            bullets: [
+              {
+                text: 'OpenAI released a new model family.',
+                sources: [{ articleId: 'article-1', title: 'Unread dashboard article', canonicalUrl: 'https://example.com/article-1' }]
+              }
+            ]
+          }
+        })
+      }
+    );
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    const headings = screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent?.trim());
+    expect(headings.slice(0, 2)).toEqual(['News Brief', 'Top Unread · Last 7 Days']);
+    expect(screen.getByText('OpenAI released a new model family.')).toBeTruthy();
+    const briefSourceLink = screen
+      .getAllByRole('link', { name: 'Unread dashboard article' })
+      .find((link) => link.getAttribute('href') === '/articles/article-1?from=%2F');
+    expect(briefSourceLink).toBeTruthy();
   });
 });

@@ -11,10 +11,12 @@ type MockDb = D1Database & {
 
 const createMockDb = ({
   version,
-  includeReactionReasons
+  includeReactionReasons,
+  includeNewsBriefEditions
 }: {
   version: number;
   includeReactionReasons: boolean;
+  includeNewsBriefEditions?: boolean;
 }): MockDb => {
   const tables = new Map<string, string[]>();
   const addTable = (name: string, columns: string[]) => tables.set(name, [...columns]);
@@ -40,6 +42,34 @@ const createMockDb = ({
   addTable('article_search', ['article_id', 'title', 'content_text', 'summary_text']);
   if (includeReactionReasons) {
     addTable('article_reaction_reasons', ['article_id', 'reason_code', 'created_at']);
+  }
+  if (includeNewsBriefEditions) {
+    addTable('news_brief_editions', [
+      'id',
+      'edition_key',
+      'edition_kind',
+      'edition_slot',
+      'timezone',
+      'scheduled_for',
+      'window_start',
+      'window_end',
+      'score_cutoff',
+      'status',
+      'candidate_count',
+      'bullets_json',
+      'source_article_ids_json',
+      'provider',
+      'model',
+      'last_error',
+      'attempts',
+      'locked_by',
+      'locked_at',
+      'lease_expires_at',
+      'run_after',
+      'generated_at',
+      'created_at',
+      'updated_at'
+    ]);
   }
 
   const schemaVersions = new Map<number, { name: string; appliedAt: number }>();
@@ -148,50 +178,51 @@ describe('migrations', () => {
     vi.resetModules();
   });
 
-  it('applies schema v9 cleanly on a v8 database', async () => {
-    const db = createMockDb({ version: 8, includeReactionReasons: true });
+  it('applies schema v10 cleanly on a v8 database', async () => {
+    const db = createMockDb({ version: 8, includeReactionReasons: true, includeNewsBriefEditions: false });
     const { ensureSchema, getSchemaVersion, assertSchemaVersion } = await import('./migrations');
 
     await ensureSchema(db);
 
-    expect(await getSchemaVersion(db)).toBe(9);
+    expect(await getSchemaVersion(db)).toBe(10);
     expect(db.__state.tables.has('article_search')).toBe(true);
-    await expect(assertSchemaVersion(db)).resolves.toBe(9);
+    expect(db.__state.tables.has('news_brief_editions')).toBe(true);
+    await expect(assertSchemaVersion(db)).resolves.toBe(10);
   });
 
-  it('applies schema v8 cleanly on a v7 database', async () => {
-    const db = createMockDb({ version: 7, includeReactionReasons: true });
+  it('applies schema v10 cleanly on a v7 database', async () => {
+    const db = createMockDb({ version: 7, includeReactionReasons: true, includeNewsBriefEditions: false });
     const { ensureSchema, getSchemaVersion, assertSchemaVersion } = await import('./migrations');
 
     await ensureSchema(db);
 
-    expect(await getSchemaVersion(db)).toBe(9);
+    expect(await getSchemaVersion(db)).toBe(10);
     expect(db.__state.tables.get('article_scores')).toEqual(
       expect.arrayContaining(['score_status', 'confidence', 'preference_confidence', 'weighted_average'])
     );
-    await expect(assertSchemaVersion(db)).resolves.toBe(9);
+    await expect(assertSchemaVersion(db)).resolves.toBe(10);
   });
 
   it('keeps reaction-reason migration compatible from v6', async () => {
-    const db = createMockDb({ version: 6, includeReactionReasons: false });
+    const db = createMockDb({ version: 6, includeReactionReasons: false, includeNewsBriefEditions: false });
     const { ensureSchema, getSchemaVersion, assertSchemaVersion } = await import('./migrations');
 
     await ensureSchema(db);
 
-    expect(await getSchemaVersion(db)).toBe(9);
+    expect(await getSchemaVersion(db)).toBe(10);
     expect(db.__state.tables.has('article_reaction_reasons')).toBe(true);
-    await expect(assertSchemaVersion(db)).resolves.toBe(9);
+    await expect(assertSchemaVersion(db)).resolves.toBe(10);
   });
 
-  it('fails schema assertion when article_reaction_reasons is missing at v9', async () => {
-    const db = createMockDb({ version: 9, includeReactionReasons: false });
+  it('fails schema assertion when article_reaction_reasons is missing at v10', async () => {
+    const db = createMockDb({ version: 10, includeReactionReasons: false, includeNewsBriefEditions: true });
     const { assertSchemaVersion } = await import('./migrations');
 
     await expect(assertSchemaVersion(db)).rejects.toThrow('Missing required table: article_reaction_reasons');
   });
 
-  it('fails schema assertion when score status columns are missing at v9', async () => {
-    const db = createMockDb({ version: 9, includeReactionReasons: true });
+  it('fails schema assertion when score status columns are missing at v10', async () => {
+    const db = createMockDb({ version: 10, includeReactionReasons: true, includeNewsBriefEditions: true });
     const articleScoresColumns = db.__state.tables.get('article_scores') ?? [];
     db.__state.tables.set(
       'article_scores',
@@ -202,11 +233,18 @@ describe('migrations', () => {
     await expect(assertSchemaVersion(db)).rejects.toThrow('Missing required article_scores column: score_status');
   });
 
-  it('fails schema assertion when article_search is missing at v9', async () => {
-    const db = createMockDb({ version: 9, includeReactionReasons: true });
+  it('fails schema assertion when article_search is missing at v10', async () => {
+    const db = createMockDb({ version: 10, includeReactionReasons: true, includeNewsBriefEditions: true });
     db.__state.tables.delete('article_search');
     const { assertSchemaVersion } = await import('./migrations');
 
     await expect(assertSchemaVersion(db)).rejects.toThrow('Missing required table: article_search');
+  });
+
+  it('fails schema assertion when news_brief_editions is missing at v10', async () => {
+    const db = createMockDb({ version: 10, includeReactionReasons: true, includeNewsBriefEditions: false });
+    const { assertSchemaVersion } = await import('./migrations');
+
+    await expect(assertSchemaVersion(db)).rejects.toThrow('Missing required table: news_brief_editions');
   });
 });

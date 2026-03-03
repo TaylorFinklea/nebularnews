@@ -1,6 +1,7 @@
 import { pollFeeds, type FeedPollSummary } from './ingest';
 import { processJobs } from './jobs';
 import { processPullRuns, recoverStalePullRuns } from './manual-pull';
+import { runNewsBriefSchedulerTick } from './news-brief';
 import { queueMissingTodayArticleJobs } from './jobs-admin';
 import { ensureSchema } from './migrations';
 import { assertRuntimeConfig } from './runtime-config';
@@ -27,6 +28,7 @@ type ScheduledJobsSummary = {
   pullStatus: string | null;
   queuedToday: Awaited<ReturnType<typeof queueMissingTodayArticleJobs>> | null;
   orphanCleanup: Awaited<ReturnType<typeof deleteOrphanArticlesBatch>> | null;
+  newsBrief: Awaited<ReturnType<typeof runNewsBriefSchedulerTick>> | null;
 };
 
 export type ScheduledRunSummary = {
@@ -69,6 +71,7 @@ const runJobsTick = async (
   await processJobs(env, {
     timeBudgetMs: pullRunning ? scheduler.jobBudgetWhilePullMs : scheduler.jobBudgetIdleMs
   });
+  const newsBrief = await runNewsBriefSchedulerTick(env.DB, env);
 
   let orphanCleanup = null;
   if (!pullRunning) {
@@ -91,7 +94,8 @@ const runJobsTick = async (
     pullSlices: pull.slices.length,
     pullStatus: latestPullSlice?.status ?? null,
     queuedToday,
-    orphanCleanup
+    orphanCleanup,
+    newsBrief
   };
 
   logInfo('scheduled.jobs.completed', {
@@ -103,7 +107,8 @@ const runJobsTick = async (
     jobs_processed: true,
     scheduler,
     queued_today: queuedToday,
-    orphan_cleanup: orphanCleanup
+    orphan_cleanup: orphanCleanup,
+    news_brief: newsBrief
   });
 
   return summary;

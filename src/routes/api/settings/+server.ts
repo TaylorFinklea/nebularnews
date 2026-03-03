@@ -16,6 +16,8 @@ import {
   clampDashboardQueueWindowDays,
   clampDashboardQueueLimit,
   clampDashboardQueueScoreCutoff,
+  clampNewsBriefLookbackHours,
+  clampNewsBriefScoreCutoff,
   clampSchedulerJobsIntervalMinutes,
   clampSchedulerPollIntervalMinutes,
   clampSchedulerPullSlicesPerTick,
@@ -45,13 +47,16 @@ import {
   getEventsPollMs,
   getDashboardRefreshMinMs,
   getRetentionConfig,
+  getNewsBriefConfig,
   getScorePromptConfig,
   getSetting,
   setSetting,
   getScoringMethod,
   getScoringAiEnhancementThreshold,
   getScoringLearningRate,
-  clampScoringAiEnhancementThreshold
+  clampScoringAiEnhancementThreshold,
+  validateNewsBriefTimezone,
+  validateNewsBriefTime
 } from '$lib/server/settings';
 import { recordAuditEvent } from '$lib/server/audit';
 
@@ -62,6 +67,7 @@ export const GET = async ({ platform }) => {
   const chatModel = await getConfiguredChatProviderModel(db, platform.env);
   const scorePrompt = await getScorePromptConfig(db);
   const dashboardQueue = await getDashboardQueueConfig(db);
+  const newsBrief = await getNewsBriefConfig(db);
   const retention = await getRetentionConfig(db);
   const taggingMethod = await getTaggingMethod(db);
   const settings = {
@@ -108,6 +114,12 @@ export const GET = async ({ platform }) => {
     dashboardQueueWindowDays: dashboardQueue.windowDays,
     dashboardQueueLimit: dashboardQueue.limit,
     dashboardQueueScoreCutoff: dashboardQueue.scoreCutoff,
+    newsBriefEnabled: newsBrief.enabled,
+    newsBriefTimezone: newsBrief.timezone,
+    newsBriefMorningTime: newsBrief.morningTime,
+    newsBriefEveningTime: newsBrief.eveningTime,
+    newsBriefLookbackHours: newsBrief.lookbackHours,
+    newsBriefScoreCutoff: newsBrief.scoreCutoff,
     scoringMethod: await getScoringMethod(db),
     scoringAiEnhancementThreshold: await getScoringAiEnhancementThreshold(db),
     scoringLearningRate: await getScoringLearningRate(db)
@@ -262,6 +274,49 @@ export const POST = async ({ request, platform, locals }) => {
       'dashboard_queue_window_days',
       String(clampDashboardQueueWindowDays(body.dashboardQueueWindowDays))
     ]);
+  }
+  if (body?.newsBriefEnabled !== undefined && body?.newsBriefEnabled !== null) {
+    entries.push(['news_brief_enabled', parseBooleanSetting(body.newsBriefEnabled, true) ? '1' : '0']);
+  }
+  if (body?.newsBriefTimezone !== undefined && body?.newsBriefTimezone !== null) {
+    const timezone = validateNewsBriefTimezone(body.newsBriefTimezone);
+    if (!timezone) {
+      return json({ error: { message: 'News Brief timezone must be a valid IANA timezone.' } }, { status: 400 });
+    }
+    entries.push(['news_brief_timezone', timezone]);
+  }
+  const nextMorningTime =
+    body?.newsBriefMorningTime !== undefined && body?.newsBriefMorningTime !== null
+      ? validateNewsBriefTime(body.newsBriefMorningTime)
+      : null;
+  if (body?.newsBriefMorningTime !== undefined && body?.newsBriefMorningTime !== null && !nextMorningTime) {
+    return json({ error: { message: 'News Brief morning time must use HH:mm format.' } }, { status: 400 });
+  }
+  const nextEveningTime =
+    body?.newsBriefEveningTime !== undefined && body?.newsBriefEveningTime !== null
+      ? validateNewsBriefTime(body.newsBriefEveningTime)
+      : null;
+  if (body?.newsBriefEveningTime !== undefined && body?.newsBriefEveningTime !== null && !nextEveningTime) {
+    return json({ error: { message: 'News Brief evening time must use HH:mm format.' } }, { status: 400 });
+  }
+  if (nextMorningTime !== null || nextEveningTime !== null) {
+    const currentNewsBrief = await getNewsBriefConfig(platform.env.DB);
+    const morningTime = nextMorningTime ?? currentNewsBrief.morningTime;
+    const eveningTime = nextEveningTime ?? currentNewsBrief.eveningTime;
+    if (morningTime >= eveningTime) {
+      return json(
+        { error: { message: 'News Brief morning time must be earlier than evening time.' } },
+        { status: 400 }
+      );
+    }
+    if (nextMorningTime !== null) entries.push(['news_brief_morning_time', nextMorningTime]);
+    if (nextEveningTime !== null) entries.push(['news_brief_evening_time', nextEveningTime]);
+  }
+  if (body?.newsBriefLookbackHours !== undefined && body?.newsBriefLookbackHours !== null) {
+    entries.push(['news_brief_lookback_hours', String(clampNewsBriefLookbackHours(body.newsBriefLookbackHours))]);
+  }
+  if (body?.newsBriefScoreCutoff !== undefined && body?.newsBriefScoreCutoff !== null) {
+    entries.push(['news_brief_score_cutoff', String(clampNewsBriefScoreCutoff(body.newsBriefScoreCutoff))]);
   }
 
   const queueLimitInput = body?.dashboardQueueLimit ?? body?.dashboardTopRatedLimit;

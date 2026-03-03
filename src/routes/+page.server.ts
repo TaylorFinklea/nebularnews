@@ -5,6 +5,7 @@ import {
   getDashboardUnreadQueue
 } from '$lib/server/dashboard';
 import { getDashboardQueueConfig } from '$lib/server/settings';
+import { getDashboardNewsBrief } from '$lib/server/news-brief';
 import { logInfo, logWarn } from '$lib/server/log';
 
 const DASHBOARD_LOAD_BUDGET_MS = 1500;
@@ -58,9 +59,16 @@ export const load = async ({ platform, request, depends, setHeaders, locals }) =
   depends('app:dashboard');
 
   const db = platform.env.DB;
-  const [queueConfig, feedStatus] = await Promise.all([
+  const [queueConfig, feedStatus, newsBrief] = await Promise.all([
     getDashboardQueueConfig(db),
-    getDashboardFeedStatus(db)
+    getDashboardFeedStatus(db),
+    getDashboardNewsBrief(db, platform.env, startedAt).catch((error) => {
+      logWarn('dashboard.load.news_brief_failed', {
+        request_id: locals.requestId ?? null,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      return null;
+    })
   ]);
 
   let readingQueue = [];
@@ -118,6 +126,7 @@ export const load = async ({ platform, request, depends, setHeaders, locals }) =
       }),
       fromHref: buildArticlesHref()
     },
+    newsBrief,
     momentumLinks: {
       unreadTotal: buildArticlesHref(),
       unread24h: buildArticlesHref({ sinceDays: 1 }),
@@ -137,6 +146,7 @@ export const load = async ({ platform, request, depends, setHeaders, locals }) =
     degraded,
     degraded_reason: degradedReason,
     has_feeds: payload.hasFeeds,
+    news_brief_state: payload.newsBrief?.state ?? null,
     reading_queue_count: payload.readingQueue.length,
     high_fit_count: payload.readingQueue.filter((item) => item.queue_reason === 'high_fit').length,
     unread_total: payload.momentum.unreadTotal

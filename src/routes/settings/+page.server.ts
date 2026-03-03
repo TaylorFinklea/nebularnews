@@ -1,4 +1,5 @@
 import { dbAll } from '$lib/server/db';
+import { getLatestNewsBriefEditionSummary } from '$lib/server/news-brief';
 import { loadSignalWeights } from '$lib/server/scoring/engine';
 import { getScoringObservabilitySummary } from '$lib/server/scoring-observability';
 import {
@@ -9,6 +10,12 @@ import {
   DEFAULT_DASHBOARD_QUEUE_WINDOW_DAYS,
   DEFAULT_DASHBOARD_QUEUE_LIMIT,
   DEFAULT_DASHBOARD_QUEUE_SCORE_CUTOFF,
+  DEFAULT_NEWS_BRIEF_ENABLED,
+  DEFAULT_NEWS_BRIEF_TIMEZONE,
+  DEFAULT_NEWS_BRIEF_MORNING_TIME,
+  DEFAULT_NEWS_BRIEF_EVENING_TIME,
+  DEFAULT_NEWS_BRIEF_LOOKBACK_HOURS,
+  DEFAULT_NEWS_BRIEF_SCORE_CUTOFF,
   DEFAULT_DASHBOARD_REFRESH_MIN_MS,
   DEFAULT_EVENTS_POLL_MS,
   DEFAULT_INITIAL_FEED_LOOKBACK_DAYS,
@@ -26,6 +33,8 @@ import {
   MAX_DASHBOARD_QUEUE_WINDOW_DAYS,
   MAX_DASHBOARD_QUEUE_LIMIT,
   MAX_DASHBOARD_QUEUE_SCORE_CUTOFF,
+  MAX_NEWS_BRIEF_LOOKBACK_HOURS,
+  MAX_NEWS_BRIEF_SCORE_CUTOFF,
   MAX_DASHBOARD_REFRESH_MIN_MS,
   MAX_EVENTS_POLL_MS,
   MAX_INITIAL_FEED_LOOKBACK_DAYS,
@@ -43,6 +52,8 @@ import {
   MIN_DASHBOARD_QUEUE_WINDOW_DAYS,
   MIN_DASHBOARD_QUEUE_LIMIT,
   MIN_DASHBOARD_QUEUE_SCORE_CUTOFF,
+  MIN_NEWS_BRIEF_LOOKBACK_HOURS,
+  MIN_NEWS_BRIEF_SCORE_CUTOFF,
   MIN_DASHBOARD_REFRESH_MIN_MS,
   MIN_EVENTS_POLL_MS,
   MIN_INITIAL_FEED_LOOKBACK_DAYS,
@@ -59,6 +70,7 @@ import {
   MIN_SCHEDULER_JOB_BUDGET_WHILE_PULL_MS,
   getFeatureModelLanes,
   getDashboardQueueConfig,
+  getNewsBriefConfig,
   MAX_AUTO_READ_DELAY_MS,
   MIN_AUTO_READ_DELAY_MS,
   getAutoReadDelayMs,
@@ -105,6 +117,7 @@ export const load = async ({ platform }) => {
   const chatModel = await getConfiguredChatProviderModel(db, platform.env);
   const scorePrompt = await getScorePromptConfig(db);
   const dashboardQueue = await getDashboardQueueConfig(db);
+  const newsBrief = await getNewsBriefConfig(db);
   const retention = await getRetentionConfig(db);
   const taggingMethod = await getTaggingMethod(db);
   const settings = {
@@ -150,6 +163,12 @@ export const load = async ({ platform }) => {
     dashboardQueueWindowDays: dashboardQueue.windowDays,
     dashboardQueueLimit: dashboardQueue.limit,
     dashboardQueueScoreCutoff: dashboardQueue.scoreCutoff,
+    newsBriefEnabled: newsBrief.enabled,
+    newsBriefTimezone: newsBrief.timezone,
+    newsBriefMorningTime: newsBrief.morningTime,
+    newsBriefEveningTime: newsBrief.eveningTime,
+    newsBriefLookbackHours: newsBrief.lookbackHours,
+    newsBriefScoreCutoff: newsBrief.scoreCutoff,
     scoringMethod: await getScoringMethod(db),
     scoringAiEnhancementThreshold: await getScoringAiEnhancementThreshold(db),
     scoringLearningRate: await getScoringLearningRate(db)
@@ -164,9 +183,11 @@ export const load = async ({ platform }) => {
   const profile = await ensurePreferenceProfile(db);
   const signalWeights = await loadSignalWeights(db);
   const scoringObservability = await getScoringObservabilitySummary(db);
-  const [orphanCount, orphanSampleIds] = await Promise.all([
+  const [orphanCount, orphanSampleIds, newsBriefLatestEdition, newsBriefTimezoneExplicit] = await Promise.all([
     countOrphanArticles(db),
-    listOrphanArticleIds(db, ORPHAN_PREVIEW_SAMPLE_SIZE)
+    listOrphanArticleIds(db, ORPHAN_PREVIEW_SAMPLE_SIZE),
+    getLatestNewsBriefEditionSummary(db),
+    getSetting(db, 'news_brief_timezone')
   ]);
 
   const scorePromptDefaults = {
@@ -275,6 +296,26 @@ export const load = async ({ platform }) => {
         default: DEFAULT_DASHBOARD_QUEUE_SCORE_CUTOFF
       }
     },
+    newsBriefRange: {
+      enabledDefault: DEFAULT_NEWS_BRIEF_ENABLED,
+      timezoneDefault: DEFAULT_NEWS_BRIEF_TIMEZONE,
+      morningTimeDefault: DEFAULT_NEWS_BRIEF_MORNING_TIME,
+      eveningTimeDefault: DEFAULT_NEWS_BRIEF_EVENING_TIME,
+      lookbackHours: {
+        min: MIN_NEWS_BRIEF_LOOKBACK_HOURS,
+        max: MAX_NEWS_BRIEF_LOOKBACK_HOURS,
+        default: DEFAULT_NEWS_BRIEF_LOOKBACK_HOURS
+      },
+      scoreCutoff: {
+        min: MIN_NEWS_BRIEF_SCORE_CUTOFF,
+        max: MAX_NEWS_BRIEF_SCORE_CUTOFF,
+        default: DEFAULT_NEWS_BRIEF_SCORE_CUTOFF
+      }
+    },
+    newsBriefMeta: {
+      timezoneExplicit: Boolean(newsBriefTimezoneExplicit)
+    },
+    newsBriefLatestEdition,
     orphanCleanup: {
       orphanCount,
       sampleArticleIds: orphanSampleIds,

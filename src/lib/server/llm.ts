@@ -15,6 +15,14 @@ export type LlmUsage = {
   total_tokens?: number;
 };
 
+export type NewsBriefGeneration = {
+  bullets: Array<{
+    text: string;
+    sourceArticleIds: string[];
+  }>;
+  usage?: LlmUsage;
+};
+
 const parseJson = (text: string) => {
   const trimmed = text.trim();
   if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
@@ -163,6 +171,37 @@ const normalizeIdList = (input: unknown, allowedIds: Set<string>, limit: number)
   return normalized.filter((id) => allowedIds.has(id)).slice(0, limit);
 };
 
+const normalizeNewsBriefBullets = (
+  input: unknown,
+  allowedIds: Set<string>,
+  maxBullets: number,
+  maxSourcesPerBullet: number
+) => {
+  const raw = Array.isArray(input) ? input : [];
+  const deduped = new Set<string>();
+  const bullets: Array<{ text: string; sourceArticleIds: string[] }> = [];
+
+  for (const entry of raw) {
+    const row = entry as Record<string, unknown>;
+    const text = String(row.text ?? row.summary ?? row.bullet ?? '').replace(/\s+/g, ' ').trim();
+    const dedupeKey = text.toLowerCase();
+    if (!text || deduped.has(dedupeKey)) continue;
+
+    const sourceArticleIds = normalizeIdList(
+      row.source_article_ids ?? row.sourceArticleIds ?? row.article_ids ?? [],
+      allowedIds,
+      maxSourcesPerBullet
+    );
+    if (sourceArticleIds.length === 0) continue;
+
+    deduped.add(dedupeKey);
+    bullets.push({ text, sourceArticleIds });
+    if (bullets.length >= maxBullets) break;
+  }
+
+  return bullets;
+};
+
 const buildSummaryInstruction = (style: SummaryStyle, length: SummaryLength) => {
   const bounds = summaryConstraints[length];
   if (style === 'bullet') {
@@ -257,7 +296,10 @@ const callOpenAI = async (apiKey: string, model: string, messages: ChatMessage[]
     });
 
     if (res.ok) {
-      const data = await res.json();
+      const data = (await res.json()) as {
+        choices?: Array<{ message?: { content?: string } }>;
+        usage?: LlmUsage;
+      };
       const content = data.choices?.[0]?.message?.content ?? '';
       const usage = data.usage ?? {};
       return { content, usage };
@@ -304,7 +346,10 @@ const callAnthropic = async (apiKey: string, model: string, messages: ChatMessag
     throw new Error(`Anthropic error: ${res.status}`);
   }
 
-  const data = await res.json();
+  const data = (await res.json()) as {
+    content?: Array<{ text?: string }>;
+    usage?: LlmUsage;
+  };
   const content = data.content?.[0]?.text ?? '';
   const usage = data.usage ?? {};
   return { content, usage };
@@ -391,6 +436,92 @@ export async function generateArticleKeyPoints(
   const parsed = parseJson(content);
   const keyPoints = normalizeKeyPoints(parsed?.key_points ?? content, length);
   return { keyPoints, usage };
+}
+
+export async function generateNewsBrief(
+  provider: Provider,
+  apiKey: string,
+  model: string,
+  input: {
+    windowLabel: string;
+    candidates: Array<{
+      id: string;
+      title: string | null;
+      sourceName: string | null;
+      publishedAt: number | null;
+      effectiveScore: number;
+      context: string;
+    }>;
+    maxBullets?: number;
+    maxSourcesPerBullet?: number;
+  },
+  options?: LlmOptions
+): Promise<NewsBriefGeneration> {
+  const maxBullets = Math.min(8, Math.max(1, Math.floor(Number(input.maxBullets ?? 5))));
+  const maxSourcesPerBullet = Math.min(5, Math.max(1, Math.floor(Number(input.maxSourcesPerBullet ?? 3))));
+  const allowedIds = new Set(input.candidates.map((candidate) => candidate.id));
+  const candidateText = input.candidates
+    .map((candidate) => {
+      const publishedAt = candidate.publishedAt ? new Date(candidate.publishedAt).toISOString() : 'unknown';
+      return [
+        `ID: ${candidate.id}`,
+        `Title: ${candidate.title ?? 'Untitled'}`,
+        `Source: ${candidate.sourceName ?? 'Unknown source'}`,
+        `Published: ${publishedAt}`,
+        `Fit score: ${candidate.effectiveScore}/5`,
+        `Context: ${candidate.context || 'No context available.'}`
+      ].join('\n');
+    })
+    .join('\n\n---\n\n');
+
+  const prompt = `Create a concise editorial news briefing from these articles.
+
+Window: ${input.windowLabel}
+
+Requirements:
+- Return JSON only.
+- JSON shape:
+  {
+    "bullets": [
+      {
+        "text": "concise factual bullet",
+        "source_article_ids": ["candidate-id-1", "candidate-id-2"]
+      }
+    ]
+  }
+- Provide up to ${maxBullets} bullets.
+- Each bullet must be <= 18 words and should synthesize developments, not restate every article.
+- Each bullet must cite 1-${maxSourcesPerBullet} source_article_ids selected only from the article IDs provided below.
+- Favor the highest-fit and most recent developments.
+- Do not invent facts, article IDs, or entities not supported by the supplied context.
+
+Candidate articles:
+${candidateText}`;
+
+  const { content, usage } = await runChat(
+    provider,
+    apiKey,
+    model,
+    [
+      {
+        role: 'system',
+        content:
+          'You write polished newsroom briefings. Follow the JSON schema exactly and only use provided article IDs.'
+      },
+      { role: 'user', content: prompt }
+    ],
+    options
+  );
+
+  const parsed = (parseJson(content) as Record<string, unknown> | null) ?? {};
+  const bullets = normalizeNewsBriefBullets(
+    parsed.bullets ?? parsed.items ?? parsed.points ?? [],
+    allowedIds,
+    maxBullets,
+    maxSourcesPerBullet
+  );
+
+  return { bullets, usage };
 }
 
 export async function generateArticleTags(

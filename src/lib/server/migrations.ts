@@ -4,7 +4,7 @@ let schemaReady = false;
 let schemaInitPromise: Promise<void> | null = null;
 
 const MAX_PUBLISHED_FUTURE_MS = 1000 * 60 * 60 * 24;
-export const EXPECTED_SCHEMA_VERSION = 9;
+export const EXPECTED_SCHEMA_VERSION = 10;
 
 const runSafe = async (db: Db, sql: string, params: unknown[] = []) => {
   try {
@@ -485,6 +485,46 @@ const applyV9 = async (db: Db) => {
   await rebuildArticleSearchIndex(db);
 };
 
+const applyV10 = async (db: Db) => {
+  await runSafe(
+    db,
+    `CREATE TABLE IF NOT EXISTS news_brief_editions (
+      id TEXT PRIMARY KEY,
+      edition_key TEXT NOT NULL UNIQUE,
+      edition_kind TEXT NOT NULL,
+      edition_slot TEXT NOT NULL,
+      timezone TEXT NOT NULL,
+      scheduled_for INTEGER,
+      window_start INTEGER NOT NULL,
+      window_end INTEGER NOT NULL,
+      score_cutoff INTEGER NOT NULL,
+      status TEXT NOT NULL,
+      candidate_count INTEGER NOT NULL DEFAULT 0,
+      bullets_json TEXT NOT NULL DEFAULT '[]',
+      source_article_ids_json TEXT NOT NULL DEFAULT '[]',
+      provider TEXT,
+      model TEXT,
+      last_error TEXT,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      locked_by TEXT,
+      locked_at INTEGER,
+      lease_expires_at INTEGER,
+      run_after INTEGER NOT NULL,
+      generated_at INTEGER,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    )`
+  );
+  await runSafe(
+    db,
+    'CREATE INDEX IF NOT EXISTS idx_news_brief_editions_status_run_after ON news_brief_editions(status, run_after)'
+  );
+  await runSafe(
+    db,
+    'CREATE INDEX IF NOT EXISTS idx_news_brief_editions_generated_at ON news_brief_editions(generated_at DESC, scheduled_for DESC)'
+  );
+};
+
 export async function ensureSchema(db: Db) {
   if (schemaReady) return;
   if (schemaInitPromise) return schemaInitPromise;
@@ -527,6 +567,10 @@ export async function ensureSchema(db: Db) {
     if (currentVersion < 9) {
       await applyV9(db);
       await markVersionApplied(db, 9, 'v9_article_search_backfill');
+    }
+    if (currentVersion < 10) {
+      await applyV10(db);
+      await markVersionApplied(db, 10, 'v10_news_brief_editions');
     }
     schemaReady = true;
   })();
@@ -617,6 +661,12 @@ const assertRequiredV9Objects = async (db: Db) => {
   }
 };
 
+const assertRequiredV10Objects = async (db: Db) => {
+  if (!(await tableExists(db, 'news_brief_editions'))) {
+    throw new Error('Missing required table: news_brief_editions');
+  }
+};
+
 export async function assertSchemaVersion(db: Db, expected = EXPECTED_SCHEMA_VERSION) {
   const version = await getSchemaVersion(db);
   if (version < expected) {
@@ -641,6 +691,9 @@ export async function assertSchemaVersion(db: Db, expected = EXPECTED_SCHEMA_VER
   }
   if (expected >= 9) {
     await assertRequiredV9Objects(db);
+  }
+  if (expected >= 10) {
+    await assertRequiredV10Objects(db);
   }
   return version;
 }

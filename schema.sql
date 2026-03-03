@@ -243,6 +243,33 @@ CREATE TABLE IF NOT EXISTS settings (
   updated_at INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS news_brief_editions (
+  id TEXT PRIMARY KEY,
+  edition_key TEXT NOT NULL UNIQUE,
+  edition_kind TEXT NOT NULL,
+  edition_slot TEXT NOT NULL,
+  timezone TEXT NOT NULL,
+  scheduled_for INTEGER,
+  window_start INTEGER NOT NULL,
+  window_end INTEGER NOT NULL,
+  score_cutoff INTEGER NOT NULL,
+  status TEXT NOT NULL,
+  candidate_count INTEGER NOT NULL DEFAULT 0,
+  bullets_json TEXT NOT NULL DEFAULT '[]',
+  source_article_ids_json TEXT NOT NULL DEFAULT '[]',
+  provider TEXT,
+  model TEXT,
+  last_error TEXT,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  locked_by TEXT,
+  locked_at INTEGER,
+  lease_expires_at INTEGER,
+  run_after INTEGER NOT NULL,
+  generated_at INTEGER,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
 CREATE VIRTUAL TABLE IF NOT EXISTS article_search USING fts5(
   article_id UNINDEXED,
   title,
@@ -318,6 +345,8 @@ CREATE TABLE IF NOT EXISTS audit_log (
 CREATE INDEX IF NOT EXISTS idx_feeds_next_poll ON feeds(next_poll_at);
 CREATE INDEX IF NOT EXISTS idx_articles_published ON articles(published_at);
 CREATE INDEX IF NOT EXISTS idx_articles_image_status ON articles(image_status, image_checked_at);
+CREATE INDEX IF NOT EXISTS idx_news_brief_editions_status_run_after ON news_brief_editions(status, run_after);
+CREATE INDEX IF NOT EXISTS idx_news_brief_editions_generated_at ON news_brief_editions(generated_at DESC, scheduled_for DESC);
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status, run_after);
 CREATE INDEX IF NOT EXISTS idx_jobs_lease ON jobs(status, lease_expires_at);
 CREATE INDEX IF NOT EXISTS idx_jobs_priority ON jobs(status, priority, run_after);

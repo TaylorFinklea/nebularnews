@@ -53,7 +53,13 @@ const createData = (overrides = {}) => ({
     articleCardLayout: 'split',
     dashboardQueueWindowDays: 7,
     dashboardQueueLimit: 6,
-    dashboardQueueScoreCutoff: 3
+    dashboardQueueScoreCutoff: 3,
+    newsBriefEnabled: true,
+    newsBriefTimezone: 'America/Chicago',
+    newsBriefMorningTime: '08:00',
+    newsBriefEveningTime: '17:00',
+    newsBriefLookbackHours: 48,
+    newsBriefScoreCutoff: 3
   },
   keyMap: {
     openai: false,
@@ -167,6 +173,33 @@ const createData = (overrides = {}) => ({
       default: 3
     }
   },
+  newsBriefRange: {
+    enabledDefault: true,
+    timezoneDefault: 'America/Chicago',
+    morningTimeDefault: '08:00',
+    eveningTimeDefault: '17:00',
+    lookbackHours: {
+      min: 6,
+      max: 168,
+      default: 48
+    },
+    scoreCutoff: {
+      min: 1,
+      max: 5,
+      default: 3
+    }
+  },
+  newsBriefMeta: {
+    timezoneExplicit: true
+  },
+  newsBriefLatestEdition: {
+    id: 'edition-1',
+    status: 'ready',
+    editionLabel: 'Morning edition',
+    generatedAt: Date.UTC(2026, 2, 3, 14, 0, 0),
+    candidateCount: 4,
+    updatedAt: Date.UTC(2026, 2, 3, 14, 2, 0)
+  },
   orphanCleanup: {
     orphanCount: 2,
     sampleArticleIds: ['article-1', 'article-2', 'article-3'],
@@ -243,6 +276,22 @@ describe('Settings page reactivity', () => {
           ok: true,
           status: 200,
           json: async () => ({ ok: true, data: {} })
+        };
+      }
+
+      if (url === '/api/settings/news-brief/generate' && init?.method === 'POST') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            ok: true,
+            edition: {
+              id: 'edition-2',
+              status: 'ready',
+              generatedAt: Date.UTC(2026, 2, 3, 17, 0, 0),
+              candidateCount: 3
+            }
+          })
         };
       }
 
@@ -415,6 +464,9 @@ describe('Settings page reactivity', () => {
     await fireEvent.change(screen.getByRole('combobox', { name: 'Summary style' }), {
       target: { value: 'detailed' }
     });
+    await fireEvent.input(screen.getByLabelText('Lookback (hours)'), {
+      target: { value: '72' }
+    });
     await fireEvent.click(screen.getByRole('button', { name: 'Expand Profile & prompts' }));
     await fireEvent.input(screen.getByDisplayValue('Profile text'), {
       target: { value: 'Saved profile text' }
@@ -428,7 +480,13 @@ describe('Settings page reactivity', () => {
     await fireEvent.click(saveButton);
 
     await waitFor(() => {
-      expect(fetch).toHaveBeenCalledWith('/api/settings', expect.objectContaining({ method: 'POST' }));
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/settings',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('"newsBriefLookbackHours":72')
+        })
+      );
       expect(fetch).toHaveBeenCalledWith('/api/profile', expect.objectContaining({ method: 'POST' }));
       expect(invalidateAllMock).toHaveBeenCalledTimes(1);
     });
@@ -513,6 +571,22 @@ describe('Settings page reactivity', () => {
     await waitFor(() => {
       expect(fetch).toHaveBeenCalledWith('/api/admin/orphans/preview', expect.anything());
       expect(screen.getByText('5')).toBeTruthy();
+    });
+  });
+
+  it('generates a news brief immediately and refreshes the page state', async () => {
+    render(SettingsPage, { data: createData() });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Generate now' }));
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/settings/news-brief/generate',
+        expect.objectContaining({ method: 'POST' })
+      );
+      expect(invalidateAllMock).toHaveBeenCalledTimes(1);
+      expect(screen.getByText(/Latest edition: Morning edition · ready/i)).toBeTruthy();
+      expect(screen.getByText(/3 candidates/i)).toBeTruthy();
     });
   });
 

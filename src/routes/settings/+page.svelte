@@ -89,7 +89,13 @@
       'articleCardLayout',
       'dashboardQueueWindowDays',
       'dashboardQueueLimit',
-      'dashboardQueueScoreCutoff'
+      'dashboardQueueScoreCutoff',
+      'newsBriefEnabled',
+      'newsBriefTimezone',
+      'newsBriefMorningTime',
+      'newsBriefEveningTime',
+      'newsBriefLookbackHours',
+      'newsBriefScoreCutoff'
     ],
     profile: ['scoreSystemPrompt', 'scoreUserPromptTemplate', 'profileText'],
     keys: [],
@@ -185,6 +191,20 @@
   let dashboardQueueScoreCutoff = Number(
     data.settings.dashboardQueueScoreCutoff ?? data.dashboardQueueRange?.scoreCutoff?.default ?? 3
   );
+  let newsBriefEnabled = Boolean(
+    data.settings.newsBriefEnabled ?? data.newsBriefRange?.enabledDefault ?? true
+  );
+  let newsBriefTimezone = data.settings.newsBriefTimezone ?? data.newsBriefRange?.timezoneDefault ?? 'America/Chicago';
+  let newsBriefMorningTime = data.settings.newsBriefMorningTime ?? data.newsBriefRange?.morningTimeDefault ?? '08:00';
+  let newsBriefEveningTime = data.settings.newsBriefEveningTime ?? data.newsBriefRange?.eveningTimeDefault ?? '17:00';
+  let newsBriefLookbackHours = Number(
+    data.settings.newsBriefLookbackHours ?? data.newsBriefRange?.lookbackHours?.default ?? 48
+  );
+  let newsBriefScoreCutoff = Number(
+    data.settings.newsBriefScoreCutoff ?? data.newsBriefRange?.scoreCutoff?.default ?? 3
+  );
+  let newsBriefTimezoneExplicit = Boolean(data.newsBriefMeta?.timezoneExplicit);
+  let newsBriefLatestEdition = data.newsBriefLatestEdition ?? null;
   let scoringMethod = data.settings.scoringMethod ?? data.scoring?.defaults?.method ?? 'hybrid';
   let scoringAiEnhancementThreshold = Number(
     data.settings.scoringAiEnhancementThreshold ?? data.scoring?.defaults?.aiEnhancementThreshold ?? 0.5
@@ -194,6 +214,7 @@
   );
   let signalWeights = data.scoring?.signalWeights ?? [];
   let isResettingWeights = false;
+  let isGeneratingNewsBrief = false;
   let orphanCount = Number(data.orphanCleanup?.orphanCount ?? 0);
   let orphanSampleArticleIds = Array.isArray(data.orphanCleanup?.sampleArticleIds)
     ? data.orphanCleanup.sampleArticleIds
@@ -363,6 +384,18 @@
     data.dashboardQueueRange.scoreCutoff.min,
     data.dashboardQueueRange.scoreCutoff.max,
     data.dashboardQueueRange.scoreCutoff.default
+  );
+  $: newsBriefLookbackHours = clampNumber(
+    newsBriefLookbackHours,
+    data.newsBriefRange.lookbackHours.min,
+    data.newsBriefRange.lookbackHours.max,
+    data.newsBriefRange.lookbackHours.default
+  );
+  $: newsBriefScoreCutoff = clampNumber(
+    newsBriefScoreCutoff,
+    data.newsBriefRange.scoreCutoff.min,
+    data.newsBriefRange.scoreCutoff.max,
+    data.newsBriefRange.scoreCutoff.default
   );
 
   const schedulerDeployScript = () =>
@@ -537,6 +570,12 @@
     dashboardQueueWindowDays: Number(dashboardQueueWindowDays ?? 0),
     dashboardQueueLimit: Number(dashboardQueueLimit ?? 0),
     dashboardQueueScoreCutoff: Number(dashboardQueueScoreCutoff ?? 0),
+    newsBriefEnabled: Boolean(newsBriefEnabled),
+    newsBriefTimezone,
+    newsBriefMorningTime,
+    newsBriefEveningTime,
+    newsBriefLookbackHours: Number(newsBriefLookbackHours ?? 0),
+    newsBriefScoreCutoff: Number(newsBriefScoreCutoff ?? 0),
     scoreSystemPrompt,
     scoreUserPromptTemplate,
     profileText,
@@ -585,6 +624,12 @@
     dashboardQueueWindowDays: Number(dashboardQueueWindowDays ?? 0),
     dashboardQueueLimit: Number(dashboardQueueLimit ?? 0),
     dashboardQueueScoreCutoff: Number(dashboardQueueScoreCutoff ?? 0),
+    newsBriefEnabled: Boolean(newsBriefEnabled),
+    newsBriefTimezone,
+    newsBriefMorningTime,
+    newsBriefEveningTime,
+    newsBriefLookbackHours: Number(newsBriefLookbackHours ?? 0),
+    newsBriefScoreCutoff: Number(newsBriefScoreCutoff ?? 0),
     scoreSystemPrompt,
     scoreUserPromptTemplate,
     profileText,
@@ -639,6 +684,12 @@
     dashboardQueueWindowDays = Number(snapshot.dashboardQueueWindowDays ?? 0);
     dashboardQueueLimit = Number(snapshot.dashboardQueueLimit ?? 0);
     dashboardQueueScoreCutoff = Number(snapshot.dashboardQueueScoreCutoff ?? 0);
+    newsBriefEnabled = Boolean(snapshot.newsBriefEnabled);
+    newsBriefTimezone = snapshot.newsBriefTimezone;
+    newsBriefMorningTime = snapshot.newsBriefMorningTime;
+    newsBriefEveningTime = snapshot.newsBriefEveningTime;
+    newsBriefLookbackHours = Number(snapshot.newsBriefLookbackHours ?? 0);
+    newsBriefScoreCutoff = Number(snapshot.newsBriefScoreCutoff ?? 0);
     scoreSystemPrompt = snapshot.scoreSystemPrompt;
     scoreUserPromptTemplate = snapshot.scoreUserPromptTemplate;
     profileText = snapshot.profileText;
@@ -666,6 +717,43 @@
       showToast('Failed to reset scoring weights.', 'error');
     } finally {
       isResettingWeights = false;
+    }
+  };
+
+  const generateNewsBriefNow = async () => {
+    if (isGeneratingNewsBrief) return;
+    isGeneratingNewsBrief = true;
+    try {
+      const res = await apiFetch('/api/settings/news-brief/generate', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      if (!res.ok) {
+        showToast(await readApiError(res, 'Failed to generate News Brief.'), 'error');
+        return;
+      }
+      const payload = await res.json().catch(() => ({}));
+      const edition = payload?.edition ?? {};
+      const candidateCount = Number(edition?.candidateCount ?? 0);
+      const status = String(edition?.status ?? 'ready');
+      newsBriefLatestEdition = {
+        ...(newsBriefLatestEdition ?? {}),
+        status,
+        generatedAt: edition?.generatedAt ?? null,
+        candidateCount
+      };
+      showToast(
+        status === 'empty'
+          ? 'News Brief generated with no qualifying developments.'
+          : `News Brief generated from ${candidateCount} candidate article${candidateCount === 1 ? '' : 's'}.`,
+        'success'
+      );
+      await invalidateAll();
+    } catch {
+      showToast('Failed to generate News Brief.', 'error');
+    } finally {
+      isGeneratingNewsBrief = false;
     }
   };
 
@@ -737,6 +825,12 @@
           dashboardQueueWindowDays,
           dashboardQueueLimit,
           dashboardQueueScoreCutoff,
+          newsBriefEnabled,
+          newsBriefTimezone,
+          newsBriefMorningTime,
+          newsBriefEveningTime,
+          newsBriefLookbackHours,
+          newsBriefScoreCutoff,
           scoreSystemPrompt,
           scoreUserPromptTemplate,
           scoringMethod,
@@ -937,7 +1031,7 @@
       case 'scoring':
         return `${scoringMethod} · threshold ${scoringAiEnhancementThreshold} · ${signalWeights.length} signal${signalWeights.length === 1 ? '' : 's'}`;
       case 'reading':
-        return `${summaryStyle} / ${summaryLength} · ${articleCardLayout} cards · Queue ${dashboardQueueLimit}`;
+        return `${summaryStyle} / ${summaryLength} · ${articleCardLayout} cards · Queue ${dashboardQueueLimit} · Brief ${newsBriefLookbackHours}h`;
       case 'profile':
         return `Profile v${data.profile.version} · Prompt ${
           scoreSystemPrompt === data.scorePromptDefaults.scoreSystemPrompt &&
@@ -995,6 +1089,14 @@
   };
 
   onMount(() => {
+    if (!newsBriefTimezoneExplicit && typeof Intl !== 'undefined') {
+      const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (browserTimezone) {
+        newsBriefTimezone = browserTimezone;
+        savedSnapshot = initialSnapshot();
+      }
+    }
+
     if (keyStatus.openai) void syncModels('openai', { silent: true });
     if (keyStatus.anthropic) void syncModels('anthropic', { silent: true });
 
@@ -1458,6 +1560,76 @@
               />
             </label>
           </div>
+        </div>
+
+        <div class="subsection soft-panel">
+          <div class="split-header">
+            <div class="subsection-header">
+              <h3>News Brief</h3>
+              <p class="muted">Twice-daily AI briefing for high-fit developments across the last configured window.</p>
+            </div>
+            <Button
+              variant="ghost"
+              size="inline"
+              on:click={generateNewsBriefNow}
+              disabled={isGeneratingNewsBrief}
+            >
+              <IconRefresh size={14} stroke={1.9} />
+              <span>{isGeneratingNewsBrief ? 'Generating...' : 'Generate now'}</span>
+            </Button>
+          </div>
+
+          <div class="field-grid field-grid-compact">
+            <label class="checkbox-field">
+              <span>Enable News Brief</span>
+              <input type="checkbox" bind:checked={newsBriefEnabled} />
+            </label>
+            <label>
+              Timezone
+              <input bind:value={newsBriefTimezone} placeholder="America/Chicago" />
+              <span class="hint">Uses IANA timezone names for morning/evening scheduling.</span>
+            </label>
+            <label>
+              Morning time
+              <input bind:value={newsBriefMorningTime} placeholder="08:00" />
+            </label>
+            <label>
+              Evening time
+              <input bind:value={newsBriefEveningTime} placeholder="17:00" />
+            </label>
+            <label>
+              Lookback (hours)
+              <input
+                type="number"
+                min={data.newsBriefRange.lookbackHours.min}
+                max={data.newsBriefRange.lookbackHours.max}
+                step="1"
+                bind:value={newsBriefLookbackHours}
+              />
+            </label>
+            <label>
+              Minimum fit score
+              <input
+                type="number"
+                min={data.newsBriefRange.scoreCutoff.min}
+                max={data.newsBriefRange.scoreCutoff.max}
+                step="1"
+                bind:value={newsBriefScoreCutoff}
+              />
+            </label>
+          </div>
+
+          {#if newsBriefLatestEdition}
+            <p class="muted small">
+              Latest edition: {newsBriefLatestEdition.editionLabel ?? 'Update'} · {newsBriefLatestEdition.status}
+              {#if newsBriefLatestEdition.generatedAt}
+                · {new Date(newsBriefLatestEdition.generatedAt).toLocaleString()}
+              {/if}
+              {#if newsBriefLatestEdition.candidateCount !== undefined}
+                · {newsBriefLatestEdition.candidateCount} candidate{newsBriefLatestEdition.candidateCount === 1 ? '' : 's'}
+              {/if}
+            </p>
+          {/if}
         </div>
       </div>
     </SettingsSectionCard>
@@ -2249,6 +2421,19 @@
     align-items: center;
     gap: var(--space-2);
     font-weight: 500;
+  }
+
+  .checkbox-field {
+    display: grid;
+    gap: var(--space-2);
+    align-content: start;
+    font-weight: 500;
+  }
+
+  .checkbox-field input[type='checkbox'] {
+    width: 1rem;
+    height: 1rem;
+    margin: 0;
   }
 
   .checkbox-row input[type='checkbox'] {

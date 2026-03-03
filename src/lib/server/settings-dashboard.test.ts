@@ -16,6 +16,8 @@ import {
   clampDashboardQueueWindowDays,
   clampDashboardQueueLimit,
   clampDashboardQueueScoreCutoff,
+  clampNewsBriefLookbackHours,
+  clampNewsBriefScoreCutoff,
   clampSchedulerJobsIntervalMinutes,
   clampSchedulerPollIntervalMinutes,
   clampSchedulerPullSlicesPerTick,
@@ -26,7 +28,10 @@ import {
   intervalMinutesToCronExpression,
   parseBooleanSetting,
   getDashboardQueueConfig,
+  getNewsBriefConfig,
   getTaggingMethod,
+  validateNewsBriefTime,
+  validateNewsBriefTimezone,
   DEFAULT_INITIAL_FEED_LOOKBACK_DAYS,
   DEFAULT_RETENTION_DAYS,
   DEFAULT_DASHBOARD_TOP_RATED_CUTOFF,
@@ -34,6 +39,8 @@ import {
   DEFAULT_DASHBOARD_QUEUE_WINDOW_DAYS,
   DEFAULT_DASHBOARD_QUEUE_LIMIT,
   DEFAULT_DASHBOARD_QUEUE_SCORE_CUTOFF,
+  DEFAULT_NEWS_BRIEF_LOOKBACK_HOURS,
+  DEFAULT_NEWS_BRIEF_SCORE_CUTOFF,
   DEFAULT_SCHEDULER_JOBS_INTERVAL_MIN,
   DEFAULT_SCHEDULER_POLL_INTERVAL_MIN,
   DEFAULT_SCHEDULER_PULL_SLICES_PER_TICK,
@@ -127,6 +134,55 @@ describe('dashboard and scheduler settings', () => {
       windowDays: 14,
       limit: 12,
       scoreCutoff: 5
+    });
+  });
+
+  it('validates and clamps News Brief settings', async () => {
+    expect(validateNewsBriefTimezone('America/Chicago')).toBe('America/Chicago');
+    expect(validateNewsBriefTimezone('Mars/Phobos')).toBeNull();
+    expect(validateNewsBriefTime('08:00')).toBe('08:00');
+    expect(validateNewsBriefTime('25:00')).toBeNull();
+    expect(clampNewsBriefLookbackHours('bad')).toBe(DEFAULT_NEWS_BRIEF_LOOKBACK_HOURS);
+    expect(clampNewsBriefLookbackHours(200)).toBe(168);
+    expect(clampNewsBriefScoreCutoff('bad')).toBe(DEFAULT_NEWS_BRIEF_SCORE_CUTOFF);
+    expect(clampNewsBriefScoreCutoff(9)).toBe(5);
+  });
+
+  it('loads News Brief settings with defaults and validation fallbacks', async () => {
+    mockSettings({
+      news_brief_enabled: 1,
+      news_brief_timezone: 'America/New_York',
+      news_brief_morning_time: '08:15',
+      news_brief_evening_time: '17:30',
+      news_brief_lookback_hours: 72,
+      news_brief_score_cutoff: 4
+    });
+
+    await expect(getNewsBriefConfig({} as D1Database)).resolves.toEqual({
+      enabled: true,
+      timezone: 'America/New_York',
+      morningTime: '08:15',
+      eveningTime: '17:30',
+      lookbackHours: 72,
+      scoreCutoff: 4
+    });
+
+    mockSettings({
+      news_brief_enabled: 0,
+      news_brief_timezone: 'Bad/Timezone',
+      news_brief_morning_time: 'bad',
+      news_brief_evening_time: 'bad',
+      news_brief_lookback_hours: 'oops',
+      news_brief_score_cutoff: 'oops'
+    });
+
+    await expect(getNewsBriefConfig({} as D1Database)).resolves.toEqual({
+      enabled: false,
+      timezone: 'America/Chicago',
+      morningTime: '08:00',
+      eveningTime: '17:00',
+      lookbackHours: DEFAULT_NEWS_BRIEF_LOOKBACK_HOURS,
+      scoreCutoff: DEFAULT_NEWS_BRIEF_SCORE_CUTOFF
     });
   });
 

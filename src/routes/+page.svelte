@@ -363,6 +363,41 @@
   </div>
 </section>
 
+<section class="momentum">
+  <div class="section-head">
+    <h2>Reading Momentum</h2>
+    <a href="/articles" class="view-all">
+      <IconExternalLink size={13} stroke={1.9} />
+      <span>Articles</span>
+    </a>
+  </div>
+
+  <div class="momentum-grid">
+    <a class="momentum-card is-link" href={data.momentumLinks?.unreadTotal ?? '/articles?read=unread&sort=unread_first'}>
+      <div class="momentum-num">{momentum.unreadTotal}</div>
+      <div class="momentum-label">Unread total</div>
+    </a>
+    <a class="momentum-card is-link" href={data.momentumLinks?.unread24h ?? '/articles?read=unread&sort=unread_first&sinceDays=1'}>
+      <div class="momentum-num">{momentum.unread24h}</div>
+      <div class="momentum-label">Unread · 24h</div>
+    </a>
+    <a class="momentum-card is-link" href={data.momentumLinks?.unread7d ?? '/articles?read=unread&sort=unread_first&sinceDays=7'}>
+      <div class="momentum-num">{momentum.unread7d}</div>
+      <div class="momentum-label">Unread · 7d</div>
+    </a>
+    <a class="momentum-card is-link" href={data.momentumLinks?.highFitUnread7d ?? '/articles?read=unread&sort=unread_first&sinceDays=7&score=5&score=4&score=3'}>
+      <div class="momentum-num">{momentum.highFitUnread7d}</div>
+      <div class="momentum-label">High fit · 7d</div>
+    </a>
+  </div>
+
+  <div class="quick-links">
+    <a href={data.queueConfig?.hrefUnread ?? '/articles?read=unread&sort=unread_first'}>Open unread queue</a>
+    <a href={data.queueConfig?.hrefHighFitUnread ?? '/articles?read=unread&sort=unread_first&sinceDays=7&score=5&score=4&score=3'}>Open high-fit unread</a>
+    <a href="/articles">Browse all articles</a>
+  </div>
+</section>
+
 {#if data.newsBrief}
   <section class="news-brief">
     <div class="section-head">
@@ -499,41 +534,6 @@
       {/each}
     </div>
   {/if}
-</section>
-
-<section class="momentum">
-  <div class="section-head">
-    <h2>Reading Momentum</h2>
-    <a href="/articles" class="view-all">
-      <IconExternalLink size={13} stroke={1.9} />
-      <span>Articles</span>
-    </a>
-  </div>
-
-  <div class="momentum-grid">
-    <a class="momentum-card is-link" href={data.momentumLinks?.unreadTotal ?? '/articles?read=unread&sort=unread_first'}>
-      <div class="momentum-num">{momentum.unreadTotal}</div>
-      <div class="momentum-label">Unread total</div>
-    </a>
-    <a class="momentum-card is-link" href={data.momentumLinks?.unread24h ?? '/articles?read=unread&sort=unread_first&sinceDays=1'}>
-      <div class="momentum-num">{momentum.unread24h}</div>
-      <div class="momentum-label">Unread · 24h</div>
-    </a>
-    <a class="momentum-card is-link" href={data.momentumLinks?.unread7d ?? '/articles?read=unread&sort=unread_first&sinceDays=7'}>
-      <div class="momentum-num">{momentum.unread7d}</div>
-      <div class="momentum-label">Unread · 7d</div>
-    </a>
-    <a class="momentum-card is-link" href={data.momentumLinks?.highFitUnread7d ?? '/articles?read=unread&sort=unread_first&sinceDays=7&score=5&score=4&score=3'}>
-      <div class="momentum-num">{momentum.highFitUnread7d}</div>
-      <div class="momentum-label">High fit · 7d</div>
-    </a>
-  </div>
-
-  <div class="quick-links">
-    <a href={data.queueConfig?.hrefUnread ?? '/articles?read=unread&sort=unread_first'}>Open unread queue</a>
-    <a href={data.queueConfig?.hrefHighFitUnread ?? '/articles?read=unread&sort=unread_first&sinceDays=7&score=5&score=4&score=3'}>Open high-fit unread</a>
-    <a href="/articles">Browse all articles</a>
-  </div>
 </section>
 
 {#if !data.hasFeeds}

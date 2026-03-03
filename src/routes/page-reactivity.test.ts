@@ -190,11 +190,20 @@ describe('Dashboard page reactivity', () => {
     await vi.advanceTimersByTimeAsync(0);
 
     const headings = screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent?.trim());
-    expect(headings.slice(0, 2)).toEqual(['News Brief', 'Top Unread · Last 7 Days']);
+    expect(headings.slice(0, 3)).toEqual(['Reading Momentum', 'News Brief', 'Top Unread · Last 7 Days']);
     expect(screen.getByText('OpenAI released a new model family.')).toBeTruthy();
     const briefSourceLink = screen
       .getAllByRole('link', { name: 'Unread dashboard article' })
       .find((link) => link.getAttribute('href') === '/articles/article-1?from=%2F');
     expect(briefSourceLink).toBeTruthy();
+  });
+
+  it('renders Reading Momentum above the unread queue without a news brief', async () => {
+    render(DashboardPage, { data: createData({ newsBrief: null }) });
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    const headings = screen.getAllByRole('heading', { level: 2 }).map((heading) => heading.textContent?.trim());
+    expect(headings.slice(0, 2)).toEqual(['Reading Momentum', 'Top Unread · Last 7 Days']);
   });
 });

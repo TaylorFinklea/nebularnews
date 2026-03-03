@@ -103,6 +103,15 @@ describe('Layout navigation shell', () => {
     expect(sidebarScope.getByRole('link', { name: 'Tags' })).toBeTruthy();
     expect(sidebarScope.getByRole('link', { name: 'Feeds' })).toBeTruthy();
     expect(sidebarScope.getByRole('link', { name: 'Jobs' })).toBeTruthy();
+
+    const jobsLink = sidebarScope.getByRole('link', { name: 'Jobs' });
+    const lightModeButton = sidebarScope.getByRole('button', { name: 'Light mode' });
+    const settingsLink = sidebarScope.getByRole('link', { name: 'Settings' });
+    const collapseButton = sidebarScope.getByRole('button', { name: 'Collapse sidebar' });
+
+    expect(jobsLink.compareDocumentPosition(lightModeButton) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    expect(lightModeButton.compareDocumentPosition(settingsLink) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    expect(settingsLink.compareDocumentPosition(collapseButton) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
   });
 
   it('persists collapsed sidebar state and restores it on mount', async () => {

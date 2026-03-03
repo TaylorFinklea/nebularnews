@@ -30,8 +30,9 @@
     clockPlay: IconClockPlay
   };
 
-  const primaryItems = APP_NAV_ITEMS.filter((item) => item.group === 'primary');
+  const primaryItems = APP_NAV_ITEMS.filter((item) => item.group === 'primary' && item.id !== 'settings');
   const workspaceItems = APP_NAV_ITEMS.filter((item) => item.group === 'workspace');
+  const settingsItem = APP_NAV_ITEMS.find((item) => item.id === 'settings');
   const themeLabel = () => (theme === 'dark' ? 'Light mode' : 'Dark mode');
   const collapseLabel = () => (collapsed ? 'Expand sidebar' : 'Collapse sidebar');
 </script>
@@ -115,6 +116,21 @@
         </span>
         <span class="nav-label">{themeLabel()}</span>
       </button>
+
+      {#if settingsItem}
+        {@const active = isAppNavItemActive(settingsItem, currentPath)}
+        <a
+          href={settingsItem.href}
+          class="nav-link sidebar-footer-link"
+          class:active
+          aria-current={active ? 'page' : undefined}
+          aria-label={collapsed ? settingsItem.label : undefined}
+          title={collapsed ? settingsItem.label : undefined}
+        >
+          <span class="nav-icon"><IconSettings size={18} stroke={1.9} /></span>
+          <span class="nav-label">{settingsItem.label}</span>
+        </a>
+      {/if}
 
     </div>
 

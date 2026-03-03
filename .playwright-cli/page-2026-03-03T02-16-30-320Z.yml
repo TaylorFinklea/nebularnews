@@ -1,0 +1,215 @@
+- generic [ref=e3]:
+  - complementary "App sidebar" [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - link "Nebular News" [ref=e7] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e8]:
+            - img
+          - generic [ref=e9]:
+            - generic [ref=e10]: Nebular
+            - generic [ref=e11]: News
+        - navigation "Primary navigation" [ref=e13]:
+          - link "Dashboard" [ref=e14] [cursor=pointer]:
+            - /url: /
+            - img [ref=e16]
+            - generic [ref=e21]: Dashboard
+          - link "Articles" [ref=e22] [cursor=pointer]:
+            - /url: /articles
+            - img [ref=e24]
+            - generic [ref=e26]: Articles
+          - link "Chat" [ref=e27] [cursor=pointer]:
+            - /url: /chat
+            - img [ref=e29]
+            - generic [ref=e31]: Chat
+        - generic [ref=e32]:
+          - generic [ref=e33]: Workspace
+          - navigation "Workspace navigation" [ref=e35]:
+            - link "Tags" [ref=e36] [cursor=pointer]:
+              - /url: /tags
+              - img [ref=e38]
+              - generic [ref=e41]: Tags
+            - link "Feeds" [ref=e42] [cursor=pointer]:
+              - /url: /feeds
+              - img [ref=e44]
+              - generic [ref=e48]: Feeds
+            - link "Jobs" [ref=e49] [cursor=pointer]:
+              - /url: /jobs
+              - img [ref=e51]
+              - generic [ref=e55]: Jobs
+      - generic [ref=e56]:
+        - button "Light mode" [ref=e57] [cursor=pointer]:
+          - img [ref=e59]
+          - generic [ref=e60]: Light mode
+        - link "Settings" [ref=e61] [cursor=pointer]:
+          - /url: /settings
+          - img [ref=e63]
+          - generic [ref=e66]: Settings
+      - button "Collapse sidebar" [ref=e67] [cursor=pointer]:
+        - img [ref=e69]
+        - generic [ref=e72]: Collapse sidebar
+  - main [ref=e74]:
+    - generic [ref=e75]:
+      - generic [ref=e76]:
+        - generic [ref=e77]:
+          - heading "Your Reading Queue" [level=1] [ref=e78]
+          - paragraph [ref=e79]: Pick up where you left off with the most relevant unread stories.
+        - generic [ref=e80]:
+          - button "Pull feeds now" [ref=e81] [cursor=pointer]:
+            - img [ref=e83]
+            - generic [ref=e87]: Pull feeds now
+          - generic [ref=e88]: ○ Connecting...
+      - generic [ref=e89]:
+        - generic [ref=e90]:
+          - heading "Top Unread · Last 7 Days" [level=2] [ref=e91]
+          - link "View unread" [ref=e92] [cursor=pointer]:
+            - /url: /articles?read=unread&sort=unread_first&reaction=up&reaction=none
+            - img [ref=e93]
+            - generic [ref=e97]: View unread
+        - paragraph [ref=e98]: Showing up to 6 articles. High-fit stories are listed first.
+        - generic [ref=e99]:
+          - article [ref=e100]:
+            - link [ref=e101] [cursor=pointer]:
+              - /url: /articles/2nKCXVkcBLeWVP7K-J-wv?from=%2Farticles%3Fread%3Dunread%26sort%3Dunread_first%26reaction%3Dup%26reaction%3Dnone
+            - generic [ref=e102]:
+              - generic [ref=e103]:
+                - link "Transgender Kansans had their IDs invalidated overnight" [ref=e104] [cursor=pointer]:
+                  - /url: /articles/2nKCXVkcBLeWVP7K-J-wv?from=%2Farticles%3Fread%3Dunread%26sort%3Dunread_first%26reaction%3Dup%26reaction%3Dnone
+                - generic "AI fit score 3 out of 5" [ref=e105]:
+                  - img [ref=e106]
+                  - generic [ref=e110]: 3/5
+              - generic [ref=e112]: High fit
+              - paragraph [ref=e113]: Kansas legislators have had an unusually busy year so far — most recently the passage of a law that restricts bathroom usage for transgender people, and prohibits gender changes on IDs. We'll hear abo...
+              - generic [ref=e114]:
+                - generic [ref=e115]: Kansas City Today
+                - generic [ref=e116]: 3/2/2026, 4:00:00 AM
+              - generic [ref=e117]:
+                - link "Open" [ref=e118] [cursor=pointer]:
+                  - /url: /articles/2nKCXVkcBLeWVP7K-J-wv?from=%2Farticles%3Fread%3Dunread%26sort%3Dunread_first%26reaction%3Dup%26reaction%3Dnone
+                - button "Mark read" [ref=e119] [cursor=pointer]
+          - article [ref=e120]:
+            - link [ref=e121] [cursor=pointer]:
+              - /url: /articles/ca_Ir9BHeYOzgsXjnHLj6?from=%2Farticles%3Fread%3Dunread%26sort%3Dunread_first%26reaction%3Dup%26reaction%3Dnone
+            - generic [ref=e122]:
+              - generic [ref=e123]:
+                - link "Pinterest’s CDC-Powered Ingestion Slashes Database Latency from 24 Hours to 15 Minutes" [ref=e124] [cursor=pointer]:
+                  - /url: /articles/ca_Ir9BHeYOzgsXjnHLj6?from=%2Farticles%3Fread%3Dunread%26sort%3Dunread_first%26reaction%3Dup%26reaction%3Dnone
+                - generic "AI fit score 3 out of 5" [ref=e125]:
+                  - img [ref=e126]
+                  - generic [ref=e130]: 3/5
+              - generic [ref=e132]: High fit
+              - paragraph [ref=e133]: Pinterest launched a next-generation CDC-based database ingestion framework using Kafka, Flink, Spark, and Iceberg. The system reduces data availability latency from 24+ hours to 15 minutes, processes...
+              - generic [ref=e134]:
+                - generic [ref=e135]: InfoQ - DevOps
+                - generic [ref=e136]: 2/26/2026, 9:00:00 AM
+              - generic [ref=e137]:
+                - link "Open" [ref=e138] [cursor=pointer]:
+                  - /url: /articles/ca_Ir9BHeYOzgsXjnHLj6?from=%2Farticles%3Fread%3Dunread%26sort%3Dunread_first%26reaction%3Dup%26reaction%3Dnone
+                - button "Mark read" [ref=e139] [cursor=pointer]
+          - article [ref=e140]:
+            - link [ref=e141] [cursor=pointer]:
+              - /url: /articles/BMaZ33WOL85w1NOxFpbOu?from=%2Farticles%3Fread%3Dunread%26sort%3Dunread_first%26reaction%3Dup%26reaction%3Dnone
+            - generic [ref=e142]:
+              - generic [ref=e143]:
+                - 'link "Cilium at Ten Years: Stronger Encryption, Safer Policies, and Clearer Visibility for Large Clusters" [ref=e144] [cursor=pointer]':
+                  - /url: /articles/BMaZ33WOL85w1NOxFpbOu?from=%2Farticles%3Fread%3Dunread%26sort%3Dunread_first%26reaction%3Dup%26reaction%3Dnone
+                - generic "AI fit score 3 out of 5" [ref=e145]:
+                  - img [ref=e146]
+                  - generic [ref=e150]: 3/5
+              - generic [ref=e152]: High fit
+              - paragraph [ref=e153]: Cilium 1.19 has been released, marking ten years of development for the eBPF-based networking and security project. There isn’t a flagship feature in this release; instead, it focuses on security hard...
+              - generic [ref=e154]:
+                - generic [ref=e155]: InfoQ - DevOps
+                - generic [ref=e156]: 2/25/2026, 5:00:00 PM
+              - generic [ref=e157]:
+                - link "Open" [ref=e158] [cursor=pointer]:
+                  - /url: /articles/BMaZ33WOL85w1NOxFpbOu?from=%2Farticles%3Fread%3Dunread%26sort%3Dunread_first%26reaction%3Dup%26reaction%3Dnone
+                - button "Mark read" [ref=e159] [cursor=pointer]
+          - article [ref=e160]:
+            - link [ref=e161] [cursor=pointer]:
+              - /url: /articles/uULNXGHyhTNHZ4EKadbl5?from=%2Farticles%3Fread%3Dunread%26sort%3Dunread_first%26reaction%3Dup%26reaction%3Dnone
+            - generic [ref=e162]:
+              - generic [ref=e163]:
+                - link "Higher Tariffs Might Have Created Headwinds to Employment Growth in 2025" [ref=e164] [cursor=pointer]:
+                  - /url: /articles/uULNXGHyhTNHZ4EKadbl5?from=%2Farticles%3Fread%3Dunread%26sort%3Dunread_first%26reaction%3Dup%26reaction%3Dnone
+                - generic "AI fit score 2 out of 5" [ref=e165]:
+                  - img [ref=e166]
+                  - generic [ref=e170]: 2/5
+              - generic [ref=e172]: Recent unread
+              - paragraph [ref=e173]: "Journal Article Abstract: Job growth in the United States has slowed considerably this year. We examine the effect of tariffs on job growth and argue that sectors with higher exposure to imports had g..."
+              - generic [ref=e174]:
+                - generic [ref=e175]: Federal Reserve Bank of Kansas City publications
+                - generic [ref=e176]: 3/2/2026, 10:46:34 AM
+              - generic [ref=e177]:
+                - link "Open" [ref=e178] [cursor=pointer]:
+                  - /url: /articles/uULNXGHyhTNHZ4EKadbl5?from=%2Farticles%3Fread%3Dunread%26sort%3Dunread_first%26reaction%3Dup%26reaction%3Dnone
+                - button "Mark read" [ref=e179] [cursor=pointer]
+          - article [ref=e180]:
+            - link [ref=e181] [cursor=pointer]:
+              - /url: /articles/-3ZYuky1bD8o2dXQenCqo?from=%2Farticles%3Fread%3Dunread%26sort%3Dunread_first%26reaction%3Dup%26reaction%3Dnone
+            - generic [ref=e182]:
+              - generic [ref=e183]:
+                - link "Artificial Intelligence Offers an Opportunity for Nebraska Firms" [ref=e184] [cursor=pointer]:
+                  - /url: /articles/-3ZYuky1bD8o2dXQenCqo?from=%2Farticles%3Fread%3Dunread%26sort%3Dunread_first%26reaction%3Dup%26reaction%3Dnone
+                - generic "AI fit score 2 out of 5" [ref=e185]:
+                  - img [ref=e186]
+                  - generic [ref=e190]: 2/5
+              - generic [ref=e192]: Recent unread
+              - paragraph [ref=e193]: "Journal Article Abstract: While the adoption of artificial intelligence remains in early stages and its ultimate effects are uncertain, firms in Nebraska may use these products as an opportunity to ad..."
+              - generic [ref=e194]:
+                - generic [ref=e195]: Federal Reserve Bank of Kansas City publications
+                - generic [ref=e196]: 3/2/2026, 10:46:34 AM
+              - generic [ref=e197]:
+                - link "Open" [ref=e198] [cursor=pointer]:
+                  - /url: /articles/-3ZYuky1bD8o2dXQenCqo?from=%2Farticles%3Fread%3Dunread%26sort%3Dunread_first%26reaction%3Dup%26reaction%3Dnone
+                - button "Mark read" [ref=e199] [cursor=pointer]
+          - article [ref=e200]:
+            - link [ref=e201] [cursor=pointer]:
+              - /url: /articles/BTMcqt88jyMt-da3Xwf8a?from=%2Farticles%3Fread%3Dunread%26sort%3Dunread_first%26reaction%3Dup%26reaction%3Dnone
+            - generic [ref=e202]:
+              - generic [ref=e203]:
+                - link "A Note on the Finite Sample Bias in Time Series Cross-Validation" [ref=e204] [cursor=pointer]:
+                  - /url: /articles/BTMcqt88jyMt-da3Xwf8a?from=%2Farticles%3Fread%3Dunread%26sort%3Dunread_first%26reaction%3Dup%26reaction%3Dnone
+                - generic "AI fit score 2 out of 5" [ref=e205]:
+                  - img [ref=e206]
+                  - generic [ref=e210]: 2/5
+              - generic [ref=e212]: Recent unread
+              - paragraph [ref=e213]: "Working Paper Abstract: It is well known that model selection via cross validation can be biased for time series models. However, many researchers have argued that this bias does not apply when using ..."
+              - generic [ref=e214]:
+                - generic [ref=e215]: Federal Reserve Bank of Kansas City publications
+                - generic [ref=e216]: 3/2/2026, 10:46:33 AM
+              - generic [ref=e217]:
+                - link "Open" [ref=e218] [cursor=pointer]:
+                  - /url: /articles/BTMcqt88jyMt-da3Xwf8a?from=%2Farticles%3Fread%3Dunread%26sort%3Dunread_first%26reaction%3Dup%26reaction%3Dnone
+                - button "Mark read" [ref=e219] [cursor=pointer]
+      - generic [ref=e220]:
+        - generic [ref=e221]:
+          - heading "Reading Momentum" [level=2] [ref=e222]
+          - link "Articles" [ref=e223] [cursor=pointer]:
+            - /url: /articles
+            - img [ref=e224]
+            - generic [ref=e228]: Articles
+        - generic [ref=e229]:
+          - link "309 Unread total" [ref=e230] [cursor=pointer]:
+            - /url: /articles?read=unread&sort=unread_first&reaction=up&reaction=none
+            - generic [ref=e231]: "309"
+            - generic [ref=e232]: Unread total
+          - link "17 Unread · 24h" [ref=e233] [cursor=pointer]:
+            - /url: /articles?read=unread&sort=unread_first&sinceDays=1&reaction=up&reaction=none
+            - generic [ref=e234]: "17"
+            - generic [ref=e235]: Unread · 24h
+          - link "67 Unread · 7d" [ref=e236] [cursor=pointer]:
+            - /url: /articles?read=unread&sort=unread_first&sinceDays=7&reaction=up&reaction=none
+            - generic [ref=e237]: "67"
+            - generic [ref=e238]: Unread · 7d
+          - link "3 High fit · 7d" [ref=e239] [cursor=pointer]:
+            - /url: /articles?read=unread&sort=unread_first&sinceDays=7&score=5&score=4&score=3&reaction=up&reaction=none
+            - generic [ref=e240]: "3"
+            - generic [ref=e241]: High fit · 7d
+        - generic [ref=e242]:
+          - link "Open unread queue" [ref=e243] [cursor=pointer]:
+            - /url: /articles?read=unread&sort=unread_first&reaction=up&reaction=none
+          - link "Open high-fit unread" [ref=e244] [cursor=pointer]:
+            - /url: /articles?read=unread&sort=unread_first&sinceDays=7&score=5&score=4&score=3&reaction=up&reaction=none
+          - link "Browse all articles" [ref=e245] [cursor=pointer]:
+            - /url: /articles

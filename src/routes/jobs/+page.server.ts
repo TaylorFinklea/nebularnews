@@ -1,56 +1,63 @@
 import { dbGet } from '$lib/server/db';
 import { getJobCounts, listJobs, normalizeJobFilter } from '$lib/server/jobs-admin';
-import { parse as parseCookie } from 'cookie';
-import { clampTimezoneOffsetMinutes, dayRangeForTimezoneOffset } from '$lib/server/time';
 import { isEventsV2Enabled } from '$lib/server/flags';
 
-export const load = async ({ platform, url, request, depends }) => {
+const RECENT_MISSING_LOOKBACK_HOURS = 72;
+
+export const load = async ({ platform, url, depends }) => {
   depends('app:jobs');
   const status = normalizeJobFilter(url.searchParams.get('status') ?? 'pending');
   const jobs = await listJobs(platform.env.DB, { status, limit: 150 });
   const counts = await getJobCounts(platform.env.DB);
-  const cookies = parseCookie(request.headers.get('cookie') ?? '');
-  const tzOffsetMinutes = clampTimezoneOffsetMinutes(cookies.nebular_tz_offset_min, 0);
-  const { dayStart, dayEnd } = dayRangeForTimezoneOffset(Date.now(), tzOffsetMinutes);
-  const todayMissingSummaries = await dbGet<{ count: number }>(
+  const recentCutoff = Date.now() - RECENT_MISSING_LOOKBACK_HOURS * 60 * 60 * 1000;
+  const recentMissing = await dbGet<{
+    recent_articles: number | null;
+    missing_scores: number | null;
+    missing_auto_tags: number | null;
+    missing_image_backfill: number | null;
+  }>(
     platform.env.DB,
-    `SELECT COUNT(*) as count
-     FROM articles a
-     WHERE COALESCE(a.published_at, a.fetched_at) >= ?
-       AND COALESCE(a.published_at, a.fetched_at) < ?
-       AND NOT EXISTS (SELECT 1 FROM article_summaries s WHERE s.article_id = a.id)`,
-    [dayStart, dayEnd]
-  );
-  const todayMissingScores = await dbGet<{ count: number }>(
-    platform.env.DB,
-    `SELECT COUNT(*) as count
-     FROM articles a
-     WHERE COALESCE(a.published_at, a.fetched_at) >= ?
-       AND COALESCE(a.published_at, a.fetched_at) < ?
-       AND NOT EXISTS (SELECT 1 FROM article_scores s WHERE s.article_id = a.id)
-       AND NOT EXISTS (SELECT 1 FROM article_score_overrides o WHERE o.article_id = a.id)`,
-    [dayStart, dayEnd]
-  );
-  const todayMissingAutoTags = await dbGet<{ count: number }>(
-    platform.env.DB,
-    `SELECT COUNT(*) as count
-     FROM articles a
-     WHERE COALESCE(a.published_at, a.fetched_at) >= ?
-       AND COALESCE(a.published_at, a.fetched_at) < ?
-       AND NOT EXISTS (
-         SELECT 1
-         FROM article_tags t
-         WHERE t.article_id = a.id
-           AND t.source IN ('ai', 'system')
-       )
-       AND NOT EXISTS (
-         SELECT 1
-         FROM jobs j
-         WHERE j.article_id = a.id
-           AND j.type = 'auto_tag'
-           AND j.status = 'done'
-       )`,
-    [dayStart, dayEnd]
+    `WITH recent_articles AS (
+       SELECT id, image_status
+       FROM articles
+       WHERE COALESCE(published_at, fetched_at, 0) >= ?
+     )
+     SELECT
+       COUNT(*) AS recent_articles,
+       COALESCE(SUM(CASE
+         WHEN EXISTS (SELECT 1 FROM article_scores s WHERE s.article_id = a.id)
+           OR EXISTS (SELECT 1 FROM article_score_overrides o WHERE o.article_id = a.id)
+           OR EXISTS (
+             SELECT 1 FROM jobs j
+             WHERE j.article_id = a.id
+               AND j.type = 'score'
+               AND j.status IN ('pending', 'running', 'done')
+           )
+         THEN 0 ELSE 1 END), 0) AS missing_scores,
+       COALESCE(SUM(CASE
+         WHEN EXISTS (
+           SELECT 1
+           FROM article_tags t
+           WHERE t.article_id = a.id
+             AND t.source IN ('ai', 'system')
+         ) OR EXISTS (
+           SELECT 1 FROM jobs j
+           WHERE j.article_id = a.id
+             AND j.type = 'auto_tag'
+             AND j.status IN ('pending', 'running', 'done')
+         )
+         THEN 0 ELSE 1 END), 0) AS missing_auto_tags,
+       COALESCE(SUM(CASE
+         WHEN COALESCE(a.image_status, '') IN ('found', 'missing')
+           OR EXISTS (
+             SELECT 1 FROM jobs j
+             WHERE j.article_id = a.id
+               AND j.type = 'image_backfill'
+               AND j.status IN ('pending', 'running', 'done')
+           )
+         THEN 0 ELSE 1 END), 0) AS missing_image_backfill
+     FROM recent_articles a`,
+    [recentCutoff]
   );
 
   return {
@@ -58,11 +65,12 @@ export const load = async ({ platform, url, request, depends }) => {
     counts,
     status,
     liveEventsEnabled: isEventsV2Enabled(platform.env),
-    today: {
-      missingSummaries: todayMissingSummaries?.count ?? 0,
-      missingScores: todayMissingScores?.count ?? 0,
-      missingAutoTags: todayMissingAutoTags?.count ?? 0,
-      tzOffsetMinutes
+    recent: {
+      lookbackHours: RECENT_MISSING_LOOKBACK_HOURS,
+      articleCount: recentMissing?.recent_articles ?? 0,
+      missingScores: recentMissing?.missing_scores ?? 0,
+      missingAutoTags: recentMissing?.missing_auto_tags ?? 0,
+      missingImageBackfill: recentMissing?.missing_image_backfill ?? 0
     }
   };
 };

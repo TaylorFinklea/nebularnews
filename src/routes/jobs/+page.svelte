@@ -147,15 +147,6 @@
     }
   });
 
-  const formatUtcOffset = (offsetMinutes) => {
-    const normalized = Number(offsetMinutes ?? 0);
-    const sign = normalized <= 0 ? '+' : '-';
-    const absolute = Math.abs(normalized);
-    const hours = String(Math.floor(absolute / 60)).padStart(2, '0');
-    const minutes = String(absolute % 60).padStart(2, '0');
-    return `UTC${sign}${hours}:${minutes}`;
-  };
-
   const runAction = async (action, options = {}) => {
     const { jobId = null, label = action, cycles = 1 } = options;
     busyKey = `${action}:${jobId ?? 'all'}`;
@@ -167,8 +158,7 @@
           action,
           jobId,
           cycles,
-          forceDue: action === 'run_queue' ? true : undefined,
-          tzOffsetMinutes: action === 'queue_today_missing' ? new Date().getTimezoneOffset() : undefined
+          forceDue: action === 'run_queue' ? true : undefined
         })
       });
       const rawPayload = await res.json().catch(() => ({}));
@@ -189,14 +179,13 @@
       const touched = payload?.updated ?? payload?.deleted;
       if (action === 'run_queue') {
         msg = `Queue ran ${payload.cycles} cycle${payload.cycles === 1 ? '' : 's'}. Pending: ${payload.counts.pending}, running: ${payload.counts.running}, failed: ${payload.counts.failed}.`;
-      } else if (action === 'queue_today_missing') {
-        const s = payload?.queued?.summarizeQueued ?? 0;
+      } else if (action === 'queue_recent_missing' || action === 'queue_today_missing') {
         const sc = payload?.queued?.scoreQueued ?? 0;
         const at = payload?.queued?.autoTagQueued ?? 0;
         const ib = payload?.queued?.imageBackfillQueued ?? 0;
-        msg = (s === 0 && sc === 0 && at === 0 && ib === 0)
-          ? `No missing jobs found for today.`
-          : `Queued: ${s} summarize, ${sc} score, ${at} auto-tag, ${ib} image backfill.`;
+        msg = (sc === 0 && at === 0 && ib === 0)
+          ? `No recent missing jobs found.`
+          : `Queued: ${sc} score, ${at} auto-tag, ${ib} image backfill.`;
       } else if (typeof touched === 'number') {
         msg = `${label} updated ${touched} job${touched === 1 ? '' : 's'}.`;
       }
@@ -264,13 +253,13 @@
   </Card>
 </div>
 
-<!-- Today missing -->
+<!-- Recent missing -->
 <div class="today-missing">
-  <strong>Today missing:</strong>
-  <span>{today.missingSummaries} summaries</span>
-  <span>{today.missingScores} scores</span>
-  <span>{today.missingAutoTags} auto-tags</span>
-  <span class="tz">({formatUtcOffset(today.tzOffsetMinutes)})</span>
+  <strong>Recent missing ({data.recent.lookbackHours}h):</strong>
+  <span>{data.recent.missingScores} scores</span>
+  <span>{data.recent.missingAutoTags} auto-tags</span>
+  <span>{data.recent.missingImageBackfill} image backfill</span>
+  <span class="tz">({data.recent.articleCount} recent articles)</span>
 </div>
 
 <!-- Controls -->
@@ -288,9 +277,9 @@
   <Button
     variant="primary"
     size="inline"
-    disabled={isBusy('queue_today_missing')}
-    on:click={() => runAction('queue_today_missing', { label: 'Queue today missing' })}
-    title="Queue missing today jobs"
+    disabled={isBusy('queue_recent_missing')}
+    on:click={() => runAction('queue_recent_missing', { label: 'Queue recent missing' })}
+    title="Queue missing recent jobs"
   >
     <IconPlaylistAdd size={16} stroke={2} />
     <span>Queue missing</span>

@@ -1,4 +1,3 @@
-import { parse as parseCookie } from 'cookie';
 import {
   cancelAllPendingJobs,
   cancelPendingJob,
@@ -10,11 +9,10 @@ import {
   listJobs,
   markJobPendingNow,
   normalizeJobFilter,
-  queueMissingTodayArticleJobs,
+  queueMissingRecentArticleJobs,
   retryFailedJobs,
   runQueueCycles
 } from '$lib/server/jobs-admin';
-import { clampTimezoneOffsetMinutes } from '$lib/server/time';
 import { apiError, apiOkWithAliases } from '$lib/server/api';
 import { logInfo } from '$lib/server/log';
 
@@ -26,6 +24,7 @@ const validActions = new Set([
   'retry_failed',
   'cancel_pending_all',
   'clear_finished',
+  'queue_recent_missing',
   'queue_today_missing'
 ]);
 const noStoreHeaders = { 'cache-control': 'no-store' };
@@ -58,13 +57,6 @@ export const POST = async (event) => {
 
   const jobId = typeof body?.jobId === 'string' ? body.jobId.trim() : '';
   const db = platform.env.DB;
-  const cookieHeader = request.headers.get('cookie') ?? '';
-  const cookies = parseCookie(cookieHeader);
-  const requestedOffset =
-    body?.tzOffsetMinutes ??
-    body?.timezoneOffsetMinutes ??
-    (cookies.nebular_tz_offset_min ? Number(cookies.nebular_tz_offset_min) : undefined);
-  const tzOffsetMinutes = clampTimezoneOffsetMinutes(requestedOffset, 0);
 
   if (action === 'run_queue') {
     const cycles = clampQueueCycles(body?.cycles ?? 1);
@@ -112,10 +104,15 @@ export const POST = async (event) => {
     return apiOkWithAliases(event, { action, deleted, counts }, { action, deleted, counts }, { headers: noStoreHeaders });
   }
 
-  if (action === 'queue_today_missing') {
-    const queued = await queueMissingTodayArticleJobs(db, { tzOffsetMinutes });
+  if (action === 'queue_recent_missing' || action === 'queue_today_missing') {
+    const queued = await queueMissingRecentArticleJobs(db, { lookbackHours: 72 });
     const counts = await getJobCounts(db);
-    return apiOkWithAliases(event, { action, queued, counts }, { action, queued, counts }, { headers: noStoreHeaders });
+    return apiOkWithAliases(
+      event,
+      { action: 'queue_recent_missing', queued, counts },
+      { action: 'queue_recent_missing', queued, counts },
+      { headers: noStoreHeaders }
+    );
   }
 
   if (!jobId) {

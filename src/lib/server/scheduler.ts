@@ -2,7 +2,7 @@ import { pollFeeds, type FeedPollSummary } from './ingest';
 import { processJobs } from './jobs';
 import { processPullRuns, recoverStalePullRuns } from './manual-pull';
 import { runNewsBriefSchedulerTick } from './news-brief';
-import { queueMissingTodayArticleJobs } from './jobs-admin';
+import { queueMissingRecentArticleJobs } from './jobs-admin';
 import { ensureSchema } from './migrations';
 import { assertRuntimeConfig } from './runtime-config';
 import { logError, logInfo } from './log';
@@ -26,7 +26,7 @@ type ScheduledJobsSummary = {
   pullProcessed: boolean;
   pullSlices: number;
   pullStatus: string | null;
-  queuedToday: Awaited<ReturnType<typeof queueMissingTodayArticleJobs>> | null;
+  queuedRecent: Awaited<ReturnType<typeof queueMissingRecentArticleJobs>> | null;
   orphanCleanup: Awaited<ReturnType<typeof deleteOrphanArticlesBatch>> | null;
   newsBrief: Awaited<ReturnType<typeof runNewsBriefSchedulerTick>> | null;
 };
@@ -64,9 +64,9 @@ const runJobsTick = async (
   });
   const latestPullSlice = pull.slices.length > 0 ? pull.slices[pull.slices.length - 1] : null;
   const pullRunning = latestPullSlice?.status === 'running';
-  let queuedToday = null;
+  let queuedRecent = null;
   if (!pullRunning && scheduler.autoQueueTodayMissing) {
-    queuedToday = await queueMissingTodayArticleJobs(env.DB, { tzOffsetMinutes: 0 });
+    queuedRecent = await queueMissingRecentArticleJobs(env.DB, { lookbackHours: 72 });
   }
   await processJobs(env, {
     timeBudgetMs: pullRunning ? scheduler.jobBudgetWhilePullMs : scheduler.jobBudgetIdleMs
@@ -93,7 +93,7 @@ const runJobsTick = async (
     pullProcessed: pull.processed,
     pullSlices: pull.slices.length,
     pullStatus: latestPullSlice?.status ?? null,
-    queuedToday,
+    queuedRecent,
     orphanCleanup,
     newsBrief
   };
@@ -106,7 +106,7 @@ const runJobsTick = async (
     pull_status: summary.pullStatus,
     jobs_processed: true,
     scheduler,
-    queued_today: queuedToday,
+    queued_recent: queuedRecent,
     orphan_cleanup: orphanCleanup,
     news_brief: newsBrief
   });

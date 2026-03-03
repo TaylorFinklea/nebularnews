@@ -31,6 +31,15 @@ describe('getScoringObservabilitySummary', () => {
           ai_count: 3
         };
       }
+      if (sql.includes('missing_score_jobs')) {
+        return {
+          recent_articles: 9,
+          missing_score_jobs: 2,
+          missing_auto_tag_jobs: 3,
+          missing_image_backfill_jobs: 1,
+          recent_tagged_articles: 4
+        };
+      }
       return {
         recent_articles: 20,
         tagged_articles: 15,
@@ -62,6 +71,14 @@ describe('getScoringObservabilitySummary', () => {
         recentScoredArticles: 10,
         taggedArticlePercent: 75,
         preferenceBackedScorePercent: 60
+      },
+      recentJobCoverage: {
+        windowHours: 24,
+        recentArticles: 9,
+        missingScoreJobs: 2,
+        missingAutoTagJobs: 3,
+        missingImageBackfillJobs: 1,
+        recentTaggedArticles: 4
       }
     });
   });

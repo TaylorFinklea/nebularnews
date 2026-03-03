@@ -11,6 +11,27 @@ const candidate = {
   slug: 'ai-policy'
 };
 
+const llmCandidate = {
+  id: 'tag-llm',
+  name: 'Large Language Models',
+  normalizedName: 'large language models',
+  slug: 'large-language-models'
+};
+
+const kubernetesCandidate = {
+  id: 'tag-k8s',
+  name: 'Kubernetes',
+  normalizedName: 'kubernetes',
+  slug: 'kubernetes'
+};
+
+const cybersecurityCandidate = {
+  id: 'tag-cybersecurity',
+  name: 'Cybersecurity',
+  normalizedName: 'cybersecurity',
+  slug: 'cybersecurity'
+};
+
 describe('deterministic tagging rules', () => {
   it('scores an exact title phrase above the attach threshold', () => {
     const decision = scoreDeterministicTagCandidate(candidate, {
@@ -44,6 +65,52 @@ describe('deterministic tagging rules', () => {
     expect(decision.features).toContain('title_overlap:1');
     expect(decision.features).toContain('content_overlap:1');
     expect(decision.score).toBeCloseTo(0.38, 4);
+  });
+
+  it('matches llm keyword bags for large language models', () => {
+    const decision = scoreDeterministicTagCandidate(llmCandidate, {
+      title: 'New LLM benchmark lands for frontier systems',
+      canonicalUrl: 'https://example.com/story',
+      contentText: 'Background text'
+    });
+
+    expect(decision.features).toContain('title_phrase');
+    expect(decision.score).toBeGreaterThanOrEqual(DEFAULT_DETERMINISTIC_TAG_ATTACH_THRESHOLD);
+  });
+
+  it('matches k8s keywords for kubernetes', () => {
+    const decision = scoreDeterministicTagCandidate(kubernetesCandidate, {
+      title: 'Why K8s cost controls are getting harder',
+      canonicalUrl: 'https://example.com/story',
+      contentText: 'Operators are tuning clusters again.'
+    });
+
+    expect(decision.features).toContain('title_phrase');
+    expect(decision.score).toBeGreaterThanOrEqual(DEFAULT_DETERMINISTIC_TAG_ATTACH_THRESHOLD);
+  });
+
+  it('matches cybersecurity terms from content', () => {
+    const decision = scoreDeterministicTagCandidate(cybersecurityCandidate, {
+      title: 'Incident response update',
+      canonicalUrl: 'https://example.com/story',
+      contentText: 'The breach exposed a vulnerability in a widely deployed enterprise system.'
+    });
+
+    expect(decision.features).toContain('content_phrase');
+    expect(decision.score).toBeGreaterThan(0.35);
+  });
+
+  it('uses feed title and site hostname as additional matching inputs', () => {
+    const decision = scoreDeterministicTagCandidate(kubernetesCandidate, {
+      title: 'Release notes',
+      canonicalUrl: 'https://infra.example.com/story',
+      contentText: 'Background text',
+      feedTitle: 'Kubernetes Weekly',
+      siteHostname: 'k8s.example.com'
+    });
+
+    expect(decision.features).toContain('title_phrase');
+    expect(decision.features).toContain('url_phrase');
   });
 
   it('applies the feed prior bonus only when counts and ratio are high enough', () => {

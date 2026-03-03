@@ -1,13 +1,28 @@
 import { nanoid } from 'nanoid';
-import { dbRun, now, type Db } from './db';
+import { dbBatch, dbRun, now, type Db } from './db';
 
-export type ArticleJobType = 'summarize' | 'summarize_chat' | 'score' | 'key_points' | 'auto_tag';
+export type ArticleJobType =
+  | 'summarize'
+  | 'summarize_chat'
+  | 'score'
+  | 'key_points'
+  | 'auto_tag'
+  | 'image_backfill';
+
+const DEFAULT_JOB_PRIORITY: Record<ArticleJobType, number> = {
+  summarize: 100,
+  summarize_chat: 100,
+  score: 100,
+  key_points: 100,
+  auto_tag: 100,
+  image_backfill: 120
+};
 
 export const enqueueArticleJob = async (
   db: Db,
   type: ArticleJobType,
   articleId: string,
-  priority = 100
+  priority = DEFAULT_JOB_PRIORITY[type]
 ) => {
   const timestamp = now();
   await dbRun(
@@ -32,3 +47,47 @@ export const enqueueArticleJob = async (
 
 export const enqueueScoreJob = async (db: Db, articleId: string, priority = 100) =>
   enqueueArticleJob(db, 'score', articleId, priority);
+
+export const enqueueNewArticleArtifactJobs = async (
+  db: Db,
+  articleId: string,
+  options?: {
+    queuedAt?: number;
+    includeSummaries?: boolean;
+    includeImageBackfill?: boolean;
+  }
+) => {
+  const queuedAt = options?.queuedAt ?? now();
+  const jobTypes: ArticleJobType[] = ['score', 'auto_tag'];
+
+  if (options?.includeSummaries) {
+    jobTypes.unshift('summarize');
+  }
+
+  if (options?.includeImageBackfill) {
+    jobTypes.push('image_backfill');
+  }
+
+  await dbBatch(
+    db,
+    jobTypes.map((type) => ({
+      sql: `INSERT INTO jobs (id, type, article_id, status, attempts, priority, run_after, last_error, provider, model, created_at, updated_at)
+            VALUES (?, ?, ?, 'pending', 0, ?, ?, NULL, NULL, NULL, ?, ?)
+            ON CONFLICT(type, article_id) DO UPDATE SET
+              status = excluded.status,
+              attempts = 0,
+              priority = excluded.priority,
+              run_after = excluded.run_after,
+              last_error = NULL,
+              provider = NULL,
+              model = NULL,
+              locked_by = NULL,
+              locked_at = NULL,
+              lease_expires_at = NULL,
+              updated_at = excluded.updated_at`,
+      params: [nanoid(), type, articleId, DEFAULT_JOB_PRIORITY[type], queuedAt, queuedAt, queuedAt]
+    }))
+  );
+
+  return jobTypes;
+};

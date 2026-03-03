@@ -463,6 +463,8 @@ export async function runAutoTagJob(db: Db, _env: App.Platform['env'], articleId
     canonical_url: string | null;
     content_text: string | null;
     source_feed_id: string | null;
+    source_feed_title: string | null;
+    source_site_url: string | null;
   }>(
     db,
     `SELECT
@@ -475,7 +477,23 @@ export async function runAutoTagJob(db: Db, _env: App.Platform['env'], articleId
         WHERE src.article_id = a.id
         ORDER BY src.published_at DESC NULLS LAST, src.id DESC
         LIMIT 1
-      ) AS source_feed_id
+      ) AS source_feed_id,
+      (
+        SELECT f.title
+        FROM article_sources src
+        JOIN feeds f ON f.id = src.feed_id
+        WHERE src.article_id = a.id
+        ORDER BY src.published_at DESC NULLS LAST, src.id DESC
+        LIMIT 1
+      ) AS source_feed_title,
+      (
+        SELECT f.site_url
+        FROM article_sources src
+        JOIN feeds f ON f.id = src.feed_id
+        WHERE src.article_id = a.id
+        ORDER BY src.published_at DESC NULLS LAST, src.id DESC
+        LIMIT 1
+      ) AS source_site_url
      FROM articles a
      WHERE a.id = ?`,
     [articleId]
@@ -485,12 +503,22 @@ export async function runAutoTagJob(db: Db, _env: App.Platform['env'], articleId
   }
 
   const maxTags = await getAutoTagMaxPerArticle(db);
+  let sourceSiteHostname: string | null = null;
+  try {
+    if (article.source_site_url) {
+      sourceSiteHostname = new URL(article.source_site_url).hostname.replace(/^www\./, '');
+    }
+  } catch {
+    sourceSiteHostname = article.source_site_url ?? null;
+  }
   const decisions = await generateDeterministicTagDecisions(db, {
     articleId,
     title: article.title,
     canonicalUrl: article.canonical_url,
     contentText: article.content_text,
     sourceFeedId: article.source_feed_id,
+    sourceFeedTitle: article.source_feed_title,
+    sourceSiteHostname,
     maxTags
   });
   const applied = await applyDeterministicTagDecisions(db, articleId, decisions);

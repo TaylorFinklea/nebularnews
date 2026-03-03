@@ -1461,6 +1461,24 @@
                 {data.scoringObservability?.recentCoverage?.recentScoredArticles ?? 0} recent scored article{(data.scoringObservability?.recentCoverage?.recentScoredArticles ?? 0) === 1 ? '' : 's'}
               </span>
             </div>
+            <div class="qa-card">
+              <span class="qa-label">Recent missing jobs</span>
+              <strong>
+                {data.scoringObservability?.recentJobCoverage?.missingScoreJobs ?? 0} score ·
+                {data.scoringObservability?.recentJobCoverage?.missingAutoTagJobs ?? 0} tag ·
+                {data.scoringObservability?.recentJobCoverage?.missingImageBackfillJobs ?? 0} image
+              </strong>
+              <span class="muted small">
+                Across the last {data.scoringObservability?.recentJobCoverage?.windowHours ?? 24} hours
+              </span>
+            </div>
+            <div class="qa-card">
+              <span class="qa-label">Recent tagged articles</span>
+              <strong>{data.scoringObservability?.recentJobCoverage?.recentTaggedArticles ?? 0} tagged</strong>
+              <span class="muted small">
+                Out of {data.scoringObservability?.recentJobCoverage?.recentArticles ?? 0} recent article{(data.scoringObservability?.recentJobCoverage?.recentArticles ?? 0) === 1 ? '' : 's'}
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -1960,7 +1978,7 @@
 
               <label class="checkbox-row">
                 <input type="checkbox" bind:checked={autoQueueTodayMissing} />
-                <span>Auto queue missing today jobs on scheduler ticks</span>
+                <span>Auto queue recent missing article jobs on scheduler ticks</span>
               </label>
 
               <div class="two-col">

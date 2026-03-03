@@ -105,7 +105,9 @@ describe('runAutoTagJob', () => {
       title: 'AI policy shifts',
       canonical_url: 'https://example.com/ai-policy',
       content_text: null,
-      source_feed_id: 'feed-1'
+      source_feed_id: 'feed-1',
+      source_feed_title: 'AI Policy Feed',
+      source_site_url: 'https://example.com'
     });
     scoreArticleAlgorithmicMock.mockResolvedValue({
       score: 3,
@@ -158,6 +160,8 @@ describe('runAutoTagJob', () => {
       canonicalUrl: 'https://example.com/ai-policy',
       contentText: null,
       sourceFeedId: 'feed-1',
+      sourceFeedTitle: 'AI Policy Feed',
+      sourceSiteHostname: 'example.com',
       maxTags: 3
     });
     expect(enqueueScoreJobMock).toHaveBeenCalledWith(expect.anything(), 'article-1');

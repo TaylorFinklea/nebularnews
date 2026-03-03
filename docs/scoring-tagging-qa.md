@@ -29,6 +29,73 @@ npx wrangler d1 execute nebularnews-prod --local --command \
    ORDER BY source;"
 ```
 
+Recent missing jobs:
+
+```sh
+npx wrangler d1 execute nebularnews-prod --local --command \
+  "WITH recent_articles AS (
+     SELECT id, image_status
+     FROM articles
+     WHERE COALESCE(published_at, fetched_at, 0) >= strftime('%s','now','-24 hours') * 1000
+   )
+   SELECT
+     COUNT(*) AS recent_articles,
+     SUM(CASE
+       WHEN EXISTS (SELECT 1 FROM article_scores sc WHERE sc.article_id = ra.id)
+         OR EXISTS (SELECT 1 FROM article_score_overrides so WHERE so.article_id = ra.id)
+         OR EXISTS (
+           SELECT 1 FROM jobs j
+           WHERE j.article_id = ra.id
+             AND j.type = 'score'
+             AND j.status IN ('pending', 'running', 'done')
+         )
+       THEN 0 ELSE 1 END) AS missing_score_jobs,
+     SUM(CASE
+       WHEN EXISTS (
+         SELECT 1 FROM article_tags at
+         WHERE at.article_id = ra.id
+           AND at.source IN ('system', 'ai')
+       ) OR EXISTS (
+         SELECT 1 FROM jobs j
+         WHERE j.article_id = ra.id
+           AND j.type = 'auto_tag'
+           AND j.status IN ('pending', 'running', 'done')
+       )
+       THEN 0 ELSE 1 END) AS missing_auto_tag_jobs,
+     SUM(CASE
+       WHEN COALESCE(ra.image_status, '') IN ('found', 'missing')
+         OR EXISTS (
+           SELECT 1 FROM jobs j
+           WHERE j.article_id = ra.id
+             AND j.type = 'image_backfill'
+             AND j.status IN ('pending', 'running', 'done')
+         )
+       THEN 0 ELSE 1 END) AS missing_image_backfill_jobs
+   FROM recent_articles ra;"
+```
+
+Recent score metadata coverage:
+
+```sh
+npx wrangler d1 execute nebularnews-prod --local --command \
+  "WITH latest_scores AS (
+     SELECT sc.*
+     FROM article_scores sc
+     JOIN (
+       SELECT article_id, MAX(created_at) AS created_at
+       FROM article_scores
+       GROUP BY article_id
+     ) latest
+       ON latest.article_id = sc.article_id
+      AND latest.created_at = sc.created_at
+   )
+   SELECT
+     SUM(CASE WHEN confidence IS NOT NULL THEN 1 ELSE 0 END) AS with_confidence,
+     SUM(CASE WHEN preference_confidence IS NOT NULL THEN 1 ELSE 0 END) AS with_preference_confidence,
+     SUM(CASE WHEN weighted_average IS NOT NULL THEN 1 ELSE 0 END) AS with_weighted_average
+   FROM latest_scores;"
+```
+
 ## Browser smoke path
 
 1. Open `http://localhost:5173/articles`
@@ -41,6 +108,25 @@ npx wrangler d1 execute nebularnews-prod --local --command \
 8. Confirm the inline learning banner renders with the guidance copy
 9. Open `http://localhost:5173/settings`
 10. Confirm the `Tagging engine` control renders and the `Scoring QA` summary block is visible
+11. Confirm the `Recent missing jobs` card renders and drops toward zero after a pull plus jobs tick
+
+## Usage-driven QA batch
+
+Use at least `24` recent articles across `8` or more feeds.
+
+1. Save `8` thumbs up reactions
+2. Spread reasons across `Matches my interests`, `Trust this source`, `Good timing`, and `Like this author`
+3. Save `8` thumbs down reactions
+4. Spread reasons across `Off topic for me`, `Don't trust this source`, `Too old / stale`, and `Too shallow`
+5. Leave `4` feedback ratings
+6. Use two high ratings (`4-5`) and two low ratings (`1-2`)
+7. Make `4` manual tag corrections by adding a missing relevant tag or removing a wrong one
+8. After the batch, confirm:
+   - `signal_weights.sample_count` increased by at least `20`
+   - `author_affinities` gained new rows
+   - `topic_affinities` gained new rows
+   - source reputation diverged across multiple feeds
+   - new `article_scores` rows include non-null `confidence`, `preference_confidence`, and `weighted_average`
 
 ## Deterministic tagging smoke path
 

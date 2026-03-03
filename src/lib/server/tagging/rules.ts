@@ -5,6 +5,7 @@ import {
   listTagLinksForArticle,
   serializeArticleTagLinkState
 } from '../tags';
+import { DETERMINISTIC_TAG_KEYWORDS_BY_SLUG } from './taxonomy';
 
 const TITLE_PHRASE_WEIGHT = 1.0;
 const URL_PHRASE_WEIGHT = 0.4;
@@ -17,7 +18,7 @@ const FEED_PRIOR_BONUS = 0.25;
 const FEED_PRIOR_MIN_ARTICLES = 3;
 const FEED_PRIOR_MIN_RATIO = 0.2;
 
-export const DEFAULT_DETERMINISTIC_TAG_ATTACH_THRESHOLD = 0.75;
+export const DEFAULT_DETERMINISTIC_TAG_ATTACH_THRESHOLD = 0.65;
 export const DEFAULT_DETERMINISTIC_MAX_SYSTEM_TAGS = 3;
 
 type CanonicalTagCandidate = {
@@ -37,6 +38,8 @@ export type DeterministicTaggingContext = {
   title: string | null;
   canonicalUrl: string | null;
   contentText: string | null;
+  feedTitle?: string | null;
+  siteHostname?: string | null;
 };
 
 export type DeterministicTagCandidate = {
@@ -90,40 +93,49 @@ export const scoreDeterministicTagCandidate = (
   feedPrior?: FeedPrior | null
 ): DeterministicTagDecision => {
   const normalizedName = normalizeWhitespace(candidate.normalizedName).toLowerCase();
-  const titleText = normalizeText(context.title);
+  const keywordPhrases = [...new Set((DETERMINISTIC_TAG_KEYWORDS_BY_SLUG[candidate.slug] ?? []).map((value) => normalizeWhitespace(value).toLowerCase()))];
+  const candidatePhrases = [...new Set([normalizedName, ...keywordPhrases])];
+  const titleText = normalizeText(`${context.title ?? ''} ${context.feedTitle ?? ''}`);
   const contentText = normalizeText(String(context.contentText ?? '').slice(0, 12000));
   const url = context.canonicalUrl ?? '';
-  let normalizedUrlText = ' ';
+  let normalizedUrlText = normalizeText(context.siteHostname ?? '');
   try {
     const parsed = new URL(url);
-    normalizedUrlText = normalizeText(`${parsed.hostname.replace(/^www\./, '')} ${parsed.pathname}`);
+    normalizedUrlText = normalizeText(
+      `${context.siteHostname ?? ''} ${parsed.hostname.replace(/^www\./, '')} ${parsed.pathname}`
+    );
   } catch {
-    normalizedUrlText = normalizeText(url);
+    normalizedUrlText = normalizeText(`${context.siteHostname ?? ''} ${url}`);
   }
 
-  const candidateTokens = tokenize(normalizedName);
+  const candidateTokens = [...new Set(candidatePhrases.flatMap((value) => tokenize(value)))];
   const titleTokens = new Set(tokenize(context.title));
+  const feedTitleTokens = new Set(tokenize(context.feedTitle));
+  const titleLikeTokens = new Set([...titleTokens, ...feedTitleTokens]);
   const contentTokens = new Set(tokenize(String(context.contentText ?? '').slice(0, 12000)));
 
   let score = 0;
   const features: string[] = [];
 
-  if (hasPhrase(titleText, normalizedName)) {
+  if (candidatePhrases.some((phrase) => hasPhrase(titleText, phrase))) {
     score += TITLE_PHRASE_WEIGHT;
     features.push('title_phrase');
   }
 
-  if (hasPhrase(normalizedUrlText, normalizedName) || (candidate.slug && String(url).toLowerCase().includes(candidate.slug))) {
+  if (
+    candidatePhrases.some((phrase) => hasPhrase(normalizedUrlText, phrase)) ||
+    (candidate.slug && String(url).toLowerCase().includes(candidate.slug))
+  ) {
     score += URL_PHRASE_WEIGHT;
     features.push('url_phrase');
   }
 
-  if (hasPhrase(contentText, normalizedName)) {
+  if (candidatePhrases.some((phrase) => hasPhrase(contentText, phrase))) {
     score += CONTENT_PHRASE_WEIGHT;
     features.push('content_phrase');
   }
 
-  const titleOverlap = overlapCount(candidateTokens, titleTokens);
+  const titleOverlap = overlapCount(candidateTokens, titleLikeTokens);
   if (titleOverlap > 0) {
     score += Math.min(TITLE_TOKEN_CAP, titleOverlap * TITLE_TOKEN_WEIGHT);
     features.push(`title_overlap:${titleOverlap}`);
@@ -211,6 +223,8 @@ export const generateDeterministicTagDecisions = async (
     canonicalUrl: string | null;
     contentText: string | null;
     sourceFeedId: string | null;
+    sourceFeedTitle?: string | null;
+    sourceSiteHostname?: string | null;
     attachThreshold?: number;
     maxTags?: number;
   }
@@ -223,7 +237,9 @@ export const generateDeterministicTagDecisions = async (
   const context: DeterministicTaggingContext = {
     title: input.title,
     canonicalUrl: input.canonicalUrl,
-    contentText: input.contentText
+    contentText: input.contentText,
+    feedTitle: input.sourceFeedTitle ?? null,
+    siteHostname: input.sourceSiteHostname ?? null
   };
   const threshold = Number.isFinite(input.attachThreshold)
     ? Math.max(0, Number(input.attachThreshold))

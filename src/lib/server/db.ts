@@ -22,3 +22,8 @@ export async function dbBatch(db: Db, statements: { sql: string; params?: unknow
   const stmts = statements.map((s) => db.prepare(s.sql).bind(...(s.params ?? [])));
   return db.batch(stmts);
 }
+
+export function getAffectedRows(result: unknown) {
+  const rowInfo = result as { meta?: { changes?: number }; changes?: number } | null;
+  return Number(rowInfo?.meta?.changes ?? rowInfo?.changes ?? 0);
+}

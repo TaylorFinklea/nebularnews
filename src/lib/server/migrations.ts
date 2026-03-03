@@ -1,10 +1,11 @@
 import type { Db } from './db';
+import { STARTER_CANONICAL_TAGS } from './tagging/taxonomy';
 
 let schemaReady = false;
 let schemaInitPromise: Promise<void> | null = null;
 
 const MAX_PUBLISHED_FUTURE_MS = 1000 * 60 * 60 * 24;
-export const EXPECTED_SCHEMA_VERSION = 10;
+export const EXPECTED_SCHEMA_VERSION = 11;
 
 const runSafe = async (db: Db, sql: string, params: unknown[] = []) => {
   try {
@@ -525,6 +526,18 @@ const applyV10 = async (db: Db) => {
   );
 };
 
+const applyV11 = async (db: Db) => {
+  const timestamp = Date.now();
+  for (const tag of STARTER_CANONICAL_TAGS) {
+    await runSafe(
+      db,
+      `INSERT OR IGNORE INTO tags (id, name, name_normalized, slug, color, description, created_at, updated_at)
+       VALUES (?, ?, ?, ?, NULL, NULL, ?, ?)`,
+      [tag.id, tag.name, tag.name.toLowerCase(), tag.slug, timestamp, timestamp]
+    );
+  }
+};
+
 export async function ensureSchema(db: Db) {
   if (schemaReady) return;
   if (schemaInitPromise) return schemaInitPromise;
@@ -571,6 +584,10 @@ export async function ensureSchema(db: Db) {
     if (currentVersion < 10) {
       await applyV10(db);
       await markVersionApplied(db, 10, 'v10_news_brief_editions');
+    }
+    if (currentVersion < 11) {
+      await applyV11(db);
+      await markVersionApplied(db, 11, 'v11_starter_tag_taxonomy');
     }
     schemaReady = true;
   })();

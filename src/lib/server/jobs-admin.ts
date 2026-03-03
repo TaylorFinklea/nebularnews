@@ -1,6 +1,5 @@
-import { dbAll, dbGet, dbRun, now, type Db } from './db';
+import { dbAll, dbGet, dbRun, getAffectedRows, now, type Db } from './db';
 import { processJobs } from './jobs';
-import { dayRangeForTimezoneOffset } from './time';
 
 const JOB_FILTERS = ['all', 'pending', 'running', 'failed', 'done', 'cancelled'] as const;
 const MAX_LIMIT = 250;
@@ -48,10 +47,7 @@ const clampLimit = (value: unknown, fallback = 100) => {
   return Math.min(MAX_LIMIT, Math.max(1, Math.floor(parsed)));
 };
 
-const getAffectedRows = (result: unknown) => {
-  const rowInfo = result as { meta?: { changes?: number }; changes?: number } | null;
-  return Number(rowInfo?.meta?.changes ?? rowInfo?.changes ?? 0);
-};
+const DEFAULT_RECENT_MISSING_LOOKBACK_HOURS = 72;
 
 export async function listJobs(db: Db, options?: { status?: JobFilter; limit?: number }) {
   const status = normalizeJobFilter(options?.status);
@@ -141,38 +137,16 @@ export async function runQueueCycles(env: App.Platform['env'], cycles: number, o
   };
 }
 
-export async function queueMissingTodayArticleJobs(
+export async function queueMissingRecentArticleJobs(
   db: Db,
-  options?: { referenceAt?: number; tzOffsetMinutes?: number }
+  options?: { referenceAt?: number; lookbackHours?: number }
 ) {
   const referenceAt = options?.referenceAt ?? now();
-  const range = dayRangeForTimezoneOffset(referenceAt, options?.tzOffsetMinutes ?? 0);
-  const { dayStart, dayEnd } = range;
+  const lookbackHours = Math.max(1, Math.floor(options?.lookbackHours ?? DEFAULT_RECENT_MISSING_LOOKBACK_HOURS));
+  const windowStart = referenceAt - lookbackHours * 60 * 60 * 1000;
+  const windowEnd = referenceAt;
   const runAfter = referenceAt;
   const timestamp = referenceAt;
-
-  const summarizeResult = await dbRun(
-    db,
-    `INSERT INTO jobs (id, type, article_id, status, attempts, priority, run_after, last_error, provider, model, created_at, updated_at)
-     SELECT lower(hex(randomblob(16))), 'summarize', a.id, 'pending', 0, 100, ?, NULL, NULL, NULL, ?, ?
-     FROM articles a
-     WHERE COALESCE(a.published_at, a.fetched_at) >= ?
-       AND COALESCE(a.published_at, a.fetched_at) < ?
-       AND NOT EXISTS (SELECT 1 FROM article_summaries s WHERE s.article_id = a.id)
-     ON CONFLICT(type, article_id) DO UPDATE SET
-       status = excluded.status,
-       attempts = 0,
-       priority = excluded.priority,
-       run_after = excluded.run_after,
-       last_error = NULL,
-       provider = NULL,
-       model = NULL,
-       locked_by = NULL,
-       locked_at = NULL,
-       lease_expires_at = NULL,
-       updated_at = excluded.updated_at`,
-    [runAfter, timestamp, timestamp, dayStart, dayEnd]
-  );
 
   const scoreResult = await dbRun(
     db,
@@ -180,7 +154,7 @@ export async function queueMissingTodayArticleJobs(
      SELECT lower(hex(randomblob(16))), 'score', a.id, 'pending', 0, 100, ?, NULL, NULL, NULL, ?, ?
      FROM articles a
      WHERE COALESCE(a.published_at, a.fetched_at) >= ?
-       AND COALESCE(a.published_at, a.fetched_at) < ?
+       AND COALESCE(a.published_at, a.fetched_at) <= ?
        AND NOT EXISTS (SELECT 1 FROM article_scores s WHERE s.article_id = a.id)
        AND NOT EXISTS (SELECT 1 FROM article_score_overrides o WHERE o.article_id = a.id)
      ON CONFLICT(type, article_id) DO UPDATE SET
@@ -195,7 +169,7 @@ export async function queueMissingTodayArticleJobs(
        locked_at = NULL,
        lease_expires_at = NULL,
        updated_at = excluded.updated_at`,
-    [runAfter, timestamp, timestamp, dayStart, dayEnd]
+    [runAfter, timestamp, timestamp, windowStart, windowEnd]
   );
 
   const autoTagResult = await dbRun(
@@ -204,7 +178,7 @@ export async function queueMissingTodayArticleJobs(
      SELECT lower(hex(randomblob(16))), 'auto_tag', a.id, 'pending', 0, 100, ?, NULL, NULL, NULL, ?, ?
      FROM articles a
      WHERE COALESCE(a.published_at, a.fetched_at) >= ?
-       AND COALESCE(a.published_at, a.fetched_at) < ?
+       AND COALESCE(a.published_at, a.fetched_at) <= ?
        AND NOT EXISTS (
          SELECT 1
          FROM article_tags t
@@ -230,7 +204,7 @@ export async function queueMissingTodayArticleJobs(
        locked_at = NULL,
        lease_expires_at = NULL,
        updated_at = excluded.updated_at`,
-    [runAfter, timestamp, timestamp, dayStart, dayEnd]
+    [runAfter, timestamp, timestamp, windowStart, windowEnd]
   );
 
   const imageBackfillResult = await dbRun(
@@ -239,8 +213,8 @@ export async function queueMissingTodayArticleJobs(
      SELECT lower(hex(randomblob(16))), 'image_backfill', a.id, 'pending', 0, 120, ?, NULL, NULL, NULL, ?, ?
      FROM articles a
      WHERE COALESCE(a.published_at, a.fetched_at) >= ?
-       AND COALESCE(a.published_at, a.fetched_at) < ?
-       AND (a.image_url IS NULL OR a.image_url = '')
+       AND COALESCE(a.published_at, a.fetched_at) <= ?
+       AND COALESCE(a.image_status, '') NOT IN ('found', 'missing')
      ON CONFLICT(type, article_id) DO UPDATE SET
        status = excluded.status,
        attempts = 0,
@@ -253,14 +227,13 @@ export async function queueMissingTodayArticleJobs(
        locked_at = NULL,
        lease_expires_at = NULL,
        updated_at = excluded.updated_at`,
-    [runAfter, timestamp, timestamp, dayStart, dayEnd]
+    [runAfter, timestamp, timestamp, windowStart, windowEnd]
   );
 
   return {
-    dayStart,
-    dayEnd,
-    tzOffsetMinutes: range.tzOffsetMinutes,
-    summarizeQueued: getAffectedRows(summarizeResult),
+    windowStart,
+    windowEnd,
+    lookbackHours,
     scoreQueued: getAffectedRows(scoreResult),
     autoTagQueued: getAffectedRows(autoTagResult),
     imageBackfillQueued: getAffectedRows(imageBackfillResult)

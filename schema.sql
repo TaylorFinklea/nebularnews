@@ -374,6 +374,33 @@ CREATE INDEX IF NOT EXISTS idx_job_runs_job ON job_runs(job_id, started_at);
 CREATE INDEX IF NOT EXISTS idx_auth_attempts_identifier ON auth_attempts(identifier);
 CREATE INDEX IF NOT EXISTS idx_audit_log_created ON audit_log(created_at);
 
+INSERT OR IGNORE INTO tags (id, name, name_normalized, slug, color, description, created_at, updated_at)
+VALUES
+  ('tag-artificial-intelligence', 'Artificial Intelligence', 'artificial intelligence', 'artificial-intelligence', NULL, NULL, unixepoch() * 1000, unixepoch() * 1000),
+  ('tag-generative-ai', 'Generative AI', 'generative ai', 'generative-ai', NULL, NULL, unixepoch() * 1000, unixepoch() * 1000),
+  ('tag-large-language-models', 'Large Language Models', 'large language models', 'large-language-models', NULL, NULL, unixepoch() * 1000, unixepoch() * 1000),
+  ('tag-ai-agents', 'AI Agents', 'ai agents', 'ai-agents', NULL, NULL, unixepoch() * 1000, unixepoch() * 1000),
+  ('tag-ai-safety', 'AI Safety', 'ai safety', 'ai-safety', NULL, NULL, unixepoch() * 1000, unixepoch() * 1000),
+  ('tag-conversational-ai', 'Conversational AI', 'conversational ai', 'conversational-ai', NULL, NULL, unixepoch() * 1000, unixepoch() * 1000),
+  ('tag-deep-learning', 'Deep Learning', 'deep learning', 'deep-learning', NULL, NULL, unixepoch() * 1000, unixepoch() * 1000),
+  ('tag-robotics', 'Robotics', 'robotics', 'robotics', NULL, NULL, unixepoch() * 1000, unixepoch() * 1000),
+  ('tag-cybersecurity', 'Cybersecurity', 'cybersecurity', 'cybersecurity', NULL, NULL, unixepoch() * 1000, unixepoch() * 1000),
+  ('tag-cloud-infrastructure', 'Cloud Infrastructure', 'cloud infrastructure', 'cloud-infrastructure', NULL, NULL, unixepoch() * 1000, unixepoch() * 1000),
+  ('tag-kubernetes', 'Kubernetes', 'kubernetes', 'kubernetes', NULL, NULL, unixepoch() * 1000, unixepoch() * 1000),
+  ('tag-open-source', 'Open Source', 'open source', 'open-source', NULL, NULL, unixepoch() * 1000, unixepoch() * 1000),
+  ('tag-developer-tools', 'Developer Tools', 'developer tools', 'developer-tools', NULL, NULL, unixepoch() * 1000, unixepoch() * 1000),
+  ('tag-software-engineering', 'Software Engineering', 'software engineering', 'software-engineering', NULL, NULL, unixepoch() * 1000, unixepoch() * 1000),
+  ('tag-semiconductors', 'Semiconductors', 'semiconductors', 'semiconductors', NULL, NULL, unixepoch() * 1000, unixepoch() * 1000),
+  ('tag-gpus', 'GPUs', 'gpus', 'gpus', NULL, NULL, unixepoch() * 1000, unixepoch() * 1000),
+  ('tag-data-centers', 'Data Centers', 'data centers', 'data-centers', NULL, NULL, unixepoch() * 1000, unixepoch() * 1000),
+  ('tag-enterprise-software', 'Enterprise Software', 'enterprise software', 'enterprise-software', NULL, NULL, unixepoch() * 1000, unixepoch() * 1000),
+  ('tag-startups', 'Startups', 'startups', 'startups', NULL, NULL, unixepoch() * 1000, unixepoch() * 1000),
+  ('tag-regulation', 'Regulation', 'regulation', 'regulation', NULL, NULL, unixepoch() * 1000, unixepoch() * 1000),
+  ('tag-privacy', 'Privacy', 'privacy', 'privacy', NULL, NULL, unixepoch() * 1000, unixepoch() * 1000),
+  ('tag-iot', 'IoT', 'iot', 'iot', NULL, NULL, unixepoch() * 1000, unixepoch() * 1000),
+  ('tag-consumer-hardware', 'Consumer Hardware', 'consumer hardware', 'consumer-hardware', NULL, NULL, unixepoch() * 1000, unixepoch() * 1000),
+  ('tag-research', 'Research', 'research', 'research', NULL, NULL, unixepoch() * 1000, unixepoch() * 1000);
+
 INSERT OR IGNORE INTO schema_migrations (version, name, applied_at)
 VALUES (2, 'v2_prod_hardening', unixepoch() * 1000);
 
@@ -388,3 +415,15 @@ VALUES (5, 'v5_tagging_v2_suggestions', unixepoch() * 1000);
 
 INSERT OR IGNORE INTO schema_migrations (version, name, applied_at)
 VALUES (7, 'v7_reaction_reason_chips', unixepoch() * 1000);
+
+INSERT OR IGNORE INTO schema_migrations (version, name, applied_at)
+VALUES (8, 'v8_score_status_metadata', unixepoch() * 1000);
+
+INSERT OR IGNORE INTO schema_migrations (version, name, applied_at)
+VALUES (9, 'v9_article_search_backfill', unixepoch() * 1000);
+
+INSERT OR IGNORE INTO schema_migrations (version, name, applied_at)
+VALUES (10, 'v10_news_brief_editions', unixepoch() * 1000);
+
+INSERT OR IGNORE INTO schema_migrations (version, name, applied_at)
+VALUES (11, 'v11_starter_tag_taxonomy', unixepoch() * 1000);

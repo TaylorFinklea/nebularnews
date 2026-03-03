@@ -1,9 +1,10 @@
 import { nanoid } from 'nanoid';
-import { dbAll, dbBatch, dbGet, dbRun, now, type Db } from './db';
+import { dbAll, dbGet, dbRun, getAffectedRows, now, type Db } from './db';
 import { fetchAndParseFeed, type FeedItem } from './feeds';
 import { extractMainContent, computeWordCount } from './text';
 import { normalizeUrl } from './urls';
 import { extractLeadImageUrlFromHtml, normalizeImageUrl } from './images';
+import { enqueueNewArticleArtifactJobs } from './job-queue';
 import {
   clampInitialFeedLookbackDays,
   getInitialFeedLookbackDays,
@@ -234,7 +235,7 @@ async function queueImageBackfillJob(
   );
 }
 
-async function ingestFeedItem(
+export async function ingestFeedItem(
   db: Db,
   feedId: string,
   item: FeedItem
@@ -293,6 +294,7 @@ async function ingestFeedItem(
   );
 
   let articleId = existing?.id ?? nanoid();
+  let insertedArticle = false;
 
   if (!existing) {
     const excerpt = safeText.slice(0, 280);
@@ -325,37 +327,25 @@ async function ingestFeedItem(
       ]
     );
 
-    if (!result.changes) {
+    if (getAffectedRows(result) === 0) {
       const dup = await dbGet<{ id: string }>(db, 'SELECT id FROM articles WHERE canonical_url = ? OR content_hash = ?', [
         url,
         contentHash
       ]);
       if (dup) articleId = dup.id;
     } else {
+      insertedArticle = true;
       await dbRun(
         db,
         'INSERT INTO article_search (article_id, title, content_text, summary_text) VALUES (?, ?, ?, ?)',
         [articleId, item.title, contentText ?? '', '']
       );
 
-      if (shouldAutoQueueArticleJobs(normalizedPublishedAt, fetchedAt)) {
-        const queuedAt = now();
-        const jobs = [
-          {
-            sql: 'INSERT OR IGNORE INTO jobs (id, type, article_id, status, attempts, priority, run_after, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            params: [nanoid(), 'summarize', articleId, 'pending', 0, 100, queuedAt, queuedAt, queuedAt]
-          },
-          {
-            sql: 'INSERT OR IGNORE INTO jobs (id, type, article_id, status, attempts, priority, run_after, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            params: [nanoid(), 'score', articleId, 'pending', 0, 100, queuedAt, queuedAt, queuedAt]
-          }
-        ];
-        jobs.push({
-          sql: 'INSERT OR IGNORE INTO jobs (id, type, article_id, status, attempts, priority, run_after, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          params: [nanoid(), 'auto_tag', articleId, 'pending', 0, 100, queuedAt, queuedAt, queuedAt]
-        });
-        await dbBatch(db, jobs);
-      }
+      await enqueueNewArticleArtifactJobs(db, articleId, {
+        queuedAt: fetchedAt,
+        includeSummaries: false,
+        includeImageBackfill: !imageUrl
+      });
     }
   } else if (imageUrl) {
     await dbRun(
@@ -370,7 +360,7 @@ async function ingestFeedItem(
   }
 
   const knownImageUrl = imageUrl ?? existing?.image_url ?? null;
-  if (!knownImageUrl && url) {
+  if (!knownImageUrl && url && !insertedArticle) {
     await queueImageBackfillJob(db, articleId, {
       imageCheckedAt: existing?.image_checked_at ?? null,
       referenceAt: fetchedAt

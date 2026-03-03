@@ -28,6 +28,14 @@ export type ScoringObservabilitySummary = {
     taggedArticlePercent: number;
     preferenceBackedScorePercent: number;
   };
+  recentJobCoverage: {
+    windowHours: number;
+    recentArticles: number;
+    missingScoreJobs: number;
+    missingAutoTagJobs: number;
+    missingImageBackfillJobs: number;
+    recentTaggedArticles: number;
+  };
 };
 
 export async function getScoringObservabilitySummary(
@@ -113,6 +121,65 @@ export async function getScoringObservabilitySummary(
   const recentScoredArticles = Number(recentCoverage?.recent_scored_articles ?? 0);
   const taggedArticles = Number(recentCoverage?.tagged_articles ?? 0);
   const preferenceBackedArticles = Number(recentCoverage?.preference_backed_articles ?? 0);
+  const RECENT_JOB_WINDOW_HOURS = 24;
+  const recentJobCutoff = referenceAt - RECENT_JOB_WINDOW_HOURS * 60 * 60 * 1000;
+  const recentJobCoverage = await dbGet<{
+    recent_articles: number | null;
+    missing_score_jobs: number | null;
+    missing_auto_tag_jobs: number | null;
+    missing_image_backfill_jobs: number | null;
+    recent_tagged_articles: number | null;
+  }>(
+    db,
+    `WITH recent_articles AS (
+       SELECT id, image_status
+       FROM articles
+       WHERE COALESCE(published_at, fetched_at, 0) >= ?
+     )
+     SELECT
+       COUNT(*) AS recent_articles,
+       COALESCE(SUM(CASE
+         WHEN EXISTS (
+           SELECT 1 FROM article_scores sc WHERE sc.article_id = ra.id
+         ) OR EXISTS (
+           SELECT 1 FROM article_score_overrides so WHERE so.article_id = ra.id
+         ) OR EXISTS (
+           SELECT 1
+           FROM jobs j
+           WHERE j.article_id = ra.id
+             AND j.type = 'score'
+             AND j.status IN ('pending', 'running', 'done')
+         )
+         THEN 0 ELSE 1 END), 0) AS missing_score_jobs,
+       COALESCE(SUM(CASE
+         WHEN EXISTS (
+           SELECT 1
+           FROM article_tags at
+           WHERE at.article_id = ra.id
+             AND at.source IN ('system', 'ai')
+         ) OR EXISTS (
+           SELECT 1
+           FROM jobs j
+           WHERE j.article_id = ra.id
+             AND j.type = 'auto_tag'
+             AND j.status IN ('pending', 'running', 'done')
+         )
+         THEN 0 ELSE 1 END), 0) AS missing_auto_tag_jobs,
+       COALESCE(SUM(CASE
+         WHEN COALESCE(ra.image_status, '') IN ('found', 'missing') OR EXISTS (
+           SELECT 1
+           FROM jobs j
+           WHERE j.article_id = ra.id
+             AND j.type = 'image_backfill'
+             AND j.status IN ('pending', 'running', 'done')
+         )
+         THEN 0 ELSE 1 END), 0) AS missing_image_backfill_jobs,
+       COALESCE(SUM(CASE
+         WHEN EXISTS (SELECT 1 FROM article_tags at WHERE at.article_id = ra.id)
+         THEN 1 ELSE 0 END), 0) AS recent_tagged_articles
+     FROM recent_articles ra`,
+    [recentJobCutoff]
+  );
 
   return {
     scoreStatusCounts: {
@@ -135,6 +202,14 @@ export async function getScoringObservabilitySummary(
       recentScoredArticles,
       taggedArticlePercent: percentage(taggedArticles, recentArticles),
       preferenceBackedScorePercent: percentage(preferenceBackedArticles, recentScoredArticles)
+    },
+    recentJobCoverage: {
+      windowHours: RECENT_JOB_WINDOW_HOURS,
+      recentArticles: Number(recentJobCoverage?.recent_articles ?? 0),
+      missingScoreJobs: Number(recentJobCoverage?.missing_score_jobs ?? 0),
+      missingAutoTagJobs: Number(recentJobCoverage?.missing_auto_tag_jobs ?? 0),
+      missingImageBackfillJobs: Number(recentJobCoverage?.missing_image_backfill_jobs ?? 0),
+      recentTaggedArticles: Number(recentJobCoverage?.recent_tagged_articles ?? 0)
     }
   };
 }

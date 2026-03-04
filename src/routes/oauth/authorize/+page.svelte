@@ -1,8 +1,12 @@
 <script>
+  import { enhance } from '$app/forms';
   import Card from '$lib/components/Card.svelte';
   import Button from '$lib/components/Button.svelte';
+  import { handleOAuthConsentResult } from '$lib/client/oauth-consent';
 
   export let data;
+
+  const handleConsentSubmit = () => async ({ result }) => handleOAuthConsentResult(result);
 </script>
 
 <div class="authorize-shell">
@@ -31,7 +35,7 @@
       Allowing access lets this client search and read article context from Nebular News. No write tools are exposed.
     </p>
 
-    <form method="post" class="actions">
+    <form method="post" class="actions" use:enhance={handleConsentSubmit}>
       <input type="hidden" name="client_id" value={data.authorization.clientId} />
       <input type="hidden" name="redirect_uri" value={data.authorization.redirectUri} />
       <input type="hidden" name="response_type" value={data.authorization.responseType} />

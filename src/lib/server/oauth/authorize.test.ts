@@ -95,6 +95,7 @@ describe('oauth authorize helpers', () => {
 
     const destination = await approveAuthorizeRequest(
       {} as D1Database,
+      env,
       {
         clientId: 'client-123',
         redirectUri: 'https://chat.openai.com/callback',
@@ -112,5 +113,6 @@ describe('oauth authorize helpers', () => {
     expect(grantConsentMock).toHaveBeenCalledWith(expect.anything(), 'client-123', 'admin', 'mcp:read');
     expect(destination).toContain('code=auth-code');
     expect(destination).toContain('state=state-1');
+    expect(destination).toContain('iss=https%3A%2F%2Fmcp.news.finklea.dev');
   });
 });

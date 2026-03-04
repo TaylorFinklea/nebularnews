@@ -39,6 +39,9 @@ const publicMcpHostAllowedPaths = [
   '/oauth/authorize',
   '/oauth/token',
   '/oauth/register',
+  '/authorize',
+  '/token',
+  '/register',
   '/favicon',
   '/robots.txt',
   '/nebularnews-logo'

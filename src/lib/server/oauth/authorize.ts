@@ -1,5 +1,6 @@
 import { error } from '@sveltejs/kit';
 import { getPublicMcpResource } from '$lib/server/mcp/context';
+import { getAuthorizationServerIssuer } from './metadata';
 import {
   OAUTH_SCOPE_READ,
   createAuthorizationCode,
@@ -113,6 +114,7 @@ const appendAuthParams = (redirectUri: string, values: Record<string, string | n
 };
 
 export const buildOAuthErrorRedirect = (
+  env: App.Platform['env'],
   redirectUri: string,
   errorCode: string,
   state: string | null,
@@ -121,13 +123,20 @@ export const buildOAuthErrorRedirect = (
   appendAuthParams(redirectUri, {
     error: errorCode,
     state,
-    error_description: description ?? null
+    error_description: description ?? null,
+    iss: getAuthorizationServerIssuer(env)
   });
 
-export const buildOAuthSuccessRedirect = (redirectUri: string, code: string, state: string | null) =>
+export const buildOAuthSuccessRedirect = (
+  env: App.Platform['env'],
+  redirectUri: string,
+  code: string,
+  state: string | null
+) =>
   appendAuthParams(redirectUri, {
     code,
-    state
+    state,
+    iss: getAuthorizationServerIssuer(env)
   });
 
 export const buildLoginRedirectForAuthorize = (url: URL) => {
@@ -144,6 +153,7 @@ export const shouldAutoApproveConsent = async (
 
 export const approveAuthorizeRequest = async (
   db: D1Database,
+  env: App.Platform['env'],
   request: OAuthAuthorizeRequest,
   userId: string
 ) => {
@@ -157,5 +167,5 @@ export const approveAuthorizeRequest = async (
     codeChallenge: request.codeChallenge,
     codeChallengeMethod: request.codeChallengeMethod
   });
-  return buildOAuthSuccessRedirect(request.redirectUri, code, request.state);
+  return buildOAuthSuccessRedirect(env, request.redirectUri, code, request.state);
 };

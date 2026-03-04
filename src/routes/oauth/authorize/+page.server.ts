@@ -18,7 +18,7 @@ export const load = async ({ url, platform, locals }) => {
   }
 
   if (await shouldAutoApproveConsent(platform.env.DB, request, locals.user.id)) {
-    const destination = await approveAuthorizeRequest(platform.env.DB, request, locals.user.id);
+    const destination = await approveAuthorizeRequest(platform.env.DB, platform.env, request, locals.user.id);
     throw redirect(303, destination);
   }
 
@@ -77,7 +77,13 @@ export const actions = {
       });
       throw redirect(
         303,
-        buildOAuthErrorRedirect(authorizeRequest.redirectUri, 'access_denied', authorizeRequest.state, 'Access denied.')
+        buildOAuthErrorRedirect(
+          platform.env,
+          authorizeRequest.redirectUri,
+          'access_denied',
+          authorizeRequest.state,
+          'Access denied.'
+        )
       );
     }
 
@@ -85,7 +91,7 @@ export const actions = {
       throw error(400, 'OAuth consent decision is invalid.');
     }
 
-    const destination = await approveAuthorizeRequest(platform.env.DB, authorizeRequest, locals.user.id);
+    const destination = await approveAuthorizeRequest(platform.env.DB, platform.env, authorizeRequest, locals.user.id);
     await recordAuditEvent(platform.env.DB, {
       actor: 'admin',
       action: 'oauth.authorize.approved',

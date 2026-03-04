@@ -22,6 +22,8 @@ const readRequiredFormValue = (form: URLSearchParams, key: string) => {
   return value;
 };
 
+const readOptionalFormValue = (form: URLSearchParams, key: string) => form.get(key)?.trim() ?? '';
+
 const validateClientRedirectUri = async (clientId: string, redirectUri: string, db: D1Database) => {
   const client = await getOAuthClient(db, clientId);
   if (!client) {
@@ -46,20 +48,20 @@ export const exchangeAuthorizationCodeGrant = async (
 ) => {
   const code = readRequiredFormValue(form, 'code');
   const clientId = readRequiredFormValue(form, 'client_id');
-  const redirectUri = readRequiredFormValue(form, 'redirect_uri');
   const codeVerifier = readRequiredFormValue(form, 'code_verifier');
-  const resource = readRequiredFormValue(form, 'resource');
+  const authCode = await getAuthorizationCodeByRawCode(db, code);
+  if (!authCode) {
+    throw error(400, 'OAuth authorization code is invalid.');
+  }
+
+  const redirectUri = readOptionalFormValue(form, 'redirect_uri') || authCode.redirect_uri;
+  const resource = readOptionalFormValue(form, 'resource') || authCode.resource;
   const expectedResource = getPublicMcpResource(env);
   if (!expectedResource || resource !== expectedResource) {
     throw error(400, 'OAuth resource is invalid.');
   }
 
   await validateClientRedirectUri(clientId, redirectUri, db);
-
-  const authCode = await getAuthorizationCodeByRawCode(db, code);
-  if (!authCode) {
-    throw error(400, 'OAuth authorization code is invalid.');
-  }
   if (authCode.client_id !== clientId) {
     throw error(400, 'OAuth authorization code client mismatch.');
   }

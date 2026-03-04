@@ -4,7 +4,8 @@ import { isPublicMcpHost, resolveMcpAllowedOrigins } from '$lib/server/mcp/conte
 const OAUTH_CORS_HEADERS = {
   'access-control-allow-methods': 'GET, POST, OPTIONS',
   'access-control-allow-headers': 'authorization, content-type',
-  'cache-control': 'no-store'
+  'cache-control': 'no-store',
+  pragma: 'no-cache'
 } as const;
 
 export const assertPublicMcpRequest = (url: URL, env: App.Platform['env']) => {

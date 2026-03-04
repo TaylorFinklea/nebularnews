@@ -47,13 +47,14 @@ export const exchangeAuthorizationCodeGrant = async (
   form: URLSearchParams
 ) => {
   const code = readRequiredFormValue(form, 'code');
-  const clientId = readRequiredFormValue(form, 'client_id');
+  const requestedClientId = readOptionalFormValue(form, 'client_id');
   const codeVerifier = readRequiredFormValue(form, 'code_verifier');
   const authCode = await getAuthorizationCodeByRawCode(db, code);
   if (!authCode) {
     throw error(400, 'OAuth authorization code is invalid.');
   }
 
+  const clientId = requestedClientId || authCode.client_id;
   const redirectUri = readOptionalFormValue(form, 'redirect_uri') || authCode.redirect_uri;
   const resource = readOptionalFormValue(form, 'resource') || authCode.resource;
   const expectedResource = getPublicMcpResource(env);
@@ -62,7 +63,7 @@ export const exchangeAuthorizationCodeGrant = async (
   }
 
   await validateClientRedirectUri(clientId, redirectUri, db);
-  if (authCode.client_id !== clientId) {
+  if (requestedClientId && authCode.client_id !== requestedClientId) {
     throw error(400, 'OAuth authorization code client mismatch.');
   }
   if (authCode.redirect_uri !== redirectUri) {
@@ -113,8 +114,12 @@ export const exchangeRefreshTokenGrant = async (
   form: URLSearchParams
 ) => {
   const refreshToken = readRequiredFormValue(form, 'refresh_token');
-  const clientId = readRequiredFormValue(form, 'client_id');
-  const resource = form.get('resource')?.trim() || getPublicMcpResource(env);
+  const token = await getRefreshTokenByRawToken(db, refreshToken);
+  if (!token) {
+    throw error(400, 'OAuth refresh token is invalid.');
+  }
+  const clientId = readOptionalFormValue(form, 'client_id') || token.client_id;
+  const resource = readOptionalFormValue(form, 'resource') || token.resource;
   const expectedResource = getPublicMcpResource(env);
   if (!expectedResource || resource !== expectedResource) {
     throw error(400, 'OAuth resource is invalid.');
@@ -125,11 +130,7 @@ export const exchangeRefreshTokenGrant = async (
     throw error(400, 'OAuth client is not registered.');
   }
 
-  const token = await getRefreshTokenByRawToken(db, refreshToken);
-  if (!token) {
-    throw error(400, 'OAuth refresh token is invalid.');
-  }
-  if (token.client_id !== clientId) {
+  if (readOptionalFormValue(form, 'client_id') && token.client_id !== clientId) {
     throw error(400, 'OAuth refresh token client mismatch.');
   }
   if (token.resource !== resource) {

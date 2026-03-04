@@ -8,6 +8,33 @@ const oauthError = (errorCode: string, description: string) => ({
   error_description: description
 });
 
+const objectToForm = (payload: Record<string, unknown>) => {
+  const form = new URLSearchParams();
+  for (const [key, value] of Object.entries(payload)) {
+    if (value === null || value === undefined) continue;
+    form.set(key, String(value));
+  }
+  return form;
+};
+
+const parseTokenRequest = async (request: Request) => {
+  const contentType = request.headers.get('content-type')?.toLowerCase() ?? '';
+  const body = await request.text();
+  if (!body.trim()) {
+    throw new Error('Token request body is invalid.');
+  }
+
+  if (contentType.includes('application/json') || body.trim().startsWith('{')) {
+    const payload = JSON.parse(body);
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      throw new Error('Token request body is invalid.');
+    }
+    return objectToForm(payload as Record<string, unknown>);
+  }
+
+  return new URLSearchParams(body);
+};
+
 export const OPTIONS = async ({ request, platform }) =>
   withPublicOauthCors(new Response(null, { status: 204 }), request, platform.env);
 
@@ -16,7 +43,7 @@ export const POST = async ({ request, platform, locals }) => {
 
   let form: URLSearchParams;
   try {
-    form = new URLSearchParams(await request.text());
+    form = await parseTokenRequest(request);
   } catch {
     return withPublicOauthCors(
       json(oauthError('invalid_request', 'Token request body is invalid.'), { status: 400 }),
@@ -58,6 +85,17 @@ export const POST = async ({ request, platform, locals }) => {
       : err instanceof Error
         ? err.message
         : 'Token request failed.';
+    await recordAuditEvent(platform.env.DB, {
+      actor: locals.user ? 'admin' : 'system',
+      action: 'oauth.token.failed',
+      target: form.get('client_id')?.trim() || null,
+      requestId: locals.requestId,
+      metadata: {
+        grant_type: grantType || null,
+        status,
+        message
+      }
+    });
     return withPublicOauthCors(
       json(oauthError(status === 400 ? 'invalid_grant' : 'server_error', message), { status }),
       request,

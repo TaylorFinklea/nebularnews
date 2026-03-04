@@ -114,6 +114,36 @@ describe('oauth token helpers', () => {
     expect(markAuthorizationCodeUsedMock).toHaveBeenCalledWith(expect.anything(), 'code-row');
   });
 
+  it('accepts a code exchange without client_id when bound on the code', async () => {
+    const { exchangeAuthorizationCodeGrant } = await import('./tokens');
+    getOAuthClientMock.mockResolvedValue({
+      clientId: 'client-123',
+      redirectUris: ['https://chat.openai.com/callback']
+    });
+    getAuthorizationCodeByRawCodeMock.mockResolvedValue({
+      id: 'code-row',
+      client_id: 'client-123',
+      user_id: 'admin',
+      redirect_uri: 'https://chat.openai.com/callback',
+      scope: 'mcp:read',
+      resource: 'https://mcp.news.finklea.dev/mcp',
+      code_challenge: 'challenge',
+      code_challenge_method: 'S256',
+      expires_at: Date.now() + 60_000,
+      used_at: null
+    });
+
+    const form = new URLSearchParams({
+      grant_type: 'authorization_code',
+      code: 'raw-code',
+      code_verifier: 'verifier'
+    });
+    const result = await exchangeAuthorizationCodeGrant({} as D1Database, env, form);
+
+    expect(result.access_token).toBe('access-1');
+    expect(getOAuthClientMock).toHaveBeenCalledWith(expect.anything(), 'client-123');
+  });
+
   it('rejects an invalid PKCE verifier', async () => {
     const { exchangeAuthorizationCodeGrant } = await import('./tokens');
     getAuthorizationCodeByRawCodeMock.mockResolvedValue({
@@ -162,6 +192,35 @@ describe('oauth token helpers', () => {
         refresh_token: 'refresh-token',
         client_id: 'client-123',
         resource: 'https://mcp.news.finklea.dev/mcp'
+      })
+    );
+
+    expect(revokeRefreshTokenMock).toHaveBeenCalledWith(expect.anything(), 'refresh-row');
+    expect(result.access_token).toBe('access-1');
+  });
+
+  it('rotates a refresh token without client_id when bound on the token', async () => {
+    const { exchangeRefreshTokenGrant } = await import('./tokens');
+    getOAuthClientMock.mockResolvedValue({
+      clientId: 'client-123',
+      redirectUris: ['https://chat.openai.com/callback']
+    });
+    getRefreshTokenByRawTokenMock.mockResolvedValue({
+      id: 'refresh-row',
+      client_id: 'client-123',
+      user_id: 'admin',
+      scope: 'mcp:read',
+      resource: 'https://mcp.news.finklea.dev/mcp',
+      expires_at: Date.now() + 60_000,
+      revoked_at: null
+    });
+
+    const result = await exchangeRefreshTokenGrant(
+      {} as D1Database,
+      env,
+      new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: 'refresh-token'
       })
     );
 

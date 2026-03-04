@@ -50,6 +50,7 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       PRODUCTION_BASE_URL: ${{ secrets.PRODUCTION_BASE_URL }}
+      PRODUCTION_MCP_BASE_URL: https://mcp.news.finklea.dev
     steps:
       - name: Validate required production secrets
         run: |
@@ -60,6 +61,10 @@ jobs:
           fi
           if [ -z "${PRODUCTION_BASE_URL}" ]; then
             echo "::error::Missing required secret: PRODUCTION_BASE_URL"
+            missing=1
+          fi
+          if [ -z "${PRODUCTION_MCP_BASE_URL}" ]; then
+            echo "::error::Missing required setting: PRODUCTION_MCP_BASE_URL"
             missing=1
           fi
           if [ "${missing}" -ne 0 ]; then
@@ -89,6 +94,19 @@ jobs:
 
       - name: Smoke check /api/ready
         run: curl -fsSL "$PRODUCTION_BASE_URL/api/ready"
+
+      - name: Smoke check public MCP protected resource metadata
+        run: curl -fsSL "$PRODUCTION_MCP_BASE_URL/.well-known/oauth-protected-resource"
+
+      - name: Smoke check public MCP authorization server metadata
+        run: curl -fsSL "$PRODUCTION_MCP_BASE_URL/.well-known/oauth-authorization-server"
+
+      - name: Smoke check public MCP unauthenticated challenge
+        run: |
+          headers="$(mktemp)"
+          curl -sS -D "$headers" -o /dev/null "$PRODUCTION_MCP_BASE_URL/mcp"
+          grep -qi '^HTTP/.* 401' "$headers"
+          grep -qi '^www-authenticate: Bearer realm="nebular-mcp", resource_metadata="https://mcp.news.finklea.dev/.well-known/oauth-protected-resource"' "$headers"
 
   deploy-staging:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.target == 'staging'

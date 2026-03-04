@@ -89,7 +89,19 @@ export const actions = {
         route,
         stage
       });
-      throw redirect(303, '/');
+      const nextRaw = String(data.get('next') ?? url.searchParams.get('next') ?? '').trim();
+      let nextDestination = '/';
+      if (nextRaw) {
+        try {
+          const parsed = new URL(nextRaw, url);
+          if (parsed.origin === url.origin) {
+            nextDestination = `${parsed.pathname}${parsed.search}${parsed.hash}`;
+          }
+        } catch {
+          nextDestination = '/';
+        }
+      }
+      throw redirect(303, nextDestination);
     } catch (error) {
       if (isRedirect(error)) throw error;
       logError('auth.login.exception', {

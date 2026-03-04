@@ -5,7 +5,7 @@ let schemaReady = false;
 let schemaInitPromise: Promise<void> | null = null;
 
 const MAX_PUBLISHED_FUTURE_MS = 1000 * 60 * 60 * 24;
-export const EXPECTED_SCHEMA_VERSION = 11;
+export const EXPECTED_SCHEMA_VERSION = 12;
 
 const runSafe = async (db: Db, sql: string, params: unknown[] = []) => {
   try {
@@ -538,6 +538,103 @@ const applyV11 = async (db: Db) => {
   }
 };
 
+const applyV12 = async (db: Db) => {
+  await runSafe(
+    db,
+    `CREATE TABLE IF NOT EXISTS oauth_clients (
+      client_id TEXT PRIMARY KEY,
+      client_name TEXT NOT NULL,
+      redirect_uris_json TEXT NOT NULL,
+      grant_types_json TEXT NOT NULL,
+      response_types_json TEXT NOT NULL,
+      token_endpoint_auth_method TEXT NOT NULL,
+      scope TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      last_used_at INTEGER
+    )`
+  );
+  await runSafe(
+    db,
+    `CREATE TABLE IF NOT EXISTS oauth_consents (
+      id TEXT PRIMARY KEY,
+      client_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      scope TEXT NOT NULL,
+      granted_at INTEGER NOT NULL,
+      revoked_at INTEGER,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      UNIQUE(client_id, user_id, scope),
+      FOREIGN KEY(client_id) REFERENCES oauth_clients(client_id) ON DELETE CASCADE
+    )`
+  );
+  await runSafe(
+    db,
+    `CREATE TABLE IF NOT EXISTS oauth_authorization_codes (
+      id TEXT PRIMARY KEY,
+      code_hash TEXT NOT NULL UNIQUE,
+      client_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      redirect_uri TEXT NOT NULL,
+      scope TEXT NOT NULL,
+      resource TEXT NOT NULL,
+      code_challenge TEXT NOT NULL,
+      code_challenge_method TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
+      used_at INTEGER,
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY(client_id) REFERENCES oauth_clients(client_id) ON DELETE CASCADE
+    )`
+  );
+  await runSafe(
+    db,
+    `CREATE TABLE IF NOT EXISTS oauth_access_tokens (
+      id TEXT PRIMARY KEY,
+      token_hash TEXT NOT NULL UNIQUE,
+      client_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      scope TEXT NOT NULL,
+      resource TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
+      revoked_at INTEGER,
+      created_at INTEGER NOT NULL,
+      last_used_at INTEGER,
+      FOREIGN KEY(client_id) REFERENCES oauth_clients(client_id) ON DELETE CASCADE
+    )`
+  );
+  await runSafe(
+    db,
+    `CREATE TABLE IF NOT EXISTS oauth_refresh_tokens (
+      id TEXT PRIMARY KEY,
+      token_hash TEXT NOT NULL UNIQUE,
+      client_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      scope TEXT NOT NULL,
+      resource TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
+      revoked_at INTEGER,
+      rotated_from_id TEXT,
+      created_at INTEGER NOT NULL,
+      last_used_at INTEGER,
+      FOREIGN KEY(client_id) REFERENCES oauth_clients(client_id) ON DELETE CASCADE,
+      FOREIGN KEY(rotated_from_id) REFERENCES oauth_refresh_tokens(id) ON DELETE SET NULL
+    )`
+  );
+  await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_oauth_consents_client ON oauth_consents(client_id)');
+  await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_oauth_consents_revoked ON oauth_consents(revoked_at)');
+  await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_oauth_codes_client ON oauth_authorization_codes(client_id)');
+  await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_oauth_codes_expires ON oauth_authorization_codes(expires_at)');
+  await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_oauth_access_tokens_client ON oauth_access_tokens(client_id)');
+  await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_oauth_access_tokens_expires ON oauth_access_tokens(expires_at)');
+  await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_oauth_access_tokens_revoked ON oauth_access_tokens(revoked_at)');
+  await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_oauth_access_tokens_last_used ON oauth_access_tokens(last_used_at)');
+  await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_oauth_refresh_tokens_client ON oauth_refresh_tokens(client_id)');
+  await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_oauth_refresh_tokens_expires ON oauth_refresh_tokens(expires_at)');
+  await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_oauth_refresh_tokens_revoked ON oauth_refresh_tokens(revoked_at)');
+  await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_oauth_refresh_tokens_last_used ON oauth_refresh_tokens(last_used_at)');
+};
+
 export async function ensureSchema(db: Db) {
   if (schemaReady) return;
   if (schemaInitPromise) return schemaInitPromise;
@@ -588,6 +685,10 @@ export async function ensureSchema(db: Db) {
     if (currentVersion < 11) {
       await applyV11(db);
       await markVersionApplied(db, 11, 'v11_starter_tag_taxonomy');
+    }
+    if (currentVersion < 12) {
+      await applyV12(db);
+      await markVersionApplied(db, 12, 'v12_public_mcp_oauth');
     }
     schemaReady = true;
   })();
@@ -684,6 +785,21 @@ const assertRequiredV10Objects = async (db: Db) => {
   }
 };
 
+const assertRequiredV12Objects = async (db: Db) => {
+  const requiredTables = [
+    'oauth_clients',
+    'oauth_consents',
+    'oauth_authorization_codes',
+    'oauth_access_tokens',
+    'oauth_refresh_tokens'
+  ];
+  for (const tableName of requiredTables) {
+    if (!(await tableExists(db, tableName))) {
+      throw new Error(`Missing required table: ${tableName}`);
+    }
+  }
+};
+
 export async function assertSchemaVersion(db: Db, expected = EXPECTED_SCHEMA_VERSION) {
   const version = await getSchemaVersion(db);
   if (version < expected) {
@@ -711,6 +827,9 @@ export async function assertSchemaVersion(db: Db, expected = EXPECTED_SCHEMA_VER
   }
   if (expected >= 10) {
     await assertRequiredV10Objects(db);
+  }
+  if (expected >= 12) {
+    await assertRequiredV12Objects(db);
   }
   return version;
 }

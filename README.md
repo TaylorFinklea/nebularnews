@@ -36,6 +36,9 @@ MCP_BEARER_TOKEN=replace-with-long-random-token
 MCP_SERVER_NAME=Nebular News MCP
 MCP_SERVER_VERSION=0.1.0
 MCP_ALLOWED_ORIGINS=
+MCP_PUBLIC_ENABLED=false
+MCP_PUBLIC_BASE_URL=https://mcp.news.finklea.dev
+MCP_PUBLIC_ALLOWED_ORIGINS=https://chatgpt.com,https://chat.openai.com,https://platform.openai.com
 ```
 
 Generate a password hash:
@@ -58,9 +61,14 @@ node -e "const { webcrypto } = require('crypto'); console.log(Buffer.from(webcry
 wrangler dev
 ```
 
-## MCP Endpoint (`/mcp`)
+## MCP Endpoints
 
-Nebular News includes a Streamable HTTP MCP endpoint for external clients (including ChatGPT custom app connectors).
+Nebular News exposes two MCP surfaces:
+
+- Internal MCP on the main app host, protected by bearer auth and/or the admin session
+- Public MCP on a dedicated MCP hostname, protected by OAuth for ChatGPT and other remote MCP clients
+
+### Internal MCP (`/mcp`)
 
 - Endpoint: `POST /mcp`
 - Health/discovery: `GET /mcp`
@@ -83,11 +91,26 @@ curl -s http://localhost:8787/mcp \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"1.0.0"}}}'
 ```
 
-### ChatGPT Custom App Notes
+### Public ChatGPT MCP (`https://mcp.news.finklea.dev/mcp`)
 
-- Use your deployed HTTPS URL: `https://<your-domain>/mcp`
-- Configure bearer auth with your `MCP_BEARER_TOKEN`
-- For local testing with ChatGPT, expose localhost through a secure tunnel and use the tunnel URL.
+- Enable with `MCP_PUBLIC_ENABLED=true`
+- Configure:
+  - `MCP_PUBLIC_BASE_URL=https://mcp.news.finklea.dev`
+  - `MCP_PUBLIC_ALLOWED_ORIGINS=https://chatgpt.com,https://chat.openai.com,https://platform.openai.com`
+- Public MCP uses OAuth Dynamic Client Registration plus Authorization Code + PKCE
+- Public MCP exposes only read-only tools:
+  - `search`
+  - `fetch`
+  - `retrieve_context_bundle`
+
+The public MCP host also serves:
+
+- `/.well-known/oauth-protected-resource`
+- `/.well-known/oauth-protected-resource/mcp`
+- `/.well-known/oauth-authorization-server`
+- `/oauth/register`
+- `/oauth/authorize`
+- `/oauth/token`
 
 ## Health, Readiness, Pull Status, and Events
 
@@ -165,6 +188,14 @@ wrangler secret put ADMIN_PASSWORD_HASH --env production
 wrangler secret put SESSION_SECRET --env production
 wrangler secret put ENCRYPTION_KEY --env production
 wrangler secret put MCP_BEARER_TOKEN --env production
+```
+
+Set public MCP vars per environment when you are ready to expose the dedicated MCP hostname:
+
+```
+MCP_PUBLIC_ENABLED=true
+MCP_PUBLIC_BASE_URL=https://mcp.news.finklea.dev
+MCP_PUBLIC_ALLOWED_ORIGINS=https://chatgpt.com,https://chat.openai.com,https://platform.openai.com
 ```
 
 Run deterministic migrations:
@@ -287,16 +318,21 @@ Secret requirements:
 - `ADMIN_PASSWORD_HASH`: format `pbkdf2$iterations$salt$hash`
 - `SESSION_SECRET`: at least 32 characters
 - `ENCRYPTION_KEY`: base64 value that decodes to exactly 32 bytes
-- `MCP_BEARER_TOKEN`: required in production
+- `MCP_BEARER_TOKEN`: required in production for the internal MCP surface
+- `MCP_PUBLIC_ENABLED`: defaults to false; set to true only after the public MCP hostname is provisioned
+- `MCP_PUBLIC_BASE_URL`: required when public MCP is enabled
+- `MCP_PUBLIC_ALLOWED_ORIGINS`: required when public MCP is enabled
 
 ## Cloudflare Access (recommended)
 
-For single-user production, put the app behind Cloudflare Access and keep app password login enabled.
+For single-user production, put the main app behind Cloudflare Access and keep app password login enabled.
 
 Minimum policy:
 - Require identity provider login for app routes.
 - Restrict allowed users/groups to your account.
-- Keep `/mcp` bearer token auth enabled.
+- Keep the internal `/mcp` bearer token auth enabled on the app hostname.
+- Serve the public OAuth MCP surface from a separate hostname such as `mcp.news.finklea.dev`.
+- Do not put Cloudflare Access in front of the public MCP hostname.
 
 ## CI/CD
 

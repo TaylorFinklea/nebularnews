@@ -1,9 +1,16 @@
 import { getSessionFromRequest } from '$lib/server/auth';
+import { getProtectedResourceMetadataUrl } from './context';
+import { authenticatePublicAccessToken } from '$lib/server/oauth/tokens';
 
 export type McpAuthMethod = 'bearer' | 'session';
+export type PublicMcpAuthMethod = 'oauth';
 
 export type McpAuthResult =
   | { ok: true; method: McpAuthMethod }
+  | { ok: false; reason: 'missing_token' | 'invalid_token' | 'unauthorized' };
+
+export type PublicMcpAuthResult =
+  | { ok: true; method: PublicMcpAuthMethod; clientId: string; userId: string; scope: string }
   | { ok: false; reason: 'missing_token' | 'invalid_token' | 'unauthorized' };
 
 export function parseBearerToken(header: string | null): string | null {
@@ -30,7 +37,7 @@ export function isMcpBearerTokenValid(provided: string | null, expected: string 
   return constantTimeEquals(provided, trimmedExpected);
 }
 
-export async function resolveMcpAuth(request: Request, env: App.Platform['env']): Promise<McpAuthResult> {
+export async function resolveInternalMcpAuth(request: Request, env: App.Platform['env']): Promise<McpAuthResult> {
   const expectedToken = env.MCP_BEARER_TOKEN?.trim();
   const providedToken = parseBearerToken(request.headers.get('authorization'));
   const bearerValid = isMcpBearerTokenValid(providedToken, expectedToken);
@@ -44,6 +51,42 @@ export async function resolveMcpAuth(request: Request, env: App.Platform['env'])
     return { ok: false, reason: 'missing_token' };
   }
   return { ok: false, reason: 'unauthorized' };
+}
+
+export async function resolvePublicMcpAuth(
+  request: Request,
+  env: App.Platform['env'],
+  db: D1Database
+): Promise<PublicMcpAuthResult> {
+  const providedToken = parseBearerToken(request.headers.get('authorization'));
+  if (!providedToken) {
+    return { ok: false, reason: 'missing_token' };
+  }
+
+  const token = await authenticatePublicAccessToken(db, env, providedToken);
+  if (!token) {
+    return { ok: false, reason: 'invalid_token' };
+  }
+
+  return {
+    ok: true,
+    method: 'oauth',
+    clientId: token.client_id,
+    userId: token.user_id,
+    scope: token.scope
+  };
+}
+
+export async function resolveMcpAuth(request: Request, env: App.Platform['env']): Promise<McpAuthResult> {
+  return resolveInternalMcpAuth(request, env);
+}
+
+export function buildPublicMcpAuthenticateHeader(env: App.Platform['env']) {
+  const resourceMetadata = getProtectedResourceMetadataUrl(env);
+  if (!resourceMetadata) {
+    return 'Bearer realm="nebular-mcp"';
+  }
+  return `Bearer realm="nebular-mcp", resource_metadata="${resourceMetadata}"`;
 }
 
 export async function readJsonRpcId(request: Request): Promise<string | number | null> {
@@ -95,4 +138,3 @@ export function mcpErrorResponse(
     }
   );
 }
-

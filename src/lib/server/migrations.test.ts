@@ -13,11 +13,13 @@ type MockDb = D1Database & {
 const createMockDb = ({
   version,
   includeReactionReasons,
-  includeNewsBriefEditions
+  includeNewsBriefEditions,
+  includeOAuthTables
 }: {
   version: number;
   includeReactionReasons: boolean;
   includeNewsBriefEditions?: boolean;
+  includeOAuthTables?: boolean;
 }): MockDb => {
   const tables = new Map<string, string[]>();
   const addTable = (name: string, columns: string[]) => tables.set(name, [...columns]);
@@ -72,6 +74,69 @@ const createMockDb = ({
       'generated_at',
       'created_at',
       'updated_at'
+    ]);
+  }
+  if (includeOAuthTables) {
+    addTable('oauth_clients', [
+      'client_id',
+      'client_name',
+      'redirect_uris_json',
+      'grant_types_json',
+      'response_types_json',
+      'token_endpoint_auth_method',
+      'scope',
+      'created_at',
+      'updated_at',
+      'last_used_at'
+    ]);
+    addTable('oauth_consents', [
+      'id',
+      'client_id',
+      'user_id',
+      'scope',
+      'granted_at',
+      'revoked_at',
+      'created_at',
+      'updated_at'
+    ]);
+    addTable('oauth_authorization_codes', [
+      'id',
+      'code_hash',
+      'client_id',
+      'user_id',
+      'redirect_uri',
+      'scope',
+      'resource',
+      'code_challenge',
+      'code_challenge_method',
+      'expires_at',
+      'used_at',
+      'created_at'
+    ]);
+    addTable('oauth_access_tokens', [
+      'id',
+      'token_hash',
+      'client_id',
+      'user_id',
+      'scope',
+      'resource',
+      'expires_at',
+      'revoked_at',
+      'created_at',
+      'last_used_at'
+    ]);
+    addTable('oauth_refresh_tokens', [
+      'id',
+      'token_hash',
+      'client_id',
+      'user_id',
+      'scope',
+      'resource',
+      'expires_at',
+      'revoked_at',
+      'rotated_from_id',
+      'created_at',
+      'last_used_at'
     ]);
   }
 
@@ -188,44 +253,65 @@ describe('migrations', () => {
     vi.resetModules();
   });
 
-  it('applies schema v11 cleanly on a v8 database', async () => {
-    const db = createMockDb({ version: 8, includeReactionReasons: true, includeNewsBriefEditions: false });
+  it('applies schema v12 cleanly on a v8 database', async () => {
+    const db = createMockDb({
+      version: 8,
+      includeReactionReasons: true,
+      includeNewsBriefEditions: false,
+      includeOAuthTables: false
+    });
     const { ensureSchema, getSchemaVersion, assertSchemaVersion } = await import('./migrations');
 
     await ensureSchema(db);
 
-    expect(await getSchemaVersion(db)).toBe(11);
+    expect(await getSchemaVersion(db)).toBe(12);
     expect(db.__state.tables.has('article_search')).toBe(true);
     expect(db.__state.tables.has('news_brief_editions')).toBe(true);
-    await expect(assertSchemaVersion(db)).resolves.toBe(11);
+    expect(db.__state.tables.has('oauth_clients')).toBe(true);
+    await expect(assertSchemaVersion(db)).resolves.toBe(12);
   });
 
-  it('applies schema v11 cleanly on a v7 database', async () => {
-    const db = createMockDb({ version: 7, includeReactionReasons: true, includeNewsBriefEditions: false });
+  it('applies schema v12 cleanly on a v7 database', async () => {
+    const db = createMockDb({
+      version: 7,
+      includeReactionReasons: true,
+      includeNewsBriefEditions: false,
+      includeOAuthTables: false
+    });
     const { ensureSchema, getSchemaVersion, assertSchemaVersion } = await import('./migrations');
 
     await ensureSchema(db);
 
-    expect(await getSchemaVersion(db)).toBe(11);
+    expect(await getSchemaVersion(db)).toBe(12);
     expect(db.__state.tables.get('article_scores')).toEqual(
       expect.arrayContaining(['score_status', 'confidence', 'preference_confidence', 'weighted_average'])
     );
-    await expect(assertSchemaVersion(db)).resolves.toBe(11);
+    await expect(assertSchemaVersion(db)).resolves.toBe(12);
   });
 
   it('keeps reaction-reason migration compatible from v6', async () => {
-    const db = createMockDb({ version: 6, includeReactionReasons: false, includeNewsBriefEditions: false });
+    const db = createMockDb({
+      version: 6,
+      includeReactionReasons: false,
+      includeNewsBriefEditions: false,
+      includeOAuthTables: false
+    });
     const { ensureSchema, getSchemaVersion, assertSchemaVersion } = await import('./migrations');
 
     await ensureSchema(db);
 
-    expect(await getSchemaVersion(db)).toBe(11);
+    expect(await getSchemaVersion(db)).toBe(12);
     expect(db.__state.tables.has('article_reaction_reasons')).toBe(true);
-    await expect(assertSchemaVersion(db)).resolves.toBe(11);
+    await expect(assertSchemaVersion(db)).resolves.toBe(12);
   });
 
   it('seeds the starter tag taxonomy exactly once', async () => {
-    const db = createMockDb({ version: 10, includeReactionReasons: true, includeNewsBriefEditions: true });
+    const db = createMockDb({
+      version: 10,
+      includeReactionReasons: true,
+      includeNewsBriefEditions: true,
+      includeOAuthTables: false
+    });
     const { ensureSchema } = await import('./migrations');
 
     await ensureSchema(db);
@@ -236,15 +322,25 @@ describe('migrations', () => {
     expect(db.__state.tagKeys.has('large language models')).toBe(true);
   });
 
-  it('fails schema assertion when article_reaction_reasons is missing at v11', async () => {
-    const db = createMockDb({ version: 11, includeReactionReasons: false, includeNewsBriefEditions: true });
+  it('fails schema assertion when article_reaction_reasons is missing at v12', async () => {
+    const db = createMockDb({
+      version: 12,
+      includeReactionReasons: false,
+      includeNewsBriefEditions: true,
+      includeOAuthTables: true
+    });
     const { assertSchemaVersion } = await import('./migrations');
 
     await expect(assertSchemaVersion(db)).rejects.toThrow('Missing required table: article_reaction_reasons');
   });
 
-  it('fails schema assertion when score status columns are missing at v11', async () => {
-    const db = createMockDb({ version: 11, includeReactionReasons: true, includeNewsBriefEditions: true });
+  it('fails schema assertion when score status columns are missing at v12', async () => {
+    const db = createMockDb({
+      version: 12,
+      includeReactionReasons: true,
+      includeNewsBriefEditions: true,
+      includeOAuthTables: true
+    });
     const articleScoresColumns = db.__state.tables.get('article_scores') ?? [];
     db.__state.tables.set(
       'article_scores',
@@ -255,18 +351,41 @@ describe('migrations', () => {
     await expect(assertSchemaVersion(db)).rejects.toThrow('Missing required article_scores column: score_status');
   });
 
-  it('fails schema assertion when article_search is missing at v11', async () => {
-    const db = createMockDb({ version: 11, includeReactionReasons: true, includeNewsBriefEditions: true });
+  it('fails schema assertion when article_search is missing at v12', async () => {
+    const db = createMockDb({
+      version: 12,
+      includeReactionReasons: true,
+      includeNewsBriefEditions: true,
+      includeOAuthTables: true
+    });
     db.__state.tables.delete('article_search');
     const { assertSchemaVersion } = await import('./migrations');
 
     await expect(assertSchemaVersion(db)).rejects.toThrow('Missing required table: article_search');
   });
 
-  it('fails schema assertion when news_brief_editions is missing at v11', async () => {
-    const db = createMockDb({ version: 11, includeReactionReasons: true, includeNewsBriefEditions: false });
+  it('fails schema assertion when news_brief_editions is missing at v12', async () => {
+    const db = createMockDb({
+      version: 12,
+      includeReactionReasons: true,
+      includeNewsBriefEditions: false,
+      includeOAuthTables: true
+    });
     const { assertSchemaVersion } = await import('./migrations');
 
     await expect(assertSchemaVersion(db)).rejects.toThrow('Missing required table: news_brief_editions');
+  });
+
+  it('fails schema assertion when oauth_clients is missing at v12', async () => {
+    const db = createMockDb({
+      version: 12,
+      includeReactionReasons: true,
+      includeNewsBriefEditions: true,
+      includeOAuthTables: true
+    });
+    db.__state.tables.delete('oauth_clients');
+    const { assertSchemaVersion } = await import('./migrations');
+
+    await expect(assertSchemaVersion(db)).rejects.toThrow('Missing required table: oauth_clients');
   });
 });

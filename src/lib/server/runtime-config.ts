@@ -5,6 +5,7 @@ type SecretChecks = {
   sessionSecret: boolean;
   encryptionKey: boolean;
   mcpBearerToken: boolean;
+  mcpPublicConfig: boolean;
 };
 
 export type RuntimeConfigReport = {
@@ -24,6 +25,7 @@ let cachedReport: RuntimeConfigReport | null = null;
 let cacheKey = '';
 
 const trim = (value: string | undefined) => value?.trim() ?? '';
+const parseBoolean = (value: string | undefined) => ['1', 'true', 'yes', 'on'].includes(trim(value).toLowerCase());
 
 const detectStage = (env: App.Platform['env']): RuntimeStage => {
   const raw = trim(env.APP_ENV).toLowerCase();
@@ -63,8 +65,36 @@ const buildCacheKey = (env: App.Platform['env']) =>
     adminPasswordHash: trim(env.ADMIN_PASSWORD_HASH),
     sessionSecret: trim(env.SESSION_SECRET),
     encryptionKey: trim(env.ENCRYPTION_KEY),
-    mcpToken: trim(env.MCP_BEARER_TOKEN)
+    mcpToken: trim(env.MCP_BEARER_TOKEN),
+    mcpPublicEnabled: trim(env.MCP_PUBLIC_ENABLED),
+    mcpPublicBaseUrl: trim(env.MCP_PUBLIC_BASE_URL),
+    mcpPublicAllowedOrigins: trim(env.MCP_PUBLIC_ALLOWED_ORIGINS)
   });
+
+const isValidHttpsUrl = (value: string) => {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && Boolean(url.hostname);
+  } catch {
+    return false;
+  }
+};
+
+const isValidHttpsOriginList = (raw: string) => {
+  const values = raw
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  if (values.length === 0) return false;
+  return values.every((entry) => {
+    try {
+      const url = new URL(entry);
+      return url.protocol === 'https:' && url.origin === entry;
+    } catch {
+      return false;
+    }
+  });
+};
 
 export const inspectRuntimeConfig = (env: App.Platform['env']): RuntimeConfigReport => {
   const key = buildCacheKey(env);
@@ -78,12 +108,16 @@ export const inspectRuntimeConfig = (env: App.Platform['env']): RuntimeConfigRep
   const sessionSecret = trim(env.SESSION_SECRET);
   const encryptionKey = trim(env.ENCRYPTION_KEY);
   const mcpBearerToken = trim(env.MCP_BEARER_TOKEN);
+  const mcpPublicEnabled = parseBoolean(env.MCP_PUBLIC_ENABLED);
+  const mcpPublicBaseUrl = trim(env.MCP_PUBLIC_BASE_URL);
+  const mcpPublicAllowedOrigins = trim(env.MCP_PUBLIC_ALLOWED_ORIGINS);
 
   const secretChecks: SecretChecks = {
     adminPasswordHash: false,
     sessionSecret: false,
     encryptionKey: false,
-    mcpBearerToken: false
+    mcpBearerToken: false,
+    mcpPublicConfig: false
   };
 
   if (adminPasswordHash && isValidPbkdf2Hash(adminPasswordHash)) {
@@ -117,6 +151,23 @@ export const inspectRuntimeConfig = (env: App.Platform['env']): RuntimeConfigRep
     errors.push('MCP_BEARER_TOKEN is required in production.');
   } else {
     warnings.push('MCP_BEARER_TOKEN is not configured; MCP endpoint will reject bearer auth.');
+  }
+
+  if (mcpPublicEnabled) {
+    const publicConfigErrors: string[] = [];
+    if (!isValidHttpsUrl(mcpPublicBaseUrl)) {
+      publicConfigErrors.push('MCP_PUBLIC_BASE_URL must be a valid HTTPS URL when MCP public mode is enabled.');
+    }
+    if (!isValidHttpsOriginList(mcpPublicAllowedOrigins)) {
+      publicConfigErrors.push(
+        'MCP_PUBLIC_ALLOWED_ORIGINS must be a comma-separated list of HTTPS origins when MCP public mode is enabled.'
+      );
+    }
+    if (publicConfigErrors.length > 0) {
+      errors.push(...publicConfigErrors);
+    } else {
+      secretChecks.mcpPublicConfig = true;
+    }
   }
 
   cachedReport = {

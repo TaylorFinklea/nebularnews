@@ -44,3 +44,20 @@ Actions:
 3. Invalidate old client credentials.
 4. Review `audit_log` for suspicious writes.
 
+## Compromised public MCP client
+Symptoms:
+- Unknown ChatGPT or MCP client appears in Settings.
+- Public MCP usage continues after a device/client should have been disconnected.
+
+Actions:
+1. Open Settings → MCP apps.
+2. Revoke access for the suspicious client.
+3. Confirm active access and refresh token counts drop to zero.
+4. Review `audit_log` for:
+   - `oauth.client.registered`
+   - `oauth.authorize.approved`
+   - `oauth.client.revoked`
+5. If compromise scope is broader than one client:
+   - disable `MCP_PUBLIC_ENABLED`
+   - redeploy
+   - investigate before re-enabling the public MCP host.

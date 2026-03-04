@@ -11,7 +11,7 @@
 
   export let data;
 
-  /** @typedef {'ai' | 'scoring' | 'reading' | 'profile' | 'keys' | 'intake' | 'operations'} SettingsSectionId */
+  /** @typedef {'ai' | 'scoring' | 'reading' | 'profile' | 'keys' | 'mcp' | 'intake' | 'operations'} SettingsSectionId */
 
   const sectionConfig = [
     {
@@ -42,6 +42,12 @@
       id: 'keys',
       title: 'Provider keys',
       description: 'Manage provider credentials and encryption rotation.',
+      defaultOpen: false
+    },
+    {
+      id: 'mcp',
+      title: 'MCP apps',
+      description: 'Inspect OAuth MCP clients and revoke their access.',
       defaultOpen: false
     },
     {
@@ -99,6 +105,7 @@
     ],
     profile: ['scoreSystemPrompt', 'scoreUserPromptTemplate', 'profileText'],
     keys: [],
+    mcp: [],
     intake: [
       'initialFeedLookbackDays',
       'maxFeedsPerPoll',
@@ -223,7 +230,10 @@
   let orphanCleanupLoading = false;
   let orphanCleanupHasMore = orphanCount > 0;
   let orphanCleanupLastRun = null;
+  let mcpClients = data.mcpClients ?? [];
+  let revokingMcpClientId = '';
   let sectionOpen = { ...defaultSectionState };
+  $: mcpClients = data.mcpClients ?? [];
   $: autoReadDelaySeconds = (Number(autoReadDelayMs) / 1000).toFixed(2);
 
   let openaiKey = '';
@@ -757,6 +767,28 @@
     }
   };
 
+  const revokeMcpClient = async (clientId) => {
+    if (!clientId || revokingMcpClientId) return;
+    revokingMcpClientId = clientId;
+    try {
+      const res = await apiFetch(`/api/settings/mcp-clients/${encodeURIComponent(clientId)}/revoke`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      if (!res.ok) {
+        showToast(await readApiError(res, 'Failed to revoke MCP client.'), 'error');
+        return;
+      }
+      showToast('MCP client access revoked.', 'success');
+      await invalidateAll();
+    } catch {
+      showToast('Failed to revoke MCP client.', 'error');
+    } finally {
+      revokingMcpClientId = '';
+    }
+  };
+
   const readApiError = async (res, fallback) => {
     const payload = await res.json().catch(() => ({}));
     return payload?.error?.message ?? payload?.error ?? fallback;
@@ -1043,6 +1075,8 @@
         return `OpenAI ${keyStatus.openai ? 'connected' : 'missing'} · Anthropic ${
           keyStatus.anthropic ? 'connected' : 'missing'
         }`;
+      case 'mcp':
+        return `${mcpClients.length} registered client${mcpClients.length === 1 ? '' : 's'}`;
       case 'intake':
         return `${initialFeedLookbackDays}-day backfill · ${maxFeedsPerPoll} feeds/${maxItemsPerPoll} items · ${retentionMode}`;
       case 'operations':
@@ -1776,10 +1810,81 @@
     </SettingsSectionCard>
 
     <SettingsSectionCard
+      id="mcp"
+      title="MCP apps"
+      summary={sectionSummary('mcp')}
+      description={sectionConfig[5].description}
+      open={sectionOpen.mcp}
+      dirty={dirtySections.mcp}
+      onToggle={() => toggleSection('mcp')}
+    >
+      <div class="section-block">
+        <div class="subsection">
+          <div class="subsection-header">
+            <h3>Connected MCP clients</h3>
+            <p class="muted">Registered OAuth clients for the public ChatGPT-facing MCP endpoint.</p>
+          </div>
+
+          {#if mcpClients.length === 0}
+            <div class="soft-panel">
+              <p class="muted">No public MCP clients have registered yet.</p>
+            </div>
+          {:else}
+            <div class="mcp-client-list">
+              {#each mcpClients as client}
+                <div class="soft-panel mcp-client-card">
+                  <div class="split-header">
+                    <div>
+                      <h3>{client.clientName}</h3>
+                      <p class="muted small">
+                        <code>{client.clientId}</code>
+                      </p>
+                    </div>
+                    <Button
+                      variant="danger"
+                      size="inline"
+                      on:click={() => revokeMcpClient(client.clientId)}
+                      disabled={revokingMcpClientId === client.clientId}
+                    >
+                      <IconTrash size={14} stroke={1.9} />
+                      <span>{revokingMcpClientId === client.clientId ? 'Revoking...' : 'Revoke access'}</span>
+                    </Button>
+                  </div>
+
+                  <div class="mcp-client-metrics">
+                    <span>{client.activeAccessTokens} access token{client.activeAccessTokens === 1 ? '' : 's'}</span>
+                    <span>{client.activeRefreshTokens} refresh token{client.activeRefreshTokens === 1 ? '' : 's'}</span>
+                    <span>{client.activeConsentCount} consent{client.activeConsentCount === 1 ? '' : 's'}</span>
+                    <span>{client.lastUsedAt ? `Last used ${new Date(client.lastUsedAt).toLocaleString()}` : 'Never used'}</span>
+                  </div>
+
+                  <div class="mcp-client-meta">
+                    <div>
+                      <div class="muted small">Redirect URIs</div>
+                      <ul>
+                        {#each client.redirectUris as redirectUri}
+                          <li><code>{redirectUri}</code></li>
+                        {/each}
+                      </ul>
+                    </div>
+                    <div>
+                      <div class="muted small">Scope</div>
+                      <p><code>{client.scope ?? 'mcp:read'}</code></p>
+                    </div>
+                  </div>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </div>
+      </div>
+    </SettingsSectionCard>
+
+    <SettingsSectionCard
       id="intake"
       title="Intake & retention"
       summary={sectionSummary('intake')}
-      description={sectionConfig[5].description}
+      description={sectionConfig[6].description}
       open={sectionOpen.intake}
       dirty={dirtySections.intake}
       onToggle={() => toggleSection('intake')}
@@ -1885,7 +1990,7 @@
       id="operations"
       title="Operations"
       summary={sectionSummary('operations')}
-      description={sectionConfig[6].description}
+      description={sectionConfig[7].description}
       open={sectionOpen.operations}
       dirty={dirtySections.operations}
       onToggle={() => toggleSection('operations')}
@@ -2621,6 +2726,40 @@
     align-items: center;
   }
 
+  .mcp-client-list {
+    display: grid;
+    gap: var(--space-4);
+  }
+
+  .mcp-client-card {
+    display: grid;
+    gap: var(--space-3);
+  }
+
+  .mcp-client-metrics {
+    display: flex;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+    font-size: var(--text-sm);
+    color: var(--muted-text);
+  }
+
+  .mcp-client-meta {
+    display: grid;
+    gap: var(--space-4);
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  }
+
+  .mcp-client-meta ul {
+    margin: var(--space-2) 0 0;
+    padding-left: 1rem;
+  }
+
+  .mcp-client-meta li {
+    margin-bottom: 0.3rem;
+    word-break: break-word;
+  }
+
   .muted {
     color: var(--muted-text);
     margin: 0;
@@ -2658,7 +2797,8 @@
     .two-col,
     .field-grid,
     .field-grid-compact,
-    .preset-grid {
+    .preset-grid,
+    .mcp-client-meta {
       grid-template-columns: 1fr;
     }
 

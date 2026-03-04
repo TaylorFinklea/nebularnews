@@ -8,6 +8,9 @@ const createEnv = (overrides: Partial<App.Platform['env']> = {}): App.Platform['
     SESSION_SECRET: 'test-session-secret-with-minimum-length-123456',
     ENCRYPTION_KEY: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
     MCP_BEARER_TOKEN: 'token',
+    MCP_PUBLIC_ENABLED: 'false',
+    MCP_PUBLIC_BASE_URL: '',
+    MCP_PUBLIC_ALLOWED_ORIGINS: '',
     APP_ENV: 'production',
     ...overrides
   }) as App.Platform['env'];
@@ -37,5 +40,31 @@ describe('inspectRuntimeConfig', () => {
     );
     expect(report.ok).toBe(false);
     expect(report.errors.join(' ')).toContain('valid base64');
+  });
+
+  it('requires HTTPS public MCP config when public mode is enabled', () => {
+    const report = inspectRuntimeConfig(
+      createEnv({
+        MCP_PUBLIC_ENABLED: 'true',
+        MCP_PUBLIC_BASE_URL: 'http://mcp.news.finklea.dev',
+        MCP_PUBLIC_ALLOWED_ORIGINS: 'https://chatgpt.com'
+      })
+    );
+
+    expect(report.ok).toBe(false);
+    expect(report.errors.join(' ')).toContain('MCP_PUBLIC_BASE_URL');
+  });
+
+  it('accepts valid public MCP config when enabled', () => {
+    const report = inspectRuntimeConfig(
+      createEnv({
+        MCP_PUBLIC_ENABLED: 'true',
+        MCP_PUBLIC_BASE_URL: 'https://mcp.news.finklea.dev',
+        MCP_PUBLIC_ALLOWED_ORIGINS: 'https://chatgpt.com,https://chat.openai.com'
+      })
+    );
+
+    expect(report.ok).toBe(true);
+    expect(report.secretChecks.mcpPublicConfig).toBe(true);
   });
 });

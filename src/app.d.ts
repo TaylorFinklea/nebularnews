@@ -25,6 +25,9 @@ declare namespace App {
       MCP_SERVER_NAME?: string;
       MCP_SERVER_VERSION?: string;
       MCP_ALLOWED_ORIGINS?: string;
+      MCP_PUBLIC_ENABLED?: string;
+      MCP_PUBLIC_BASE_URL?: string;
+      MCP_PUBLIC_ALLOWED_ORIGINS?: string;
       APP_ENV?: string;
       EVENTS_V2_ENABLED?: string;
       OPTIMISTIC_MUTATIONS_ENABLED?: string;

@@ -5,6 +5,7 @@ import { createRequestId } from '$lib/server/api';
 import { assertRuntimeConfig } from '$lib/server/runtime-config';
 import { logError, logWarn, summarizeError } from '$lib/server/log';
 import { runScheduledTasks } from '$lib/server/scheduler';
+import { getConfiguredPublicMcpHost, isPublicMcpEnabled, isPublicMcpHost } from '$lib/server/mcp/context';
 import {
   applySecurityHeaders,
   buildCsrfCookie,
@@ -21,7 +22,26 @@ const publicPaths = [
   '/api/ready',
   '/favicon',
   '/robots.txt',
-  '/mcp'
+  '/mcp',
+  '/oauth',
+  '/.well-known/oauth-protected-resource',
+  '/.well-known/oauth-authorization-server'
+];
+
+const publicMcpHostAllowedPaths = [
+  '/mcp',
+  '/login',
+  '/api/auth/login',
+  '/api/auth/logout',
+  '/api/health',
+  '/.well-known/oauth-protected-resource',
+  '/.well-known/oauth-authorization-server',
+  '/oauth/authorize',
+  '/oauth/token',
+  '/oauth/register',
+  '/favicon',
+  '/robots.txt',
+  '/nebularnews-logo'
 ];
 let runtimeWarningLogged = false;
 const SCHEMA_ASSERT_CACHE_MS = 1000 * 60 * 5;
@@ -51,11 +71,25 @@ export const handle: Handle = async ({ event, resolve }) => {
     });
     runtimeWarningLogged = true;
   }
+  const isPublicMcpRequest = isPublicMcpHost(event.url, event.platform.env);
+  const configuredPublicMcpHost = getConfiguredPublicMcpHost(event.platform.env);
+  if (configuredPublicMcpHost && event.url.host === configuredPublicMcpHost) {
+    if (!isPublicMcpEnabled(event.platform.env)) {
+      return applySecurityHeaders(new Response('Not found', { status: 404 }));
+    }
+    const allowedOnPublicHost =
+      pathname.startsWith('/_app') ||
+      publicMcpHostAllowedPaths.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+    if (!allowedOnPublicHost) {
+      return applySecurityHeaders(new Response('Not found', { status: 404 }));
+    }
+  }
   const isDevScheduledHandlerPath =
     pathname === '/cdn-cgi/handler/scheduled' && runtimeReport.stage === 'development';
   const isPublic =
     publicPaths.some((path) => pathname.startsWith(path)) ||
     isDevScheduledHandlerPath ||
+    isPublicMcpRequest ||
     pathname.startsWith('/_app');
   const secureCookie = event.url.protocol === 'https:';
 

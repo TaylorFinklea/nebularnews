@@ -103,6 +103,7 @@ import {
   DEFAULT_SCORING_LEARNING_RATE
 } from '$lib/server/settings';
 import { ensurePreferenceProfile } from '$lib/server/profile';
+import { listOAuthClientSummaries } from '$lib/server/oauth/storage';
 import {
   countOrphanArticles,
   listOrphanArticleIds,
@@ -183,11 +184,12 @@ export const load = async ({ platform }) => {
   const profile = await ensurePreferenceProfile(db);
   const signalWeights = await loadSignalWeights(db);
   const scoringObservability = await getScoringObservabilitySummary(db);
-  const [orphanCount, orphanSampleIds, newsBriefLatestEdition, newsBriefTimezoneExplicit] = await Promise.all([
+  const [orphanCount, orphanSampleIds, newsBriefLatestEdition, newsBriefTimezoneExplicit, mcpClients] = await Promise.all([
     countOrphanArticles(db),
     listOrphanArticleIds(db, ORPHAN_PREVIEW_SAMPLE_SIZE),
     getLatestNewsBriefEditionSummary(db),
-    getSetting(db, 'news_brief_timezone')
+    getSetting(db, 'news_brief_timezone'),
+    listOAuthClientSummaries(db)
   ]);
 
   const scorePromptDefaults = {
@@ -316,6 +318,7 @@ export const load = async ({ platform }) => {
       timezoneExplicit: Boolean(newsBriefTimezoneExplicit)
     },
     newsBriefLatestEdition,
+    mcpClients,
     orphanCleanup: {
       orphanCount,
       sampleArticleIds: orphanSampleIds,

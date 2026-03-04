@@ -52,6 +52,8 @@ type Logger = {
   error: (message: string) => void;
 };
 
+type ToolProfile = 'internal' | 'public';
+
 const defaultLogger: Logger = {
   info: (message) => console.info(message),
   error: (message) => console.error(message)
@@ -77,18 +79,7 @@ const withMetrics = <Args>(
   };
 };
 
-export function createNebularMcpServer(input: {
-  name: string;
-  version: string;
-  handlers: McpHandlers;
-  logger?: Logger;
-}) {
-  const logger = input.logger ?? defaultLogger;
-  const server = new McpServer({
-    name: input.name,
-    version: input.version
-  });
-
+const registerSearchTool = (server: McpServer, handlers: McpHandlers, logger: Logger) =>
   server.registerTool(
     'search',
     {
@@ -100,9 +91,10 @@ export function createNebularMcpServer(input: {
         offset: z.number().int().min(0).max(10000).default(0)
       }
     },
-    withMetrics(input.handlers, 'search', logger, async (args) => input.handlers.search(args))
+    withMetrics(handlers, 'search', logger, async (args) => handlers.search(args))
   );
 
+const registerFetchTool = (server: McpServer, handlers: McpHandlers, logger: Logger) =>
   server.registerTool(
     'fetch',
     {
@@ -115,9 +107,25 @@ export function createNebularMcpServer(input: {
         max_chars: z.number().int().min(1).max(30000).default(12000)
       }
     },
-    withMetrics(input.handlers, 'fetch', logger, async (args) => input.handlers.fetch(args))
+    withMetrics(handlers, 'fetch', logger, async (args) => handlers.fetch(args))
   );
 
+const registerRetrieveContextBundleTool = (server: McpServer, handlers: McpHandlers, logger: Logger) =>
+  server.registerTool(
+    'retrieve_context_bundle',
+    {
+      title: 'Retrieve Context Bundle',
+      description: 'Return top-ranked article snippets to ground external model reasoning.',
+      inputSchema: {
+        question: z.string(),
+        max_sources: z.number().int().min(1).max(10).default(5),
+        per_source_chars: z.number().int().min(300).max(5000).default(2400)
+      }
+    },
+    withMetrics(handlers, 'retrieve_context_bundle', logger, async (args) => handlers.retrieveContextBundle(args))
+  );
+
+const registerInternalOnlyTools = (server: McpServer, handlers: McpHandlers, logger: Logger) => {
   server.registerTool(
     'search_articles',
     {
@@ -134,7 +142,7 @@ export function createNebularMcpServer(input: {
         tags_all: z.array(z.string()).default([])
       }
     },
-    withMetrics(input.handlers, 'search_articles', logger, async (args) => input.handlers.searchArticles(args))
+    withMetrics(handlers, 'search_articles', logger, async (args) => handlers.searchArticles(args))
   );
 
   server.registerTool(
@@ -148,23 +156,7 @@ export function createNebularMcpServer(input: {
         max_chars: z.number().int().min(1).max(30000).default(12000)
       }
     },
-    withMetrics(input.handlers, 'get_article', logger, async (args) => input.handlers.getArticle(args))
-  );
-
-  server.registerTool(
-    'retrieve_context_bundle',
-    {
-      title: 'Retrieve Context Bundle',
-      description: 'Return top-ranked article snippets to ground external model reasoning.',
-      inputSchema: {
-        question: z.string(),
-        max_sources: z.number().int().min(1).max(10).default(5),
-        per_source_chars: z.number().int().min(300).max(5000).default(2400)
-      }
-    },
-    withMetrics(input.handlers, 'retrieve_context_bundle', logger, async (args) =>
-      input.handlers.retrieveContextBundle(args)
-    )
+    withMetrics(handlers, 'get_article', logger, async (args) => handlers.getArticle(args))
   );
 
   server.registerTool(
@@ -177,7 +169,7 @@ export function createNebularMcpServer(input: {
         is_read: z.boolean()
       }
     },
-    withMetrics(input.handlers, 'set_article_read', logger, async (args) => input.handlers.setArticleRead(args))
+    withMetrics(handlers, 'set_article_read', logger, async (args) => handlers.setArticleRead(args))
   );
 
   server.registerTool(
@@ -190,7 +182,7 @@ export function createNebularMcpServer(input: {
         reaction: z.enum(['up', 'down'])
       }
     },
-    withMetrics(input.handlers, 'set_article_reaction', logger, async (args) => input.handlers.setArticleReaction(args))
+    withMetrics(handlers, 'set_article_reaction', logger, async (args) => handlers.setArticleReaction(args))
   );
 
   server.registerTool(
@@ -204,7 +196,7 @@ export function createNebularMcpServer(input: {
         comment: z.string().optional()
       }
     },
-    withMetrics(input.handlers, 'set_article_fit_score', logger, async (args) => input.handlers.setArticleFitScore(args))
+    withMetrics(handlers, 'set_article_fit_score', logger, async (args) => handlers.setArticleFitScore(args))
   );
 
   server.registerTool(
@@ -216,7 +208,7 @@ export function createNebularMcpServer(input: {
         cycles: z.number().int().min(1).max(3).default(1)
       }
     },
-    withMetrics(input.handlers, 'refresh_feeds', logger, async (args) => input.handlers.refreshFeeds(args))
+    withMetrics(handlers, 'refresh_feeds', logger, async (args) => handlers.refreshFeeds(args))
   );
 
   server.registerTool(
@@ -228,8 +220,31 @@ export function createNebularMcpServer(input: {
         run_id: z.string().optional()
       }
     },
-    withMetrics(input.handlers, 'get_pull_status', logger, async (args) => input.handlers.getPullStatus(args))
+    withMetrics(handlers, 'get_pull_status', logger, async (args) => handlers.getPullStatus(args))
   );
+};
+
+const getToolCount = (profile: ToolProfile) => (profile === 'public' ? 3 : 10);
+
+function createNebularMcpServerForProfile(input: {
+  name: string;
+  version: string;
+  handlers: McpHandlers;
+  profile: ToolProfile;
+  logger?: Logger;
+}) {
+  const logger = input.logger ?? defaultLogger;
+  const server = new McpServer({
+    name: input.name,
+    version: input.version
+  });
+
+  registerSearchTool(server, input.handlers, logger);
+  registerFetchTool(server, input.handlers, logger);
+  registerRetrieveContextBundleTool(server, input.handlers, logger);
+  if (input.profile === 'internal') {
+    registerInternalOnlyTools(server, input.handlers, logger);
+  }
 
   server.registerResource(
     'server-info',
@@ -252,7 +267,7 @@ export function createNebularMcpServer(input: {
           'nebular://articles/top-rated'
         ],
         resource_templates: ['nebular://article/{article_id}'],
-        tool_count: 10
+        tool_count: getToolCount(input.profile)
       })
   );
 
@@ -366,4 +381,37 @@ export function createNebularMcpServer(input: {
   );
 
   return server;
+}
+
+export function createInternalNebularMcpServer(input: {
+  name: string;
+  version: string;
+  handlers: McpHandlers;
+  logger?: Logger;
+}) {
+  return createNebularMcpServerForProfile({
+    ...input,
+    profile: 'internal'
+  });
+}
+
+export function createPublicNebularMcpServer(input: {
+  name: string;
+  version: string;
+  handlers: McpHandlers;
+  logger?: Logger;
+}) {
+  return createNebularMcpServerForProfile({
+    ...input,
+    profile: 'public'
+  });
+}
+
+export function createNebularMcpServer(input: {
+  name: string;
+  version: string;
+  handlers: McpHandlers;
+  logger?: Logger;
+}) {
+  return createInternalNebularMcpServer(input);
 }

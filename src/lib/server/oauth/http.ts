@@ -1,11 +1,11 @@
 import { error } from '@sveltejs/kit';
-import { isPublicMcpHost, resolveMcpAllowedOrigins } from '$lib/server/mcp/context';
+import { isPublicMcpHost } from '$lib/server/mcp/context';
 
 const OAUTH_CORS_HEADERS = {
   'access-control-allow-methods': 'GET, POST, OPTIONS',
-  'access-control-allow-headers': 'authorization, content-type',
   'cache-control': 'no-store',
-  pragma: 'no-cache'
+  pragma: 'no-cache',
+  'access-control-max-age': '600'
 } as const;
 
 export const assertPublicMcpRequest = (url: URL, env: App.Platform['env']) => {
@@ -14,39 +14,20 @@ export const assertPublicMcpRequest = (url: URL, env: App.Platform['env']) => {
   }
 };
 
-const resolvePublicCorsOrigin = (request: Request, env: App.Platform['env']) => {
-  const allowedOrigins = resolveMcpAllowedOrigins(env, 'public');
-  if (allowedOrigins.length === 0) return '*';
-  const origin = request.headers.get('origin')?.trim() ?? '';
-  if (!origin) return null;
-  if (allowedOrigins.includes(origin)) return origin;
-  return '__BLOCKED__';
-};
+const resolvePublicCorsOrigin = (request: Request) => request.headers.get('origin')?.trim() || '*';
 
-export const withPublicOauthCors = (response: Response, request: Request, env: App.Platform['env']) => {
-  const resolvedOrigin = resolvePublicCorsOrigin(request, env);
-  if (resolvedOrigin === '__BLOCKED__') {
-    return new Response(
-      JSON.stringify({
-        error: 'Origin not allowed'
-      }),
-      {
-        status: 403,
-        headers: {
-          'content-type': 'application/json; charset=utf-8'
-        }
-      }
-    );
-  }
+const resolveAllowedHeaders = (request: Request) =>
+  request.headers.get('access-control-request-headers')?.trim() ||
+  'authorization, content-type, accept, cache-control, pragma, x-requested-with';
 
+export const withPublicOauthCors = (response: Response, request: Request, _env: App.Platform['env']) => {
   const headers = new Headers(response.headers);
   for (const [key, value] of Object.entries(OAUTH_CORS_HEADERS)) {
     headers.set(key, value);
   }
-  if (resolvedOrigin) {
-    headers.set('access-control-allow-origin', resolvedOrigin);
-    headers.set('vary', 'origin');
-  }
+  headers.set('access-control-allow-origin', resolvePublicCorsOrigin(request));
+  headers.set('access-control-allow-headers', resolveAllowedHeaders(request));
+  headers.set('vary', 'origin, access-control-request-headers');
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,

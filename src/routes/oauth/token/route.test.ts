@@ -13,7 +13,7 @@ vi.mock('$lib/server/audit', () => ({
   recordAuditEvent: recordAuditEventMock
 }));
 
-import { POST } from './+server';
+import { OPTIONS, POST } from './+server';
 
 const createPlatform = (): App.Platform =>
   ({
@@ -117,5 +117,24 @@ describe('/oauth/token POST', () => {
         target: 'client-123'
       })
     );
+  });
+
+  it('answers preflight requests with permissive OAuth CORS headers', async () => {
+    const response = await OPTIONS(
+      createEvent(
+        new Request('https://mcp.news.finklea.dev/oauth/token', {
+          method: 'OPTIONS',
+          headers: {
+            origin: 'https://chatgpt.com',
+            'access-control-request-headers': 'content-type, x-requested-with'
+          }
+        })
+      )
+    );
+
+    expect(response.status).toBe(204);
+    expect(response.headers.get('access-control-allow-origin')).toBe('https://chatgpt.com');
+    expect(response.headers.get('access-control-allow-headers')).toBe('content-type, x-requested-with');
+    expect(response.headers.get('access-control-allow-methods')).toContain('POST');
   });
 });

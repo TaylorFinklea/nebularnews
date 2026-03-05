@@ -22,7 +22,7 @@
   const dispatch = createEventDispatcher();
   $: isLearningScore = score?.status === 'insufficient_signal';
   let scoreDetailsOpen = false;
-  $: hasScoreDetails = Boolean(score?.reason_text) || Boolean(score?.evidence?.length);
+  $: hasScoreDetails = Boolean(score?.label) || Boolean(score?.reason_text) || Boolean(score?.evidence?.length);
 </script>
 
 <div class="article-header">
@@ -96,7 +96,6 @@
       <div class="score-val">
         <IconStars size={18} stroke={1.9} />
         <span>{score.score} / 5</span>
-        <strong>· {score.label}</strong>
       </div>
       {#if hasScoreDetails}
         <button
@@ -110,6 +109,9 @@
         </button>
       {/if}
       {#if scoreDetailsOpen}
+        {#if score.label}
+          <p class="score-method">{score.label}</p>
+        {/if}
         {#if score.reason_text}
           <p class="score-reason">{score.reason_text}</p>
         {/if}
@@ -235,6 +237,13 @@
     margin: 0;
     font-size: var(--text-sm);
     color: var(--text-color);
+  }
+
+  .score-method {
+    margin: 0;
+    font-size: var(--text-sm);
+    color: var(--primary);
+    font-weight: 600;
   }
 
   .score-details-toggle {

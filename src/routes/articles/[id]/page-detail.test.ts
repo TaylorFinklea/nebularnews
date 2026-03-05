@@ -172,12 +172,16 @@ describe('Article detail reaction reason flow', () => {
     );
 
     expect(screen.getByText('3 / 5')).toBeTruthy();
-    expect(screen.queryByText('Weighted average: 0.562')).toBeNull();
-    expect(screen.queryByText('topic_affinity: 0.550 (raw: 0.10)')).toBeNull();
+    const leadScoreBanner = document.querySelector('.score-banner');
+    expect(leadScoreBanner).toBeTruthy();
+    expect(within(leadScoreBanner as HTMLElement).queryByText('Algorithmic (83% confidence)')).toBeNull();
+    expect(within(leadScoreBanner as HTMLElement).queryByText('Weighted average: 0.562')).toBeNull();
+    expect(within(leadScoreBanner as HTMLElement).queryByText('topic_affinity: 0.550 (raw: 0.10)')).toBeNull();
 
     await fireEvent.click(screen.getByRole('button', { name: 'Why this score' }));
 
-    expect(screen.getByText('Weighted average: 0.562')).toBeTruthy();
-    expect(screen.getByText('topic_affinity: 0.550 (raw: 0.10)')).toBeTruthy();
+    expect(within(leadScoreBanner as HTMLElement).getByText('Algorithmic (83% confidence)')).toBeTruthy();
+    expect(within(leadScoreBanner as HTMLElement).getByText('Weighted average: 0.562')).toBeTruthy();
+    expect(within(leadScoreBanner as HTMLElement).getByText('topic_affinity: 0.550 (raw: 0.10)')).toBeTruthy();
   });
 });

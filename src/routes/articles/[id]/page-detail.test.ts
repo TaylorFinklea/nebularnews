@@ -154,4 +154,30 @@ describe('Article detail reaction reason flow', () => {
     ).toBeTruthy();
     expect(screen.queryByText('3 / 5')).toBeNull();
   });
+
+  it('keeps score explanation collapsed by default and expands on demand', async () => {
+    render(
+      ArticleDetailPage,
+      {
+        data: createData({
+          score: {
+            score: 3,
+            label: 'Algorithmic (83% confidence)',
+            reason_text: 'Weighted average: 0.562',
+            evidence: ['topic_affinity: 0.550 (raw: 0.10)'],
+            status: 'ready'
+          }
+        })
+      }
+    );
+
+    expect(screen.getByText('3 / 5')).toBeTruthy();
+    expect(screen.queryByText('Weighted average: 0.562')).toBeNull();
+    expect(screen.queryByText('topic_affinity: 0.550 (raw: 0.10)')).toBeNull();
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Why this score' }));
+
+    expect(screen.getByText('Weighted average: 0.562')).toBeTruthy();
+    expect(screen.getByText('topic_affinity: 0.550 (raw: 0.10)')).toBeTruthy();
+  });
 });

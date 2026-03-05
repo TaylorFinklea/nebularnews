@@ -2,6 +2,7 @@
   import { createEventDispatcher } from 'svelte';
   import {
     IconArrowLeft,
+    IconChevronDown,
     IconEye,
     IconEyeOff,
     IconExternalLink,
@@ -20,6 +21,8 @@
 
   const dispatch = createEventDispatcher();
   $: isLearningScore = score?.status === 'insufficient_signal';
+  let scoreDetailsOpen = false;
+  $: hasScoreDetails = Boolean(score?.reason_text) || Boolean(score?.evidence?.length);
 </script>
 
 <div class="article-header">
@@ -95,13 +98,28 @@
         <span>{score.score} / 5</span>
         <strong>· {score.label}</strong>
       </div>
-      <p class="score-reason">{score.reason_text}</p>
-      {#if score.evidence?.length}
-        <ul class="score-evidence">
-          {#each score.evidence as evidence}
-            <li>{evidence}</li>
-          {/each}
-        </ul>
+      {#if hasScoreDetails}
+        <button
+          type="button"
+          class="score-details-toggle"
+          aria-expanded={scoreDetailsOpen}
+          on:click={() => (scoreDetailsOpen = !scoreDetailsOpen)}
+        >
+          <span>{scoreDetailsOpen ? 'Hide score details' : 'Why this score'}</span>
+          <IconChevronDown class={scoreDetailsOpen ? 'rotated' : ''} size={15} stroke={1.9} />
+        </button>
+      {/if}
+      {#if scoreDetailsOpen}
+        {#if score.reason_text}
+          <p class="score-reason">{score.reason_text}</p>
+        {/if}
+        {#if score.evidence?.length}
+          <ul class="score-evidence">
+            {#each score.evidence as evidence}
+              <li>{evidence}</li>
+            {/each}
+          </ul>
+        {/if}
       {/if}
     </div>
   {/if}
@@ -217,6 +235,29 @@
     margin: 0;
     font-size: var(--text-sm);
     color: var(--text-color);
+  }
+
+  .score-details-toggle {
+    width: fit-content;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: 999px;
+    background: var(--surface-soft);
+    color: var(--text-color);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    line-height: 1.2;
+    padding: 0.35rem 0.7rem;
+  }
+
+  .score-details-toggle :global(svg) {
+    transition: transform var(--transition-fast);
+  }
+
+  .score-details-toggle :global(svg.rotated) {
+    transform: rotate(180deg);
   }
 
   .score-evidence {

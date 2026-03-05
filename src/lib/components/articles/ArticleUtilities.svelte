@@ -3,6 +3,7 @@
   import { getReactionReasonLabel } from '$lib/article-reactions';
   import {
     IconCheck,
+    IconChevronDown,
     IconPlus,
     IconStars,
     IconTag,
@@ -40,11 +41,12 @@
   let reactionDialogOpen = false;
   let pendingReactionValue = 1;
   let pendingReactionReasonCodes = [];
+  let scoreDetailsOpen = false;
 
   const dispatch = createEventDispatcher();
 
   /** @type {Record<string, boolean>} */
-  let openSections = { tags: true, ai_tools: true, chat: true, feedback: false, sources: false };
+  let openSections = { tags: true, chat: true, feedback: false, sources: false };
 
   const toggleSection = (e) => {
     const id = e.detail.id;
@@ -78,7 +80,7 @@
   $: savedReactionReasonLabels = Array.isArray(reaction?.reason_codes)
     ? reaction.reason_codes.map((reasonCode) => getReactionReasonLabel(reasonCode))
     : [];
-  $: scoreSummary = score ? (score.status === 'insufficient_signal' ? 'Learning' : `${score.score}/5`) : '';
+  $: hasScoreDetails = Boolean(score?.label) || Boolean(score?.reason_text) || Boolean(score?.evidence?.length);
 </script>
 
 <div class="utilities-panel" class:compact={density === 'compact'}>
@@ -87,6 +89,56 @@
       {#each utilityHighlights as highlight}
         <span class="highlight-chip">{highlight.label}: {highlight.count}</span>
       {/each}
+    </div>
+  {/if}
+
+  {#if score}
+    <div class="score-banner" aria-label="Fit score">
+      {#if score.status === 'insufficient_signal'}
+        <div class="score-header-row">
+          <p class="score-title">Fit score</p>
+          <Button variant="ghost" size="icon" on:click={() => dispatch('rerun', { types: ['score'] })} disabled={rerunBusy} title="Re-score article">
+            <IconStars size={15} stroke={1.9} />
+          </Button>
+        </div>
+        <p class="muted small">Learning your preferences. React to articles or refine tags to improve scoring.</p>
+      {:else}
+        <div class="score-header-row">
+          <div class="score-val">
+            <IconStars size={18} stroke={1.9} />
+            <span>{score.score} / 5</span>
+          </div>
+          <Button variant="ghost" size="icon" on:click={() => dispatch('rerun', { types: ['score'] })} disabled={rerunBusy} title="Re-score article">
+            <IconStars size={15} stroke={1.9} />
+          </Button>
+        </div>
+        {#if hasScoreDetails}
+          <button
+            type="button"
+            class="score-details-toggle"
+            aria-expanded={scoreDetailsOpen}
+            on:click={() => (scoreDetailsOpen = !scoreDetailsOpen)}
+          >
+            <span>{scoreDetailsOpen ? 'Hide score details' : 'Why this score'}</span>
+            <IconChevronDown class={scoreDetailsOpen ? 'rotated' : ''} size={15} stroke={1.9} />
+          </button>
+        {/if}
+        {#if scoreDetailsOpen}
+          {#if score.label}
+            <p class="score-method">{score.label}</p>
+          {/if}
+          {#if score.reason_text}
+            <p class="score-reason">{score.reason_text}</p>
+          {/if}
+          {#if score.evidence?.length}
+            <ul class="score-evidence">
+              {#each score.evidence as evidence}
+                <li>{evidence}</li>
+              {/each}
+            </ul>
+          {/if}
+        {/if}
+      {/if}
     </div>
   {/if}
 
@@ -190,28 +242,6 @@
     {#if tagError}<p class="muted small err">{tagError}</p>{/if}
   </ArticleUtilitySection>
 
-  <!-- AI Score -->
-  <ArticleUtilitySection id="ai_tools" title="AI Fit Score" summary={scoreSummary} open={openSections.ai_tools} on:toggle={toggleSection}>
-    <div class="section-header-row">
-      <Button variant="ghost" size="icon" on:click={() => dispatch('rerun', { types: ['score'] })} disabled={rerunBusy} title="Re-score article">
-        <IconStars size={15} stroke={1.9} />
-      </Button>
-    </div>
-    {#if score}
-      {#if score.status === 'insufficient_signal'}
-        <p class="muted small">Learning your preferences. React to articles or refine tags to improve scoring.</p>
-      {:else}
-        <div class="score-display">
-          <span class="score-num">{score.score}</span>
-          <span class="score-denom">/ 5</span>
-          <Pill>{score.label}</Pill>
-        </div>
-      {/if}
-    {:else}
-      <p class="muted small">Score pending.</p>
-    {/if}
-  </ArticleUtilitySection>
-
   <!-- Chat -->
   <ArticleUtilitySection id="chat" title="Chat with article" summary={chatLog.length ? `${chatLog.length} messages` : ''} open={openSections.chat} on:toggle={toggleSection}>
     <div class="section-header-row">
@@ -291,6 +321,86 @@
     padding: 0.2rem 0.55rem;
     font-size: var(--text-xs);
     font-weight: 500;
+    color: var(--muted-text);
+  }
+
+  .score-banner {
+    background: var(--primary-soft);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4);
+    display: grid;
+    gap: var(--space-2);
+    border: 1px solid var(--surface-border);
+  }
+
+  .score-header-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+  }
+
+  .score-title {
+    margin: 0;
+    font-size: var(--text-base);
+    font-weight: 600;
+    color: var(--primary);
+  }
+
+  .score-val {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: var(--text-lg);
+    color: var(--primary);
+    font-weight: 700;
+  }
+
+  .score-details-toggle {
+    width: fit-content;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    border: 1px solid var(--border-subtle);
+    border-radius: 999px;
+    background: var(--surface-soft);
+    color: var(--text-color);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    line-height: 1.2;
+    padding: 0.35rem 0.7rem;
+  }
+
+  .score-details-toggle :global(svg) {
+    transition: transform var(--transition-fast);
+  }
+
+  .score-details-toggle :global(svg.rotated) {
+    transform: rotate(180deg);
+  }
+
+  .score-method {
+    margin: 0;
+    font-size: var(--text-sm);
+    color: var(--primary);
+    font-weight: 600;
+  }
+
+  .score-reason {
+    margin: 0;
+    font-size: var(--text-sm);
+    color: var(--text-color);
+  }
+
+  .score-evidence {
+    margin: 0;
+    padding-left: 1.1rem;
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  .score-evidence li {
+    font-size: var(--text-sm);
     color: var(--muted-text);
   }
 
@@ -437,25 +547,6 @@
     display: grid;
     gap: 0.35rem;
     font-size: var(--text-sm);
-  }
-
-  .score-display {
-    display: flex;
-    align-items: baseline;
-    gap: 0.4rem;
-    flex-wrap: wrap;
-  }
-
-  .score-num {
-    font-size: 2rem;
-    font-weight: 700;
-    color: var(--primary);
-    line-height: 1;
-  }
-
-  .score-denom {
-    font-size: var(--text-base);
-    color: var(--muted-text);
   }
 
   .source-list {

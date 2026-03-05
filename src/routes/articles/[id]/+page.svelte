@@ -351,7 +351,6 @@
     {articleImageUrl}
     isRead={data.article.is_read}
     {readStateBusy}
-    score={data.score}
     on:toggleRead={() => setReadState(!data.article.is_read)}
   />
 

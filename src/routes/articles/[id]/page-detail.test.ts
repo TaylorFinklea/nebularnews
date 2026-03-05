@@ -132,7 +132,7 @@ describe('Article detail reaction reason flow', () => {
     expect(screen.getByText('Too shallow')).toBeTruthy();
   });
 
-  it('shows the inline learning banner when the latest score is insufficient', () => {
+  it('shows the sidebar learning state when the latest score is insufficient', () => {
     render(
       ArticleDetailPage,
       {
@@ -148,10 +148,7 @@ describe('Article detail reaction reason flow', () => {
       }
     );
 
-    expect(screen.getByText('Learning your preferences')).toBeTruthy();
-    expect(
-      screen.getByText('Not enough preference signals yet. React to articles or refine tags to improve scoring.')
-    ).toBeTruthy();
+    expect(screen.getByText('Learning your preferences. React to articles or refine tags to improve scoring.')).toBeTruthy();
     expect(screen.queryByText('3 / 5')).toBeNull();
   });
 

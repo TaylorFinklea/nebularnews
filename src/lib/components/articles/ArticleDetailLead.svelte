@@ -2,11 +2,9 @@
   import { createEventDispatcher } from 'svelte';
   import {
     IconArrowLeft,
-    IconChevronDown,
     IconEye,
     IconEyeOff,
-    IconExternalLink,
-    IconStars
+    IconExternalLink
   } from '$lib/icons';
   import Button from '$lib/components/Button.svelte';
   import Pill from '$lib/components/Pill.svelte';
@@ -17,12 +15,8 @@
   export let articleImageUrl = '';
   export let isRead = false;
   export let readStateBusy = false;
-  export let score = null;
 
   const dispatch = createEventDispatcher();
-  $: isLearningScore = score?.status === 'insufficient_signal';
-  let scoreDetailsOpen = false;
-  $: hasScoreDetails = Boolean(score?.label) || Boolean(score?.reason_text) || Boolean(score?.evidence?.length);
 </script>
 
 <div class="article-header">
@@ -80,51 +74,6 @@
   <div class="article-hero">
     <img class="hero-img" src={articleImageUrl} alt="" decoding="async" />
   </div>
-{/if}
-
-{#if score}
-  {#if isLearningScore}
-    <div class="score-banner learning-banner">
-      <div class="score-val">
-        <IconStars size={18} stroke={1.9} />
-        <span>Learning your preferences</span>
-      </div>
-      <p class="score-reason">Not enough preference signals yet. React to articles or refine tags to improve scoring.</p>
-    </div>
-  {:else}
-    <div class="score-banner">
-      <div class="score-val">
-        <IconStars size={18} stroke={1.9} />
-        <span>{score.score} / 5</span>
-      </div>
-      {#if hasScoreDetails}
-        <button
-          type="button"
-          class="score-details-toggle"
-          aria-expanded={scoreDetailsOpen}
-          on:click={() => (scoreDetailsOpen = !scoreDetailsOpen)}
-        >
-          <span>{scoreDetailsOpen ? 'Hide score details' : 'Why this score'}</span>
-          <IconChevronDown class={scoreDetailsOpen ? 'rotated' : ''} size={15} stroke={1.9} />
-        </button>
-      {/if}
-      {#if scoreDetailsOpen}
-        {#if score.label}
-          <p class="score-method">{score.label}</p>
-        {/if}
-        {#if score.reason_text}
-          <p class="score-reason">{score.reason_text}</p>
-        {/if}
-        {#if score.evidence?.length}
-          <ul class="score-evidence">
-            {#each score.evidence as evidence}
-              <li>{evidence}</li>
-            {/each}
-          </ul>
-        {/if}
-      {/if}
-    </div>
-  {/if}
 {/if}
 
 <style>
@@ -207,78 +156,6 @@
     object-fit: cover;
     display: block;
     aspect-ratio: 21/9;
-  }
-
-  .score-banner {
-    background: var(--primary-soft);
-    border-radius: var(--radius-xl);
-    padding: var(--space-5);
-    display: grid;
-    gap: var(--space-2);
-    margin-bottom: var(--space-5);
-    backdrop-filter: blur(var(--blur-md));
-    -webkit-backdrop-filter: blur(var(--blur-md));
-  }
-
-  .learning-banner {
-    background: var(--surface-soft);
-  }
-
-  .score-val {
-    display: flex;
-    align-items: center;
-    gap: 0.45rem;
-    font-size: var(--text-lg);
-    color: var(--primary);
-    font-weight: 700;
-  }
-
-  .score-reason {
-    margin: 0;
-    font-size: var(--text-sm);
-    color: var(--text-color);
-  }
-
-  .score-method {
-    margin: 0;
-    font-size: var(--text-sm);
-    color: var(--primary);
-    font-weight: 600;
-  }
-
-  .score-details-toggle {
-    width: fit-content;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    border: 1px solid var(--border-subtle);
-    border-radius: 999px;
-    background: var(--surface-soft);
-    color: var(--text-color);
-    font-size: var(--text-xs);
-    font-weight: 600;
-    line-height: 1.2;
-    padding: 0.35rem 0.7rem;
-  }
-
-  .score-details-toggle :global(svg) {
-    transition: transform var(--transition-fast);
-  }
-
-  .score-details-toggle :global(svg.rotated) {
-    transform: rotate(180deg);
-  }
-
-  .score-evidence {
-    margin: 0;
-    padding-left: 1.1rem;
-    display: grid;
-    gap: 0.25rem;
-  }
-
-  .score-evidence li {
-    font-size: var(--text-sm);
-    color: var(--muted-text);
   }
 
   @media (max-width: 900px) {

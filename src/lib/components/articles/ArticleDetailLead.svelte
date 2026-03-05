@@ -235,5 +235,17 @@
     h1 {
       font-size: var(--text-2xl);
     }
+
+    .header-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: var(--space-3);
+    }
+
+    .header-actions {
+      width: 100%;
+      flex-wrap: wrap;
+      justify-content: flex-start;
+    }
   }
 </style>

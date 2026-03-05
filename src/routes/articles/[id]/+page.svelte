@@ -355,15 +355,15 @@
     on:toggleRead={() => setReadState(!data.article.is_read)}
   />
 
+  <ArticleQuickTake
+    summary={data.summary}
+    keyPoints={data.keyPoints}
+    {rerunBusy}
+    on:rerun={(e) => rerunJobs(e.detail.types)}
+  />
+
   <div class="article-layout">
     <div class="content-col">
-      <ArticleQuickTake
-        summary={data.summary}
-        keyPoints={data.keyPoints}
-        {rerunBusy}
-        on:rerun={(e) => rerunJobs(e.detail.types)}
-      />
-
       <Card>
         <h2>Full text</h2>
         <ArticleProse blocks={articleBlocks} />
@@ -413,6 +413,7 @@
     grid-template-columns: minmax(0, 1fr) 320px;
     gap: var(--space-8);
     align-items: start;
+    margin-top: var(--space-5);
   }
 
   .content-col, .sidebar-col {

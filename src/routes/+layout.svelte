@@ -369,10 +369,14 @@
     }
 
     .content {
-      padding: var(--space-6);
+      padding:
+        calc(env(safe-area-inset-top) + var(--space-6))
+        var(--space-6)
+        var(--space-6);
     }
 
     .main-column.with-mobile-nav .content {
+      padding-top: calc(env(safe-area-inset-top) + var(--space-6));
       padding-bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom) + var(--mobile-nav-offset, 0px) + var(--space-6));
     }
   }

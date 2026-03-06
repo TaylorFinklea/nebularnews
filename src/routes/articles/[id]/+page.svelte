@@ -176,13 +176,21 @@
 
   const rerunJobs = async (types) => {
     rerunBusy = true;
-    await apiFetch(`/api/articles/${data.article.id}/rerun`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ types })
-    });
-    rerunBusy = false;
-    await invalidateAll();
+    try {
+      const res = await apiFetch(`/api/articles/${data.article.id}/rerun`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ types })
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showToast(payload?.error?.message ?? payload?.error ?? 'Failed to rerun article jobs.', 'error');
+        return;
+      }
+      await invalidateAll();
+    } finally {
+      rerunBusy = false;
+    }
   };
 
   const setReadState = async (isRead) => {

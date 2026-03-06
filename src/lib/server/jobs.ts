@@ -301,6 +301,144 @@ export async function processJobs(
   };
 }
 
+export async function runArticleJobImmediately(
+  env: App.Platform['env'],
+  type: 'summarize' | 'summarize_chat' | 'score' | 'key_points' | 'auto_tag' | 'image_backfill',
+  articleId: string
+): Promise<JobRunMetadata> {
+  const db = env.DB;
+  const existingJob = await dbGet<{ id: string; status: string; attempts: number | null }>(
+    db,
+    'SELECT id, status, attempts FROM jobs WHERE type = ? AND article_id = ? LIMIT 1',
+    [type, articleId]
+  );
+
+  if (existingJob?.status === 'running') {
+    throw new Error('Job is currently running');
+  }
+
+  const startedAt = now();
+  const jobId = existingJob?.id ?? nanoid();
+  const attempt = Number(existingJob?.attempts ?? 0) + 1;
+  const priority = type === 'image_backfill' ? 120 : 100;
+  const lockedBy = `manual:${nanoid()}`;
+
+  await dbRun(
+    db,
+    `INSERT INTO jobs (id, type, article_id, status, attempts, priority, run_after, locked_by, locked_at, lease_expires_at, last_error, provider, model, created_at, updated_at)
+     VALUES (?, ?, ?, 'running', ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?)
+     ON CONFLICT(type, article_id) DO UPDATE SET
+       status = 'running',
+       attempts = excluded.attempts,
+       priority = excluded.priority,
+       run_after = excluded.run_after,
+       locked_by = excluded.locked_by,
+       locked_at = excluded.locked_at,
+       lease_expires_at = excluded.lease_expires_at,
+       last_error = NULL,
+       provider = NULL,
+       model = NULL,
+       updated_at = excluded.updated_at`,
+    [
+      jobId,
+      type,
+      articleId,
+      attempt,
+      priority,
+      startedAt,
+      lockedBy,
+      startedAt,
+      startedAt + JOB_LEASE_MS,
+      startedAt,
+      startedAt
+    ]
+  );
+
+  const jobRunId = nanoid();
+  await dbRun(
+    db,
+    `INSERT INTO job_runs (id, job_id, attempt, status, started_at)
+     VALUES (?, ?, ?, ?, ?)`,
+    [jobRunId, jobId, attempt, 'running', startedAt]
+  );
+
+  try {
+    let runMetadata: JobRunMetadata = null;
+    if (type === 'summarize' || type === 'summarize_chat') {
+      runMetadata = await runSummarizeJob(db, env, articleId);
+    } else if (type === 'image_backfill') {
+      runMetadata = await runImageBackfillJob(db, articleId);
+    } else if (type === 'key_points') {
+      runMetadata = await runKeyPointsJob(db, env, articleId);
+    } else if (type === 'auto_tag') {
+      runMetadata = await runAutoTagJob(db, env, articleId);
+    } else if (type === 'score') {
+      runMetadata = await runScoreJob(db, env, articleId);
+    }
+
+    const finishedAt = now();
+    await dbRun(
+      db,
+      `UPDATE jobs
+       SET status = ?,
+           attempts = ?,
+           last_error = NULL,
+           provider = ?,
+           model = ?,
+           locked_by = NULL,
+           locked_at = NULL,
+           lease_expires_at = NULL,
+           updated_at = ?
+       WHERE id = ?`,
+      ['done', attempt, runMetadata?.provider ?? null, runMetadata?.model ?? null, finishedAt, jobId]
+    );
+    await dbRun(
+      db,
+      `UPDATE job_runs
+       SET status = ?,
+           provider = ?,
+           model = ?,
+           duration_ms = ?,
+           finished_at = ?
+       WHERE id = ?`,
+      ['done', runMetadata?.provider ?? null, runMetadata?.model ?? null, finishedAt - startedAt, finishedAt, jobRunId]
+    );
+    return runMetadata;
+  } catch (err) {
+    const status = attempt >= MAX_JOB_ATTEMPTS ? 'failed' : 'pending';
+    const runAfter = status === 'failed' ? startedAt : createPendingTimestamp() + computeRetryDelayMs(attempt);
+    const errorMessage = String(err);
+    const finishedAt = now();
+    await dbRun(
+      db,
+      `UPDATE jobs
+       SET status = ?,
+           attempts = ?,
+           last_error = ?,
+           run_after = ?,
+           provider = NULL,
+           model = NULL,
+           locked_by = NULL,
+           locked_at = NULL,
+           lease_expires_at = NULL,
+           updated_at = ?
+       WHERE id = ?`,
+      [status, attempt, errorMessage, runAfter, finishedAt, jobId]
+    );
+    await dbRun(
+      db,
+      `UPDATE job_runs
+       SET status = ?,
+           error = ?,
+           duration_ms = ?,
+           finished_at = ?
+       WHERE id = ?`,
+      ['failed', errorMessage, finishedAt - startedAt, finishedAt, jobRunId]
+    );
+    throw err;
+  }
+}
+
 async function runImageBackfillJob(db: Db, articleId: string): Promise<JobRunMetadata> {
   const article = await dbGet<{
     canonical_url: string | null;

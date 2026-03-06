@@ -1,9 +1,8 @@
 import { error } from '@sveltejs/kit';
-import { getPublicMcpResource } from '$lib/server/mcp/context';
 import { verifyPkceS256 } from './crypto';
+import { getOauthResourceForAudience, hasRequiredScope, type PublicOauthAudience } from './audience';
 import {
   OAUTH_ACCESS_TOKEN_TTL_MS,
-  OAUTH_SCOPE_READ,
   getAccessTokenByRawToken,
   getAuthorizationCodeByRawCode,
   getOAuthClient,
@@ -35,15 +34,10 @@ const validateClientRedirectUri = async (clientId: string, redirectUri: string, 
   return client;
 };
 
-const ensureSupportedScope = (scope: string) => {
-  if (scope !== OAUTH_SCOPE_READ) {
-    throw error(400, 'Only the mcp:read scope is supported.');
-  }
-};
-
 export const exchangeAuthorizationCodeGrant = async (
   db: D1Database,
   env: App.Platform['env'],
+  audience: PublicOauthAudience,
   form: URLSearchParams
 ) => {
   const code = readRequiredFormValue(form, 'code');
@@ -57,7 +51,7 @@ export const exchangeAuthorizationCodeGrant = async (
   const clientId = requestedClientId || authCode.client_id;
   const redirectUri = readOptionalFormValue(form, 'redirect_uri') || authCode.redirect_uri;
   const resource = readOptionalFormValue(form, 'resource') || authCode.resource;
-  const expectedResource = getPublicMcpResource(env);
+  const expectedResource = getOauthResourceForAudience(env, audience);
   if (!expectedResource || resource !== expectedResource) {
     throw error(400, 'OAuth resource is invalid.');
   }
@@ -72,7 +66,6 @@ export const exchangeAuthorizationCodeGrant = async (
   if (authCode.resource !== resource) {
     throw error(400, 'OAuth resource mismatch.');
   }
-  ensureSupportedScope(authCode.scope);
   if (authCode.used_at) {
     throw error(400, 'OAuth authorization code has already been used.');
   }
@@ -111,6 +104,7 @@ export const exchangeAuthorizationCodeGrant = async (
 export const exchangeRefreshTokenGrant = async (
   db: D1Database,
   env: App.Platform['env'],
+  audience: PublicOauthAudience,
   form: URLSearchParams
 ) => {
   const refreshToken = readRequiredFormValue(form, 'refresh_token');
@@ -120,7 +114,7 @@ export const exchangeRefreshTokenGrant = async (
   }
   const clientId = readOptionalFormValue(form, 'client_id') || token.client_id;
   const resource = readOptionalFormValue(form, 'resource') || token.resource;
-  const expectedResource = getPublicMcpResource(env);
+  const expectedResource = getOauthResourceForAudience(env, audience);
   if (!expectedResource || resource !== expectedResource) {
     throw error(400, 'OAuth resource is invalid.');
   }
@@ -136,7 +130,6 @@ export const exchangeRefreshTokenGrant = async (
   if (token.resource !== resource) {
     throw error(400, 'OAuth refresh token resource mismatch.');
   }
-  ensureSupportedScope(token.scope);
   if (token.revoked_at) {
     throw error(400, 'OAuth refresh token has been revoked.');
   }
@@ -166,6 +159,7 @@ export const exchangeRefreshTokenGrant = async (
 export const authenticatePublicAccessToken = async (
   db: D1Database,
   env: App.Platform['env'],
+  audience: PublicOauthAudience,
   rawToken: string | null
 ) => {
   if (!rawToken) {
@@ -178,11 +172,14 @@ export const authenticatePublicAccessToken = async (
   if (token.revoked_at || token.expires_at <= Date.now()) {
     return null;
   }
-  const expectedResource = getPublicMcpResource(env);
+  const expectedResource = getOauthResourceForAudience(env, audience);
   if (!expectedResource || token.resource !== expectedResource) {
     return null;
   }
-  if (token.scope !== OAUTH_SCOPE_READ) {
+  if (audience === 'mcp' && !hasRequiredScope(token.scope, 'mcp:read')) {
+    return null;
+  }
+  if (audience === 'mobile' && !hasRequiredScope(token.scope, 'app:read')) {
     return null;
   }
   await touchAccessToken(db, token.id, token.client_id);

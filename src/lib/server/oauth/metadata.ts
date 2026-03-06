@@ -1,24 +1,29 @@
-import { getConfiguredPublicMcpOrigin, getPublicMcpResource } from '$lib/server/mcp/context';
-import { OAUTH_SCOPE_READ } from './storage';
+import {
+  getOauthIssuerForAudience,
+  getOauthResourceForAudience,
+  getScopesSupportedForAudience,
+  type PublicOauthAudience
+} from './audience';
 
-export const getAuthorizationServerIssuer = (env: App.Platform['env']) => getConfiguredPublicMcpOrigin(env);
+export const getAuthorizationServerIssuer = (env: App.Platform['env'], audience: PublicOauthAudience) =>
+  getOauthIssuerForAudience(env, audience);
 
-export const buildProtectedResourceMetadata = (env: App.Platform['env']) => {
-  const resource = getPublicMcpResource(env);
-  const issuer = getAuthorizationServerIssuer(env);
+export const buildProtectedResourceMetadata = (env: App.Platform['env'], audience: PublicOauthAudience) => {
+  const resource = getOauthResourceForAudience(env, audience);
+  const issuer = getAuthorizationServerIssuer(env, audience);
   if (!resource || !issuer) {
     throw new Error('Public MCP resource metadata is not configured');
   }
   return {
     resource,
     authorization_servers: [issuer],
-    scopes_supported: [OAUTH_SCOPE_READ]
+    scopes_supported: getScopesSupportedForAudience(audience)
   };
 };
 
-export const buildAuthorizationServerMetadata = (env: App.Platform['env']) => {
-  const issuer = getAuthorizationServerIssuer(env);
-  const resource = getPublicMcpResource(env);
+export const buildAuthorizationServerMetadata = (env: App.Platform['env'], audience: PublicOauthAudience) => {
+  const issuer = getAuthorizationServerIssuer(env, audience);
+  const resource = getOauthResourceForAudience(env, audience);
   if (!issuer || !resource) {
     throw new Error('Public MCP authorization server is not configured');
   }
@@ -33,7 +38,7 @@ export const buildAuthorizationServerMetadata = (env: App.Platform['env']) => {
     token_endpoint_auth_methods_supported: ['none'],
     code_challenge_methods_supported: ['S256'],
     authorization_response_iss_parameter_supported: true,
-    scopes_supported: [OAUTH_SCOPE_READ],
+    scopes_supported: getScopesSupportedForAudience(audience),
     resource
   };
 };

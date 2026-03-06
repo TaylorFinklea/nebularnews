@@ -6,6 +6,7 @@ import { assertRuntimeConfig } from '$lib/server/runtime-config';
 import { logError, logWarn, summarizeError } from '$lib/server/log';
 import { runScheduledTasks } from '$lib/server/scheduler';
 import { getConfiguredPublicMcpHost, isPublicMcpEnabled, isPublicMcpHost } from '$lib/server/mcp/context';
+import { getConfiguredPublicMobileHost, isPublicMobileEnabled, isPublicMobileHost } from '$lib/server/mobile/context';
 import {
   applySecurityHeaders,
   buildCsrfCookie,
@@ -46,6 +47,23 @@ const publicMcpHostAllowedPaths = [
   '/robots.txt',
   '/nebularnews-logo'
 ];
+
+const publicMobileHostAllowedPaths = [
+  '/api/mobile',
+  '/login',
+  '/api/auth/login',
+  '/api/auth/logout',
+  '/api/health',
+  '/.well-known/oauth-protected-resource',
+  '/.well-known/oauth-authorization-server',
+  '/oauth/authorize',
+  '/oauth/token',
+  '/authorize',
+  '/token',
+  '/favicon',
+  '/robots.txt',
+  '/nebularnews-logo'
+];
 let runtimeWarningLogged = false;
 const SCHEMA_ASSERT_CACHE_MS = 1000 * 60 * 5;
 let schemaAssertedAt = 0;
@@ -75,7 +93,9 @@ export const handle: Handle = async ({ event, resolve }) => {
     runtimeWarningLogged = true;
   }
   const isPublicMcpRequest = isPublicMcpHost(event.url, event.platform.env);
+  const isPublicMobileRequest = isPublicMobileHost(event.url, event.platform.env);
   const configuredPublicMcpHost = getConfiguredPublicMcpHost(event.platform.env);
+  const configuredPublicMobileHost = getConfiguredPublicMobileHost(event.platform.env);
   if (configuredPublicMcpHost && event.url.host === configuredPublicMcpHost) {
     if (!isPublicMcpEnabled(event.platform.env)) {
       return applySecurityHeaders(new Response('Not found', { status: 404 }));
@@ -87,12 +107,24 @@ export const handle: Handle = async ({ event, resolve }) => {
       return applySecurityHeaders(new Response('Not found', { status: 404 }));
     }
   }
+  if (configuredPublicMobileHost && event.url.host === configuredPublicMobileHost) {
+    if (!isPublicMobileEnabled(event.platform.env)) {
+      return applySecurityHeaders(new Response('Not found', { status: 404 }));
+    }
+    const allowedOnPublicHost =
+      pathname.startsWith('/_app') ||
+      publicMobileHostAllowedPaths.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+    if (!allowedOnPublicHost) {
+      return applySecurityHeaders(new Response('Not found', { status: 404 }));
+    }
+  }
   const isDevScheduledHandlerPath =
     pathname === '/cdn-cgi/handler/scheduled' && runtimeReport.stage === 'development';
   const isPublic =
     publicPaths.some((path) => pathname.startsWith(path)) ||
     isDevScheduledHandlerPath ||
     isPublicMcpRequest ||
+    isPublicMobileRequest ||
     pathname.startsWith('/_app');
   const secureCookie = event.url.protocol === 'https:';
 

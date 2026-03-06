@@ -1,0 +1,95 @@
+import { json } from '@sveltejs/kit';
+import { nanoid } from 'nanoid';
+import {
+  areReasonCodesValidForReaction,
+  canonicalizeReasonCodesForReaction,
+  isReactionValue,
+  isValidReactionReasonCode,
+  type ArticleReactionReasonCode
+} from '$lib/article-reactions';
+import { dbGet, dbRun, now } from '$lib/server/db';
+import { requireMobileAccess } from '$lib/server/mobile/auth';
+import { replaceReactionReasonCodes } from '$lib/server/reactions';
+import { getPreferredSourceForArticle, isFeedLinkedToArticle } from '$lib/server/sources';
+import { processReactionLearning } from '$lib/server/scoring/learning';
+
+export const POST = async ({ params, request, platform }) => {
+  await requireMobileAccess(request, platform.env, platform.env.DB, 'app:write');
+
+  const articleId = params.id;
+  const body = (await request.json().catch(() => ({}))) as {
+    value?: unknown;
+    feedId?: unknown;
+    reasonCodes?: unknown;
+  };
+  const value = Number(body?.value);
+  const feedIdInput = typeof body?.feedId === 'string' ? body.feedId.trim() : '';
+  const rawReasonCodes = Array.isArray(body?.reasonCodes) ? body.reasonCodes : [];
+
+  if (!isReactionValue(value)) {
+    return json({ error: 'Invalid reaction value' }, { status: 400 });
+  }
+  if (!rawReasonCodes.every((code) => typeof code === 'string')) {
+    return json({ error: 'Invalid reaction reason codes' }, { status: 400 });
+  }
+
+  const uniqueReasonCodes = [...new Set(rawReasonCodes)];
+  if (uniqueReasonCodes.length > 5) {
+    return json({ error: 'Too many reaction reason codes' }, { status: 400 });
+  }
+  if (!uniqueReasonCodes.every((code) => isValidReactionReasonCode(code))) {
+    return json({ error: 'Invalid reaction reason codes' }, { status: 400 });
+  }
+
+  const typedReasonCodes = uniqueReasonCodes as ArticleReactionReasonCode[];
+  if (!areReasonCodesValidForReaction(value, typedReasonCodes)) {
+    return json({ error: 'Reaction reasons do not match the selected reaction' }, { status: 400 });
+  }
+  const reasonCodes = canonicalizeReasonCodesForReaction(value, typedReasonCodes);
+
+  let feedId: string | null = null;
+  if (feedIdInput && (await isFeedLinkedToArticle(platform.env.DB, articleId, feedIdInput))) {
+    feedId = feedIdInput;
+  } else {
+    feedId = (await getPreferredSourceForArticle(platform.env.DB, articleId))?.feedId ?? null;
+  }
+
+  if (!feedId) {
+    return json({ error: 'No source feed found for article' }, { status: 400 });
+  }
+
+  const existingReaction = await dbGet<{ value: number | null }>(
+    platform.env.DB,
+    'SELECT value FROM article_reactions WHERE article_id = ? LIMIT 1',
+    [articleId]
+  );
+  const previousValue = Number(existingReaction?.value);
+  const shouldApplyLearning = ![1, -1].includes(previousValue) || previousValue !== value;
+  const timestamp = now();
+
+  await dbRun(
+    platform.env.DB,
+    `INSERT INTO article_reactions (id, article_id, feed_id, value, created_at)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(article_id) DO UPDATE SET
+       feed_id = excluded.feed_id,
+       value = excluded.value,
+       created_at = excluded.created_at`,
+    [nanoid(), articleId, feedId, value, timestamp]
+  );
+  await replaceReactionReasonCodes(platform.env.DB, articleId, reasonCodes, timestamp);
+
+  if (shouldApplyLearning) {
+    processReactionLearning(platform.env.DB, articleId, value as 1 | -1, reasonCodes).catch(() => {});
+  }
+
+  return json({
+    reaction: {
+      article_id: articleId,
+      feed_id: feedId,
+      value,
+      created_at: timestamp,
+      reason_codes: reasonCodes
+    }
+  });
+};

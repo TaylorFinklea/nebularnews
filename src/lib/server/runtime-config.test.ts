@@ -46,7 +46,7 @@ describe('inspectRuntimeConfig', () => {
     const report = inspectRuntimeConfig(
       createEnv({
         MCP_PUBLIC_ENABLED: 'true',
-        MCP_PUBLIC_BASE_URL: 'http://mcp.news.finklea.dev',
+        MCP_PUBLIC_BASE_URL: 'http://mcp.example.com',
         MCP_PUBLIC_ALLOWED_ORIGINS: 'https://chatgpt.com'
       })
     );
@@ -59,7 +59,7 @@ describe('inspectRuntimeConfig', () => {
     const report = inspectRuntimeConfig(
       createEnv({
         MCP_PUBLIC_ENABLED: 'true',
-        MCP_PUBLIC_BASE_URL: 'https://mcp.news.finklea.dev',
+        MCP_PUBLIC_BASE_URL: 'https://mcp.example.com',
         MCP_PUBLIC_ALLOWED_ORIGINS: 'https://chatgpt.com,https://chat.openai.com'
       })
     );

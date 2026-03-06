@@ -2,15 +2,18 @@ import { error, redirect } from '@sveltejs/kit';
 import { recordAuditEvent } from '$lib/server/audit';
 import {
   approveAuthorizeRequest,
+  buildAuthorizeCardDescription,
+  buildAuthorizeCardTitle,
+  buildAuthorizeCardWarning,
   buildLoginRedirectForAuthorize,
   buildOAuthErrorRedirect,
   parseAuthorizeRequest,
   shouldAutoApproveConsent
 } from '$lib/server/oauth/authorize';
-import { assertPublicMcpRequest } from '$lib/server/oauth/http';
+import { assertPublicOauthRequest } from '$lib/server/oauth/http';
 
 export const load = async ({ url, platform, locals }) => {
-  assertPublicMcpRequest(url, platform.env);
+  assertPublicOauthRequest(url, platform.env);
 
   const { client, request } = await parseAuthorizeRequest(url, platform.env.DB, platform.env);
   if (!locals.user) {
@@ -29,13 +32,16 @@ export const load = async ({ url, platform, locals }) => {
       redirectOrigin: new URL(request.redirectUri).origin,
       redirectUri: request.redirectUri
     },
-    authorization: request
+    authorization: request,
+    title: buildAuthorizeCardTitle(request.audience),
+    description: buildAuthorizeCardDescription(request.audience, client.clientName),
+    warning: buildAuthorizeCardWarning(request.audience)
   };
 };
 
 export const actions = {
   default: async ({ request, url, platform, locals }) => {
-    assertPublicMcpRequest(url, platform.env);
+    assertPublicOauthRequest(url, platform.env);
 
     if (!locals.user) {
       throw redirect(303, buildLoginRedirectForAuthorize(url));
@@ -82,7 +88,8 @@ export const actions = {
           authorizeRequest.redirectUri,
           'access_denied',
           authorizeRequest.state,
-          'Access denied.'
+          'Access denied.',
+          authorizeRequest.audience
         )
       );
     }

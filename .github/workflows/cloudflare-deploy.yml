@@ -49,24 +49,39 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      PRODUCTION_BASE_URL: ${{ secrets.PRODUCTION_BASE_URL }}
-      PRODUCTION_MCP_BASE_URL: https://mcp.news.finklea.dev
+      PRODUCTION_BASE_URL: ${{ vars.BASE_URL }}
+      PRODUCTION_D1_DATABASE_NAME: ${{ vars.D1_DATABASE_NAME }}
+      PRODUCTION_D1_DATABASE_ID: ${{ vars.D1_DATABASE_ID }}
+      PRODUCTION_MCP_BASE_URL: ${{ vars.PUBLIC_MCP_BASE_URL }}
+      PRODUCTION_MCP_ALLOWED_ORIGINS: ${{ vars.PUBLIC_MCP_ALLOWED_ORIGINS }}
+      PRODUCTION_MOBILE_BASE_URL: ${{ vars.PUBLIC_MOBILE_BASE_URL }}
+      PRODUCTION_MOBILE_ALLOWED_ORIGINS: ${{ vars.PUBLIC_MOBILE_ALLOWED_ORIGINS }}
+      PRODUCTION_MOBILE_OAUTH_CLIENT_ID: ${{ vars.MOBILE_OAUTH_CLIENT_ID }}
+      PRODUCTION_MOBILE_OAUTH_CLIENT_NAME: ${{ vars.MOBILE_OAUTH_CLIENT_NAME }}
+      PRODUCTION_MOBILE_OAUTH_REDIRECT_URIS: ${{ vars.MOBILE_OAUTH_REDIRECT_URIS }}
     steps:
-      - name: Validate required production secrets
+      - name: Validate required production secrets and vars
         run: |
           missing=0
-          if [ -z "${CLOUDFLARE_API_TOKEN}" ]; then
-            echo "::error::Missing required secret: CLOUDFLARE_API_TOKEN"
-            missing=1
-          fi
-          if [ -z "${PRODUCTION_BASE_URL}" ]; then
-            echo "::error::Missing required secret: PRODUCTION_BASE_URL"
-            missing=1
-          fi
-          if [ -z "${PRODUCTION_MCP_BASE_URL}" ]; then
-            echo "::error::Missing required setting: PRODUCTION_MCP_BASE_URL"
-            missing=1
-          fi
+          for key in \
+            CLOUDFLARE_API_TOKEN \
+            CLOUDFLARE_ACCOUNT_ID \
+            PRODUCTION_BASE_URL \
+            PRODUCTION_D1_DATABASE_NAME \
+            PRODUCTION_D1_DATABASE_ID \
+            PRODUCTION_MCP_BASE_URL \
+            PRODUCTION_MCP_ALLOWED_ORIGINS \
+            PRODUCTION_MOBILE_BASE_URL \
+            PRODUCTION_MOBILE_ALLOWED_ORIGINS \
+            PRODUCTION_MOBILE_OAUTH_CLIENT_ID \
+            PRODUCTION_MOBILE_OAUTH_CLIENT_NAME \
+            PRODUCTION_MOBILE_OAUTH_REDIRECT_URIS
+          do
+            if [ -z "${!key}" ]; then
+              echo "::error::Missing required production environment value: ${key}"
+              missing=1
+            fi
+          done
           if [ "${missing}" -ne 0 ]; then
             exit 1
           fi
@@ -82,6 +97,12 @@ jobs:
 
       - name: Install
         run: npm ci
+
+      - name: Render Wrangler config
+        run: npm run render:wrangler
+
+      - name: Export Wrangler config path
+        run: echo "WRANGLER_CONFIG_PATH=wrangler.generated.toml" >> "$GITHUB_ENV"
 
       - name: Run remote migration (production)
         run: npm run migrate:prod
@@ -96,7 +117,7 @@ jobs:
           for attempt in $(seq 1 "$max_attempts"); do
             echo "Deploy attempt ${attempt}/${max_attempts}"
             output_file="$(mktemp)"
-            if npx wrangler deploy --env production 2>&1 | tee "$output_file"; then
+            if npx wrangler deploy --env production --config "$WRANGLER_CONFIG_PATH" 2>&1 | tee "$output_file"; then
               exit 0
             fi
             if grep -Eqi '([[:space:]]|^)(50[0-9]|52[0-9]|530)([[:space:]]|$)|malformed response from the API|5[0-9]{2} (Bad Gateway|Service Unavailable|Gateway Timeout)' "$output_file"; then
@@ -111,10 +132,10 @@ jobs:
             exit 1
           done
 
-      - name: Smoke check /api/health
+      - name: Smoke check protected app /api/health
         run: curl -fsSL "$PRODUCTION_BASE_URL/api/health"
 
-      - name: Smoke check /api/ready
+      - name: Smoke check protected app /api/ready
         run: curl -fsSL "$PRODUCTION_BASE_URL/api/ready"
 
       - name: Smoke check public MCP protected resource metadata
@@ -128,7 +149,16 @@ jobs:
           headers="$(mktemp)"
           curl -sS -D "$headers" -o /dev/null "$PRODUCTION_MCP_BASE_URL/mcp"
           grep -qi '^HTTP/.* 401' "$headers"
-          grep -qi '^www-authenticate: Bearer realm="nebular-mcp", resource_metadata="https://mcp.news.finklea.dev/.well-known/oauth-protected-resource"' "$headers"
+          grep -qi "^www-authenticate: Bearer realm=\"nebular-mcp\", resource_metadata=\"${PRODUCTION_MCP_BASE_URL}/.well-known/oauth-protected-resource\"" "$headers"
+
+      - name: Smoke check public mobile /api/health
+        run: curl -fsSL "$PRODUCTION_MOBILE_BASE_URL/api/health"
+
+      - name: Smoke check public mobile unauthenticated session
+        run: |
+          headers="$(mktemp)"
+          curl -sS -D "$headers" -o /dev/null "$PRODUCTION_MOBILE_BASE_URL/api/mobile/session"
+          grep -qi '^HTTP/.* 401' "$headers"
 
   deploy-staging:
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.target == 'staging'
@@ -138,19 +168,25 @@ jobs:
     env:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      STAGING_BASE_URL: ${{ secrets.STAGING_BASE_URL }}
+      STAGING_BASE_URL: ${{ vars.BASE_URL }}
+      STAGING_D1_DATABASE_NAME: ${{ vars.D1_DATABASE_NAME }}
+      STAGING_D1_DATABASE_ID: ${{ vars.D1_DATABASE_ID }}
     steps:
-      - name: Validate required staging secrets
+      - name: Validate required staging secrets and vars
         run: |
           missing=0
-          if [ -z "${CLOUDFLARE_API_TOKEN}" ]; then
-            echo "::error::Missing required secret: CLOUDFLARE_API_TOKEN"
-            missing=1
-          fi
-          if [ -z "${STAGING_BASE_URL}" ]; then
-            echo "::error::Missing required secret: STAGING_BASE_URL"
-            missing=1
-          fi
+          for key in \
+            CLOUDFLARE_API_TOKEN \
+            CLOUDFLARE_ACCOUNT_ID \
+            STAGING_BASE_URL \
+            STAGING_D1_DATABASE_NAME \
+            STAGING_D1_DATABASE_ID
+          do
+            if [ -z "${!key}" ]; then
+              echo "::error::Missing required staging environment value: ${key}"
+              missing=1
+            fi
+          done
           if [ "${missing}" -ne 0 ]; then
             exit 1
           fi
@@ -167,6 +203,12 @@ jobs:
       - name: Install
         run: npm ci
 
+      - name: Render Wrangler config
+        run: npm run render:wrangler
+
+      - name: Export Wrangler config path
+        run: echo "WRANGLER_CONFIG_PATH=wrangler.generated.toml" >> "$GITHUB_ENV"
+
       - name: Run remote migration (staging)
         run: npm run migrate:staging
 
@@ -180,7 +222,7 @@ jobs:
           for attempt in $(seq 1 "$max_attempts"); do
             echo "Deploy attempt ${attempt}/${max_attempts}"
             output_file="$(mktemp)"
-            if npx wrangler deploy --env staging 2>&1 | tee "$output_file"; then
+            if npx wrangler deploy --env staging --config "$WRANGLER_CONFIG_PATH" 2>&1 | tee "$output_file"; then
               exit 0
             fi
             if grep -Eqi '([[:space:]]|^)(50[0-9]|52[0-9]|530)([[:space:]]|$)|malformed response from the API|5[0-9]{2} (Bad Gateway|Service Unavailable|Gateway Timeout)' "$output_file"; then
@@ -195,8 +237,8 @@ jobs:
             exit 1
           done
 
-      - name: Smoke check /api/health
+      - name: Smoke check staging /api/health
         run: curl -fsSL "$STAGING_BASE_URL/api/health"
 
-      - name: Smoke check /api/ready
+      - name: Smoke check staging /api/ready
         run: curl -fsSL "$STAGING_BASE_URL/api/ready"

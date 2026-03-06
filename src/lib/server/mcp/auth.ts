@@ -63,7 +63,7 @@ export async function resolvePublicMcpAuth(
     return { ok: false, reason: 'missing_token' };
   }
 
-  const token = await authenticatePublicAccessToken(db, env, providedToken);
+  const token = await authenticatePublicAccessToken(db, env, 'mcp', providedToken);
   if (!token) {
     return { ok: false, reason: 'invalid_token' };
   }

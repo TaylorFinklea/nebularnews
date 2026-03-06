@@ -11,10 +11,8 @@
 
 <div class="authorize-shell">
   <Card variant="default">
-    <h1>Allow MCP access?</h1>
-    <p>
-      <strong>{data.client.name}</strong> wants read-only access to Nebular News through the public MCP server.
-    </p>
+    <h1>{data.title}</h1>
+    <p><strong>{data.client.name}</strong> {data.description.replace(`${data.client.name} `, '')}</p>
 
     <dl>
       <div>
@@ -31,9 +29,7 @@
       </div>
     </dl>
 
-    <p class="warning">
-      Allowing access lets this client search and read article context from Nebular News. No write tools are exposed.
-    </p>
+    <p class="warning">{data.warning}</p>
 
     <form method="post" class="actions" use:enhance={handleConsentSubmit}>
       <input type="hidden" name="client_id" value={data.authorization.clientId} />

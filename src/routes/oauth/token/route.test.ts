@@ -20,7 +20,7 @@ const createPlatform = (): App.Platform =>
     env: {
       DB: {} as D1Database,
       MCP_PUBLIC_ENABLED: 'true',
-      MCP_PUBLIC_BASE_URL: 'https://mcp.news.finklea.dev',
+      MCP_PUBLIC_BASE_URL: 'https://mcp.example.com',
       MCP_PUBLIC_ALLOWED_ORIGINS: 'https://chatgpt.com'
     },
     context: {
@@ -49,14 +49,14 @@ describe('/oauth/token POST', () => {
       expires_in: 3600,
       refresh_token: 'refresh-1',
       scope: 'mcp:read',
-      resource: 'https://mcp.news.finklea.dev/mcp'
+      resource: 'https://mcp.example.com/mcp'
     });
   });
 
   it('accepts JSON token requests', async () => {
     const response = await POST(
       createEvent(
-        new Request('https://mcp.news.finklea.dev/oauth/token', {
+        new Request('https://mcp.example.com/oauth/token', {
           method: 'POST',
           headers: {
             'content-type': 'application/json',
@@ -75,9 +75,10 @@ describe('/oauth/token POST', () => {
     expect(exchangeAuthorizationCodeGrantMock).toHaveBeenCalledWith(
       expect.anything(),
       expect.anything(),
+      'mcp',
       expect.any(URLSearchParams)
     );
-    const form = exchangeAuthorizationCodeGrantMock.mock.calls[0][2];
+    const form = exchangeAuthorizationCodeGrantMock.mock.calls[0][3];
     expect(form.get('grant_type')).toBe('authorization_code');
     expect(form.get('code')).toBe('raw-code');
     expect(form.get('code_verifier')).toBe('verifier');
@@ -93,7 +94,7 @@ describe('/oauth/token POST', () => {
 
     const response = await POST(
       createEvent(
-        new Request('https://mcp.news.finklea.dev/oauth/token', {
+        new Request('https://mcp.example.com/oauth/token', {
           method: 'POST',
           headers: {
             'content-type': 'application/x-www-form-urlencoded',
@@ -122,7 +123,7 @@ describe('/oauth/token POST', () => {
   it('answers preflight requests with permissive OAuth CORS headers', async () => {
     const response = await OPTIONS(
       createEvent(
-        new Request('https://mcp.news.finklea.dev/oauth/token', {
+        new Request('https://mcp.example.com/oauth/token', {
           method: 'OPTIONS',
           headers: {
             origin: 'https://chatgpt.com',

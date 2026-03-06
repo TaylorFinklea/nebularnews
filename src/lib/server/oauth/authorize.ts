@@ -1,8 +1,13 @@
 import { error } from '@sveltejs/kit';
-import { getPublicMcpResource } from '$lib/server/mcp/context';
+import { ensureMobileOAuthClient } from '$lib/server/mobile/oauth-client';
+import {
+  getOauthResourceForAudience,
+  normalizeScopeForAudience,
+  resolvePublicOauthAudience,
+  type PublicOauthAudience
+} from './audience';
 import { getAuthorizationServerIssuer } from './metadata';
 import {
-  OAUTH_SCOPE_READ,
   createAuthorizationCode,
   getOAuthClient,
   grantConsent,
@@ -11,6 +16,7 @@ import {
 } from './storage';
 
 export type OAuthAuthorizeRequest = {
+  audience: PublicOauthAudience;
   clientId: string;
   redirectUri: string;
   responseType: 'code';
@@ -24,14 +30,6 @@ export type OAuthAuthorizeRequest = {
 
 const readSingleParam = (params: URLSearchParams, key: string) => params.get(key)?.trim() ?? '';
 
-const normalizeScope = (rawScope: string) => {
-  const scope = rawScope.trim() || OAUTH_SCOPE_READ;
-  if (scope !== OAUTH_SCOPE_READ) {
-    throw error(400, 'Only the mcp:read scope is supported.');
-  }
-  return scope;
-};
-
 const assertRegisteredRedirectUri = (client: OAuthClient, redirectUri: string) => {
   if (!client.redirectUris.includes(redirectUri)) {
     throw error(400, 'OAuth redirect_uri is not registered for this client.');
@@ -43,10 +41,22 @@ export const parseAuthorizeRequest = async (
   db: D1Database,
   env: App.Platform['env']
 ): Promise<{ request: OAuthAuthorizeRequest; client: OAuthClient }> => {
+  const audience = resolvePublicOauthAudience(url, env);
+  if (!audience) {
+    throw error(404, 'Not found');
+  }
+
   const params = url.searchParams;
   const clientId = readSingleParam(params, 'client_id');
   if (!clientId) {
     throw error(400, 'OAuth client_id is required.');
+  }
+
+  if (audience === 'mobile') {
+    const fixedClient = await ensureMobileOAuthClient(db, env);
+    if (fixedClient.clientId !== clientId) {
+      throw error(400, 'OAuth client is not registered.');
+    }
   }
 
   const client = await getOAuthClient(db, clientId);
@@ -66,9 +76,9 @@ export const parseAuthorizeRequest = async (
   assertRegisteredRedirectUri(client, redirectUri);
 
   const resource = readSingleParam(params, 'resource');
-  const expectedResource = getPublicMcpResource(env);
+  const expectedResource = getOauthResourceForAudience(env, audience);
   if (!expectedResource) {
-    throw error(503, 'Public MCP resource is not configured.');
+    throw error(503, 'Public OAuth resource is not configured.');
   }
   if (!resource) {
     throw error(400, 'OAuth resource is required.');
@@ -86,11 +96,12 @@ export const parseAuthorizeRequest = async (
     throw error(400, 'OAuth code_challenge_method must be S256.');
   }
 
-  const scope = normalizeScope(readSingleParam(params, 'scope'));
+  const scope = normalizeScopeForAudience(audience, readSingleParam(params, 'scope'));
 
   return {
     client,
     request: {
+      audience,
       clientId,
       redirectUri,
       responseType: 'code',
@@ -118,25 +129,27 @@ export const buildOAuthErrorRedirect = (
   redirectUri: string,
   errorCode: string,
   state: string | null,
-  description?: string
+  description?: string,
+  audience: PublicOauthAudience = 'mcp'
 ) =>
   appendAuthParams(redirectUri, {
     error: errorCode,
     state,
     error_description: description ?? null,
-    iss: getAuthorizationServerIssuer(env)
+    iss: getAuthorizationServerIssuer(env, audience)
   });
 
 export const buildOAuthSuccessRedirect = (
   env: App.Platform['env'],
   redirectUri: string,
   code: string,
-  state: string | null
+  state: string | null,
+  audience: PublicOauthAudience = 'mcp'
 ) =>
   appendAuthParams(redirectUri, {
     code,
     state,
-    iss: getAuthorizationServerIssuer(env)
+    iss: getAuthorizationServerIssuer(env, audience)
   });
 
 export const buildLoginRedirectForAuthorize = (url: URL) => {
@@ -167,5 +180,18 @@ export const approveAuthorizeRequest = async (
     codeChallenge: request.codeChallenge,
     codeChallengeMethod: request.codeChallengeMethod
   });
-  return buildOAuthSuccessRedirect(env, request.redirectUri, code, request.state);
+  return buildOAuthSuccessRedirect(env, request.redirectUri, code, request.state, request.audience);
 };
+
+export const buildAuthorizeCardTitle = (audience: PublicOauthAudience) =>
+  audience === 'mobile' ? 'Connect Nebular News iOS?' : 'Allow MCP access?';
+
+export const buildAuthorizeCardDescription = (audience: PublicOauthAudience, clientName: string) =>
+  audience === 'mobile'
+    ? `${clientName} wants companion-app access to your Nebular News server.`
+    : `${clientName} wants read-only access to Nebular News through the public MCP server.`;
+
+export const buildAuthorizeCardWarning = (audience: PublicOauthAudience) =>
+  audience === 'mobile'
+    ? 'Allowing access lets the iOS companion app read your dashboard/articles and update read state, reactions, and manual tags.'
+    : 'Allowing access lets this client search and read article context from Nebular News. No write tools are exposed.';

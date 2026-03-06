@@ -23,7 +23,7 @@ const createPlatform = (overrides?: Partial<App.Platform['env']>): App.Platform 
       MCP_SERVER_NAME: 'Nebular News MCP',
       MCP_SERVER_VERSION: '0.1.0',
       MCP_PUBLIC_ENABLED: 'true',
-      MCP_PUBLIC_BASE_URL: 'https://mcp.news.finklea.dev',
+      MCP_PUBLIC_BASE_URL: 'https://mcp.example.com',
       MCP_PUBLIC_ALLOWED_ORIGINS: 'https://chatgpt.com',
       ...overrides
     },
@@ -70,13 +70,13 @@ describe('/mcp public audience behavior', () => {
     const { GET } = await import('./+server');
 
     const response = await GET({
-      request: new Request('https://mcp.news.finklea.dev/mcp'),
+      request: new Request('https://mcp.example.com/mcp'),
       platform: createPlatform()
     } as Parameters<typeof GET>[0]);
 
     expect(response.status).toBe(401);
     expect(response.headers.get('www-authenticate')).toContain(
-      'resource_metadata="https://mcp.news.finklea.dev/.well-known/oauth-protected-resource"'
+      'resource_metadata="https://mcp.example.com/.well-known/oauth-protected-resource"'
     );
   });
 
@@ -91,7 +91,7 @@ describe('/mcp public audience behavior', () => {
     const { POST } = await import('./+server');
 
     const response = await POST({
-      request: new Request('https://mcp.news.finklea.dev/mcp', {
+      request: new Request('https://mcp.example.com/mcp', {
         method: 'POST',
         headers: {
           authorization: 'Bearer access-token',

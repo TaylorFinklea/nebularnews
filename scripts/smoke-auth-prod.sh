@@ -3,7 +3,7 @@ set -euo pipefail
 
 if [[ $# -lt 1 ]]; then
   echo "Usage: $0 <base-url>"
-  echo "Example: $0 https://news.finklea.dev"
+  echo "Example: $0 https://news.example.com"
   exit 1
 fi
 

@@ -19,7 +19,7 @@ wrangler d1 execute nebularnews --file=./schema.sql
 
 3. Configure environment variables
 
-Create a `.dev.vars` with:
+Copy `.env.example` to `.dev.vars` (or create `.dev.vars` from scratch) and fill in the local values you need:
 
 ```
 APP_ENV=development
@@ -37,8 +37,14 @@ MCP_SERVER_NAME=Nebular News MCP
 MCP_SERVER_VERSION=0.1.0
 MCP_ALLOWED_ORIGINS=
 MCP_PUBLIC_ENABLED=false
-MCP_PUBLIC_BASE_URL=https://mcp.news.finklea.dev
+MCP_PUBLIC_BASE_URL=https://mcp.example.com
 MCP_PUBLIC_ALLOWED_ORIGINS=https://chatgpt.com,https://chat.openai.com,https://platform.openai.com
+MOBILE_PUBLIC_ENABLED=false
+MOBILE_PUBLIC_BASE_URL=https://api.example.com
+MOBILE_PUBLIC_ALLOWED_ORIGINS=
+MOBILE_OAUTH_CLIENT_ID=nebular-news-ios
+MOBILE_OAUTH_CLIENT_NAME=Nebular News iOS
+MOBILE_OAUTH_REDIRECT_URIS=nebularnews://oauth/callback
 ```
 
 Generate a password hash:
@@ -91,11 +97,11 @@ curl -s http://localhost:8787/mcp \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"1.0.0"}}}'
 ```
 
-### Public ChatGPT MCP (`https://mcp.news.finklea.dev/mcp`)
+### Public ChatGPT MCP (`https://mcp.example.com/mcp`)
 
 - Enable with `MCP_PUBLIC_ENABLED=true`
 - Configure:
-  - `MCP_PUBLIC_BASE_URL=https://mcp.news.finklea.dev`
+  - `MCP_PUBLIC_BASE_URL=https://mcp.example.com`
   - `MCP_PUBLIC_ALLOWED_ORIGINS=https://chatgpt.com,https://chat.openai.com,https://platform.openai.com`
 - Public MCP uses OAuth Dynamic Client Registration plus Authorization Code + PKCE
 - Public MCP exposes only read-only tools:
@@ -111,6 +117,30 @@ The public MCP host also serves:
 - `/oauth/register`
 - `/oauth/authorize`
 - `/oauth/token`
+
+## Companion Mobile API (`https://api.example.com/api/mobile`)
+
+Nebular News also exposes a separate public API surface for the iOS companion app. Keep it on its own hostname instead of weakening the main app host.
+
+- Enable with:
+  - `MOBILE_PUBLIC_ENABLED=true`
+  - `MOBILE_PUBLIC_BASE_URL=https://api.example.com`
+  - `MOBILE_OAUTH_CLIENT_ID=nebular-news-ios`
+  - `MOBILE_OAUTH_CLIENT_NAME=Nebular News iOS`
+  - `MOBILE_OAUTH_REDIRECT_URIS=nebularnews://oauth/callback`
+- Public mobile OAuth uses Authorization Code + PKCE with a fixed first-party client config
+- Public mobile API scope:
+  - `app:read`
+  - `app:write`
+- Public mobile API is intentionally smaller than the web/admin API. It exposes:
+  - `/api/mobile/session`
+  - `/api/mobile/dashboard`
+  - `/api/mobile/feeds`
+  - `/api/mobile/articles`
+  - `/api/mobile/articles/:id`
+  - `/api/mobile/articles/:id/read`
+  - `/api/mobile/articles/:id/reaction`
+  - `/api/mobile/articles/:id/tags`
 
 ## Health, Readiness, Pull Status, and Events
 
@@ -172,44 +202,44 @@ Notes:
 
 ## Deployment
 
-`wrangler.toml` includes dedicated envs for staging and production:
-- `[env.staging]`
-- `[env.production]`
+This repo is meant to stay template-safe. Do not commit real D1 ids, first-party domains, or other deployment-specific values into tracked files.
 
-Update both D1 `database_id` placeholders, then set secrets per environment:
+### Host topology
 
-```
-wrangler secret put ADMIN_PASSWORD_HASH --env staging
-wrangler secret put SESSION_SECRET --env staging
-wrangler secret put ENCRYPTION_KEY --env staging
-wrangler secret put MCP_BEARER_TOKEN --env staging
+- Protected app host: `https://news.example.com`
+- Public MCP host: `https://mcp.example.com`
+- Public mobile API host: `https://api.example.com`
 
-wrangler secret put ADMIN_PASSWORD_HASH --env production
-wrangler secret put SESSION_SECRET --env production
-wrangler secret put ENCRYPTION_KEY --env production
-wrangler secret put MCP_BEARER_TOKEN --env production
-```
+Keep Cloudflare Access only on the protected app host. The public MCP and public mobile hosts should be routed to the same Worker, but allowlisted in app code instead of sitting behind Access.
 
-Set public MCP vars per environment when you are ready to expose the dedicated MCP hostname:
+### Config contract
 
-```
-MCP_PUBLIC_ENABLED=true
-MCP_PUBLIC_BASE_URL=https://mcp.news.finklea.dev
-MCP_PUBLIC_ALLOWED_ORIGINS=https://chatgpt.com,https://chat.openai.com,https://platform.openai.com
-```
+- `wrangler.toml` is a template with placeholders
+- GitHub Actions renders `wrangler.generated.toml` from environment vars at deploy time via `npm run render:wrangler`
+- runtime secrets stay in Cloudflare secrets
+- tracked config should stay reusable for `example.com`-style deployments
 
-Run deterministic migrations:
+See:
 
-```
+- [Production runbook](docs/runbooks/production.md)
+- [GitHub environments matrix](docs/runbooks/github-environments.md)
+
+### Remote migrations and deploys
+
+```bash
 npm run migrate:staging
 npm run migrate:prod
-```
 
-Deploy:
-
-```
 npm run deploy:staging
 npm run deploy:prod
+```
+
+### Guardrails
+
+The build runs a tracked-file scan to prevent committing first-party deployment values:
+
+```bash
+npm run check:first-party-config
 ```
 
 ### Scheduler tuning (settings-driven)
@@ -274,7 +304,7 @@ If production returns:
 you need to set the required production secrets and redeploy.
 
 ```bash
-cd /Users/tfinklea/git/nebularnews
+cd <repo-root>
 
 # Generate valid values
 ADMIN_PASSWORD_HASH="$(npm run --silent hash-password -- 'REPLACE_WITH_YOUR_LOGIN_PASSWORD')"
@@ -289,18 +319,18 @@ printf '%s' "$ENCRYPTION_KEY" | npx wrangler secret put ENCRYPTION_KEY --env pro
 printf '%s' "$MCP_BEARER_TOKEN" | npx wrangler secret put MCP_BEARER_TOKEN --env production
 
 # Create GitHub environment once (prevents gh 404 on --env production)
-gh api --method PUT repos/TaylorFinklea/nebularnews/environments/production
+gh api --method PUT repos/your-org/nebularnews/environments/production
 
 # Save same app runtime values to GitHub Actions production environment secrets
-gh secret set ADMIN_PASSWORD_HASH --repo TaylorFinklea/nebularnews --env production --body "$ADMIN_PASSWORD_HASH"
-gh secret set SESSION_SECRET --repo TaylorFinklea/nebularnews --env production --body "$SESSION_SECRET"
-gh secret set ENCRYPTION_KEY --repo TaylorFinklea/nebularnews --env production --body "$ENCRYPTION_KEY"
-gh secret set MCP_BEARER_TOKEN --repo TaylorFinklea/nebularnews --env production --body "$MCP_BEARER_TOKEN"
+gh secret set ADMIN_PASSWORD_HASH --repo your-org/nebularnews --env production --body "$ADMIN_PASSWORD_HASH"
+gh secret set SESSION_SECRET --repo your-org/nebularnews --env production --body "$SESSION_SECRET"
+gh secret set ENCRYPTION_KEY --repo your-org/nebularnews --env production --body "$ENCRYPTION_KEY"
+gh secret set MCP_BEARER_TOKEN --repo your-org/nebularnews --env production --body "$MCP_BEARER_TOKEN"
 
 # GitHub deploy workflow secrets (required for Cloudflare deploy from Actions)
-gh secret set CLOUDFLARE_API_TOKEN --repo TaylorFinklea/nebularnews --env production
-gh secret set CLOUDFLARE_ACCOUNT_ID --repo TaylorFinklea/nebularnews --env production
-gh secret set PRODUCTION_BASE_URL --repo TaylorFinklea/nebularnews --env production --body "https://news.finklea.dev"
+gh secret set CLOUDFLARE_API_TOKEN --repo your-org/nebularnews --env production
+gh secret set CLOUDFLARE_ACCOUNT_ID --repo your-org/nebularnews --env production
+gh secret set PRODUCTION_BASE_URL --repo your-org/nebularnews --env production --body "https://news.example.com"
 
 # Redeploy
 npm run deploy:prod
@@ -331,12 +361,12 @@ Minimum policy:
 - Require identity provider login for app routes.
 - Restrict allowed users/groups to your account.
 - Keep the internal `/mcp` bearer token auth enabled on the app hostname.
-- Serve the public OAuth MCP surface from a separate hostname such as `mcp.news.finklea.dev`.
+- Serve the public OAuth MCP surface from a separate hostname such as `mcp.example.com`.
 - Do not put Cloudflare Access in front of the public MCP hostname.
 
 ## CI/CD
 
-GitHub Actions workflow: `/Users/tfinklea/git/nebularnews/.github/workflows/cloudflare-deploy.yml`
+GitHub Actions workflow: `<repo-root>/.github/workflows/cloudflare-deploy.yml`
 
 - Push to `main` deploys production.
 - Manual dispatch can deploy production or staging.
@@ -356,7 +386,7 @@ Required GitHub secrets:
 If you store secrets with `gh secret set --env production`, create the environment first:
 
 ```bash
-gh api --method PUT repos/TaylorFinklea/nebularnews/environments/production
+gh api --method PUT repos/your-org/nebularnews/environments/production
 ```
 
 Without that, GitHub returns:
@@ -372,8 +402,8 @@ Without that, GitHub returns:
 
 ## Runbooks
 
-- Production runbook: `/Users/tfinklea/git/nebularnews/docs/runbooks/production.md`
-- Incident runbook: `/Users/tfinklea/git/nebularnews/docs/runbooks/incidents.md`
+- Production runbook: `<repo-root>/docs/runbooks/production.md`
+- Incident runbook: `<repo-root>/docs/runbooks/incidents.md`
 
 ## Notes
 

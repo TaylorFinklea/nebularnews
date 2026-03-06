@@ -28,6 +28,12 @@ declare namespace App {
       MCP_PUBLIC_ENABLED?: string;
       MCP_PUBLIC_BASE_URL?: string;
       MCP_PUBLIC_ALLOWED_ORIGINS?: string;
+      MOBILE_PUBLIC_ENABLED?: string;
+      MOBILE_PUBLIC_BASE_URL?: string;
+      MOBILE_PUBLIC_ALLOWED_ORIGINS?: string;
+      MOBILE_OAUTH_CLIENT_ID?: string;
+      MOBILE_OAUTH_CLIENT_NAME?: string;
+      MOBILE_OAUTH_REDIRECT_URIS?: string;
       APP_ENV?: string;
       EVENTS_V2_ENABLED?: string;
       OPTIMISTIC_MUTATIONS_ENABLED?: string;

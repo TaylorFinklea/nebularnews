@@ -11,7 +11,7 @@ const createEnv = (overrides: Partial<App.Platform['env']> = {}) =>
   ({
     APP_ENV: 'development',
     MCP_PUBLIC_ENABLED: 'true',
-    MCP_PUBLIC_BASE_URL: 'https://mcp.news.finklea.dev',
+    MCP_PUBLIC_BASE_URL: 'https://mcp.example.com',
     ...overrides
   }) as App.Platform['env'];
 

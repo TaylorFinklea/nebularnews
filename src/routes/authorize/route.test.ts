@@ -6,13 +6,13 @@ describe('/authorize alias route', () => {
     await expect(
       load({
         url: new URL(
-          'https://mcp.news.finklea.dev/authorize?client_id=client-123&response_type=code&state=abc'
+          'https://mcp.example.com/authorize?client_id=client-123&response_type=code&state=abc'
         )
       } as Parameters<typeof load>[0])
     ).rejects.toMatchObject({
       status: 307,
       location:
-        'https://mcp.news.finklea.dev/oauth/authorize?client_id=client-123&response_type=code&state=abc'
+        'https://mcp.example.com/oauth/authorize?client_id=client-123&response_type=code&state=abc'
     });
   });
 });

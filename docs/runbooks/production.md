@@ -1,80 +1,135 @@
 # Nebular News Production Runbook
 
-## 1) Initial Provisioning
-1. Create D1 databases:
-   - `nebularnews-staging`
-   - `nebularnews-prod`
-2. Update `/Users/tfinklea/git/nebularnews/wrangler.toml` with real `database_id` values for:
-   - `[env.staging]`
-   - `[env.production]`
-3. Create DNS for the public MCP hostname:
-   - staging equivalent if used
-   - production `mcp.news.finklea.dev`
-4. Configure Cloudflare Access policy in front of the app route only:
-   - keep `news.finklea.dev/*` behind Access
-   - do not put `mcp.news.finklea.dev/*` behind Access
-5. Point both hostnames at the same Worker service and let app host routing split behavior.
-4. Set required secrets in each environment:
-   - `ADMIN_PASSWORD_HASH`
-   - `SESSION_SECRET`
-   - `ENCRYPTION_KEY`
-   - `MCP_BEARER_TOKEN`
-5. Set environment vars:
-   - `APP_ENV` (`staging` or `production`)
-   - `MCP_ALLOWED_ORIGINS` (internal MCP CORS allowlist)
-   - `MCP_PUBLIC_ENABLED`
-   - `MCP_PUBLIC_BASE_URL`
-   - `MCP_PUBLIC_ALLOWED_ORIGINS`
+## 1) Topology
 
-## 2) Migrations
-1. Staging:
-   - `npm run migrate:staging`
-2. Production:
-   - `npm run migrate:prod`
-3. Verify:
-   - `GET /api/ready` returns `ok: true`
-   - `schema_version` matches expected.
+Use three separate hostnames:
 
-## 3) Deployment
-1. Deploy staging:
-   - `npm run deploy:staging`
-2. Smoke checks:
-   - `GET /api/health`
-   - `GET /api/ready`
-   - `GET /api/admin/preflight` (authenticated)
-   - `GET https://<mcp-host>/.well-known/oauth-protected-resource`
-   - `GET https://<mcp-host>/.well-known/oauth-authorization-server`
-3. Deploy production:
-   - `npm run deploy:prod`
-4. Repeat smoke checks on production.
-5. ChatGPT MCP smoke:
-   - import `https://mcp.news.finklea.dev/mcp`
-   - complete OAuth login/consent
-   - confirm only `search`, `fetch`, and `retrieve_context_bundle` are available
+- protected app host: `https://news.example.com`
+- public MCP host: `https://mcp.example.com`
+- public mobile API host: `https://api.example.com`
 
-## 4) Rollback
-1. Re-deploy the previous known-good commit/tag to the target environment.
-2. Re-run smoke checks.
-3. If rollback needs data restore, follow backup/restore section.
+Route all three to the same Worker service. App code enforces host-specific allowlists.
 
-## 5) Backup / Restore
-1. Use Cloudflare D1 export/backups for point-in-time safety before migrations.
-2. On bad migration/data event:
-   - restore DB backup
-   - deploy matching app version
-   - verify `/api/ready`, `/api/admin/preflight`.
+Keep Cloudflare Access only on the protected app host. Do not place Access in front of the public MCP or public mobile hosts.
 
-## 6) Rotation Procedures
-1. Session secret rotation:
-   - update `SESSION_SECRET`
-   - redeploy
-   - users must log in again.
-2. MCP token rotation:
-   - update `MCP_BEARER_TOKEN`
-   - update client integrations.
-3. Provider key cipher rewrap:
-   - call `POST /api/keys/rotate` (authenticated).
-4. Public MCP client revocation:
-   - open Settings → MCP apps
-   - revoke the affected client
-   - confirm the client must complete OAuth again
+## 2) Provisioning
+
+1. Create D1 databases for each environment.
+2. Create DNS records for each enabled host.
+3. Configure Cloudflare Access on the protected app host only.
+4. Set GitHub Environment vars and secrets for the target environment.
+5. Set Cloudflare runtime secrets for the Worker environment.
+
+Use the matrix in [GitHub environments matrix](github-environments.md) instead of editing tracked config files with real deployment values.
+
+## 3) Migrations
+
+Run deterministic remote migrations before deploy:
+
+```bash
+npm run migrate:staging
+npm run migrate:prod
+```
+
+Verify:
+
+- `GET /api/ready` returns `ok: true`
+- `schema_version` matches the app expectation
+
+## 4) Deployment
+
+Deploys should render `wrangler.generated.toml` from GitHub environment values. Do not replace placeholders in tracked `wrangler.toml`.
+
+```bash
+npm run deploy:staging
+npm run deploy:prod
+```
+
+The GitHub Action already performs:
+
+- `npm ci`
+- tests
+- build
+- rendered Wrangler config
+- remote migration
+- deploy retry on transient Cloudflare API failures
+- smoke checks for the protected app host
+- smoke checks for public MCP metadata/challenge
+- smoke checks for public mobile unauthenticated access
+
+## 5) Post-deploy Smoke Checks
+
+### Protected app host
+
+- `GET https://news.example.com/api/health`
+- `GET https://news.example.com/api/ready`
+- authenticated `GET /api/admin/preflight`
+
+### Public MCP host
+
+- `GET https://mcp.example.com/.well-known/oauth-protected-resource`
+- `GET https://mcp.example.com/.well-known/oauth-authorization-server`
+- unauthenticated `GET https://mcp.example.com/mcp` returns `401`
+- `WWW-Authenticate` points to the protected resource metadata document
+
+### Public mobile host
+
+- `GET https://api.example.com/api/health`
+- unauthenticated `GET https://api.example.com/api/mobile/session` returns `401`
+- OAuth consent flow succeeds from the iOS companion app
+
+### Product smoke
+
+- ChatGPT imports `https://mcp.example.com/mcp`
+- ChatGPT only sees `search`, `fetch`, and `retrieve_context_bundle`
+- iOS companion login completes via PKCE and can load dashboard, articles, reactions, and tags
+
+## 6) Backup / Restore
+
+1. Take a Cloudflare D1 backup/export before migrations that change schema or operationally sensitive data.
+2. On a bad migration or bad deployment:
+   - restore the D1 backup
+   - redeploy the matching app version
+   - verify `/api/ready`
+   - verify app, MCP, and mobile host smoke checks
+
+## 7) Rollback
+
+1. Re-deploy the previous known-good commit or tag.
+2. Re-run the smoke checks above.
+3. If data shape no longer matches the rollback target, restore the matching D1 backup before declaring the rollback complete.
+
+## 8) Revocation and Rotation
+
+### Session secret rotation
+
+- update `SESSION_SECRET`
+- redeploy
+- expect all browser sessions to be logged out
+
+### Internal MCP bearer token rotation
+
+- update `MCP_BEARER_TOKEN`
+- redeploy
+- rotate any internal MCP clients
+
+### Provider key cipher rewrap
+
+- call `POST /api/keys/rotate` while authenticated
+
+### Public OAuth client/session revocation
+
+- open Settings → Connected apps
+- revoke the affected client
+- confirm its access tokens and refresh tokens stop working
+- force the client to complete OAuth again
+
+## 9) Incident Notes
+
+- If the public MCP host or mobile host starts returning non-allowlisted content, treat it as a routing regression and roll back immediately.
+- If ChatGPT or the iOS app cannot complete OAuth, verify:
+  - the public host DNS
+  - the configured base URL
+  - the redirect URI list
+  - token endpoint health
+  - client revocation state

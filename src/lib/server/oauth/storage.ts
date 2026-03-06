@@ -1,8 +1,10 @@
 import { nanoid } from 'nanoid';
 import { dbAll, dbGet, dbRun, getAffectedRows, now, type Db } from '$lib/server/db';
 import { createOpaqueToken, sha256Base64Url } from './crypto';
+import { OAUTH_SCOPE_READ } from './audience';
 
-export const OAUTH_SCOPE_READ = 'mcp:read';
+export { OAUTH_SCOPE_READ } from './audience';
+
 export const OAUTH_CODE_TTL_MS = 5 * 60 * 1000;
 export const OAUTH_ACCESS_TOKEN_TTL_MS = 60 * 60 * 1000;
 export const OAUTH_REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -21,6 +23,7 @@ export type OAuthClient = {
 };
 
 export type OAuthClientSummary = OAuthClient & {
+  clientKind: 'mcp' | 'mobile' | 'unknown';
   activeAccessTokens: number;
   activeRefreshTokens: number;
   activeConsentCount: number;
@@ -94,6 +97,13 @@ const mapClient = (row: OAuthClientRow): OAuthClient => ({
   lastUsedAt: row.last_used_at
 });
 
+const inferClientKind = (scope: string | null) => {
+  if (!scope) return 'unknown' as const;
+  if (scope.includes('mcp:')) return 'mcp' as const;
+  if (scope.includes('app:')) return 'mobile' as const;
+  return 'unknown' as const;
+};
+
 export const registerOAuthClient = async (
   db: Db,
   input: {
@@ -137,6 +147,61 @@ export const registerOAuthClient = async (
   const client = await getOAuthClient(db, clientId);
   if (!client) {
     throw new Error('Failed to load registered OAuth client');
+  }
+  return client;
+};
+
+export const upsertOAuthClient = async (
+  db: Db,
+  input: {
+    clientId: string;
+    clientName: string;
+    redirectUris: string[];
+    grantTypes?: string[];
+    responseTypes?: string[];
+    tokenEndpointAuthMethod?: string;
+    scope?: string | null;
+  }
+) => {
+  const timestamp = now();
+  await dbRun(
+    db,
+    `INSERT INTO oauth_clients (
+      client_id,
+      client_name,
+      redirect_uris_json,
+      grant_types_json,
+      response_types_json,
+      token_endpoint_auth_method,
+      scope,
+      created_at,
+      updated_at,
+      last_used_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+    ON CONFLICT(client_id) DO UPDATE SET
+      client_name = excluded.client_name,
+      redirect_uris_json = excluded.redirect_uris_json,
+      grant_types_json = excluded.grant_types_json,
+      response_types_json = excluded.response_types_json,
+      token_endpoint_auth_method = excluded.token_endpoint_auth_method,
+      scope = excluded.scope,
+      updated_at = excluded.updated_at`,
+    [
+      input.clientId,
+      input.clientName,
+      JSON.stringify(input.redirectUris),
+      JSON.stringify(input.grantTypes ?? ['authorization_code', 'refresh_token']),
+      JSON.stringify(input.responseTypes ?? ['code']),
+      input.tokenEndpointAuthMethod ?? 'none',
+      input.scope ?? OAUTH_SCOPE_READ,
+      timestamp,
+      timestamp
+    ]
+  );
+
+  const client = await getOAuthClient(db, input.clientId);
+  if (!client) {
+    throw new Error('Failed to load OAuth client');
   }
   return client;
 };
@@ -185,6 +250,7 @@ export const listOAuthClientSummaries = async (db: Db): Promise<OAuthClientSumma
 
   return rows.map((row) => ({
     ...mapClient(row),
+    clientKind: inferClientKind(row.scope),
     activeAccessTokens: Number(row.active_access_tokens ?? 0),
     activeRefreshTokens: Number(row.active_refresh_tokens ?? 0),
     activeConsentCount: Number(row.active_consent_count ?? 0)

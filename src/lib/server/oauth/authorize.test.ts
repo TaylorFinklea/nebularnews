@@ -15,7 +15,7 @@ vi.mock('./storage', () => ({
 
 const env = {
   MCP_PUBLIC_ENABLED: 'true',
-  MCP_PUBLIC_BASE_URL: 'https://mcp.news.finklea.dev'
+  MCP_PUBLIC_BASE_URL: 'https://mcp.example.com'
 } as App.Platform['env'];
 
 describe('oauth authorize helpers', () => {
@@ -41,11 +41,11 @@ describe('oauth authorize helpers', () => {
 
   it('parses a valid authorization request', async () => {
     const { parseAuthorizeRequest } = await import('./authorize');
-    const url = new URL('https://mcp.news.finklea.dev/oauth/authorize');
+    const url = new URL('https://mcp.example.com/oauth/authorize');
     url.searchParams.set('client_id', 'client-123');
     url.searchParams.set('redirect_uri', 'https://chat.openai.com/callback');
     url.searchParams.set('response_type', 'code');
-    url.searchParams.set('resource', 'https://mcp.news.finklea.dev/mcp');
+    url.searchParams.set('resource', 'https://mcp.example.com/mcp');
     url.searchParams.set('code_challenge', 'challenge');
     url.searchParams.set('code_challenge_method', 'S256');
 
@@ -57,7 +57,7 @@ describe('oauth authorize helpers', () => {
 
   it('rejects a missing resource parameter', async () => {
     const { parseAuthorizeRequest } = await import('./authorize');
-    const url = new URL('https://mcp.news.finklea.dev/oauth/authorize');
+    const url = new URL('https://mcp.example.com/oauth/authorize');
     url.searchParams.set('client_id', 'client-123');
     url.searchParams.set('redirect_uri', 'https://chat.openai.com/callback');
     url.searchParams.set('response_type', 'code');
@@ -79,7 +79,7 @@ describe('oauth authorize helpers', () => {
         responseType: 'code',
         scope: 'mcp:read',
         state: 'abc',
-        resource: 'https://mcp.news.finklea.dev/mcp',
+        resource: 'https://mcp.example.com/mcp',
         codeChallenge: 'challenge',
         codeChallengeMethod: 'S256',
         prompt: null
@@ -102,7 +102,7 @@ describe('oauth authorize helpers', () => {
         responseType: 'code',
         scope: 'mcp:read',
         state: 'state-1',
-        resource: 'https://mcp.news.finklea.dev/mcp',
+        resource: 'https://mcp.example.com/mcp',
         codeChallenge: 'challenge',
         codeChallengeMethod: 'S256',
         prompt: null
@@ -113,6 +113,6 @@ describe('oauth authorize helpers', () => {
     expect(grantConsentMock).toHaveBeenCalledWith(expect.anything(), 'client-123', 'admin', 'mcp:read');
     expect(destination).toContain('code=auth-code');
     expect(destination).toContain('state=state-1');
-    expect(destination).toContain('iss=https%3A%2F%2Fmcp.news.finklea.dev');
+    expect(destination).toContain('iss=https%3A%2F%2Fmcp.example.com');
   });
 });

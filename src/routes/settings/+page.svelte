@@ -11,7 +11,7 @@
 
   export let data;
 
-  /** @typedef {'ai' | 'scoring' | 'reading' | 'profile' | 'keys' | 'mcp' | 'intake' | 'operations'} SettingsSectionId */
+  /** @typedef {'ai' | 'scoring' | 'reading' | 'profile' | 'keys' | 'apps' | 'intake' | 'operations'} SettingsSectionId */
 
   const sectionConfig = [
     {
@@ -45,9 +45,9 @@
       defaultOpen: false
     },
     {
-      id: 'mcp',
-      title: 'MCP apps',
-      description: 'Inspect OAuth MCP clients and revoke their access.',
+      id: 'apps',
+      title: 'Connected apps',
+      description: 'Inspect OAuth clients for MCP and mobile access and revoke their sessions.',
       defaultOpen: false
     },
     {
@@ -105,7 +105,7 @@
     ],
     profile: ['scoreSystemPrompt', 'scoreUserPromptTemplate', 'profileText'],
     keys: [],
-    mcp: [],
+    apps: [],
     intake: [
       'initialFeedLookbackDays',
       'maxFeedsPerPoll',
@@ -230,10 +230,10 @@
   let orphanCleanupLoading = false;
   let orphanCleanupHasMore = orphanCount > 0;
   let orphanCleanupLastRun = null;
-  let mcpClients = data.mcpClients ?? [];
-  let revokingMcpClientId = '';
+  let connectedApps = data.connectedApps ?? [];
+  let revokingConnectedAppId = '';
   let sectionOpen = { ...defaultSectionState };
-  $: mcpClients = data.mcpClients ?? [];
+  $: connectedApps = data.connectedApps ?? [];
   $: autoReadDelaySeconds = (Number(autoReadDelayMs) / 1000).toFixed(2);
 
   let openaiKey = '';
@@ -767,25 +767,31 @@
     }
   };
 
-  const revokeMcpClient = async (clientId) => {
-    if (!clientId || revokingMcpClientId) return;
-    revokingMcpClientId = clientId;
+  const appKindLabel = (clientKind) => {
+    if (clientKind === 'mobile') return 'iOS companion';
+    if (clientKind === 'mcp') return 'MCP';
+    return 'OAuth';
+  };
+
+  const revokeConnectedApp = async (clientId) => {
+    if (!clientId || revokingConnectedAppId) return;
+    revokingConnectedAppId = clientId;
     try {
-      const res = await apiFetch(`/api/settings/mcp-clients/${encodeURIComponent(clientId)}/revoke`, {
+      const res = await apiFetch(`/api/settings/oauth-clients/${encodeURIComponent(clientId)}/revoke`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({})
       });
       if (!res.ok) {
-        showToast(await readApiError(res, 'Failed to revoke MCP client.'), 'error');
+        showToast(await readApiError(res, 'Failed to revoke connected app.'), 'error');
         return;
       }
-      showToast('MCP client access revoked.', 'success');
+      showToast('Connected app access revoked.', 'success');
       await invalidateAll();
     } catch {
-      showToast('Failed to revoke MCP client.', 'error');
+      showToast('Failed to revoke connected app.', 'error');
     } finally {
-      revokingMcpClientId = '';
+      revokingConnectedAppId = '';
     }
   };
 
@@ -1075,8 +1081,8 @@
         return `OpenAI ${keyStatus.openai ? 'connected' : 'missing'} · Anthropic ${
           keyStatus.anthropic ? 'connected' : 'missing'
         }`;
-      case 'mcp':
-        return `${mcpClients.length} registered client${mcpClients.length === 1 ? '' : 's'}`;
+      case 'apps':
+        return `${connectedApps.length} connected app${connectedApps.length === 1 ? '' : 's'}`;
       case 'intake':
         return `${initialFeedLookbackDays}-day backfill · ${maxFeedsPerPoll} feeds/${maxItemsPerPoll} items · ${retentionMode}`;
       case 'operations':
@@ -1810,28 +1816,28 @@
     </SettingsSectionCard>
 
     <SettingsSectionCard
-      id="mcp"
-      title="MCP apps"
-      summary={sectionSummary('mcp')}
+      id="apps"
+      title="Connected apps"
+      summary={sectionSummary('apps')}
       description={sectionConfig[5].description}
-      open={sectionOpen.mcp}
-      dirty={dirtySections.mcp}
-      onToggle={() => toggleSection('mcp')}
+      open={sectionOpen.apps}
+      dirty={dirtySections.apps}
+      onToggle={() => toggleSection('apps')}
     >
       <div class="section-block">
         <div class="subsection">
           <div class="subsection-header">
-            <h3>Connected MCP clients</h3>
-            <p class="muted">Registered OAuth clients for the public ChatGPT-facing MCP endpoint.</p>
+            <h3>Connected OAuth clients</h3>
+            <p class="muted">Registered MCP and mobile companion clients using the public OAuth surfaces.</p>
           </div>
 
-          {#if mcpClients.length === 0}
+          {#if connectedApps.length === 0}
             <div class="soft-panel">
-              <p class="muted">No public MCP clients have registered yet.</p>
+              <p class="muted">No connected apps have authorized access yet.</p>
             </div>
           {:else}
             <div class="mcp-client-list">
-              {#each mcpClients as client}
+              {#each connectedApps as client}
                 <div class="soft-panel mcp-client-card">
                   <div class="split-header">
                     <div>
@@ -1839,15 +1845,16 @@
                       <p class="muted small">
                         <code>{client.clientId}</code>
                       </p>
+                      <p class="muted small">{appKindLabel(client.clientKind)}</p>
                     </div>
                     <Button
                       variant="danger"
                       size="inline"
-                      on:click={() => revokeMcpClient(client.clientId)}
-                      disabled={revokingMcpClientId === client.clientId}
+                      on:click={() => revokeConnectedApp(client.clientId)}
+                      disabled={revokingConnectedAppId === client.clientId}
                     >
                       <IconTrash size={14} stroke={1.9} />
-                      <span>{revokingMcpClientId === client.clientId ? 'Revoking...' : 'Revoke access'}</span>
+                      <span>{revokingConnectedAppId === client.clientId ? 'Revoking...' : 'Revoke access'}</span>
                     </Button>
                   </div>
 

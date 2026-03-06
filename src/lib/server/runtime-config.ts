@@ -6,6 +6,7 @@ type SecretChecks = {
   encryptionKey: boolean;
   mcpBearerToken: boolean;
   mcpPublicConfig: boolean;
+  mobilePublicConfig: boolean;
 };
 
 export type RuntimeConfigReport = {
@@ -68,7 +69,11 @@ const buildCacheKey = (env: App.Platform['env']) =>
     mcpToken: trim(env.MCP_BEARER_TOKEN),
     mcpPublicEnabled: trim(env.MCP_PUBLIC_ENABLED),
     mcpPublicBaseUrl: trim(env.MCP_PUBLIC_BASE_URL),
-    mcpPublicAllowedOrigins: trim(env.MCP_PUBLIC_ALLOWED_ORIGINS)
+    mcpPublicAllowedOrigins: trim(env.MCP_PUBLIC_ALLOWED_ORIGINS),
+    mobilePublicEnabled: trim(env.MOBILE_PUBLIC_ENABLED),
+    mobilePublicBaseUrl: trim(env.MOBILE_PUBLIC_BASE_URL),
+    mobileOauthClientId: trim(env.MOBILE_OAUTH_CLIENT_ID),
+    mobileOauthRedirectUris: trim(env.MOBILE_OAUTH_REDIRECT_URIS)
   });
 
 const isValidHttpsUrl = (value: string) => {
@@ -96,6 +101,22 @@ const isValidHttpsOriginList = (raw: string) => {
   });
 };
 
+const isValidAbsoluteRedirectUriList = (raw: string) => {
+  const values = raw
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  if (values.length === 0) return false;
+  return values.every((entry) => {
+    try {
+      const url = new URL(entry);
+      return Boolean(url.protocol) && url.protocol !== 'javascript:';
+    } catch {
+      return false;
+    }
+  });
+};
+
 export const inspectRuntimeConfig = (env: App.Platform['env']): RuntimeConfigReport => {
   const key = buildCacheKey(env);
   if (cachedReport && cacheKey === key) return cachedReport;
@@ -111,13 +132,18 @@ export const inspectRuntimeConfig = (env: App.Platform['env']): RuntimeConfigRep
   const mcpPublicEnabled = parseBoolean(env.MCP_PUBLIC_ENABLED);
   const mcpPublicBaseUrl = trim(env.MCP_PUBLIC_BASE_URL);
   const mcpPublicAllowedOrigins = trim(env.MCP_PUBLIC_ALLOWED_ORIGINS);
+  const mobilePublicEnabled = parseBoolean(env.MOBILE_PUBLIC_ENABLED);
+  const mobilePublicBaseUrl = trim(env.MOBILE_PUBLIC_BASE_URL);
+  const mobileOauthClientId = trim(env.MOBILE_OAUTH_CLIENT_ID);
+  const mobileOauthRedirectUris = trim(env.MOBILE_OAUTH_REDIRECT_URIS);
 
   const secretChecks: SecretChecks = {
     adminPasswordHash: false,
     sessionSecret: false,
     encryptionKey: false,
     mcpBearerToken: false,
-    mcpPublicConfig: false
+    mcpPublicConfig: false,
+    mobilePublicConfig: false
   };
 
   if (adminPasswordHash && isValidPbkdf2Hash(adminPasswordHash)) {
@@ -167,6 +193,26 @@ export const inspectRuntimeConfig = (env: App.Platform['env']): RuntimeConfigRep
       errors.push(...publicConfigErrors);
     } else {
       secretChecks.mcpPublicConfig = true;
+    }
+  }
+
+  if (mobilePublicEnabled) {
+    const mobileConfigErrors: string[] = [];
+    if (!isValidHttpsUrl(mobilePublicBaseUrl)) {
+      mobileConfigErrors.push('MOBILE_PUBLIC_BASE_URL must be a valid HTTPS URL when the mobile public API is enabled.');
+    }
+    if (!mobileOauthClientId) {
+      mobileConfigErrors.push('MOBILE_OAUTH_CLIENT_ID is required when the mobile public API is enabled.');
+    }
+    if (!isValidAbsoluteRedirectUriList(mobileOauthRedirectUris)) {
+      mobileConfigErrors.push(
+        'MOBILE_OAUTH_REDIRECT_URIS must be a comma-separated list of absolute redirect URIs when the mobile public API is enabled.'
+      );
+    }
+    if (mobileConfigErrors.length > 0) {
+      errors.push(...mobileConfigErrors);
+    } else {
+      secretChecks.mobilePublicConfig = true;
     }
   }
 

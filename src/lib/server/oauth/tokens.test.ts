@@ -29,7 +29,9 @@ vi.mock('./storage', () => ({
 
 const env = {
   MCP_PUBLIC_ENABLED: 'true',
-  MCP_PUBLIC_BASE_URL: 'https://mcp.news.finklea.dev'
+  MCP_PUBLIC_BASE_URL: 'https://mcp.example.com',
+  MOBILE_PUBLIC_ENABLED: 'true',
+  MOBILE_PUBLIC_BASE_URL: 'https://api.example.com'
 } as App.Platform['env'];
 
 describe('oauth token helpers', () => {
@@ -46,7 +48,7 @@ describe('oauth token helpers', () => {
 
     getOAuthClientMock.mockResolvedValue({
       clientId: 'client-123',
-      redirectUris: ['https://chat.openai.com/callback']
+      redirectUris: ['https://chat.example.com/callback']
     });
     verifyPkceS256Mock.mockResolvedValue(true);
     markAuthorizationCodeUsedMock.mockResolvedValue(true);
@@ -62,9 +64,9 @@ describe('oauth token helpers', () => {
       id: 'code-row',
       client_id: 'client-123',
       user_id: 'admin',
-      redirect_uri: 'https://chat.openai.com/callback',
+      redirect_uri: 'https://chat.example.com/callback',
       scope: 'mcp:read',
-      resource: 'https://mcp.news.finklea.dev/mcp',
+      resource: 'https://mcp.example.com/mcp',
       code_challenge: 'challenge',
       code_challenge_method: 'S256',
       expires_at: Date.now() + 60_000,
@@ -75,11 +77,11 @@ describe('oauth token helpers', () => {
       grant_type: 'authorization_code',
       code: 'raw-code',
       client_id: 'client-123',
-      redirect_uri: 'https://chat.openai.com/callback',
-      resource: 'https://mcp.news.finklea.dev/mcp',
+      redirect_uri: 'https://chat.example.com/callback',
+      resource: 'https://mcp.example.com/mcp',
       code_verifier: 'verifier'
     });
-    const result = await exchangeAuthorizationCodeGrant({} as D1Database, env, form);
+    const result = await exchangeAuthorizationCodeGrant({} as D1Database, env, 'mcp', form);
 
     expect(result.access_token).toBe('access-1');
     expect(result.refresh_token).toBe('refresh-1');
@@ -92,9 +94,9 @@ describe('oauth token helpers', () => {
       id: 'code-row',
       client_id: 'client-123',
       user_id: 'admin',
-      redirect_uri: 'https://chat.openai.com/callback',
+      redirect_uri: 'https://chat.example.com/callback',
       scope: 'mcp:read',
-      resource: 'https://mcp.news.finklea.dev/mcp',
+      resource: 'https://mcp.example.com/mcp',
       code_challenge: 'challenge',
       code_challenge_method: 'S256',
       expires_at: Date.now() + 60_000,
@@ -107,10 +109,10 @@ describe('oauth token helpers', () => {
       client_id: 'client-123',
       code_verifier: 'verifier'
     });
-    const result = await exchangeAuthorizationCodeGrant({} as D1Database, env, form);
+    const result = await exchangeAuthorizationCodeGrant({} as D1Database, env, 'mcp', form);
 
     expect(result.access_token).toBe('access-1');
-    expect(result.resource).toBe('https://mcp.news.finklea.dev/mcp');
+    expect(result.resource).toBe('https://mcp.example.com/mcp');
     expect(markAuthorizationCodeUsedMock).toHaveBeenCalledWith(expect.anything(), 'code-row');
   });
 
@@ -118,15 +120,15 @@ describe('oauth token helpers', () => {
     const { exchangeAuthorizationCodeGrant } = await import('./tokens');
     getOAuthClientMock.mockResolvedValue({
       clientId: 'client-123',
-      redirectUris: ['https://chat.openai.com/callback']
+      redirectUris: ['https://chat.example.com/callback']
     });
     getAuthorizationCodeByRawCodeMock.mockResolvedValue({
       id: 'code-row',
       client_id: 'client-123',
       user_id: 'admin',
-      redirect_uri: 'https://chat.openai.com/callback',
+      redirect_uri: 'https://chat.example.com/callback',
       scope: 'mcp:read',
-      resource: 'https://mcp.news.finklea.dev/mcp',
+      resource: 'https://mcp.example.com/mcp',
       code_challenge: 'challenge',
       code_challenge_method: 'S256',
       expires_at: Date.now() + 60_000,
@@ -138,7 +140,7 @@ describe('oauth token helpers', () => {
       code: 'raw-code',
       code_verifier: 'verifier'
     });
-    const result = await exchangeAuthorizationCodeGrant({} as D1Database, env, form);
+    const result = await exchangeAuthorizationCodeGrant({} as D1Database, env, 'mcp', form);
 
     expect(result.access_token).toBe('access-1');
     expect(getOAuthClientMock).toHaveBeenCalledWith(expect.anything(), 'client-123');
@@ -150,9 +152,9 @@ describe('oauth token helpers', () => {
       id: 'code-row',
       client_id: 'client-123',
       user_id: 'admin',
-      redirect_uri: 'https://chat.openai.com/callback',
+      redirect_uri: 'https://chat.example.com/callback',
       scope: 'mcp:read',
-      resource: 'https://mcp.news.finklea.dev/mcp',
+      resource: 'https://mcp.example.com/mcp',
       code_challenge: 'challenge',
       code_challenge_method: 'S256',
       expires_at: Date.now() + 60_000,
@@ -164,12 +166,12 @@ describe('oauth token helpers', () => {
       grant_type: 'authorization_code',
       code: 'raw-code',
       client_id: 'client-123',
-      redirect_uri: 'https://chat.openai.com/callback',
-      resource: 'https://mcp.news.finklea.dev/mcp',
+      redirect_uri: 'https://chat.example.com/callback',
+      resource: 'https://mcp.example.com/mcp',
       code_verifier: 'bad-verifier'
     });
 
-    await expect(exchangeAuthorizationCodeGrant({} as D1Database, env, form)).rejects.toMatchObject({ status: 400 });
+    await expect(exchangeAuthorizationCodeGrant({} as D1Database, env, 'mcp', form)).rejects.toMatchObject({ status: 400 });
   });
 
   it('rotates a refresh token', async () => {
@@ -179,7 +181,7 @@ describe('oauth token helpers', () => {
       client_id: 'client-123',
       user_id: 'admin',
       scope: 'mcp:read',
-      resource: 'https://mcp.news.finklea.dev/mcp',
+      resource: 'https://mcp.example.com/mcp',
       expires_at: Date.now() + 60_000,
       revoked_at: null
     });
@@ -187,11 +189,12 @@ describe('oauth token helpers', () => {
     const result = await exchangeRefreshTokenGrant(
       {} as D1Database,
       env,
+      'mcp',
       new URLSearchParams({
         grant_type: 'refresh_token',
         refresh_token: 'refresh-token',
         client_id: 'client-123',
-        resource: 'https://mcp.news.finklea.dev/mcp'
+        resource: 'https://mcp.example.com/mcp'
       })
     );
 
@@ -203,14 +206,14 @@ describe('oauth token helpers', () => {
     const { exchangeRefreshTokenGrant } = await import('./tokens');
     getOAuthClientMock.mockResolvedValue({
       clientId: 'client-123',
-      redirectUris: ['https://chat.openai.com/callback']
+      redirectUris: ['https://chat.example.com/callback']
     });
     getRefreshTokenByRawTokenMock.mockResolvedValue({
       id: 'refresh-row',
       client_id: 'client-123',
       user_id: 'admin',
       scope: 'mcp:read',
-      resource: 'https://mcp.news.finklea.dev/mcp',
+      resource: 'https://mcp.example.com/mcp',
       expires_at: Date.now() + 60_000,
       revoked_at: null
     });
@@ -218,6 +221,7 @@ describe('oauth token helpers', () => {
     const result = await exchangeRefreshTokenGrant(
       {} as D1Database,
       env,
+      'mcp',
       new URLSearchParams({
         grant_type: 'refresh_token',
         refresh_token: 'refresh-token'
@@ -235,12 +239,12 @@ describe('oauth token helpers', () => {
       client_id: 'client-123',
       user_id: 'admin',
       scope: 'mcp:read',
-      resource: 'https://mcp.news.finklea.dev/mcp',
+      resource: 'https://mcp.example.com/mcp',
       expires_at: Date.now() + 60_000,
       revoked_at: null
     });
 
-    const token = await authenticatePublicAccessToken({} as D1Database, env, 'access-token');
+    const token = await authenticatePublicAccessToken({} as D1Database, env, 'mcp', 'access-token');
 
     expect(token?.client_id).toBe('client-123');
     expect(touchAccessTokenMock).toHaveBeenCalledWith(expect.anything(), 'access-row', 'client-123');

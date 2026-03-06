@@ -6,9 +6,10 @@
   "scripts": {
     "dev": "vite dev",
     "check:guardrails": "node scripts/check-no-global-reload.mjs",
+    "check:first-party-config": "node scripts/check-no-first-party-config.mjs",
     "check:ssr-render-inner": "node scripts/check-ssr-render-inner.mjs",
     "check:worker-scheduled": "node scripts/check-scheduled-export.mjs",
-    "build": "npm run check:guardrails && vite build && npm run check:ssr-render-inner && node scripts/patch-cloudflare-worker.mjs && npm run check:worker-scheduled",
+    "build": "npm run check:guardrails && npm run check:first-party-config && vite build && npm run check:ssr-render-inner && node scripts/patch-cloudflare-worker.mjs && npm run check:worker-scheduled",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run",
@@ -17,10 +18,11 @@
     "hash-password": "node scripts/hash-password.mjs",
     "scheduler:apply:staging": "node scripts/apply-scheduler-cron.mjs --env staging",
     "scheduler:apply:prod": "node scripts/apply-scheduler-cron.mjs --env production",
-    "migrate:staging": "wrangler d1 execute nebularnews-staging --remote --env staging --file=./schema.sql",
-    "migrate:prod": "wrangler d1 execute nebularnews-prod --remote --env production --file=./schema.sql",
-    "deploy:staging": "npm run build && wrangler deploy --env staging",
-    "deploy:prod": "npm run build && wrangler deploy --env production"
+    "render:wrangler": "node scripts/render-wrangler-config.mjs",
+    "migrate:staging": "node scripts/run-remote-migration.mjs --env staging",
+    "migrate:prod": "node scripts/run-remote-migration.mjs --env production",
+    "deploy:staging": "npm run build && wrangler deploy --env staging --config ${WRANGLER_CONFIG_PATH:-wrangler.toml}",
+    "deploy:prod": "npm run build && wrangler deploy --env production --config ${WRANGLER_CONFIG_PATH:-wrangler.toml}"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",

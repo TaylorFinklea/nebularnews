@@ -885,16 +885,18 @@
     background: var(--surface-strong);
     border-radius: var(--radius-xl);
     box-shadow: none;
+    border: 1px solid var(--surface-border);
     display: grid;
     gap: var(--space-4);
     align-items: start;
-    transition: box-shadow var(--transition-normal), transform var(--transition-fast);
+    transition: box-shadow var(--transition-normal), transform var(--transition-fast), border-color var(--transition-fast);
     overflow: hidden;
   }
 
   .card:hover {
     transform: translateY(-1px);
     box-shadow: var(--shadow-md);
+    border-color: var(--surface-border-hover);
   }
 
   .card.layout-split {
@@ -938,7 +940,7 @@
   .card-img-link {
     grid-area: image;
     display: block;
-    background: linear-gradient(145deg, rgba(83, 118, 255, 0.18), rgba(69, 36, 199, 0.1));
+    background: linear-gradient(145deg, rgba(83, 118, 255, 0.20), rgba(124, 106, 239, 0.14), rgba(200, 120, 80, 0.10));
   }
 
   .card.layout-split .card-img-link {
@@ -959,7 +961,7 @@
   .img-fallback {
     width: 100%;
     height: 100%;
-    background: linear-gradient(145deg, rgba(83, 118, 255, 0.18), rgba(69, 36, 199, 0.1));
+    background: linear-gradient(145deg, rgba(83, 118, 255, 0.20), rgba(124, 106, 239, 0.14), rgba(200, 120, 80, 0.10));
   }
 
   .card-main {

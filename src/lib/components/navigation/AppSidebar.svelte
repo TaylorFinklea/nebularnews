@@ -293,25 +293,32 @@
     left: 0;
     top: 6px;
     bottom: 6px;
-    width: 2px;
-    border-radius: 0 2px 2px 0;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
     background: var(--primary);
     opacity: 0;
     transform: scaleY(0.4);
+    box-shadow: none;
     transition:
       opacity 0.15s ease,
-      transform 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+      transform 0.18s cubic-bezier(0.4, 0, 0.2, 1),
+      box-shadow 0.18s ease;
   }
 
   .nav-link.active::before {
     opacity: 1;
     transform: scaleY(1);
+    box-shadow: 2px 0 8px rgba(124, 106, 239, 0.3);
   }
 
   .nav-link.active {
     color: var(--text-color);
-    background: var(--primary-soft);
+    background: rgba(124, 106, 239, 0.16);
     font-weight: 500;
+  }
+
+  .nav-link.active .nav-icon {
+    color: var(--primary);
   }
 
   /* ── Icon / Label ── */

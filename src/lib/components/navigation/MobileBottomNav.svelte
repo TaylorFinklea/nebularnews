@@ -201,8 +201,8 @@
     top: 0;
     left: 25%;
     right: 25%;
-    height: 2px;
-    border-radius: 0 0 2px 2px;
+    height: 3px;
+    border-radius: 0 0 3px 3px;
     background: var(--primary);
     opacity: 0;
     transform: scaleX(0.4);
@@ -218,6 +218,11 @@
   .rail-link.active::before {
     opacity: 1;
     transform: scaleX(1);
+    box-shadow: 0 2px 8px rgba(124, 106, 239, 0.3);
+  }
+
+  .rail-link.active .rail-icon {
+    color: var(--primary);
   }
 
   /* Touch press feedback */

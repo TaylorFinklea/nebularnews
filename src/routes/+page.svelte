@@ -607,7 +607,7 @@
   }
 
   .live-badge.live {
-    color: #7aded0;
+    color: var(--accent);
   }
 
   .news-brief {
@@ -615,6 +615,7 @@
     border-radius: var(--radius-xl);
     padding: var(--space-6);
     margin-bottom: var(--space-6);
+    border-left: 3px solid var(--accent);
   }
 
   .news-brief-heading-row {
@@ -667,8 +668,8 @@
     align-items: center;
     border-radius: var(--radius-sm);
     padding: 0.3rem 0.55rem;
-    background: var(--surface-soft);
-    color: var(--primary);
+    background: var(--accent-soft);
+    color: var(--accent);
     font-size: var(--text-xs);
     text-decoration: none;
   }
@@ -741,12 +742,14 @@
     overflow: hidden;
     display: grid;
     grid-template-columns: 180px 1fr;
-    transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+    border: 1px solid var(--surface-border);
+    transition: transform var(--transition-fast), box-shadow var(--transition-fast), border-color var(--transition-fast);
   }
 
   .queue-card:hover {
     transform: translateY(-1px);
     box-shadow: var(--shadow-md);
+    border-color: var(--surface-border-hover);
   }
 
   .card-img-wrap {
@@ -849,8 +852,8 @@
   }
 
   .reason-chip.high {
-    color: #7aded0;
-    background: rgba(122, 222, 208, 0.10);
+    color: var(--accent);
+    background: var(--accent-soft);
   }
 
   .card-excerpt {
@@ -961,6 +964,35 @@
     border-radius: var(--radius-lg);
     padding: var(--space-4);
     text-align: center;
+    border: 1px solid var(--surface-border);
+  }
+
+  .momentum-card:nth-child(1) {
+    border-color: rgba(124, 106, 239, 0.15);
+  }
+
+  .momentum-card:nth-child(2) {
+    border-color: rgba(61, 200, 192, 0.15);
+  }
+
+  .momentum-card:nth-child(2) .momentum-num {
+    color: var(--accent);
+  }
+
+  .momentum-card:nth-child(3) {
+    border-color: rgba(232, 160, 96, 0.15);
+  }
+
+  .momentum-card:nth-child(3) .momentum-num {
+    color: #e8a060;
+  }
+
+  .momentum-card:nth-child(4) {
+    border-color: rgba(122, 222, 208, 0.15);
+  }
+
+  .momentum-card:nth-child(4) .momentum-num {
+    color: #7aded0;
   }
 
   .momentum-card.is-link {
@@ -972,6 +1004,7 @@
   .momentum-card.is-link:hover {
     transform: translateY(-1px);
     box-shadow: var(--shadow-md);
+    border-color: var(--surface-border-hover);
   }
 
   .momentum-num {

@@ -25,6 +25,7 @@
 
   .card:hover {
     box-shadow: var(--shadow-md);
+    border-color: var(--surface-border-hover);
   }
   .card-strong {
     background: var(--surface-strong);

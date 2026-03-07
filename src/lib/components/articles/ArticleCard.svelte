@@ -181,7 +181,7 @@
     display: block;
     border-radius: 14px;
     overflow: hidden;
-    background: linear-gradient(145deg, rgba(83, 118, 255, 0.24), rgba(69, 36, 199, 0.12));
+    background: linear-gradient(145deg, rgba(83, 118, 255, 0.22), rgba(124, 106, 239, 0.14), rgba(200, 120, 80, 0.10));
     border: 1px solid var(--surface-border);
   }
 
@@ -201,7 +201,7 @@
     height: 100%;
     object-fit: cover;
     display: block;
-    background: linear-gradient(145deg, rgba(83, 118, 255, 0.24), rgba(69, 36, 199, 0.12));
+    background: linear-gradient(145deg, rgba(83, 118, 255, 0.22), rgba(124, 106, 239, 0.14), rgba(200, 120, 80, 0.10));
   }
 
   .image-fallback {

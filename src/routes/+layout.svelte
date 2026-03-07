@@ -198,8 +198,15 @@
     --bg-gradient-start: #030711;
     --bg-gradient-mid: #080e24;
     --bg-gradient-end: #110d2e;
-    --nebula-a: rgba(99, 72, 255, 0.18);
-    --nebula-b: rgba(40, 100, 200, 0.12);
+    --nebula-a: rgba(99, 72, 255, 0.22);
+    --nebula-b: rgba(40, 100, 200, 0.16);
+    --nebula-c: rgba(220, 120, 80, 0.10);
+    --nebula-d: rgba(200, 70, 140, 0.08);
+    --accent: #3dc8c0;
+    --accent-strong: #2bb0a8;
+    --accent-soft: rgba(61, 200, 192, 0.12);
+    --accent-contrast: #f0fffd;
+    --surface-border-hover: rgba(124, 106, 239, 0.18);
     --text-color: #e8ecf4;
     --muted-text: rgba(200, 210, 235, 0.58);
     --surface: rgba(10, 14, 36, 0.72);
@@ -227,6 +234,13 @@
     --bg-gradient-end: #e4ddf5;
     --nebula-a: rgba(110, 80, 220, 0.10);
     --nebula-b: rgba(60, 140, 220, 0.08);
+    --nebula-c: rgba(200, 110, 60, 0.06);
+    --nebula-d: rgba(180, 70, 120, 0.05);
+    --accent: #1a8f88;
+    --accent-strong: #147a74;
+    --accent-soft: rgba(26, 143, 136, 0.08);
+    --accent-contrast: #f0fffd;
+    --surface-border-hover: rgba(90, 62, 214, 0.14);
     --text-color: #1a1430;
     --muted-text: rgba(26, 20, 48, 0.52);
     --surface: rgba(255, 255, 255, 0.88);
@@ -254,13 +268,16 @@
     min-height: 100vh;
     background-color: var(--bg-gradient-start);
     background-image:
-      radial-gradient(1px 1px at 20% 30%, rgba(200, 210, 255, 0.15), transparent),
-      radial-gradient(1px 1px at 80% 10%, rgba(200, 210, 255, 0.12), transparent),
-      radial-gradient(1.5px 1.5px at 65% 50%, rgba(180, 190, 255, 0.18), transparent),
-      radial-gradient(1px 1px at 10% 85%, rgba(200, 210, 255, 0.10), transparent),
+      radial-gradient(1px 1px at 20% 30%, rgba(200, 210, 255, 0.19), transparent),
+      radial-gradient(1px 1px at 80% 10%, rgba(200, 210, 255, 0.16), transparent),
+      radial-gradient(1.5px 1.5px at 65% 50%, rgba(180, 190, 255, 0.22), transparent),
+      radial-gradient(1px 1px at 10% 85%, rgba(200, 210, 255, 0.14), transparent),
+      radial-gradient(1px 1px at 45% 65%, rgba(255, 210, 180, 0.12), transparent),
       radial-gradient(900px 500px at 5% -8%, var(--nebula-a), transparent 55%),
       radial-gradient(700px 400px at 92% 5%, var(--nebula-b), transparent 50%),
-      radial-gradient(600px 350px at 50% 100%, rgba(80, 50, 180, 0.06), transparent 50%),
+      radial-gradient(650px 400px at 35% 70%, var(--nebula-c), transparent 50%),
+      radial-gradient(500px 350px at 75% 85%, var(--nebula-d), transparent 50%),
+      radial-gradient(600px 350px at 50% 100%, rgba(80, 50, 180, 0.08), transparent 50%),
       linear-gradient(170deg, var(--bg-gradient-start), var(--bg-gradient-mid) 40%, var(--bg-gradient-end));
     background-attachment: fixed;
   }

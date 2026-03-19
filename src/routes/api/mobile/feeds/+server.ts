@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
-import { dbAll } from '$lib/server/db';
+import { nanoid } from 'nanoid';
+import { dbAll, dbRun, now } from '$lib/server/db';
 import { requireMobileAccess } from '$lib/server/mobile/auth';
 
 export const GET = async ({ request, platform }) => {
@@ -26,4 +27,27 @@ export const GET = async ({ request, platform }) => {
   );
 
   return json({ feeds });
+};
+
+export const POST = async ({ request, platform }) => {
+  await requireMobileAccess(request, platform.env, platform.env.DB, 'app:write');
+
+  const body = await request.json();
+  const url = body?.url?.trim();
+  if (!url) return json({ error: 'Missing url' }, { status: 400 });
+
+  try {
+    new URL(url);
+  } catch {
+    return json({ error: 'Invalid url' }, { status: 400 });
+  }
+
+  const id = nanoid();
+  await dbRun(
+    platform.env.DB,
+    'INSERT OR IGNORE INTO feeds (id, url, last_polled_at, next_poll_at) VALUES (?, ?, ?, ?)',
+    [id, url, null, now()]
+  );
+
+  return json({ ok: true, id });
 };

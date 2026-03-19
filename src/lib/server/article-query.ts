@@ -22,6 +22,7 @@ export type ArticleQueryInput = {
   selectedTagIds: string[];
   minPublishedAt?: number | null;
   groupedByPublishedAt?: boolean;
+  savedOnly?: boolean;
 };
 
 const sanitizeQuery = (value: string) => (value.toLowerCase().match(/\w+/g) ?? []).join(' ');
@@ -100,6 +101,10 @@ const buildWhere = (input: ArticleQueryInput) => {
 
   if (input.readFilter === 'unread') conditions.push(`${effectiveReadExpr} = 0`);
   if (input.readFilter === 'read') conditions.push(`${effectiveReadExpr} = 1`);
+
+  if (input.savedOnly) {
+    conditions.push(`(SELECT saved_at FROM article_read_state WHERE article_id = a.id LIMIT 1) IS NOT NULL`);
+  }
 
   if (input.selectedReactions.length < REACTION_VALUES.length) {
     const reactionConditions: string[] = [];

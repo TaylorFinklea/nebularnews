@@ -5,7 +5,7 @@ let schemaReady = false;
 let schemaInitPromise: Promise<void> | null = null;
 
 const MAX_PUBLISHED_FUTURE_MS = 1000 * 60 * 60 * 24;
-export const EXPECTED_SCHEMA_VERSION = 12;
+export const EXPECTED_SCHEMA_VERSION = 13;
 
 const runSafe = async (db: Db, sql: string, params: unknown[] = []) => {
   try {
@@ -635,6 +635,13 @@ const applyV12 = async (db: Db) => {
   await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_oauth_refresh_tokens_last_used ON oauth_refresh_tokens(last_used_at)');
 };
 
+const applyV13 = async (db: Db) => {
+  if (!(await columnExists(db, 'article_read_state', 'saved_at'))) {
+    await runSafe(db, 'ALTER TABLE article_read_state ADD COLUMN saved_at INTEGER');
+  }
+  await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_article_read_state_saved ON article_read_state(saved_at)');
+};
+
 export async function ensureSchema(db: Db) {
   if (schemaReady) return;
   if (schemaInitPromise) return schemaInitPromise;
@@ -689,6 +696,10 @@ export async function ensureSchema(db: Db) {
     if (currentVersion < 12) {
       await applyV12(db);
       await markVersionApplied(db, 12, 'v12_public_mcp_oauth');
+    }
+    if (currentVersion < 13) {
+      await applyV13(db);
+      await markVersionApplied(db, 13, 'v13_reading_list_saved_at');
     }
     schemaReady = true;
   })();

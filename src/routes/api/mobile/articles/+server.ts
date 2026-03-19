@@ -76,6 +76,7 @@ export const GET = async ({ request, url, platform }) => {
   ];
   const selectedTags = await resolveTagsByTokens(platform.env.DB, requestedTagTokens);
   const selectedTagIds = selectedTags.map((tag) => tag.id);
+  const savedOnly = url.searchParams.get('saved') === 'true';
 
   const result = await listArticlesWithFilters(platform.env.DB, {
     query,
@@ -86,7 +87,8 @@ export const GET = async ({ request, url, platform }) => {
     readFilter,
     sort,
     selectedTagIds,
-    minPublishedAt
+    minPublishedAt,
+    savedOnly
   });
 
   return json({
@@ -99,6 +101,7 @@ export const GET = async ({ request, url, platform }) => {
     selectedTagIds,
     readFilter,
     sort,
-    sinceDays
+    sinceDays,
+    savedOnly
   });
 };

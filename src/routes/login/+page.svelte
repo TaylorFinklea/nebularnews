@@ -1,13 +1,20 @@
 <script>
   import Card from '$lib/components/Card.svelte';
   import Button from '$lib/components/Button.svelte';
+  import { page } from '$app/stores';
   export let form;
+
+  $: isOAuthFlow = ($page.url.searchParams.get('next') ?? '').includes('/oauth/authorize');
 </script>
 
 <div class="login-shell">
   <Card variant="default">
     <h1>Welcome back</h1>
-    <p>Enter the admin password to unlock your Nebular News console.</p>
+    {#if isOAuthFlow}
+      <p class="oauth-context">Enter your admin password to authorize Nebular News iOS.</p>
+    {:else}
+      <p>Enter the admin password to unlock your Nebular News console.</p>
+    {/if}
 
     <form method="post">
       <label>
@@ -52,6 +59,16 @@
     background: var(--input-bg);
     color: var(--text-color);
     font-family: inherit;
+  }
+
+  .oauth-context {
+    font-size: var(--text-sm);
+    color: var(--text-muted);
+    background: var(--surface-2, rgba(0 0 0 / 0.05));
+    border-left: 3px solid var(--accent, currentColor);
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--radius-sm);
+    margin: 0;
   }
 
   .error {

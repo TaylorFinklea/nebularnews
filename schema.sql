@@ -134,6 +134,7 @@ CREATE TABLE IF NOT EXISTS article_read_state (
   article_id TEXT PRIMARY KEY,
   is_read INTEGER NOT NULL CHECK (is_read IN (0, 1)),
   updated_at INTEGER NOT NULL,
+  saved_at INTEGER,
   FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE
 );
 
@@ -434,6 +435,7 @@ CREATE INDEX IF NOT EXISTS idx_article_feedback_feed ON article_feedback(feed_id
 CREATE INDEX IF NOT EXISTS idx_article_reactions_feed ON article_reactions(feed_id);
 CREATE INDEX IF NOT EXISTS idx_article_reaction_reasons_code ON article_reaction_reasons(reason_code);
 CREATE INDEX IF NOT EXISTS idx_article_read_state_updated ON article_read_state(updated_at);
+CREATE INDEX IF NOT EXISTS idx_article_read_state_saved ON article_read_state(saved_at);
 CREATE INDEX IF NOT EXISTS idx_article_tags_article ON article_tags(article_id);
 CREATE INDEX IF NOT EXISTS idx_article_tags_tag ON article_tags(tag_id);
 CREATE INDEX IF NOT EXISTS idx_article_tag_suggestions_article ON article_tag_suggestions(article_id, updated_at DESC);
@@ -514,3 +516,6 @@ VALUES (11, 'v11_starter_tag_taxonomy', unixepoch() * 1000);
 
 INSERT OR IGNORE INTO schema_migrations (version, name, applied_at)
 VALUES (12, 'v12_public_mcp_oauth', unixepoch() * 1000);
+
+INSERT OR IGNORE INTO schema_migrations (version, name, applied_at)
+VALUES (13, 'v13_reading_list_saved_at', unixepoch() * 1000);

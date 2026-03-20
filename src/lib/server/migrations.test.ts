@@ -253,7 +253,7 @@ describe('migrations', () => {
     vi.resetModules();
   });
 
-  it('applies schema v12 cleanly on a v8 database', async () => {
+  it('applies schema v13 cleanly on a v8 database', async () => {
     const db = createMockDb({
       version: 8,
       includeReactionReasons: true,
@@ -264,14 +264,14 @@ describe('migrations', () => {
 
     await ensureSchema(db);
 
-    expect(await getSchemaVersion(db)).toBe(12);
+    expect(await getSchemaVersion(db)).toBe(13);
     expect(db.__state.tables.has('article_search')).toBe(true);
     expect(db.__state.tables.has('news_brief_editions')).toBe(true);
     expect(db.__state.tables.has('oauth_clients')).toBe(true);
-    await expect(assertSchemaVersion(db)).resolves.toBe(12);
+    await expect(assertSchemaVersion(db)).resolves.toBe(13);
   });
 
-  it('applies schema v12 cleanly on a v7 database', async () => {
+  it('applies schema v13 cleanly on a v7 database', async () => {
     const db = createMockDb({
       version: 7,
       includeReactionReasons: true,
@@ -282,11 +282,11 @@ describe('migrations', () => {
 
     await ensureSchema(db);
 
-    expect(await getSchemaVersion(db)).toBe(12);
+    expect(await getSchemaVersion(db)).toBe(13);
     expect(db.__state.tables.get('article_scores')).toEqual(
       expect.arrayContaining(['score_status', 'confidence', 'preference_confidence', 'weighted_average'])
     );
-    await expect(assertSchemaVersion(db)).resolves.toBe(12);
+    await expect(assertSchemaVersion(db)).resolves.toBe(13);
   });
 
   it('keeps reaction-reason migration compatible from v6', async () => {
@@ -300,9 +300,9 @@ describe('migrations', () => {
 
     await ensureSchema(db);
 
-    expect(await getSchemaVersion(db)).toBe(12);
+    expect(await getSchemaVersion(db)).toBe(13);
     expect(db.__state.tables.has('article_reaction_reasons')).toBe(true);
-    await expect(assertSchemaVersion(db)).resolves.toBe(12);
+    await expect(assertSchemaVersion(db)).resolves.toBe(13);
   });
 
   it('seeds the starter tag taxonomy exactly once', async () => {
@@ -331,7 +331,7 @@ describe('migrations', () => {
     });
     const { assertSchemaVersion } = await import('./migrations');
 
-    await expect(assertSchemaVersion(db)).rejects.toThrow('Missing required table: article_reaction_reasons');
+    await expect(assertSchemaVersion(db, 12)).rejects.toThrow('Missing required table: article_reaction_reasons');
   });
 
   it('fails schema assertion when score status columns are missing at v12', async () => {
@@ -348,7 +348,7 @@ describe('migrations', () => {
     );
     const { assertSchemaVersion } = await import('./migrations');
 
-    await expect(assertSchemaVersion(db)).rejects.toThrow('Missing required article_scores column: score_status');
+    await expect(assertSchemaVersion(db, 12)).rejects.toThrow('Missing required article_scores column: score_status');
   });
 
   it('fails schema assertion when article_search is missing at v12', async () => {
@@ -361,7 +361,7 @@ describe('migrations', () => {
     db.__state.tables.delete('article_search');
     const { assertSchemaVersion } = await import('./migrations');
 
-    await expect(assertSchemaVersion(db)).rejects.toThrow('Missing required table: article_search');
+    await expect(assertSchemaVersion(db, 12)).rejects.toThrow('Missing required table: article_search');
   });
 
   it('fails schema assertion when news_brief_editions is missing at v12', async () => {
@@ -373,7 +373,7 @@ describe('migrations', () => {
     });
     const { assertSchemaVersion } = await import('./migrations');
 
-    await expect(assertSchemaVersion(db)).rejects.toThrow('Missing required table: news_brief_editions');
+    await expect(assertSchemaVersion(db, 12)).rejects.toThrow('Missing required table: news_brief_editions');
   });
 
   it('fails schema assertion when oauth_clients is missing at v12', async () => {
@@ -386,6 +386,6 @@ describe('migrations', () => {
     db.__state.tables.delete('oauth_clients');
     const { assertSchemaVersion } = await import('./migrations');
 
-    await expect(assertSchemaVersion(db)).rejects.toThrow('Missing required table: oauth_clients');
+    await expect(assertSchemaVersion(db, 12)).rejects.toThrow('Missing required table: oauth_clients');
   });
 });

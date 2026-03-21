@@ -1160,6 +1160,12 @@
   description="Configure AI behavior, reading defaults, provider access, and operational controls."
 />
 
+<div class="settings-quick-links">
+  <a href="/jobs" class="quick-link">Jobs →</a>
+  <a href="/tags" class="quick-link">Tags →</a>
+  <a href="/feeds" class="quick-link">Feeds →</a>
+</div>
+
 <div class="settings-layout">
   <div class="settings-main">
     <SettingsSectionCard
@@ -2288,6 +2294,31 @@
 </datalist>
 
 <style>
+  .settings-quick-links {
+    display: flex;
+    gap: var(--space-2);
+    flex-wrap: wrap;
+    margin-bottom: var(--space-5);
+  }
+
+  .quick-link {
+    display: inline-flex;
+    align-items: center;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--surface-border);
+    background: var(--surface-soft);
+    color: var(--text-color);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+
+  .quick-link:hover {
+    background: var(--primary-soft);
+    border-color: var(--surface-border-hover);
+  }
+
   .settings-layout {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 20rem;

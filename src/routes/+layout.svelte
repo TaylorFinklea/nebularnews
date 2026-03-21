@@ -7,6 +7,7 @@
   import AppSidebar from '$lib/components/navigation/AppSidebar.svelte';
   import MobileBottomNav from '$lib/components/navigation/MobileBottomNav.svelte';
   import Toast from '$lib/components/Toast.svelte';
+  import { IconSettings } from '$lib/icons';
 
   const THEME_KEY = 'nebular-theme';
   const SIDEBAR_COLLAPSED_KEY = 'nebular-sidebar-collapsed';
@@ -174,6 +175,13 @@
   {/if}
 
   <div class="main-column" class:with-mobile-nav={!isLoginRoute}>
+    {#if !isLoginRoute}
+      <header class="mobile-header">
+        <a href="/settings" class="mobile-settings-btn" aria-label="Settings">
+          <IconSettings size={20} stroke={1.9} />
+        </a>
+      </header>
+    {/if}
     <main class="content">
       {#key currentPath}
         <div in:fade={{ duration: 150, delay: 60 }}>
@@ -184,7 +192,7 @@
   </div>
 
   {#if !isLoginRoute}
-    <MobileBottomNav {currentPath} {theme} onToggleTheme={toggleTheme} />
+    <MobileBottomNav {currentPath} />
   {/if}
 </div>
 
@@ -380,20 +388,46 @@
     box-sizing: border-box;
   }
 
+  .mobile-header {
+    display: none;
+  }
+
   @media (max-width: 800px) {
     .app-shell.with-chrome {
       display: block;
     }
 
+    .mobile-header {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      padding: calc(env(safe-area-inset-top) + var(--space-3)) var(--space-4) var(--space-2);
+    }
+
+    .mobile-settings-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 2.2rem;
+      height: 2.2rem;
+      border-radius: var(--radius-md);
+      color: var(--muted-text);
+      transition: background 0.15s ease, color 0.15s ease;
+    }
+
+    .mobile-settings-btn:hover {
+      background: var(--primary-soft);
+      color: var(--text-color);
+    }
+
     .content {
       padding:
-        calc(env(safe-area-inset-top) + var(--space-6))
+        var(--space-3)
         var(--space-6)
         var(--space-6);
     }
 
     .main-column.with-mobile-nav .content {
-      padding-top: calc(env(safe-area-inset-top) + var(--space-6));
       padding-bottom: calc(var(--mobile-nav-height) + env(safe-area-inset-bottom) + var(--mobile-nav-offset, 0px) + var(--space-6));
     }
   }

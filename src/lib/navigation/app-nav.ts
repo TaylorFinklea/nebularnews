@@ -1,20 +1,16 @@
 export type AppNavItemId =
-  | 'dashboard'
+  | 'today'
   | 'articles'
-  | 'chat'
-  | 'settings'
-  | 'tags'
-  | 'feeds'
-  | 'jobs';
+  | 'discover'
+  | 'lists'
+  | 'settings';
 
 export type AppNavItemIcon =
-  | 'layoutDashboard'
+  | 'sun'
   | 'article'
-  | 'message'
-  | 'settings'
-  | 'tag'
-  | 'rss'
-  | 'clockPlay';
+  | 'compass'
+  | 'bookmark'
+  | 'settings';
 
 export type AppNavItem = {
   id: AppNavItemId;
@@ -23,16 +19,16 @@ export type AppNavItem = {
   icon: AppNavItemIcon;
   activePrefixes: string[];
   exact?: boolean;
-  group: 'primary' | 'workspace';
+  group: 'primary';
   mobilePrimary: boolean;
 };
 
 export const APP_NAV_ITEMS: readonly AppNavItem[] = [
   {
-    id: 'dashboard',
-    label: 'Dashboard',
+    id: 'today',
+    label: 'Today',
     href: '/',
-    icon: 'layoutDashboard',
+    icon: 'sun',
     activePrefixes: ['/'],
     exact: true,
     group: 'primary',
@@ -48,11 +44,20 @@ export const APP_NAV_ITEMS: readonly AppNavItem[] = [
     mobilePrimary: true
   },
   {
-    id: 'chat',
-    label: 'Chat',
-    href: '/chat',
-    icon: 'message',
-    activePrefixes: ['/chat'],
+    id: 'discover',
+    label: 'Discover',
+    href: '/discover',
+    icon: 'compass',
+    activePrefixes: ['/discover'],
+    group: 'primary',
+    mobilePrimary: true
+  },
+  {
+    id: 'lists',
+    label: 'Lists',
+    href: '/lists',
+    icon: 'bookmark',
+    activePrefixes: ['/lists'],
     group: 'primary',
     mobilePrimary: true
   },
@@ -61,35 +66,8 @@ export const APP_NAV_ITEMS: readonly AppNavItem[] = [
     label: 'Settings',
     href: '/settings',
     icon: 'settings',
-    activePrefixes: ['/settings', '/tags', '/feeds', '/jobs'],
+    activePrefixes: ['/settings'],
     group: 'primary',
-    mobilePrimary: false
-  },
-  {
-    id: 'tags',
-    label: 'Tags',
-    href: '/tags',
-    icon: 'tag',
-    activePrefixes: ['/tags'],
-    group: 'workspace',
-    mobilePrimary: false
-  },
-  {
-    id: 'feeds',
-    label: 'Feeds',
-    href: '/feeds',
-    icon: 'rss',
-    activePrefixes: ['/feeds'],
-    group: 'workspace',
-    mobilePrimary: false
-  },
-  {
-    id: 'jobs',
-    label: 'Jobs',
-    href: '/jobs',
-    icon: 'clockPlay',
-    activePrefixes: ['/jobs'],
-    group: 'workspace',
     mobilePrimary: false
   }
 ];

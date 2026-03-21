@@ -2,15 +2,11 @@
   import {
     IconArticle,
     IconArrowLeft,
-    IconClockPlay,
-    IconLayoutDashboard,
-    IconMessage2,
+    IconBookmark,
+    IconCompass,
     IconMoonStars,
-    IconRss,
     IconSettings,
-    IconStars,
-    IconSun,
-    IconTag
+    IconSun
   } from '$lib/icons';
   import { APP_NAV_ITEMS, isAppNavItemActive, type AppNavItem, type AppNavItemIcon } from '$lib/navigation/app-nav';
 
@@ -20,18 +16,15 @@
   export let onToggleTheme: () => void = () => {};
   export let onToggleCollapse: () => void = () => {};
 
-  const iconByName: Record<AppNavItemIcon, typeof IconLayoutDashboard> = {
-    layoutDashboard: IconLayoutDashboard,
+  const iconByName: Record<AppNavItemIcon, typeof IconSun> = {
+    sun: IconSun,
     article: IconArticle,
-    message: IconMessage2,
-    settings: IconSettings,
-    tag: IconTag,
-    rss: IconRss,
-    clockPlay: IconClockPlay
+    compass: IconCompass,
+    bookmark: IconBookmark,
+    settings: IconSettings
   };
 
-  const primaryItems = APP_NAV_ITEMS.filter((item) => item.group === 'primary' && item.id !== 'settings');
-  const workspaceItems = APP_NAV_ITEMS.filter((item) => item.group === 'workspace');
+  const primaryItems = APP_NAV_ITEMS.filter((item) => item.id !== 'settings');
   const settingsItem = APP_NAV_ITEMS.find((item) => item.id === 'settings');
   const themeLabel = () => (theme === 'dark' ? 'Light mode' : 'Dark mode');
   const collapseLabel = () => (collapsed ? 'Expand sidebar' : 'Collapse sidebar');
@@ -73,29 +66,6 @@
             </a>
           {/each}
         </nav>
-      </div>
-
-      <div class="workspace-block">
-        <div class="block-label">Workspace</div>
-        <div class="nav-panel">
-          <nav class="nav-group" aria-label="Workspace navigation">
-            {#each workspaceItems as item}
-              {@const Icon = iconByName[item.icon]}
-              {@const active = isAppNavItemActive(item, currentPath)}
-              <a
-                href={item.href}
-                class="nav-link"
-                class:active
-                aria-current={active ? 'page' : undefined}
-                aria-label={collapsed ? item.label : undefined}
-                title={collapsed ? item.label : undefined}
-              >
-                <span class="nav-icon"><Icon size={18} stroke={1.9} /></span>
-                <span class="nav-label">{item.label}</span>
-              </a>
-            {/each}
-          </nav>
-        </div>
       </div>
     </div>
 
@@ -240,25 +210,6 @@
     gap: var(--space-1);
   }
 
-  .workspace-block {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    margin-top: auto;
-    padding-top: var(--space-3);
-  }
-
-  .block-label {
-    font-size: 0.68rem;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--muted-text);
-    padding: 0 var(--space-2);
-    white-space: nowrap;
-    opacity: 0.7;
-    transition: opacity 0.12s ease;
-  }
-
   /* ── Nav links ── */
   .nav-link,
   .sidebar-action {
@@ -377,13 +328,6 @@
     width: 0;
     overflow: hidden;
     transition: opacity 0.12s ease, width 0s linear 0.12s;
-  }
-
-  .sidebar.collapsed .block-label {
-    opacity: 0;
-    height: 0;
-    overflow: hidden;
-    transition: opacity 0.1s ease, height 0s linear 0.1s;
   }
 
   .sidebar.collapsed .nav-label {

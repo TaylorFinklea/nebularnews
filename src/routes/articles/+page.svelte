@@ -1,5 +1,5 @@
 <script>
-  import { invalidateAll } from '$app/navigation';
+  import { goto, invalidateAll } from '$app/navigation';
   import { onDestroy } from 'svelte';
   import { apiFetch } from '$lib/client/api-fetch';
   import {
@@ -371,6 +371,48 @@
     return `/articles/${articleId}?from=${encodeURIComponent(from)}`;
   };
 
+  const filterHref = (overrides = {}) => {
+    const params = new URLSearchParams();
+    const r = overrides.read ?? data.readFilter ?? 'unread';
+    const s = overrides.sort ?? data.sort ?? 'newest';
+    const sc = overrides.scores ?? data.selectedScores ?? DEFAULT_SCORE_FILTER;
+    if (r !== 'unread') params.set('read', r);
+    if (s !== 'newest') params.set('sort', s);
+    for (const score of sc) params.append('score', score);
+    if (data.q) params.set('q', data.q);
+    if (data.sinceDays) params.set('sinceDays', String(data.sinceDays));
+    if (data.view && data.view !== 'list') params.set('view', data.view);
+    for (const reaction of data.selectedReactions ?? []) params.append('reaction', reaction);
+    for (const tagId of data.selectedTagIds ?? []) params.append('tags', tagId);
+    const qs = params.toString();
+    return `/articles${qs ? '?' + qs : ''}`;
+  };
+
+  const scoreThresholdToFilter = (scores) => {
+    if (!scores || scores.length >= 7) return 'any';
+    const nums = scores.filter(s => !isNaN(Number(s))).map(Number).sort();
+    if (nums.length === 3 && nums[0] === 3 && nums[1] === 4 && nums[2] === 5) return '3plus';
+    if (nums.length === 2 && nums[0] === 4 && nums[1] === 5) return '4plus';
+    if (nums.length === 1 && nums[0] === 5) return '5only';
+    return 'custom';
+  };
+
+  const scoreFilterToScores = (val) => {
+    if (val === '3plus') return ['5', '4', '3'];
+    if (val === '4plus') return ['5', '4'];
+    if (val === '5only') return ['5'];
+    return [...DEFAULT_SCORE_FILTER];
+  };
+
+  $: currentScoreFilter = scoreThresholdToFilter(data.selectedScores);
+
+  $: advancedFilterCount = [
+    data.q ? 1 : 0,
+    (data.selectedReactions?.length ?? 3) < 3 ? 1 : 0,
+    (data.selectedTagIds?.length ?? 0) > 0 ? 1 : 0,
+    data.view && data.view !== 'list' ? 1 : 0
+  ].reduce((a, b) => a + b, 0);
+
   $: hasActiveFilters = (data.q || data.sinceDays || (data.selectedScores?.length ?? 0) < 7 || data.readFilter !== 'unread' || (data.selectedReactions?.length ?? 0) < 3 || (data.selectedTagIds?.length ?? 0) > 0);
   $: activeFilterCount = [
     data.q ? 1 : 0,
@@ -395,22 +437,39 @@
   </svelte:fragment>
 </PageHeader>
 
-<!-- Collapsible filters -->
+<!-- Inline filter bar -->
 <div class="filter-bar">
+  <div class="pill-group">
+    <a class="pill" class:active={readFilter === 'all'} href={filterHref({ read: 'all' })}>All</a>
+    <a class="pill" class:active={readFilter === 'unread'} href={filterHref({ read: 'unread' })}>Unread</a>
+    <a class="pill" class:active={readFilter === 'read'} href={filterHref({ read: 'read' })}>Read</a>
+  </div>
+
+  <select class="inline-select" value={sort} on:change={(e) => goto(filterHref({ sort: e.currentTarget.value }))}>
+    <option value="newest">Newest</option>
+    <option value="oldest">Oldest</option>
+    <option value="score_desc">Best fit</option>
+    <option value="unread_first">Unread first</option>
+  </select>
+
+  <select class="inline-select" value={currentScoreFilter} on:change={(e) => goto(filterHref({ scores: scoreFilterToScores(e.currentTarget.value) }))}>
+    <option value="any">Any score</option>
+    <option value="3plus">3+</option>
+    <option value="4plus">4+</option>
+    <option value="5only">5 only</option>
+    {#if currentScoreFilter === 'custom'}<option value="custom">Custom</option>{/if}
+  </select>
+
   <button class="filter-toggle" on:click={() => (filtersOpen = !filtersOpen)} aria-expanded={filtersOpen}>
-    <IconAdjustments size={16} stroke={1.9} />
-    <span>Filters</span>
-    {#if activeFilterCount > 0}
-      <span class="filter-badge">{activeFilterCount}</span>
+    <IconAdjustments size={14} stroke={1.9} />
+    <span>More</span>
+    {#if advancedFilterCount > 0}
+      <span class="filter-badge">{advancedFilterCount}</span>
     {/if}
-    <span class="toggle-arrow" class:open={filtersOpen}>▾</span>
   </button>
 
   {#if hasActiveFilters}
-    <a class="clear-all" href="/articles" data-sveltekit-reload="true">
-      <IconFilterX size={14} stroke={1.9} />
-      <span>Clear all</span>
-    </a>
+    <a class="clear-link" href="/articles" data-sveltekit-reload="true">Clear</a>
   {/if}
 </div>
 
@@ -419,36 +478,18 @@
     {#if sinceDays}
       <input type="hidden" name="sinceDays" value={sinceDays} />
     {/if}
+    <input type="hidden" name="read" value={readFilter} />
+    <input type="hidden" name="sort" value={sort} />
+    {#each selectedScores as sc}<input type="hidden" name="score" value={sc} />{/each}
     <div class="filter-row">
       <div class="filter-group">
         <label class="filter-label" for="q-input">Search</label>
         <div class="search-row">
           <input id="q-input" name="q" placeholder="Search headlines and summaries" bind:value={query} />
-          <Button type="submit" size="icon" title="Apply filters">
+          <Button type="submit" size="icon" title="Search">
             <IconSearch size={15} stroke={1.9} />
           </Button>
         </div>
-      </div>
-
-      <div class="filter-group">
-        <label class="filter-label" for="sort-select">Sort</label>
-        <select id="sort-select" name="sort" bind:value={sort}>
-          <option value="newest">Newest first</option>
-          <option value="oldest">Oldest first</option>
-          <option value="score_desc">Score high → low</option>
-          <option value="score_asc">Score low → high</option>
-          <option value="unread_first">Unread first</option>
-          <option value="title_az">Title A–Z</option>
-        </select>
-      </div>
-
-      <div class="filter-group">
-        <label class="filter-label" for="read-select">Read status</label>
-        <select id="read-select" name="read" bind:value={readFilter}>
-          <option value="all">All articles</option>
-          <option value="unread">Unread only</option>
-          <option value="read">Read only</option>
-        </select>
       </div>
 
       <div class="filter-group">
@@ -456,21 +497,6 @@
         <div class="radio-row">
           <label class="radio-opt"><input type="radio" name="view" value="list" bind:group={view} /><span>List</span></label>
           <label class="radio-opt"><input type="radio" name="view" value="grouped" bind:group={view} /><span>By date</span></label>
-        </div>
-      </div>
-    </div>
-
-    <div class="filter-row">
-      <div class="filter-group">
-        <span class="filter-label">AI Score</span>
-        <div class="check-row">
-          {#each [['5','Perfect'], ['4','Strong'], ['3','Okay'], ['2','Weak'], ['1','Poor'], ['learning','Learning'], ['unscored','Unscored']] as [val, lbl]}
-            <label class="check-opt">
-              <input type="checkbox" name="score" value={val} bind:group={selectedScores} />
-              <span>{lbl}</span>
-            </label>
-          {/each}
-          <button type="button" class="select-all-btn" on:click={() => (selectedScores = [...DEFAULT_SCORE_FILTER])}>All</button>
         </div>
       </div>
 
@@ -498,7 +524,7 @@
       <div class="filter-submit">
         <Button type="submit" size="inline">
           <IconSearch size={15} stroke={1.9} />
-          <span>Apply filters</span>
+          <span>Apply</span>
         </Button>
       </div>
     </div>
@@ -694,24 +720,65 @@
   .filter-bar {
     display: flex;
     align-items: center;
-    gap: var(--space-3);
-    margin-bottom: var(--space-3);
+    gap: 0.6rem;
+    flex-wrap: wrap;
+    margin-bottom: var(--space-4);
+  }
+
+  .pill-group {
+    display: inline-flex;
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-full);
+    overflow: hidden;
+  }
+
+  .pill {
+    padding: 0.35rem 0.75rem;
+    font-size: var(--text-sm);
+    font-weight: 500;
+    color: var(--muted-text);
+    text-decoration: none;
+    transition: background var(--transition-fast), color var(--transition-fast);
+    border-right: 1px solid var(--input-border);
+  }
+
+  .pill:last-child {
+    border-right: none;
+  }
+
+  .pill:hover {
+    background: var(--surface-soft);
+  }
+
+  .pill.active {
+    background: var(--primary);
+    color: var(--button-text);
+  }
+
+  .inline-select {
+    padding: 0.35rem 0.6rem;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--input-border);
+    background: var(--surface-strong);
+    font-size: var(--text-sm);
+    font-family: inherit;
+    color: var(--text-color);
+    cursor: pointer;
   }
 
   .filter-toggle {
     display: inline-flex;
     align-items: center;
-    gap: 0.4rem;
+    gap: 0.35rem;
     background: var(--surface-strong);
-    border: none;
+    border: 1px solid var(--input-border);
     border-radius: var(--radius-md);
-    padding: 0.45rem 0.9rem;
+    padding: 0.35rem 0.7rem;
     font-family: inherit;
     font-size: var(--text-sm);
     font-weight: 500;
     cursor: pointer;
     color: var(--text-color);
-    transition: background var(--transition-fast), border-color var(--transition-fast);
   }
 
   .filter-toggle:hover {
@@ -722,28 +789,21 @@
     background: var(--primary);
     color: var(--button-text);
     border-radius: var(--radius-full);
-    padding: 0 0.45rem;
+    padding: 0 0.4rem;
     font-size: 0.7rem;
     font-weight: 600;
-    line-height: 1.6;
+    line-height: 1.5;
   }
 
-  .toggle-arrow {
-    transition: transform var(--transition-fast);
-    font-size: 0.8rem;
-    color: var(--muted-text);
-  }
-
-  .toggle-arrow.open {
-    transform: rotate(180deg);
-  }
-
-  .clear-all {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
+  .clear-link {
     font-size: var(--text-sm);
     color: var(--muted-text);
+    text-decoration: none;
+    font-weight: 500;
+  }
+
+  .clear-link:hover {
+    color: var(--text-color);
   }
 
   .header-actions {

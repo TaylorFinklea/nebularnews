@@ -55,18 +55,11 @@ const keyPointCountByLength: Record<SummaryLength, number> = {
   long: 8
 };
 
-const clampWords = (text: string, maxWords: number) => {
-  const words = text.split(/\s+/).filter(Boolean);
-  if (words.length <= maxWords) return text.trim();
-  return `${words.slice(0, maxWords).join(' ').trim()}...`;
-};
-
-const normalizeParagraphSummary = (text: string, length: SummaryLength) => {
+const normalizeParagraphSummary = (text: string, _length: SummaryLength) => {
   const withoutListMarkers = text
     .replace(/^\s*[-*•]\s+/gm, '')
     .replace(/^\s*\d+[\).]\s+/gm, '');
-  const flattened = withoutListMarkers.replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
-  return clampWords(flattened, summaryConstraints[length].maxWords);
+  return withoutListMarkers.replace(/\n+/g, ' ').replace(/\s+/g, ' ').trim();
 };
 
 const normalizeBulletSummary = (text: string, length: SummaryLength) => {
@@ -77,7 +70,7 @@ const normalizeBulletSummary = (text: string, length: SummaryLength) => {
     .map((line) => line.replace(/^\s*[-*•]\s*/, '').replace(/^\s*\d+[\).]\s*/, '').trim())
     .filter(Boolean)
     .slice(0, maxBullets)
-    .map((line) => `- ${clampWords(line, 16)}`);
+    .map((line) => `- ${line}`);
 
   if (lines.length > 0) return lines.join('\n');
 
@@ -98,7 +91,7 @@ const normalizeKeyPoints = (input: unknown, length: SummaryLength) => {
     .filter(Boolean);
 
   const deduped = [...new Set(cleaned)];
-  return deduped.slice(0, keyPointCountByLength[length]).map((point) => clampWords(point, 18));
+  return deduped.slice(0, keyPointCountByLength[length]);
 };
 
 const normalizeTagName = (value: unknown) =>

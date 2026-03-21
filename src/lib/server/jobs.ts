@@ -9,7 +9,7 @@ import {
   summarizeArticle
 } from './llm';
 import { extractLeadImageUrlFromHtml } from './images';
-import { BROWSER_USER_AGENT, BROWSER_ACCEPT } from './text';
+import { BROWSER_USER_AGENT, BROWSER_ACCEPT, extractMainContent, computeWordCount } from './text';
 import {
   getAutoTagMaxPerArticle,
   getFeatureProviderModel,
@@ -150,6 +150,8 @@ export async function processJobs(
         runMetadata = await runAutoTagJob(db, env, job.article_id);
       } else if (job.type === 'score' && job.article_id) {
         runMetadata = await runScoreJob(db, env, job.article_id);
+      } else if (job.type === 'refetch_content' && job.article_id) {
+        runMetadata = await runRefetchContentJob(db, job.article_id);
       } else if (job.type === 'refresh_profile') {
         runMetadata = await runRefreshProfile(db, env);
       }
@@ -438,6 +440,41 @@ export async function runArticleJobImmediately(
     );
     throw err;
   }
+}
+
+const REFETCH_TIMEOUT_MS = 15_000;
+
+async function runRefetchContentJob(db: Db, articleId: string): Promise<JobRunMetadata> {
+  const article = await dbGet<{
+    canonical_url: string | null;
+    content_text: string | null;
+  }>(db, 'SELECT canonical_url, content_text FROM articles WHERE id = ?', [articleId]);
+
+  if (!article?.canonical_url) return null;
+  if (article.content_text && article.content_text.length >= 200) return null;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REFETCH_TIMEOUT_MS);
+  try {
+    const res = await fetch(article.canonical_url, {
+      headers: { 'user-agent': BROWSER_USER_AGENT, 'accept': BROWSER_ACCEPT },
+      signal: controller.signal
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const html = await res.text();
+    const extracted = extractMainContent(html, article.canonical_url);
+    if (extracted.contentText && extracted.contentText.length >= 200) {
+      const wordCount = computeWordCount(extracted.contentText);
+      await dbRun(
+        db,
+        `UPDATE articles SET content_html = ?, content_text = ?, word_count = ?, updated_at = ? WHERE id = ?`,
+        [extracted.contentHtml, extracted.contentText, wordCount, now(), articleId]
+      );
+    }
+  } finally {
+    clearTimeout(timeout);
+  }
+  return null;
 }
 
 async function runImageBackfillJob(db: Db, articleId: string): Promise<JobRunMetadata> {

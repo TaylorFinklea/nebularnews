@@ -10,6 +10,8 @@ import {
   markJobPendingNow,
   normalizeJobFilter,
   queueMissingRecentArticleJobs,
+  queueMissingKeyPoints,
+  queueRefetchContent,
   retryFailedJobs,
   runQueueCycles
 } from '$lib/server/jobs-admin';
@@ -25,7 +27,9 @@ const validActions = new Set([
   'cancel_pending_all',
   'clear_finished',
   'queue_recent_missing',
-  'queue_today_missing'
+  'queue_today_missing',
+  'backfill_key_points',
+  'refetch_missing_content'
 ]);
 const noStoreHeaders = { 'cache-control': 'no-store' };
 
@@ -113,6 +117,18 @@ export const POST = async (event) => {
       { action: 'queue_recent_missing', queued, counts },
       { headers: noStoreHeaders }
     );
+  }
+
+  if (action === 'backfill_key_points') {
+    const result = await queueMissingKeyPoints(db);
+    const counts = await getJobCounts(db);
+    return apiOkWithAliases(event, { action, ...result, counts }, { action, ...result, counts }, { headers: noStoreHeaders });
+  }
+
+  if (action === 'refetch_missing_content') {
+    const result = await queueRefetchContent(db);
+    const counts = await getJobCounts(db);
+    return apiOkWithAliases(event, { action, ...result, counts }, { action, ...result, counts }, { headers: noStoreHeaders });
   }
 
   if (!jobId) {

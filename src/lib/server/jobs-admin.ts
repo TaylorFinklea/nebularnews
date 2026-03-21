@@ -230,14 +230,91 @@ export async function queueMissingRecentArticleJobs(
     [runAfter, timestamp, timestamp, windowStart, windowEnd]
   );
 
+  const keyPointsResult = await dbRun(
+    db,
+    `INSERT INTO jobs (id, type, article_id, status, attempts, priority, run_after, last_error, provider, model, created_at, updated_at)
+     SELECT lower(hex(randomblob(16))), 'key_points', a.id, 'pending', 0, 100, ?, NULL, NULL, NULL, ?, ?
+     FROM articles a
+     WHERE COALESCE(a.published_at, a.fetched_at) >= ?
+       AND COALESCE(a.published_at, a.fetched_at) <= ?
+       AND EXISTS (SELECT 1 FROM article_summaries s WHERE s.article_id = a.id)
+       AND NOT EXISTS (SELECT 1 FROM article_key_points kp WHERE kp.article_id = a.id)
+     ON CONFLICT(type, article_id) DO UPDATE SET
+       status = excluded.status,
+       attempts = 0,
+       priority = excluded.priority,
+       run_after = excluded.run_after,
+       last_error = NULL,
+       provider = NULL,
+       model = NULL,
+       locked_by = NULL,
+       locked_at = NULL,
+       lease_expires_at = NULL,
+       updated_at = excluded.updated_at`,
+    [runAfter, timestamp, timestamp, windowStart, windowEnd]
+  );
+
   return {
     windowStart,
     windowEnd,
     lookbackHours,
     scoreQueued: getAffectedRows(scoreResult),
     autoTagQueued: getAffectedRows(autoTagResult),
-    imageBackfillQueued: getAffectedRows(imageBackfillResult)
+    imageBackfillQueued: getAffectedRows(imageBackfillResult),
+    keyPointsQueued: getAffectedRows(keyPointsResult)
   };
+}
+
+export async function queueMissingKeyPoints(db: Db) {
+  const timestamp = now();
+  const result = await dbRun(
+    db,
+    `INSERT INTO jobs (id, type, article_id, status, attempts, priority, run_after, last_error, provider, model, created_at, updated_at)
+     SELECT lower(hex(randomblob(16))), 'key_points', a.id, 'pending', 0, 80, ?, NULL, NULL, NULL, ?, ?
+     FROM articles a
+     WHERE EXISTS (SELECT 1 FROM article_summaries s WHERE s.article_id = a.id)
+       AND NOT EXISTS (SELECT 1 FROM article_key_points kp WHERE kp.article_id = a.id)
+     ON CONFLICT(type, article_id) DO UPDATE SET
+       status = excluded.status,
+       attempts = 0,
+       priority = excluded.priority,
+       run_after = excluded.run_after,
+       last_error = NULL,
+       provider = NULL,
+       model = NULL,
+       locked_by = NULL,
+       locked_at = NULL,
+       lease_expires_at = NULL,
+       updated_at = excluded.updated_at`,
+    [timestamp, timestamp, timestamp]
+  );
+  return { queued: getAffectedRows(result) };
+}
+
+export async function queueRefetchContent(db: Db) {
+  const timestamp = now();
+  const result = await dbRun(
+    db,
+    `INSERT INTO jobs (id, type, article_id, status, attempts, priority, run_after, last_error, provider, model, created_at, updated_at)
+     SELECT lower(hex(randomblob(16))), 'refetch_content', a.id, 'pending', 0, 90, ?, NULL, NULL, NULL, ?, ?
+     FROM articles a
+     WHERE a.canonical_url IS NOT NULL
+       AND (a.content_text IS NULL OR length(a.content_text) < 200)
+     ON CONFLICT(type, article_id) DO UPDATE SET
+       status = excluded.status,
+       attempts = 0,
+       priority = excluded.priority,
+       run_after = excluded.run_after,
+       last_error = NULL,
+       provider = NULL,
+       model = NULL,
+       locked_by = NULL,
+       locked_at = NULL,
+       lease_expires_at = NULL,
+       updated_at = excluded.updated_at`,
+    [timestamp, timestamp, timestamp]
+  );
+  return { queued: getAffectedRows(result) };
 }
 
 export async function retryFailedJobs(db: Db) {

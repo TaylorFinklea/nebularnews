@@ -112,8 +112,8 @@
       'maxItemsPerPoll',
       'eventsPollMs',
       'dashboardRefreshMinMs',
-      'retentionDays',
-      'retentionMode'
+      'retentionArchiveDays',
+      'retentionDeleteDays'
     ],
     operations: [
       'jobProcessorBatchSize',
@@ -155,8 +155,8 @@
   let dashboardRefreshMinMs = Number(
     data.settings.dashboardRefreshMinMs ?? data.feedPollingRange?.dashboardRefreshMinMs?.default ?? 30000
   );
-  let retentionDays = Number(data.settings.retentionDays ?? data.retentionRange?.default ?? 0);
-  let retentionMode = data.settings.retentionMode ?? 'archive';
+  let retentionArchiveDays = Number(data.settings.retentionArchiveDays ?? data.settings.retentionDays ?? 30);
+  let retentionDeleteDays = Number(data.settings.retentionDeleteDays ?? 90);
   let autoReadDelayMs = Number(data.settings.autoReadDelayMs ?? 4000);
   let taggingMethod = data.settings.taggingMethod ?? (data.settings.autoTaggingEnabled ? 'hybrid' : 'algorithmic');
   let autoTagMaxPerArticle = Number(
@@ -563,8 +563,8 @@
     maxItemsPerPoll: Number(maxItemsPerPoll ?? 0),
     eventsPollMs: Number(eventsPollMs ?? 0),
     dashboardRefreshMinMs: Number(dashboardRefreshMinMs ?? 0),
-    retentionDays: Number(retentionDays ?? 0),
-    retentionMode,
+    retentionArchiveDays: Number(retentionArchiveDays ?? 0),
+    retentionDeleteDays: Number(retentionDeleteDays ?? 0),
     autoReadDelayMs: Number(autoReadDelayMs ?? 0),
     taggingMethod,
     autoTagMaxPerArticle: Number(autoTagMaxPerArticle ?? 0),
@@ -617,8 +617,8 @@
     maxItemsPerPoll: Number(maxItemsPerPoll ?? 0),
     eventsPollMs: Number(eventsPollMs ?? 0),
     dashboardRefreshMinMs: Number(dashboardRefreshMinMs ?? 0),
-    retentionDays: Number(retentionDays ?? 0),
-    retentionMode,
+    retentionArchiveDays: Number(retentionArchiveDays ?? 0),
+    retentionDeleteDays: Number(retentionDeleteDays ?? 0),
     autoReadDelayMs: Number(autoReadDelayMs ?? 0),
     taggingMethod,
     autoTagMaxPerArticle: Number(autoTagMaxPerArticle ?? 0),
@@ -677,8 +677,8 @@
     maxItemsPerPoll = Number(snapshot.maxItemsPerPoll ?? 0);
     eventsPollMs = Number(snapshot.eventsPollMs ?? 0);
     dashboardRefreshMinMs = Number(snapshot.dashboardRefreshMinMs ?? 0);
-    retentionDays = Number(snapshot.retentionDays ?? 0);
-    retentionMode = snapshot.retentionMode;
+    retentionArchiveDays = Number(snapshot.retentionArchiveDays ?? 0);
+    retentionDeleteDays = Number(snapshot.retentionDeleteDays ?? 0);
     autoReadDelayMs = Number(snapshot.autoReadDelayMs ?? 0);
     taggingMethod = snapshot.taggingMethod;
     autoTagMaxPerArticle = Number(snapshot.autoTagMaxPerArticle ?? 0);
@@ -846,8 +846,8 @@
           maxItemsPerPoll,
           eventsPollMs,
           dashboardRefreshMinMs,
-          retentionDays,
-          retentionMode,
+          retentionArchiveDays,
+          retentionDeleteDays,
           autoReadDelayMs,
           taggingMethod,
           autoTagMaxPerArticle,
@@ -1084,7 +1084,7 @@
       case 'apps':
         return `${connectedApps.length} connected app${connectedApps.length === 1 ? '' : 's'}`;
       case 'intake':
-        return `${initialFeedLookbackDays}-day backfill · ${maxFeedsPerPoll} feeds/${maxItemsPerPoll} items · ${retentionMode}`;
+        return `${initialFeedLookbackDays}-day backfill · ${maxFeedsPerPoll} feeds/${maxItemsPerPoll} items · archive ${retentionArchiveDays}d / delete ${retentionDeleteDays}d`;
       case 'operations':
         return `${activeSchedulerPresetLabel} · ${orphanCount} orphan article${orphanCount === 1 ? '' : 's'}`;
       default:
@@ -1971,30 +1971,26 @@
             <p class="muted">Trim or archive older article content on the daily cleanup schedule.</p>
           </div>
           <label>
-            Retention window (days)
+            Archive after (days)
             <input
               type="number"
               min={data.retentionRange.min}
               max={data.retentionRange.max}
               step="1"
-              bind:value={retentionDays}
+              bind:value={retentionArchiveDays}
             />
           </label>
-
-          <div class="field">
-            <div class="field-label">Retention mode</div>
-            <div class="lane-toggle" role="radiogroup" aria-label="Retention mode">
-              <label class:active={retentionMode === 'archive'}>
-                <input type="radio" name="retentionMode" value="archive" bind:group={retentionMode} />
-                <span>Archive text</span>
-              </label>
-              <label class:active={retentionMode === 'delete'}>
-                <input type="radio" name="retentionMode" value="delete" bind:group={retentionMode} />
-                <span>Delete records</span>
-              </label>
-            </div>
-            <span class="hint">Daily cleanup runs at 03:30 UTC. 0 days disables cleanup.</span>
-          </div>
+          <label>
+            Delete after (days)
+            <input
+              type="number"
+              min={data.retentionRange.min}
+              max={data.retentionRange.max}
+              step="1"
+              bind:value={retentionDeleteDays}
+            />
+          </label>
+          <span class="hint">Daily cleanup at 03:30 UTC. Archive strips body text; delete removes records. Saved articles are never touched. 0 disables.</span>
         </div>
       </div>
     </SettingsSectionCard>

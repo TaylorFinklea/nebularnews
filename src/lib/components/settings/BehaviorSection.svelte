@@ -38,31 +38,29 @@
     Set to 0 to include all available history.
   </p>
   <label>
-    Retention window (days)
+    Archive after (days)
     <input
       type="number"
       min={ranges.retention.min}
       max={ranges.retention.max}
       step="1"
-      value={draft.retentionDays}
-      on:input={(event) => onSetField('retentionDays', Number(event.currentTarget.value))}
+      value={draft.retentionArchiveDays}
+      on:input={(event) => onSetField('retentionArchiveDays', Number(event.currentTarget.value))}
     />
   </label>
-  <div class="field">
-    <div class="field-label">Retention mode</div>
-    <div class="lane-toggle" role="radiogroup" aria-label="Retention mode">
-      <label class:active={draft.retentionMode === 'archive'}>
-        <input type="radio" name="retentionMode" value="archive" checked={draft.retentionMode === 'archive'} on:change={() => onSetField('retentionMode', 'archive')} />
-        <span>Archive text</span>
-      </label>
-      <label class:active={draft.retentionMode === 'delete'}>
-        <input type="radio" name="retentionMode" value="delete" checked={draft.retentionMode === 'delete'} on:change={() => onSetField('retentionMode', 'delete')} />
-        <span>Delete records</span>
-      </label>
-    </div>
-  </div>
+  <label>
+    Delete after (days)
+    <input
+      type="number"
+      min={ranges.retention.min}
+      max={ranges.retention.max}
+      step="1"
+      value={draft.retentionDeleteDays}
+      on:input={(event) => onSetField('retentionDeleteDays', Number(event.currentTarget.value))}
+    />
+  </label>
   <p class="muted">
-    Daily cleanup runs at 03:30 UTC. 0 days disables cleanup. Archive mode strips article body text; delete mode removes old articles.
+    Daily cleanup runs at 03:30 UTC. Archive strips article body text after the given days. Delete removes old articles permanently after the given days. Saved articles are never archived or deleted. 0 disables.
   </p>
   <label>
     Mark article as read after (ms)

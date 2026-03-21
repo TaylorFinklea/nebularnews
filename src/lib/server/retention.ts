@@ -1,134 +1,109 @@
-import { dbGet, dbRun, now } from './db';
-import { getRetentionConfig, type RetentionMode } from './settings';
-import { logInfo, logWarn } from './log';
+import { dbRun, now } from './db';
+import { getRetentionConfig } from './settings';
+import { logInfo } from './log';
 
 const DAY_MS = 1000 * 60 * 60 * 24;
 
+const SAVED_EXCLUSION = `AND NOT EXISTS (
+  SELECT 1 FROM article_read_state
+  WHERE article_id = articles.id AND saved_at IS NOT NULL
+)`;
+
+const AGE_FILTER = `COALESCE(published_at, fetched_at, 0) > 0
+  AND COALESCE(published_at, fetched_at, 0) < ?`;
+
 export type RetentionCleanupStats = {
   enabled: boolean;
-  mode: RetentionMode;
-  days: number;
-  cutoff_at: number | null;
-  articles_targeted: number;
-  articles_deleted: number;
+  archive_days: number;
+  delete_days: number;
+  archive_cutoff_at: number | null;
+  delete_cutoff_at: number | null;
   articles_archived: number;
+  articles_deleted: number;
   search_rows_cleared: number;
-};
-
-const countTargetArticles = async (db: D1Database, cutoffAt: number) => {
-  const row = await dbGet<{ count: number }>(
-    db,
-    `SELECT COUNT(*) as count
-     FROM articles
-     WHERE COALESCE(published_at, fetched_at, 0) > 0
-       AND COALESCE(published_at, fetched_at, 0) < ?`,
-    [cutoffAt]
-  );
-  return row?.count ?? 0;
 };
 
 export async function runRetentionCleanup(env: App.Platform['env']): Promise<RetentionCleanupStats> {
   const config = await getRetentionConfig(env.DB);
-  if (config.days <= 0) {
+  const { archiveDays, deleteDays } = config;
+
+  if (archiveDays <= 0 && deleteDays <= 0) {
     return {
       enabled: false,
-      mode: config.mode,
-      days: config.days,
-      cutoff_at: null,
-      articles_targeted: 0,
-      articles_deleted: 0,
+      archive_days: archiveDays,
+      delete_days: deleteDays,
+      archive_cutoff_at: null,
+      delete_cutoff_at: null,
       articles_archived: 0,
+      articles_deleted: 0,
       search_rows_cleared: 0
     };
   }
 
-  const cutoffAt = now() - config.days * DAY_MS;
-  const targeted = await countTargetArticles(env.DB, cutoffAt);
-  if (targeted === 0) {
-    return {
-      enabled: true,
-      mode: config.mode,
-      days: config.days,
-      cutoff_at: cutoffAt,
-      articles_targeted: 0,
-      articles_deleted: 0,
-      articles_archived: 0,
-      search_rows_cleared: 0
-    };
-  }
+  let articlesArchived = 0;
+  let articlesDeleted = 0;
+  let searchRowsCleared = 0;
+  const archiveCutoff = archiveDays > 0 ? now() - archiveDays * DAY_MS : null;
+  const deleteCutoff = deleteDays > 0 ? now() - deleteDays * DAY_MS : null;
 
-  if (config.mode === 'delete') {
+  // Phase 1: Archive — strip body text for old unsaved articles
+  if (archiveCutoff !== null) {
+    const archiveResult = await dbRun(
+      env.DB,
+      `UPDATE articles
+       SET content_html = NULL, content_text = NULL
+       WHERE ${AGE_FILTER}
+         AND (content_html IS NOT NULL OR content_text IS NOT NULL)
+         ${SAVED_EXCLUSION}`,
+      [archiveCutoff]
+    );
+    articlesArchived = Number(archiveResult.meta?.changes ?? 0);
+
     const clearSearch = await dbRun(
+      env.DB,
+      `UPDATE article_search
+       SET content_text = ''
+       WHERE article_id IN (
+         SELECT id FROM articles
+         WHERE ${AGE_FILTER} ${SAVED_EXCLUSION}
+       ) AND content_text != ''`,
+      [archiveCutoff]
+    );
+    searchRowsCleared += Number(clearSearch.meta?.changes ?? 0);
+  }
+
+  // Phase 2: Delete — remove old unsaved article records entirely
+  if (deleteCutoff !== null) {
+    const deleteSearch = await dbRun(
       env.DB,
       `DELETE FROM article_search
        WHERE article_id IN (
          SELECT id FROM articles
-         WHERE COALESCE(published_at, fetched_at, 0) > 0
-           AND COALESCE(published_at, fetched_at, 0) < ?
+         WHERE ${AGE_FILTER} ${SAVED_EXCLUSION}
        )`,
-      [cutoffAt]
+      [deleteCutoff]
     );
-    const deleteArticles = await dbRun(
+    searchRowsCleared += Number(deleteSearch.meta?.changes ?? 0);
+
+    const deleteResult = await dbRun(
       env.DB,
       `DELETE FROM articles
-       WHERE COALESCE(published_at, fetched_at, 0) > 0
-         AND COALESCE(published_at, fetched_at, 0) < ?`,
-      [cutoffAt]
+       WHERE ${AGE_FILTER} ${SAVED_EXCLUSION}`,
+      [deleteCutoff]
     );
-
-    const stats: RetentionCleanupStats = {
-      enabled: true,
-      mode: config.mode,
-      days: config.days,
-      cutoff_at: cutoffAt,
-      articles_targeted: targeted,
-      articles_deleted: Number(deleteArticles.meta?.changes ?? 0),
-      articles_archived: 0,
-      search_rows_cleared: Number(clearSearch.meta?.changes ?? 0)
-    };
-    logInfo('retention.cleanup.completed', stats);
-    return stats;
-  }
-
-  const archiveArticles = await dbRun(
-    env.DB,
-    `UPDATE articles
-     SET content_html = NULL,
-         content_text = NULL
-     WHERE COALESCE(published_at, fetched_at, 0) > 0
-       AND COALESCE(published_at, fetched_at, 0) < ?
-       AND (content_html IS NOT NULL OR content_text IS NOT NULL)`,
-    [cutoffAt]
-  );
-  const clearSearch = await dbRun(
-    env.DB,
-    `UPDATE article_search
-     SET content_text = ''
-     WHERE article_id IN (
-       SELECT id FROM articles
-       WHERE COALESCE(published_at, fetched_at, 0) > 0
-         AND COALESCE(published_at, fetched_at, 0) < ?
-     )
-       AND content_text != ''`,
-    [cutoffAt]
-  );
-
-  const archived = Number(archiveArticles.meta?.changes ?? 0);
-  if (archived === 0) {
-    logWarn('retention.cleanup.noop', { mode: config.mode, days: config.days, cutoff_at: cutoffAt, targeted });
+    articlesDeleted = Number(deleteResult.meta?.changes ?? 0);
   }
 
   const stats: RetentionCleanupStats = {
     enabled: true,
-    mode: config.mode,
-    days: config.days,
-    cutoff_at: cutoffAt,
-    articles_targeted: targeted,
-    articles_deleted: 0,
-    articles_archived: archived,
-    search_rows_cleared: Number(clearSearch.meta?.changes ?? 0)
+    archive_days: archiveDays,
+    delete_days: deleteDays,
+    archive_cutoff_at: archiveCutoff,
+    delete_cutoff_at: deleteCutoff,
+    articles_archived: articlesArchived,
+    articles_deleted: articlesDeleted,
+    search_rows_cleared: searchRowsCleared
   };
   logInfo('retention.cleanup.completed', stats);
   return stats;
 }
-

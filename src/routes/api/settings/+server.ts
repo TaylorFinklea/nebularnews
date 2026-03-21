@@ -9,6 +9,8 @@ import {
   clampJobProcessorBatchSize,
   clampInitialFeedLookbackDays,
   clampRetentionDays,
+  clampRetentionArchiveDays,
+  clampRetentionDeleteDays,
   clampMaxFeedsPerPoll,
   clampMaxItemsPerPoll,
   clampEventsPollMs,
@@ -98,6 +100,8 @@ export const GET = async ({ platform }) => {
     dashboardRefreshMinMs: await getDashboardRefreshMinMs(db, platform.env),
     retentionDays: retention.days,
     retentionMode: retention.mode,
+    retentionArchiveDays: retention.archiveDays,
+    retentionDeleteDays: retention.deleteDays,
     autoReadDelayMs: await getAutoReadDelayMs(db),
     taggingMethod,
     autoTaggingEnabled: taggingMethod === 'hybrid',
@@ -222,6 +226,12 @@ export const POST = async ({ request, platform, locals }) => {
   }
   if (body?.retentionDays !== undefined && body?.retentionDays !== null) {
     entries.push(['retention_days', String(clampRetentionDays(body.retentionDays))]);
+  }
+  if (body?.retentionArchiveDays !== undefined && body?.retentionArchiveDays !== null) {
+    entries.push(['retention_days', String(clampRetentionArchiveDays(body.retentionArchiveDays))]);
+  }
+  if (body?.retentionDeleteDays !== undefined && body?.retentionDeleteDays !== null) {
+    entries.push(['retention_delete_days', String(clampRetentionDeleteDays(body.retentionDeleteDays))]);
   }
   if (body?.retentionMode && validRetentionModes.has(body.retentionMode)) {
     entries.push(['retention_mode', body.retentionMode]);

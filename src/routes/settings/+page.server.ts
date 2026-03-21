@@ -148,6 +148,8 @@ export const load = async ({ platform }) => {
     dashboardRefreshMinMs: await getDashboardRefreshMinMs(db, platform.env),
     retentionDays: retention.days,
     retentionMode: retention.mode,
+    retentionArchiveDays: retention.archiveDays,
+    retentionDeleteDays: retention.deleteDays,
     autoReadDelayMs: await getAutoReadDelayMs(db),
     taggingMethod,
     autoTaggingEnabled: taggingMethod === 'hybrid',

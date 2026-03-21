@@ -5,12 +5,15 @@ import {
   clampNewsBriefLookbackHours,
   clampNewsBriefScoreCutoff,
   clampDashboardQueueLimit,
+  clampRetentionArchiveDays,
+  clampRetentionDeleteDays,
   getSchedulerPollIntervalMinutes,
   getSetting,
   setSetting,
   getScoringMethod,
   getNewsBriefConfig,
   getDashboardQueueConfig,
+  getRetentionConfig,
   parseBooleanSetting,
   validateNewsBriefTimezone,
   validateNewsBriefTime
@@ -20,15 +23,24 @@ const validSummaryStyles = new Set(['concise', 'detailed', 'bullet']);
 const validScoringMethods = new Set(['ai', 'algorithmic', 'hybrid']);
 
 async function aggregateSettings(db: D1Database) {
-  const [pollIntervalMinutes, summaryStyle, scoringMethod, newsBriefConfig, queueConfig] =
+  const [pollIntervalMinutes, summaryStyle, scoringMethod, newsBriefConfig, queueConfig, retention] =
     await Promise.all([
       getSchedulerPollIntervalMinutes(db),
       getSetting(db, 'summary_style').then((v) => v ?? 'concise'),
       getScoringMethod(db),
       getNewsBriefConfig(db),
-      getDashboardQueueConfig(db)
+      getDashboardQueueConfig(db),
+      getRetentionConfig(db)
     ]);
-  return { pollIntervalMinutes, summaryStyle, scoringMethod, newsBriefConfig, upNextLimit: queueConfig.limit };
+  return {
+    pollIntervalMinutes,
+    summaryStyle,
+    scoringMethod,
+    newsBriefConfig,
+    upNextLimit: queueConfig.limit,
+    retentionArchiveDays: retention.archiveDays,
+    retentionDeleteDays: retention.deleteDays
+  };
 }
 
 export const GET = async ({ request, platform }) => {
@@ -59,6 +71,14 @@ export const PATCH = async ({ request, platform }) => {
 
   if (body?.upNextLimit !== undefined && body?.upNextLimit !== null) {
     entries.push(['dashboard_queue_limit', String(clampDashboardQueueLimit(body.upNextLimit))]);
+  }
+
+  if (body?.retentionArchiveDays !== undefined && body?.retentionArchiveDays !== null) {
+    entries.push(['retention_days', String(clampRetentionArchiveDays(body.retentionArchiveDays))]);
+  }
+
+  if (body?.retentionDeleteDays !== undefined && body?.retentionDeleteDays !== null) {
+    entries.push(['retention_delete_days', String(clampRetentionDeleteDays(body.retentionDeleteDays))]);
   }
 
   if (body?.newsBriefConfig !== undefined && body?.newsBriefConfig !== null) {

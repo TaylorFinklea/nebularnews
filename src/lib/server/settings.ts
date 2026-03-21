@@ -87,6 +87,8 @@ const DEFAULT_DASHBOARD_REFRESH_MIN_MS = 30000;
 const MIN_DASHBOARD_REFRESH_MIN_MS = 10000;
 const MAX_DASHBOARD_REFRESH_MIN_MS = 120000;
 const DEFAULT_RETENTION_DAYS = 0;
+const DEFAULT_RETENTION_ARCHIVE_DAYS = 30;
+const DEFAULT_RETENTION_DELETE_DAYS = 90;
 const MIN_RETENTION_DAYS = 0;
 const MAX_RETENTION_DAYS = 3650;
 const DEFAULT_RETENTION_MODE: RetentionMode = 'archive';
@@ -357,6 +359,18 @@ export const clampInitialFeedLookbackDays = (value: unknown) => {
 export const clampRetentionDays = (value: unknown) => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return DEFAULT_RETENTION_DAYS;
+  return Math.min(MAX_RETENTION_DAYS, Math.max(MIN_RETENTION_DAYS, Math.round(parsed)));
+};
+
+export const clampRetentionArchiveDays = (value: unknown) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return DEFAULT_RETENTION_ARCHIVE_DAYS;
+  return Math.min(MAX_RETENTION_DAYS, Math.max(MIN_RETENTION_DAYS, Math.round(parsed)));
+};
+
+export const clampRetentionDeleteDays = (value: unknown) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return DEFAULT_RETENTION_DELETE_DAYS;
   return Math.min(MAX_RETENTION_DAYS, Math.max(MIN_RETENTION_DAYS, Math.round(parsed)));
 };
 
@@ -687,9 +701,10 @@ export async function getDashboardRefreshMinMs(db: Db, env?: App.Platform['env']
 }
 
 export async function getRetentionConfig(db: Db) {
-  const days = clampRetentionDays(await getSetting(db, 'retention_days'));
+  const archiveDays = clampRetentionArchiveDays(await getSetting(db, 'retention_days'));
+  const deleteDays = clampRetentionDeleteDays(await getSetting(db, 'retention_delete_days'));
   const mode = toRetentionMode(await getSetting(db, 'retention_mode'));
-  return { days, mode };
+  return { archiveDays, deleteDays, mode, days: archiveDays };
 }
 
 export async function getJobProcessorBatchSize(db: Db, env?: App.Platform['env']) {

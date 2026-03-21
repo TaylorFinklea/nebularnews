@@ -1,0 +1,19 @@
+import { json } from '@sveltejs/kit';
+import { requireMobileAccess } from '$lib/server/mobile/auth';
+import { runArticleJobImmediately } from '$lib/server/jobs';
+
+export const POST = async ({ params, request, platform }) => {
+  await requireMobileAccess(request, platform.env, platform.env.DB, 'app:write');
+
+  const articleId = params.id;
+
+  try {
+    await runArticleJobImmediately(platform.env, 'summarize', articleId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to generate summary';
+    const status = message === 'Job is currently running' ? 409 : 500;
+    return json({ error: message }, { status });
+  }
+
+  return json({ ok: true });
+};

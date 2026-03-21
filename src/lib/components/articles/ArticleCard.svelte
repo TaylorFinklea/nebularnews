@@ -35,6 +35,11 @@
 </script>
 
 <article class={`card layout-${cardLayout}`} id={`article-${article.id}`}>
+  <div
+    class={`accent-bar ${getFitScoreTone(article.score, article.score_status)}`}
+    class:read={isArticleRead(article)}
+    aria-hidden="true"
+  ></div>
   <a
     class="card-image-link"
     href={href}
@@ -155,19 +160,38 @@
   }
 
   .card.layout-split {
-    grid-template-columns: 180px minmax(0, 1fr);
+    grid-template-columns: 4px 180px minmax(0, 1fr);
     grid-template-areas:
-      'image main'
-      'actions actions';
+      'bar image main'
+      'bar actions actions';
   }
 
   .card.layout-stacked {
-    grid-template-columns: 1fr;
+    grid-template-columns: 4px 1fr;
     grid-template-areas:
-      'image'
-      'main'
-      'actions';
+      'bar image'
+      'bar main'
+      'bar actions';
   }
+
+  .accent-bar {
+    grid-area: bar;
+    width: 4px;
+    border-radius: 2px;
+    align-self: stretch;
+  }
+
+  .accent-bar.read {
+    opacity: 0.3;
+  }
+
+  .accent-bar.fit-1 { background: #fca5a5; }
+  .accent-bar.fit-2 { background: #fdba74; }
+  .accent-bar.fit-3 { background: #c4b5fd; }
+  .accent-bar.fit-4 { background: #67e8f9; }
+  .accent-bar.fit-5 { background: #86efac; }
+  .accent-bar.fit-none,
+  .accent-bar.fit-learning { background: var(--muted-text); opacity: 0.2; }
 
   .card-head {
     display: flex;
@@ -415,11 +439,11 @@
   @media (max-width: 700px) {
     .card.layout-split,
     .card.layout-stacked {
-      grid-template-columns: 1fr;
+      grid-template-columns: 4px 1fr;
       grid-template-areas:
-        'image'
-        'main'
-        'actions';
+        'bar image'
+        'bar main'
+        'bar actions';
     }
 
     .card.layout-split .card-image-link,

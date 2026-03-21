@@ -6,7 +6,7 @@ export const POST = async ({ params, request, platform }) => {
   const body = await request.json().catch(() => ({}));
   const types = Array.isArray(body?.types) ? body.types : ['summarize', 'score'];
   const articleId = params.id;
-  const allowed = new Set(['summarize', 'summarize_chat', 'score', 'key_points', 'auto_tag']);
+  const allowed = new Set(['summarize', 'score', 'key_points', 'auto_tag']);
   const filtered = types.filter((type: string) => allowed.has(type));
   if (filtered.length === 0) {
     return json({ error: 'No valid types' }, { status: 400 });
@@ -24,10 +24,6 @@ export const POST = async ({ params, request, platform }) => {
       const status = message === 'Job is currently running' ? 409 : 500;
       return json({ error: message }, { status });
     }
-  }
-  if (filtered.includes('summarize_chat')) {
-    await enqueueArticleJob(platform.env.DB, 'summarize_chat', articleId);
-    queued.push('summarize_chat');
   }
   if (filtered.includes('score')) {
     await enqueueArticleJob(platform.env.DB, 'score', articleId);

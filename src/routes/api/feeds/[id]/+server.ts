@@ -68,12 +68,6 @@ export const DELETE = async ({ params, platform }) => {
       params: [id, id]
     },
     {
-      sql: `DELETE FROM chat_threads
-            WHERE scope = 'article'
-              AND article_id IN (${deletableArticlesSelectionSql})`,
-      params: [id, id]
-    },
-    {
       sql: `DELETE FROM jobs
             WHERE article_id IN (${deletableArticlesSelectionSql})`,
       params: [id, id]

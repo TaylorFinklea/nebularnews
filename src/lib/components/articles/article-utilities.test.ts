@@ -16,15 +16,10 @@ const baseProps = {
   tagSuggestions: [],
   availableTags: [],
   sources: [],
-  chatReadiness: { canChat: false, reasons: [] },
-  chatLog: [],
-  message: '',
-  sending: false,
   rerunBusy: false,
   tagBusy: false,
   tagError: '',
   tagInput: '',
-  chatError: '',
   feedback: []
 };
 

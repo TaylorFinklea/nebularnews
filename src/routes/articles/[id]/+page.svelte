@@ -13,10 +13,6 @@
 
   export let data;
 
-  let threadId = null;
-  let message = '';
-  let chatLog = [];
-  let sending = false;
   let rerunBusy = false;
   let readStateBusy = false;
   let tagBusy = false;
@@ -24,7 +20,6 @@
   let tagInput = '';
   let tags = Array.isArray(data.tags) ? data.tags : [];
   let tagSuggestions = Array.isArray(data.tagSuggestions) ? data.tagSuggestions : [];
-  let chatError = '';
   const AUTO_MARK_READ_DELAY_MS = Number(data.autoReadDelayMs ?? 4000);
   let autoReadTimer = null;
   let fullTextSource = '';
@@ -138,40 +133,6 @@
       body: JSON.stringify({ value, feedId: data.preferredSource?.feedId ?? null, reasonCodes })
     });
     await invalidateAll();
-  };
-
-  const sendMessage = async () => {
-    if (!data.chatReadiness?.canChat) { chatError = data.chatReadiness?.reasons?.[0] ?? 'Chat is not ready yet.'; return; }
-    if (!message) return;
-    sending = true;
-    chatError = '';
-    try {
-      if (!threadId) {
-        const threadRes = await apiFetch('/api/chat/threads', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ scope: 'article', articleId: data.article.id, title: data.article.title })
-        });
-        const created = await threadRes.json().catch(() => ({}));
-        if (!threadRes.ok || !created?.id) { chatError = created?.error ?? 'Failed to start article chat'; return; }
-        threadId = created.id;
-      }
-      const userText = message;
-      chatLog = [...chatLog, { role: 'user', content: userText }];
-      message = '';
-      const res = await apiFetch(`/api/chat/threads/${threadId}/messages`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ message: userText })
-      });
-      const response = await res.json().catch(() => ({}));
-      if (!res.ok) { chatError = response?.error ?? 'Chat request failed'; return; }
-      chatLog = [...chatLog, { role: 'assistant', content: response.response }];
-    } catch {
-      chatError = 'Chat request failed';
-    } finally {
-      sending = false;
-    }
   };
 
   const rerunJobs = async (types) => {
@@ -386,15 +347,10 @@
         {tagSuggestions}
         availableTags={data.availableTags ?? []}
         sources={data.sources ?? []}
-        chatReadiness={data.chatReadiness}
-        {chatLog}
-        bind:message
-        {sending}
         {rerunBusy}
         {tagBusy}
         {tagError}
         bind:tagInput
-        {chatError}
         on:react={(e) => setReaction(e.detail.value, e.detail.reasonCodes ?? [])}
         on:rerun={(e) => rerunJobs(e.detail.types)}
         on:addTags={addTags}
@@ -402,7 +358,6 @@
         on:acceptTagSuggestion={(e) => acceptTagSuggestion(e.detail.suggestion)}
         on:dismissTagSuggestion={(e) => dismissTagSuggestion(e.detail.suggestion)}
         on:submitFeedback={(e) => submitFeedback(e.detail.rating, e.detail.comment)}
-        on:send={sendMessage}
       />
     </div>
   </div>

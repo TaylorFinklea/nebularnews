@@ -3,8 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const harness = vi.hoisted(() => ({
   orphanOrder: [] as string[],
   articleSearchRows: new Set<string>(),
-  jobsRows: new Set<string>(),
-  threadRows: new Set<string>()
+  jobsRows: new Set<string>()
 }));
 
 const dbGetMock = vi.hoisted(() => vi.fn());
@@ -31,7 +30,6 @@ describe('orphan cleanup helpers', () => {
     harness.orphanOrder = ['art-03', 'art-01', 'art-02'];
     harness.articleSearchRows = new Set(harness.orphanOrder);
     harness.jobsRows = new Set(harness.orphanOrder);
-    harness.threadRows = new Set(harness.orphanOrder);
     dbGetMock.mockReset();
     dbAllMock.mockReset();
     dbRunMock.mockReset();
@@ -62,13 +60,6 @@ describe('orphan cleanup helpers', () => {
         let changes = 0;
         for (const id of ids) {
           if (harness.jobsRows.delete(id)) changes += 1;
-        }
-        return { meta: { changes } };
-      }
-      if (sql.includes('DELETE FROM chat_threads')) {
-        let changes = 0;
-        for (const id of ids) {
-          if (harness.threadRows.delete(id)) changes += 1;
         }
         return { meta: { changes } };
       }
@@ -104,7 +95,6 @@ describe('orphan cleanup helpers', () => {
       deleted_articles: 0,
       deleted_article_search_rows: 0,
       deleted_jobs_rows: 0,
-      deleted_chat_threads_rows: 0,
       orphan_count_after: 3,
       has_more: true,
       dry_run: true
@@ -121,7 +111,6 @@ describe('orphan cleanup helpers', () => {
       deleted_articles: 2,
       deleted_article_search_rows: 2,
       deleted_jobs_rows: 2,
-      deleted_chat_threads_rows: 2,
       orphan_count_after: 1,
       has_more: true,
       dry_run: false

@@ -2,7 +2,7 @@ import { error } from '@sveltejs/kit';
 import { dbAll, dbGet } from '$lib/server/db';
 import { getPreferredSourceForArticle, listSourcesForArticle } from '$lib/server/sources';
 import { getReactionForArticle } from '$lib/server/reactions';
-import { getAutoReadDelayMs, getFeatureModelLane, getFeatureProviderModel } from '$lib/server/settings';
+import { getAutoReadDelayMs } from '$lib/server/settings';
 import { listTagSuggestionsForArticle, listTags, listTagsForArticle } from '$lib/server/tags';
 import { logWarn, summarizeError } from '$lib/server/log';
 
@@ -187,50 +187,6 @@ export const load = async ({ params, platform }) => {
   const tagSuggestions = await safeLoad('tag_suggestions', [], () => listTagSuggestionsForArticle(db, params.id));
   const availableTags = await safeLoad('available_tags', [], () => listTags(db, { limit: 200 }));
 
-  const articleChatLane = await getFeatureModelLane(db, 'article_chat');
-  const chatModel = await safeLoad('chat_model', { provider: 'openai', model: '', reasoningEffort: 'medium' as const }, () =>
-    getFeatureProviderModel(db, platform.env, 'article_chat')
-  );
-  const modelCandidates = [
-    {
-      provider: chatModel.provider,
-      model: chatModel.model
-    }
-  ];
-
-  const keyRows = await safeLoad('provider_keys', [] as { provider: string }[], () =>
-    dbAll<{ provider: string }>(db, 'SELECT provider FROM provider_keys')
-  );
-  const keySet = new Set(keyRows.map((row) => row.provider));
-  const providersNeeded = [chatModel.provider];
-  const providersWithKeys = providersNeeded.filter((provider) => keySet.has(provider));
-  const hasArticleContext = Boolean(article?.content_text && article.content_text.trim().length >= 120);
-  const hasModelConfig = modelCandidates.every((candidate) => Boolean(candidate.model?.trim()));
-  const hasAnyProviderKey = providersWithKeys.length > 0;
-
-  const blockingReasons: string[] = [];
-  if (!hasArticleContext) {
-    blockingReasons.push('Article text is missing or too short. Pull/re-extract content first.');
-  }
-  if (!hasModelConfig) {
-    blockingReasons.push('Chat model is not configured in Settings.');
-  }
-  if (!hasAnyProviderKey) {
-    blockingReasons.push(`No API key available for: ${providersNeeded.join(', ')}.`);
-  }
-
-  const chatReadiness = {
-    canChat: hasArticleContext && hasModelConfig && hasAnyProviderKey,
-    hasArticleContext,
-    hasModelConfig,
-    hasAnyProviderKey,
-    selectedLane: articleChatLane,
-    providersNeeded,
-    providersWithKeys,
-    modelCandidates,
-    reasons: blockingReasons
-  };
-
   const autoReadDelayMs = await getAutoReadDelayMs(db);
 
   return {
@@ -246,7 +202,6 @@ export const load = async ({ params, platform }) => {
     tagSuggestions,
     tag_suggestions: tagSuggestions,
     availableTags,
-    chatReadiness,
     autoReadDelayMs
   };
 };

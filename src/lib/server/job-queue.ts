@@ -3,7 +3,6 @@ import { dbBatch, dbRun, now, type Db } from './db';
 
 export type ArticleJobType =
   | 'summarize'
-  | 'summarize_chat'
   | 'score'
   | 'key_points'
   | 'auto_tag'
@@ -12,7 +11,6 @@ export type ArticleJobType =
 
 const DEFAULT_JOB_PRIORITY: Record<ArticleJobType, number> = {
   summarize: 100,
-  summarize_chat: 100,
   score: 100,
   key_points: 100,
   auto_tag: 100,

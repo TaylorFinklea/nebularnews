@@ -139,9 +139,6 @@ export async function processJobs(
       let runMetadata: JobRunMetadata = null;
       if (job.type === 'summarize' && job.article_id) {
         runMetadata = await runSummarizeJob(db, env, job.article_id);
-      } else if (job.type === 'summarize_chat' && job.article_id) {
-        // Backward compatibility for older queued jobs; follows current Summaries lane setting.
-        runMetadata = await runSummarizeJob(db, env, job.article_id);
       } else if (job.type === 'image_backfill' && job.article_id) {
         runMetadata = await runImageBackfillJob(db, job.article_id);
       } else if (job.type === 'key_points' && job.article_id) {
@@ -306,7 +303,7 @@ export async function processJobs(
 
 export async function runArticleJobImmediately(
   env: App.Platform['env'],
-  type: 'summarize' | 'summarize_chat' | 'score' | 'key_points' | 'auto_tag' | 'image_backfill',
+  type: 'summarize' | 'score' | 'key_points' | 'auto_tag' | 'image_backfill',
   articleId: string
 ): Promise<JobRunMetadata> {
   const db = env.DB;
@@ -367,7 +364,7 @@ export async function runArticleJobImmediately(
 
   try {
     let runMetadata: JobRunMetadata = null;
-    if (type === 'summarize' || type === 'summarize_chat') {
+    if (type === 'summarize') {
       runMetadata = await runSummarizeJob(db, env, articleId);
     } else if (type === 'image_backfill') {
       runMetadata = await runImageBackfillJob(db, articleId);

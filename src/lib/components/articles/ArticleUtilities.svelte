@@ -13,7 +13,6 @@
   } from '$lib/icons';
   import Button from '$lib/components/Button.svelte';
   import Pill from '$lib/components/Pill.svelte';
-  import ChatBox from '$lib/components/ChatBox.svelte';
   import ArticleUtilitySection from './ArticleUtilitySection.svelte';
   import ReactionReasonDialog from './ReactionReasonDialog.svelte';
 
@@ -24,15 +23,10 @@
   export let tagSuggestions = [];
   export let availableTags = [];
   export let sources = [];
-  export let chatReadiness = { canChat: false, reasons: [] };
-  export let chatLog = [];
-  export let message = '';
-  export let sending = false;
   export let rerunBusy = false;
   export let tagBusy = false;
   export let tagError = '';
   export let tagInput = '';
-  export let chatError = '';
   export let feedback = [];
   export let density = 'default';
 
@@ -46,7 +40,7 @@
   const dispatch = createEventDispatcher();
 
   /** @type {Record<string, boolean>} */
-  let openSections = { tags: true, chat: true, feedback: false, sources: false };
+  let openSections = { tags: true, feedback: false, sources: false };
 
   const toggleSection = (e) => {
     const id = e.detail.id;
@@ -56,7 +50,6 @@
 
   $: utilityHighlights = [
     tags.length > 0 && { label: 'Tags', count: tags.length },
-    chatLog.length > 0 && { label: 'Chat', count: chatLog.length },
     feedback.length > 0 && { label: 'Feedback', count: feedback.length },
     sources.length > 0 && { label: 'Sources', count: sources.length }
   ].filter(Boolean);
@@ -240,25 +233,6 @@
       </Button>
     </div>
     {#if tagError}<p class="muted small err">{tagError}</p>{/if}
-  </ArticleUtilitySection>
-
-  <!-- Chat -->
-  <ArticleUtilitySection id="chat" title="Chat with article" summary={chatLog.length ? `${chatLog.length} messages` : ''} open={openSections.chat} on:toggle={toggleSection}>
-    <div class="section-header-row">
-      <Pill variant={chatReadiness?.canChat ? 'success' : 'warning'}>
-        {chatReadiness?.canChat ? 'Ready' : 'Needs setup'}
-      </Pill>
-    </div>
-    <ChatBox
-      {chatLog}
-      bind:message
-      {sending}
-      disabled={!chatReadiness?.canChat}
-      placeholder={chatReadiness?.canChat ? 'Ask about this article' : 'Complete chat setup first'}
-      error={chatError}
-      on:send
-      density={density === 'compact' ? 'compact' : 'default'}
-    />
   </ArticleUtilitySection>
 
   <!-- Feedback -->

@@ -14,7 +14,6 @@ export type OrphanCleanupStats = {
   deleted_articles: number;
   deleted_article_search_rows: number;
   deleted_jobs_rows: number;
-  deleted_chat_threads_rows: number;
   orphan_count_after: number;
   has_more: boolean;
   dry_run: boolean;
@@ -85,7 +84,6 @@ export async function deleteOrphanArticlesBatch(
       deleted_articles: 0,
       deleted_article_search_rows: 0,
       deleted_jobs_rows: 0,
-      deleted_chat_threads_rows: 0,
       orphan_count_after: orphanCountBefore,
       has_more: orphanCountBefore > targeted,
       dry_run: dryRun
@@ -107,13 +105,6 @@ export async function deleteOrphanArticlesBatch(
      WHERE article_id IN (${inClause})`,
     params
   );
-  const deleteThreads = await dbRun(
-    db,
-    `DELETE FROM chat_threads
-     WHERE scope = 'article'
-       AND article_id IN (${inClause})`,
-    params
-  );
   const deleteArticles = await dbRun(
     db,
     `DELETE FROM articles
@@ -128,7 +119,6 @@ export async function deleteOrphanArticlesBatch(
     deleted_articles: Number(deleteArticles.meta?.changes ?? 0),
     deleted_article_search_rows: Number(deleteSearch.meta?.changes ?? 0),
     deleted_jobs_rows: Number(deleteJobs.meta?.changes ?? 0),
-    deleted_chat_threads_rows: Number(deleteThreads.meta?.changes ?? 0),
     orphan_count_after: orphanCountAfter,
     has_more: orphanCountAfter > 0,
     dry_run: false

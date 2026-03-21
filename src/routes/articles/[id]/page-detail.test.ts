@@ -55,7 +55,6 @@ const createData = (overrides = {}) => ({
   tags: [],
   tagSuggestions: [],
   availableTags: [],
-  chatReadiness: { canChat: false, reasons: [] },
   autoReadDelayMs: 999999,
   ...overrides
 });

@@ -35,7 +35,6 @@ export type OpsSummary = {
     orphan_articles: number;
     summaries: number;
     scores: number;
-    chat_messages: number;
   };
   warnings: string[];
 };
@@ -75,7 +74,7 @@ export async function getOpsSummary(db: Db): Promise<OpsSummary> {
     }
   }
 
-  const [latestPull, success24h, failed24h, articles, orphanArticles, summaries, scores, chatMessages] = await Promise.all([
+  const [latestPull, success24h, failed24h, articles, orphanArticles, summaries, scores] = await Promise.all([
     dbGet<{
       id: string;
       status: string;
@@ -101,8 +100,7 @@ export async function getOpsSummary(db: Db): Promise<OpsSummary> {
        )`
     ),
     getCount(db, 'SELECT COUNT(*) as count FROM article_summaries'),
-    getCount(db, 'SELECT COUNT(*) as count FROM article_scores'),
-    getCount(db, 'SELECT COUNT(*) as count FROM chat_messages')
+    getCount(db, 'SELECT COUNT(*) as count FROM article_scores')
   ]);
 
   const warnings: string[] = [];
@@ -149,8 +147,7 @@ export async function getOpsSummary(db: Db): Promise<OpsSummary> {
       articles,
       orphan_articles: orphanArticles,
       summaries,
-      scores,
-      chat_messages: chatMessages
+      scores
     },
     warnings
   };

@@ -1,4 +1,4 @@
-export type ArticleUtilitySectionId = 'tags' | 'ai_tools' | 'chat' | 'feedback' | 'sources';
+export type ArticleUtilitySectionId = 'tags' | 'ai_tools' | 'feedback' | 'sources';
 export type ArticleUtilityLayout = 'inspector' | 'sheet';
 
 export type ArticleBlock =

@@ -184,24 +184,6 @@ CREATE TABLE IF NOT EXISTS article_tag_suggestion_dismissals (
   FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE
 );
 
-CREATE TABLE IF NOT EXISTS chat_threads (
-  id TEXT PRIMARY KEY,
-  scope TEXT NOT NULL,
-  article_id TEXT,
-  title TEXT,
-  created_at INTEGER NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS chat_messages (
-  id TEXT PRIMARY KEY,
-  thread_id TEXT NOT NULL,
-  role TEXT NOT NULL,
-  content TEXT NOT NULL,
-  created_at INTEGER NOT NULL,
-  token_usage_json TEXT,
-  FOREIGN KEY(thread_id) REFERENCES chat_threads(id) ON DELETE CASCADE
-);
-
 CREATE TABLE IF NOT EXISTS preference_profile (
   id TEXT PRIMARY KEY,
   profile_text TEXT NOT NULL,
@@ -441,7 +423,6 @@ CREATE INDEX IF NOT EXISTS idx_article_tag_suggestions_article ON article_tag_su
 CREATE INDEX IF NOT EXISTS idx_article_tag_suggestions_name ON article_tag_suggestions(name_normalized);
 CREATE INDEX IF NOT EXISTS idx_article_tag_dismissals_article ON article_tag_suggestion_dismissals(article_id);
 CREATE INDEX IF NOT EXISTS idx_tags_updated ON tags(updated_at);
-CREATE INDEX IF NOT EXISTS idx_chat_messages_thread ON chat_messages(thread_id);
 CREATE INDEX IF NOT EXISTS idx_pull_runs_status ON pull_runs(status, created_at);
 CREATE INDEX IF NOT EXISTS idx_job_runs_job ON job_runs(job_id, started_at);
 CREATE INDEX IF NOT EXISTS idx_auth_attempts_identifier ON auth_attempts(identifier);

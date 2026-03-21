@@ -20,7 +20,9 @@ vi.mock('./feeds', () => ({
 
 vi.mock('./text', () => ({
   computeWordCount: vi.fn(() => 42),
-  extractMainContent: vi.fn()
+  extractMainContent: vi.fn(),
+  BROWSER_USER_AGENT: 'Mozilla/5.0 (compatible; NebularNews/1.0; +https://nebularnews.app)',
+  BROWSER_ACCEPT: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
 }));
 
 vi.mock('./images', () => ({

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ArticlesPage from './+page.svelte';
 
 vi.mock('$app/navigation', () => ({
+  goto: vi.fn(async () => undefined),
   invalidateAll: vi.fn(async () => undefined)
 }));
 
@@ -191,21 +192,25 @@ describe('Articles page reactivity', () => {
     expect(screen.queryByText('3/5')).toBeNull();
   });
 
-  it('renders a dedicated learning score filter option', async () => {
-    render(ArticlesPage, { data: createData() });
+  it('renders learning-scored articles with default any-score filter', () => {
+    render(ArticlesPage, {
+      data: createData({
+        articles: [{ ...baseArticle, score: 3, score_status: 'insufficient_signal' }]
+      })
+    });
 
-    await fireEvent.click(screen.getByRole('button', { name: /Filters/i }));
-    expect(screen.getByLabelText('Learning')).toBeTruthy();
+    expect(screen.getByText('Learning')).toBeTruthy();
   });
 
   it('updates read state immediately after marking read', async () => {
     render(ArticlesPage, { data: createData() });
 
-    expect(screen.getByText('Unread')).toBeTruthy();
+    const articleCard = screen.getByText('Reactive UI test article').closest('article');
+    expect(within(articleCard).getByText('Unread')).toBeTruthy();
     const readButton = screen.getByRole('button', { name: 'Mark read' });
     await fireEvent.click(readButton);
 
-    expect(screen.getByText('Read')).toBeTruthy();
+    expect(within(articleCard).getByText('Read')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Mark unread' })).toBeTruthy();
     expect(fetch).toHaveBeenCalledWith(
       '/api/articles/article-1/read',

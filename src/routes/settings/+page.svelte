@@ -232,6 +232,8 @@
   let orphanCleanupLastRun = null;
   let connectedApps = data.connectedApps ?? [];
   let revokingConnectedAppId = '';
+  let maintenanceRunning = '';
+  let maintenanceResult = '';
   let sectionOpen = { ...defaultSectionState };
   $: connectedApps = data.connectedApps ?? [];
   $: autoReadDelaySeconds = (Number(autoReadDelayMs) / 1000).toFixed(2);
@@ -973,6 +975,56 @@
       showToast('Failed to run orphan cleanup', 'error');
     } finally {
       orphanCleanupLoading = false;
+    }
+  };
+
+  const runBackfillKeyPoints = async () => {
+    maintenanceRunning = 'key_points';
+    maintenanceResult = '';
+    try {
+      const res = await apiFetch('/api/jobs', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'backfill_key_points' })
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showToast(payload?.error?.message ?? 'Failed to backfill key points', 'error');
+        return;
+      }
+      const result = readApiData(payload);
+      const queued = Number(result?.queued ?? 0);
+      maintenanceResult = `Queued ${queued} key point job${queued === 1 ? '' : 's'}. They will process on the next queue cycle.`;
+      showToast(maintenanceResult, 'success');
+    } catch {
+      showToast('Failed to backfill key points', 'error');
+    } finally {
+      maintenanceRunning = '';
+    }
+  };
+
+  const runRefetchContent = async () => {
+    maintenanceRunning = 'refetch';
+    maintenanceResult = '';
+    try {
+      const res = await apiFetch('/api/jobs', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'refetch_missing_content' })
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showToast(payload?.error?.message ?? 'Failed to queue content re-fetch', 'error');
+        return;
+      }
+      const result = readApiData(payload);
+      const queued = Number(result?.queued ?? 0);
+      maintenanceResult = `Queued ${queued} content re-fetch job${queued === 1 ? '' : 's'}. They will process on the next queue cycle.`;
+      showToast(maintenanceResult, 'success');
+    } catch {
+      showToast('Failed to queue content re-fetch', 'error');
+    } finally {
+      maintenanceRunning = '';
     }
   };
 
@@ -1992,6 +2044,40 @@
           </label>
           <span class="hint">Daily cleanup at 03:30 UTC. Archive strips body text; delete removes records. Saved articles are never touched. 0 disables.</span>
         </div>
+
+        <div class="subsection">
+          <div class="subsection-header">
+            <h3>Maintenance</h3>
+            <p class="muted">One-time actions to backfill missing data or re-fetch failed content.</p>
+          </div>
+          <div class="field-grid field-grid-compact">
+            <div class="field">
+              <button
+                type="button"
+                class="action-btn"
+                disabled={maintenanceRunning}
+                on:click={runBackfillKeyPoints}
+              >
+                {maintenanceRunning === 'key_points' ? 'Running…' : 'Backfill key points'}
+              </button>
+              <span class="hint">Generate key points for articles that have summaries but no key points.</span>
+            </div>
+            <div class="field">
+              <button
+                type="button"
+                class="action-btn"
+                disabled={maintenanceRunning}
+                on:click={runRefetchContent}
+              >
+                {maintenanceRunning === 'refetch' ? 'Running…' : 'Re-fetch missing content'}
+              </button>
+              <span class="hint">Re-download article text for articles with missing or short body content.</span>
+            </div>
+          </div>
+          {#if maintenanceResult}
+            <span class="hint">{maintenanceResult}</span>
+          {/if}
+        </div>
       </div>
     </SettingsSectionCard>
 
@@ -2934,5 +3020,28 @@
     text-align: right;
     font-size: var(--text-xs);
     color: var(--muted-text);
+  }
+
+  .action-btn {
+    background: var(--surface-soft);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-md);
+    padding: 0.5rem 1rem;
+    font-family: inherit;
+    font-size: var(--text-sm);
+    font-weight: 500;
+    color: var(--text-color);
+    cursor: pointer;
+    transition: background var(--transition-fast);
+  }
+
+  .action-btn:hover:not(:disabled) {
+    background: var(--primary-soft);
+    border-color: var(--primary);
+  }
+
+  .action-btn:disabled {
+    opacity: 0.5;
+    cursor: wait;
   }
 </style>

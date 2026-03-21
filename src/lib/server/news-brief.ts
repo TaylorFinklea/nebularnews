@@ -300,7 +300,7 @@ export async function resolveNewsBriefGenerationContext(
   env: App.Platform['env']
 ): Promise<NewsBriefGenerationContext> {
   const config = await getNewsBriefConfig(db);
-  const { provider, model, reasoningEffort } = await getFeatureProviderModel(db, env, 'global_chat');
+  const { provider, model, reasoningEffort } = await getFeatureProviderModel(db, env, 'summaries');
   const apiKey = await getProviderKey(db, env, provider);
   return { config, provider, model, reasoningEffort, apiKey };
 }

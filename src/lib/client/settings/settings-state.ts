@@ -18,15 +18,13 @@ type SettingsPageData = {
       profileRefresh?: string;
       keyPoints?: string;
       autoTagging?: string;
-      articleChat?: string;
-      globalChat?: string;
     };
-    ingestProvider: Provider;
-    ingestModel: string;
-    ingestReasoningEffort: SettingsDraft['ingestReasoningEffort'];
-    chatProvider: Provider;
-    chatModel: string;
-    chatReasoningEffort: SettingsDraft['chatReasoningEffort'];
+    modelAProvider: Provider;
+    modelAModel: string;
+    modelAReasoningEffort: SettingsDraft['modelAReasoningEffort'];
+    modelBProvider: Provider;
+    modelBModel: string;
+    modelBReasoningEffort: SettingsDraft['modelBReasoningEffort'];
     scoreSystemPrompt: string;
     scoreUserPromptTemplate: string;
     summaryStyle: SettingsDraft['summaryStyle'];
@@ -62,19 +60,17 @@ const normalizeNumber = (value: unknown, fallback: number) => {
 };
 
 const createDraft = (data: SettingsPageData): SettingsDraft => ({
-  laneSummaries: (data.settings.featureLanes?.summaries as SettingsDraft['laneSummaries']) ?? 'pipeline',
-  laneScoring: (data.settings.featureLanes?.scoring as SettingsDraft['laneScoring']) ?? 'pipeline',
-  laneProfileRefresh: (data.settings.featureLanes?.profileRefresh as SettingsDraft['laneProfileRefresh']) ?? 'pipeline',
-  laneKeyPoints: (data.settings.featureLanes?.keyPoints as SettingsDraft['laneKeyPoints']) ?? 'pipeline',
-  laneAutoTagging: (data.settings.featureLanes?.autoTagging as SettingsDraft['laneAutoTagging']) ?? 'pipeline',
-  laneArticleChat: (data.settings.featureLanes?.articleChat as SettingsDraft['laneArticleChat']) ?? 'chat',
-  laneGlobalChat: (data.settings.featureLanes?.globalChat as SettingsDraft['laneGlobalChat']) ?? 'chat',
-  ingestProvider: data.settings.ingestProvider,
-  ingestModel: data.settings.ingestModel,
-  ingestReasoningEffort: data.settings.ingestReasoningEffort,
-  chatProvider: data.settings.chatProvider,
-  chatModel: data.settings.chatModel,
-  chatReasoningEffort: data.settings.chatReasoningEffort,
+  laneSummaries: (data.settings.featureLanes?.summaries as SettingsDraft['laneSummaries']) ?? 'model_a',
+  laneScoring: (data.settings.featureLanes?.scoring as SettingsDraft['laneScoring']) ?? 'model_a',
+  laneProfileRefresh: (data.settings.featureLanes?.profileRefresh as SettingsDraft['laneProfileRefresh']) ?? 'model_a',
+  laneKeyPoints: (data.settings.featureLanes?.keyPoints as SettingsDraft['laneKeyPoints']) ?? 'model_a',
+  laneAutoTagging: (data.settings.featureLanes?.autoTagging as SettingsDraft['laneAutoTagging']) ?? 'model_a',
+  modelAProvider: data.settings.modelAProvider,
+  modelAModel: data.settings.modelAModel,
+  modelAReasoningEffort: data.settings.modelAReasoningEffort,
+  modelBProvider: data.settings.modelBProvider,
+  modelBModel: data.settings.modelBModel,
+  modelBReasoningEffort: data.settings.modelBReasoningEffort,
   scoreSystemPrompt: data.settings.scoreSystemPrompt,
   scoreUserPromptTemplate: data.settings.scoreUserPromptTemplate,
   summaryStyle: data.settings.summaryStyle,
@@ -104,16 +100,14 @@ const toSettingsPayload = (draft: SettingsDraft) => ({
     scoring: draft.laneScoring,
     profileRefresh: draft.laneProfileRefresh,
     keyPoints: draft.laneKeyPoints,
-    autoTagging: draft.laneAutoTagging,
-    articleChat: draft.laneArticleChat,
-    globalChat: draft.laneGlobalChat
+    autoTagging: draft.laneAutoTagging
   },
-  ingestProvider: draft.ingestProvider,
-  ingestModel: draft.ingestModel,
-  ingestReasoningEffort: draft.ingestReasoningEffort,
-  chatProvider: draft.chatProvider,
-  chatModel: draft.chatModel,
-  chatReasoningEffort: draft.chatReasoningEffort,
+  modelAProvider: draft.modelAProvider,
+  modelAModel: draft.modelAModel,
+  modelAReasoningEffort: draft.modelAReasoningEffort,
+  modelBProvider: draft.modelBProvider,
+  modelBModel: draft.modelBModel,
+  modelBReasoningEffort: draft.modelBReasoningEffort,
   summaryStyle: draft.summaryStyle,
   summaryLength: draft.summaryLength,
   initialFeedLookbackDays: draft.initialFeedLookbackDays,

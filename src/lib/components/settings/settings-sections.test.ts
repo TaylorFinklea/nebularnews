@@ -11,19 +11,17 @@ afterEach(() => {
 });
 
 const draft = {
-  laneSummaries: 'pipeline',
-  laneScoring: 'pipeline',
-  laneProfileRefresh: 'pipeline',
-  laneKeyPoints: 'pipeline',
-  laneAutoTagging: 'pipeline',
-  laneArticleChat: 'pipeline',
-  laneGlobalChat: 'pipeline',
-  ingestProvider: 'openai',
-  ingestModel: 'gpt-5-mini',
-  ingestReasoningEffort: 'low',
-  chatProvider: 'openai',
-  chatModel: 'gpt-5.2',
-  chatReasoningEffort: 'medium',
+  laneSummaries: 'model_a',
+  laneScoring: 'model_a',
+  laneProfileRefresh: 'model_a',
+  laneKeyPoints: 'model_a',
+  laneAutoTagging: 'model_a',
+  modelAProvider: 'openai',
+  modelAModel: 'gpt-5-mini',
+  modelAReasoningEffort: 'low',
+  modelBProvider: 'openai',
+  modelBModel: 'gpt-5.2',
+  modelBReasoningEffort: 'medium',
   scoreSystemPrompt: 'system',
   scoreUserPromptTemplate: 'template',
   summaryStyle: 'concise',
@@ -54,11 +52,11 @@ describe('Settings section components', () => {
       isLoadingModels: () => false
     });
 
-    const laneSummariesChat = container.querySelector('input[name="laneSummaries"][value="chat"]');
-    expect(laneSummariesChat).toBeTruthy();
-    await fireEvent.click(laneSummariesChat as Element);
+    const laneSummariesModelB = container.querySelector('input[name="laneSummaries"][value="model_b"]');
+    expect(laneSummariesModelB).toBeTruthy();
+    await fireEvent.click(laneSummariesModelB as Element);
 
-    expect(onSetField).toHaveBeenCalledWith('laneSummaries', 'chat');
+    expect(onSetField).toHaveBeenCalledWith('laneSummaries', 'model_b');
   });
 
   it('BehaviorSection emits numeric and select updates', async () => {

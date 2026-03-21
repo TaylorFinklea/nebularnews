@@ -72,14 +72,12 @@
       'laneProfileRefresh',
       'laneKeyPoints',
       'laneAutoTagging',
-      'laneArticleChat',
-      'laneGlobalChat',
-      'ingestProvider',
-      'ingestModel',
-      'ingestReasoningEffort',
-      'chatProvider',
-      'chatModel',
-      'chatReasoningEffort',
+      'modelAProvider',
+      'modelAModel',
+      'modelAReasoningEffort',
+      'modelBProvider',
+      'modelBModel',
+      'modelBReasoningEffort',
       'taggingMethod',
       'autoTagMaxPerArticle'
     ],
@@ -127,19 +125,17 @@
     ]
   };
 
-  let laneSummaries = data.settings.featureLanes?.summaries ?? 'pipeline';
-  let laneScoring = data.settings.featureLanes?.scoring ?? 'pipeline';
-  let laneProfileRefresh = data.settings.featureLanes?.profileRefresh ?? 'pipeline';
-  let laneKeyPoints = data.settings.featureLanes?.keyPoints ?? 'pipeline';
-  let laneAutoTagging = data.settings.featureLanes?.autoTagging ?? 'pipeline';
-  let laneArticleChat = data.settings.featureLanes?.articleChat ?? 'chat';
-  let laneGlobalChat = data.settings.featureLanes?.globalChat ?? 'chat';
-  let ingestProvider = data.settings.ingestProvider;
-  let ingestModel = data.settings.ingestModel;
-  let ingestReasoningEffort = data.settings.ingestReasoningEffort;
-  let chatProvider = data.settings.chatProvider;
-  let chatModel = data.settings.chatModel;
-  let chatReasoningEffort = data.settings.chatReasoningEffort;
+  let laneSummaries = data.settings.featureLanes?.summaries ?? 'model_a';
+  let laneScoring = data.settings.featureLanes?.scoring ?? 'model_a';
+  let laneProfileRefresh = data.settings.featureLanes?.profileRefresh ?? 'model_a';
+  let laneKeyPoints = data.settings.featureLanes?.keyPoints ?? 'model_a';
+  let laneAutoTagging = data.settings.featureLanes?.autoTagging ?? 'model_a';
+  let modelAProvider = data.settings.modelAProvider;
+  let modelAModel = data.settings.modelAModel;
+  let modelAReasoningEffort = data.settings.modelAReasoningEffort;
+  let modelBProvider = data.settings.modelBProvider;
+  let modelBModel = data.settings.modelBModel;
+  let modelBReasoningEffort = data.settings.modelBReasoningEffort;
   let scoreSystemPrompt = data.settings.scoreSystemPrompt;
   let scoreUserPromptTemplate = data.settings.scoreUserPromptTemplate;
   let summaryStyle = data.settings.summaryStyle;
@@ -307,22 +303,6 @@
         laneProfileRefresh = value;
       }
     },
-    {
-      label: 'Article Chat',
-      name: 'laneArticleChat',
-      get: () => laneArticleChat,
-      set: (value) => {
-        laneArticleChat = value;
-      }
-    },
-    {
-      label: 'Global Chat',
-      name: 'laneGlobalChat',
-      get: () => laneGlobalChat,
-      set: (value) => {
-        laneGlobalChat = value;
-      }
-    }
   ];
 
   const clampNumber = (value, min, max, fallback) => {
@@ -550,14 +530,12 @@
     laneProfileRefresh,
     laneKeyPoints,
     laneAutoTagging,
-    laneArticleChat,
-    laneGlobalChat,
-    ingestProvider,
-    ingestModel,
-    ingestReasoningEffort,
-    chatProvider,
-    chatModel,
-    chatReasoningEffort,
+    modelAProvider,
+    modelAModel,
+    modelAReasoningEffort,
+    modelBProvider,
+    modelBModel,
+    modelBReasoningEffort,
     summaryStyle,
     summaryLength,
     initialFeedLookbackDays: Number(initialFeedLookbackDays ?? 0),
@@ -604,14 +582,12 @@
     laneProfileRefresh,
     laneKeyPoints,
     laneAutoTagging,
-    laneArticleChat,
-    laneGlobalChat,
-    ingestProvider,
-    ingestModel,
-    ingestReasoningEffort,
-    chatProvider,
-    chatModel,
-    chatReasoningEffort,
+    modelAProvider,
+    modelAModel,
+    modelAReasoningEffort,
+    modelBProvider,
+    modelBModel,
+    modelBReasoningEffort,
     summaryStyle,
     summaryLength,
     initialFeedLookbackDays: Number(initialFeedLookbackDays ?? 0),
@@ -664,14 +640,12 @@
     laneProfileRefresh = snapshot.laneProfileRefresh;
     laneKeyPoints = snapshot.laneKeyPoints;
     laneAutoTagging = snapshot.laneAutoTagging;
-    laneArticleChat = snapshot.laneArticleChat;
-    laneGlobalChat = snapshot.laneGlobalChat;
-    ingestProvider = snapshot.ingestProvider;
-    ingestModel = snapshot.ingestModel;
-    ingestReasoningEffort = snapshot.ingestReasoningEffort;
-    chatProvider = snapshot.chatProvider;
-    chatModel = snapshot.chatModel;
-    chatReasoningEffort = snapshot.chatReasoningEffort;
+    modelAProvider = snapshot.modelAProvider;
+    modelAModel = snapshot.modelAModel;
+    modelAReasoningEffort = snapshot.modelAReasoningEffort;
+    modelBProvider = snapshot.modelBProvider;
+    modelBModel = snapshot.modelBModel;
+    modelBReasoningEffort = snapshot.modelBReasoningEffort;
     summaryStyle = snapshot.summaryStyle;
     summaryLength = snapshot.summaryLength;
     initialFeedLookbackDays = Number(snapshot.initialFeedLookbackDays ?? 0);
@@ -831,16 +805,14 @@
             scoring: laneScoring,
             profileRefresh: laneProfileRefresh,
             keyPoints: laneKeyPoints,
-            autoTagging: laneAutoTagging,
-            articleChat: laneArticleChat,
-            globalChat: laneGlobalChat
+            autoTagging: laneAutoTagging
           },
-          ingestProvider,
-          ingestModel,
-          ingestReasoningEffort,
-          chatProvider,
-          chatModel,
-          chatReasoningEffort,
+          modelAProvider,
+          modelAModel,
+          modelAReasoningEffort,
+          modelBProvider,
+          modelBModel,
+          modelBReasoningEffort,
           summaryStyle,
           summaryLength,
           initialFeedLookbackDays,
@@ -1117,7 +1089,7 @@
   const sectionSummary = (sectionId) => {
     switch (sectionId) {
       case 'ai':
-        return `Pipeline: ${ingestProvider}/${ingestModel} · Chat: ${chatProvider}/${chatModel} · Tagging ${taggingMethod}`;
+        return `Model A: ${modelAProvider}/${modelAModel} · Model B: ${modelBProvider}/${modelBModel} · Tagging ${taggingMethod}`;
       case 'scoring':
         return `${scoringMethod} · threshold ${scoringAiEnhancementThreshold} · ${signalWeights.length} signal${signalWeights.length === 1 ? '' : 's'}`;
       case 'reading':
@@ -1240,25 +1212,25 @@
               <div class="feature-lane">
                 <div class="feature-name">{feature.label}</div>
                 <div class="lane-toggle" role="radiogroup" aria-label={`${feature.label} lane`}>
-                  <label class:active={feature.get() === 'pipeline'}>
+                  <label class:active={feature.get() === 'model_a'}>
                     <input
                       type="radio"
                       name={feature.name}
-                      value="pipeline"
-                      checked={feature.get() === 'pipeline'}
-                      on:change={() => feature.set('pipeline')}
+                      value="model_a"
+                      checked={feature.get() === 'model_a'}
+                      on:change={() => feature.set('model_a')}
                     />
-                    <span>Pipeline</span>
+                    <span>Model A</span>
                   </label>
-                  <label class:active={feature.get() === 'chat'}>
+                  <label class:active={feature.get() === 'model_b'}>
                     <input
                       type="radio"
                       name={feature.name}
-                      value="chat"
-                      checked={feature.get() === 'chat'}
-                      on:change={() => feature.set('chat')}
+                      value="model_b"
+                      checked={feature.get() === 'model_b'}
+                      on:change={() => feature.set('model_b')}
                     />
-                    <span>Chat</span>
+                    <span>Model B</span>
                   </label>
                 </div>
               </div>
@@ -1315,12 +1287,12 @@
         <div class="model-sections">
           <div class="subsection soft-panel">
             <div class="subsection-header">
-              <h3>Pipeline lane</h3>
+              <h3>Model A</h3>
               <p class="muted">Faster and lower-cost lane for background jobs and bulk processing.</p>
             </div>
             <label>
               Provider
-              <select bind:value={ingestProvider}>
+              <select bind:value={modelAProvider}>
                 <option value="openai">OpenAI</option>
                 <option value="anthropic">Anthropic</option>
               </select>
@@ -1328,26 +1300,26 @@
             <label>
               Model
               <input
-                bind:value={ingestModel}
+                bind:value={modelAModel}
                 placeholder="gpt-4o-mini"
-                list={ingestProvider === 'anthropic' ? 'anthropic-model-options' : 'openai-model-options'}
+                list={modelAProvider === 'anthropic' ? 'anthropic-model-options' : 'openai-model-options'}
               />
             </label>
             <div class="model-tools">
               <Button
                 variant="ghost"
                 size="inline"
-                on:click={() => syncModels(ingestProvider)}
-                disabled={isLoadingModels(ingestProvider)}
+                on:click={() => syncModels(modelAProvider)}
+                disabled={isLoadingModels(modelAProvider)}
               >
                 <IconRefresh size={14} stroke={1.9} />
-                <span>{isLoadingModels(ingestProvider) ? 'Loading...' : `Refresh ${ingestProvider}`}</span>
+                <span>{isLoadingModels(modelAProvider) ? 'Loading...' : `Refresh ${modelAProvider}`}</span>
               </Button>
-              <p class="muted small">{modelStatus(ingestProvider)}</p>
+              <p class="muted small">{modelStatus(modelAProvider)}</p>
             </div>
             <label>
               Reasoning level
-              <select bind:value={ingestReasoningEffort}>
+              <select bind:value={modelAReasoningEffort}>
                 <option value="minimal">Minimal</option>
                 <option value="low">Low</option>
                 <option value="medium">Medium</option>
@@ -1358,12 +1330,12 @@
 
           <div class="subsection soft-panel">
             <div class="subsection-header">
-              <h3>Chat lane</h3>
-              <p class="muted">Higher-capability lane for conversations and more complex tasks.</p>
+              <h3>Model B</h3>
+              <p class="muted">Higher-capability lane for more complex tasks.</p>
             </div>
             <label>
               Provider
-              <select bind:value={chatProvider}>
+              <select bind:value={modelBProvider}>
                 <option value="openai">OpenAI</option>
                 <option value="anthropic">Anthropic</option>
               </select>
@@ -1371,26 +1343,26 @@
             <label>
               Model
               <input
-                bind:value={chatModel}
+                bind:value={modelBModel}
                 placeholder="gpt-4o"
-                list={chatProvider === 'anthropic' ? 'anthropic-model-options' : 'openai-model-options'}
+                list={modelBProvider === 'anthropic' ? 'anthropic-model-options' : 'openai-model-options'}
               />
             </label>
             <div class="model-tools">
               <Button
                 variant="ghost"
                 size="inline"
-                on:click={() => syncModels(chatProvider)}
-                disabled={isLoadingModels(chatProvider)}
+                on:click={() => syncModels(modelBProvider)}
+                disabled={isLoadingModels(modelBProvider)}
               >
                 <IconRefresh size={14} stroke={1.9} />
-                <span>{isLoadingModels(chatProvider) ? 'Loading...' : `Refresh ${chatProvider}`}</span>
+                <span>{isLoadingModels(modelBProvider) ? 'Loading...' : `Refresh ${modelBProvider}`}</span>
               </Button>
-              <p class="muted small">{modelStatus(chatProvider)}</p>
+              <p class="muted small">{modelStatus(modelBProvider)}</p>
             </div>
             <label>
               Reasoning level
-              <select bind:value={chatReasoningEffort}>
+              <select bind:value={modelBReasoningEffort}>
                 <option value="minimal">Minimal</option>
                 <option value="low">Low</option>
                 <option value="medium">Medium</option>

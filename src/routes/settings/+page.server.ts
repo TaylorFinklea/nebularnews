@@ -77,9 +77,9 @@ import {
   getAutoTagMaxPerArticle,
   getTaggingMethod,
   getArticleCardLayout,
-  getConfiguredChatProviderModel,
+  getConfiguredModelB,
   getDashboardRefreshMinMs,
-  getConfiguredIngestProviderModel,
+  getConfiguredModelA,
   getEventsPollMs,
   getInitialFeedLookbackDays,
   getJobProcessorBatchSize,
@@ -114,8 +114,8 @@ import {
 export const load = async ({ platform }) => {
   const db = platform.env.DB;
   const featureLanes = await getFeatureModelLanes(db);
-  const ingestModel = await getConfiguredIngestProviderModel(db, platform.env);
-  const chatModel = await getConfiguredChatProviderModel(db, platform.env);
+  const modelA = await getConfiguredModelA(db, platform.env);
+  const modelB = await getConfiguredModelB(db, platform.env);
   const scorePrompt = await getScorePromptConfig(db);
   const dashboardQueue = await getDashboardQueueConfig(db);
   const newsBrief = await getNewsBriefConfig(db);
@@ -127,16 +127,14 @@ export const load = async ({ platform }) => {
       scoring: featureLanes.scoring,
       profileRefresh: featureLanes.profile_refresh,
       keyPoints: featureLanes.key_points,
-      autoTagging: featureLanes.auto_tagging,
-      articleChat: featureLanes.article_chat,
-      globalChat: featureLanes.global_chat
+      autoTagging: featureLanes.auto_tagging
     },
-    ingestProvider: ingestModel.provider,
-    ingestModel: ingestModel.model,
-    ingestReasoningEffort: ingestModel.reasoningEffort,
-    chatProvider: chatModel.provider,
-    chatModel: chatModel.model,
-    chatReasoningEffort: chatModel.reasoningEffort,
+    modelAProvider: modelA.provider,
+    modelAModel: modelA.model,
+    modelAReasoningEffort: modelA.reasoningEffort,
+    modelBProvider: modelB.provider,
+    modelBModel: modelB.model,
+    modelBReasoningEffort: modelB.reasoningEffort,
     scoreSystemPrompt: scorePrompt.systemPrompt,
     scoreUserPromptTemplate: scorePrompt.userPromptTemplate,
     summaryStyle: (await getSetting(db, 'summary_style')) ?? 'concise',

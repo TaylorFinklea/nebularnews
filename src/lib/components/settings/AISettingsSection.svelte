@@ -18,13 +18,13 @@
     <div class="feature-lane">
       <div class="feature-name">Summaries</div>
       <div class="lane-toggle" role="radiogroup" aria-label="Summaries model lane">
-        <label class:active={draft.laneSummaries === 'pipeline'}>
-          <input type="radio" name="laneSummaries" value="pipeline" checked={draft.laneSummaries === 'pipeline'} on:change={() => onSetField('laneSummaries', 'pipeline')} />
-          <span>Pipeline</span>
+        <label class:active={draft.laneSummaries === 'model_a'}>
+          <input type="radio" name="laneSummaries" value="model_a" checked={draft.laneSummaries === 'model_a'} on:change={() => onSetField('laneSummaries', 'model_a')} />
+          <span>Model A</span>
         </label>
-        <label class:active={draft.laneSummaries === 'chat'}>
-          <input type="radio" name="laneSummaries" value="chat" checked={draft.laneSummaries === 'chat'} on:change={() => onSetField('laneSummaries', 'chat')} />
-          <span>Chat</span>
+        <label class:active={draft.laneSummaries === 'model_b'}>
+          <input type="radio" name="laneSummaries" value="model_b" checked={draft.laneSummaries === 'model_b'} on:change={() => onSetField('laneSummaries', 'model_b')} />
+          <span>Model B</span>
         </label>
       </div>
     </div>
@@ -32,13 +32,13 @@
     <div class="feature-lane">
       <div class="feature-name">Key Points</div>
       <div class="lane-toggle" role="radiogroup" aria-label="Key points model lane">
-        <label class:active={draft.laneKeyPoints === 'pipeline'}>
-          <input type="radio" name="laneKeyPoints" value="pipeline" checked={draft.laneKeyPoints === 'pipeline'} on:change={() => onSetField('laneKeyPoints', 'pipeline')} />
-          <span>Pipeline</span>
+        <label class:active={draft.laneKeyPoints === 'model_a'}>
+          <input type="radio" name="laneKeyPoints" value="model_a" checked={draft.laneKeyPoints === 'model_a'} on:change={() => onSetField('laneKeyPoints', 'model_a')} />
+          <span>Model A</span>
         </label>
-        <label class:active={draft.laneKeyPoints === 'chat'}>
-          <input type="radio" name="laneKeyPoints" value="chat" checked={draft.laneKeyPoints === 'chat'} on:change={() => onSetField('laneKeyPoints', 'chat')} />
-          <span>Chat</span>
+        <label class:active={draft.laneKeyPoints === 'model_b'}>
+          <input type="radio" name="laneKeyPoints" value="model_b" checked={draft.laneKeyPoints === 'model_b'} on:change={() => onSetField('laneKeyPoints', 'model_b')} />
+          <span>Model B</span>
         </label>
       </div>
     </div>
@@ -46,13 +46,13 @@
     <div class="feature-lane">
       <div class="feature-name">Auto Tagging</div>
       <div class="lane-toggle" role="radiogroup" aria-label="Auto tagging model lane">
-        <label class:active={draft.laneAutoTagging === 'pipeline'}>
-          <input type="radio" name="laneAutoTagging" value="pipeline" checked={draft.laneAutoTagging === 'pipeline'} on:change={() => onSetField('laneAutoTagging', 'pipeline')} />
-          <span>Pipeline</span>
+        <label class:active={draft.laneAutoTagging === 'model_a'}>
+          <input type="radio" name="laneAutoTagging" value="model_a" checked={draft.laneAutoTagging === 'model_a'} on:change={() => onSetField('laneAutoTagging', 'model_a')} />
+          <span>Model A</span>
         </label>
-        <label class:active={draft.laneAutoTagging === 'chat'}>
-          <input type="radio" name="laneAutoTagging" value="chat" checked={draft.laneAutoTagging === 'chat'} on:change={() => onSetField('laneAutoTagging', 'chat')} />
-          <span>Chat</span>
+        <label class:active={draft.laneAutoTagging === 'model_b'}>
+          <input type="radio" name="laneAutoTagging" value="model_b" checked={draft.laneAutoTagging === 'model_b'} on:change={() => onSetField('laneAutoTagging', 'model_b')} />
+          <span>Model B</span>
         </label>
       </div>
     </div>
@@ -60,13 +60,13 @@
     <div class="feature-lane">
       <div class="feature-name">Scoring</div>
       <div class="lane-toggle" role="radiogroup" aria-label="Scoring model lane">
-        <label class:active={draft.laneScoring === 'pipeline'}>
-          <input type="radio" name="laneScoring" value="pipeline" checked={draft.laneScoring === 'pipeline'} on:change={() => onSetField('laneScoring', 'pipeline')} />
-          <span>Pipeline</span>
+        <label class:active={draft.laneScoring === 'model_a'}>
+          <input type="radio" name="laneScoring" value="model_a" checked={draft.laneScoring === 'model_a'} on:change={() => onSetField('laneScoring', 'model_a')} />
+          <span>Model A</span>
         </label>
-        <label class:active={draft.laneScoring === 'chat'}>
-          <input type="radio" name="laneScoring" value="chat" checked={draft.laneScoring === 'chat'} on:change={() => onSetField('laneScoring', 'chat')} />
-          <span>Chat</span>
+        <label class:active={draft.laneScoring === 'model_b'}>
+          <input type="radio" name="laneScoring" value="model_b" checked={draft.laneScoring === 'model_b'} on:change={() => onSetField('laneScoring', 'model_b')} />
+          <span>Model B</span>
         </label>
       </div>
     </div>
@@ -74,52 +74,25 @@
     <div class="feature-lane">
       <div class="feature-name">Profile Refresh</div>
       <div class="lane-toggle" role="radiogroup" aria-label="Profile refresh model lane">
-        <label class:active={draft.laneProfileRefresh === 'pipeline'}>
-          <input type="radio" name="laneProfileRefresh" value="pipeline" checked={draft.laneProfileRefresh === 'pipeline'} on:change={() => onSetField('laneProfileRefresh', 'pipeline')} />
-          <span>Pipeline</span>
+        <label class:active={draft.laneProfileRefresh === 'model_a'}>
+          <input type="radio" name="laneProfileRefresh" value="model_a" checked={draft.laneProfileRefresh === 'model_a'} on:change={() => onSetField('laneProfileRefresh', 'model_a')} />
+          <span>Model A</span>
         </label>
-        <label class:active={draft.laneProfileRefresh === 'chat'}>
-          <input type="radio" name="laneProfileRefresh" value="chat" checked={draft.laneProfileRefresh === 'chat'} on:change={() => onSetField('laneProfileRefresh', 'chat')} />
-          <span>Chat</span>
-        </label>
-      </div>
-    </div>
-
-    <div class="feature-lane">
-      <div class="feature-name">Article Chat</div>
-      <div class="lane-toggle" role="radiogroup" aria-label="Article chat model lane">
-        <label class:active={draft.laneArticleChat === 'pipeline'}>
-          <input type="radio" name="laneArticleChat" value="pipeline" checked={draft.laneArticleChat === 'pipeline'} on:change={() => onSetField('laneArticleChat', 'pipeline')} />
-          <span>Pipeline</span>
-        </label>
-        <label class:active={draft.laneArticleChat === 'chat'}>
-          <input type="radio" name="laneArticleChat" value="chat" checked={draft.laneArticleChat === 'chat'} on:change={() => onSetField('laneArticleChat', 'chat')} />
-          <span>Chat</span>
+        <label class:active={draft.laneProfileRefresh === 'model_b'}>
+          <input type="radio" name="laneProfileRefresh" value="model_b" checked={draft.laneProfileRefresh === 'model_b'} on:change={() => onSetField('laneProfileRefresh', 'model_b')} />
+          <span>Model B</span>
         </label>
       </div>
     </div>
 
-    <div class="feature-lane">
-      <div class="feature-name">Global Chat</div>
-      <div class="lane-toggle" role="radiogroup" aria-label="Global chat model lane">
-        <label class:active={draft.laneGlobalChat === 'pipeline'}>
-          <input type="radio" name="laneGlobalChat" value="pipeline" checked={draft.laneGlobalChat === 'pipeline'} on:change={() => onSetField('laneGlobalChat', 'pipeline')} />
-          <span>Pipeline</span>
-        </label>
-        <label class:active={draft.laneGlobalChat === 'chat'}>
-          <input type="radio" name="laneGlobalChat" value="chat" checked={draft.laneGlobalChat === 'chat'} on:change={() => onSetField('laneGlobalChat', 'chat')} />
-          <span>Chat</span>
-        </label>
-      </div>
-    </div>
   </div>
 
   <div class="model-sections">
-    <section class="model-section" aria-label="Pipeline lane settings">
-      <h3>Pipeline lane (cheaper)</h3>
+    <section class="model-section" aria-label="Model A settings">
+      <h3>Model A (cheaper)</h3>
       <label>
         Provider
-        <select value={draft.ingestProvider} on:change={(event) => onSetField('ingestProvider', event.currentTarget.value)}>
+        <select value={draft.modelAProvider} on:change={(event) => onSetField('modelAProvider', event.currentTarget.value)}>
           <option value="openai">OpenAI</option>
           <option value="anthropic">Anthropic</option>
         </select>
@@ -127,21 +100,21 @@
       <label>
         Model
         <input
-          value={draft.ingestModel}
-          on:input={(event) => onSetField('ingestModel', event.currentTarget.value)}
+          value={draft.modelAModel}
+          on:input={(event) => onSetField('modelAModel', event.currentTarget.value)}
           placeholder="gpt-5-mini"
-          list={draft.ingestProvider === 'anthropic' ? 'anthropic-model-options' : 'openai-model-options'}
+          list={draft.modelAProvider === 'anthropic' ? 'anthropic-model-options' : 'openai-model-options'}
         />
       </label>
       <div class="model-tools">
-        <button class="ghost" on:click={() => onSyncModels(draft.ingestProvider)} disabled={isLoadingModels(draft.ingestProvider)}>
-          <span>{isLoadingModels(draft.ingestProvider) ? 'Loading...' : `Refresh ${draft.ingestProvider}`}</span>
+        <button class="ghost" on:click={() => onSyncModels(draft.modelAProvider)} disabled={isLoadingModels(draft.modelAProvider)}>
+          <span>{isLoadingModels(draft.modelAProvider) ? 'Loading...' : `Refresh ${draft.modelAProvider}`}</span>
         </button>
-        <p class="muted">{modelStatus(draft.ingestProvider)}</p>
+        <p class="muted">{modelStatus(draft.modelAProvider)}</p>
       </div>
       <label>
         Reasoning level
-        <select value={draft.ingestReasoningEffort} on:change={(event) => onSetField('ingestReasoningEffort', event.currentTarget.value)}>
+        <select value={draft.modelAReasoningEffort} on:change={(event) => onSetField('modelAReasoningEffort', event.currentTarget.value)}>
           <option value="minimal">Minimal</option>
           <option value="low">Low</option>
           <option value="medium">Medium</option>
@@ -150,11 +123,11 @@
       </label>
     </section>
 
-    <section class="model-section" aria-label="Chat lane settings">
-      <h3>Chat lane (more capable)</h3>
+    <section class="model-section" aria-label="Model B settings">
+      <h3>Model B (more capable)</h3>
       <label>
         Provider
-        <select value={draft.chatProvider} on:change={(event) => onSetField('chatProvider', event.currentTarget.value)}>
+        <select value={draft.modelBProvider} on:change={(event) => onSetField('modelBProvider', event.currentTarget.value)}>
           <option value="openai">OpenAI</option>
           <option value="anthropic">Anthropic</option>
         </select>
@@ -162,21 +135,21 @@
       <label>
         Model
         <input
-          value={draft.chatModel}
-          on:input={(event) => onSetField('chatModel', event.currentTarget.value)}
+          value={draft.modelBModel}
+          on:input={(event) => onSetField('modelBModel', event.currentTarget.value)}
           placeholder="gpt-5.2"
-          list={draft.chatProvider === 'anthropic' ? 'anthropic-model-options' : 'openai-model-options'}
+          list={draft.modelBProvider === 'anthropic' ? 'anthropic-model-options' : 'openai-model-options'}
         />
       </label>
       <div class="model-tools">
-        <button class="ghost" on:click={() => onSyncModels(draft.chatProvider)} disabled={isLoadingModels(draft.chatProvider)}>
-          <span>{isLoadingModels(draft.chatProvider) ? 'Loading...' : `Refresh ${draft.chatProvider}`}</span>
+        <button class="ghost" on:click={() => onSyncModels(draft.modelBProvider)} disabled={isLoadingModels(draft.modelBProvider)}>
+          <span>{isLoadingModels(draft.modelBProvider) ? 'Loading...' : `Refresh ${draft.modelBProvider}`}</span>
         </button>
-        <p class="muted">{modelStatus(draft.chatProvider)}</p>
+        <p class="muted">{modelStatus(draft.modelBProvider)}</p>
       </div>
       <label>
         Reasoning level
-        <select value={draft.chatReasoningEffort} on:change={(event) => onSetField('chatReasoningEffort', event.currentTarget.value)}>
+        <select value={draft.modelBReasoningEffort} on:change={(event) => onSetField('modelBReasoningEffort', event.currentTarget.value)}>
           <option value="minimal">Minimal</option>
           <option value="low">Low</option>
           <option value="medium">Medium</option>

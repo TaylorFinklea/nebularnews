@@ -13,7 +13,7 @@ import { now } from './db';
 export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
 export type SummaryStyle = 'concise' | 'detailed' | 'bullet';
 export type SummaryLength = 'short' | 'medium' | 'long';
-export type AiModelLane = 'pipeline' | 'chat';
+export type AiModelLane = 'model_a' | 'model_b';
 export type ArticleCardLayout = 'split' | 'stacked';
 export type DashboardTopRatedLayout = 'split' | 'stacked';
 export type RetentionMode = 'archive' | 'delete';
@@ -31,16 +31,14 @@ export type AiFeature =
   | 'scoring'
   | 'profile_refresh'
   | 'key_points'
-  | 'auto_tagging'
-  | 'article_chat'
-  | 'global_chat';
+  | 'auto_tagging';
 
 const DEFAULT_REASONING_EFFORT: ReasoningEffort = 'medium';
 const DEFAULT_PROVIDER: Provider = 'openai';
 const DEFAULT_MODEL = 'gpt-4o-mini';
 const DEFAULT_SUMMARY_STYLE: SummaryStyle = 'concise';
 const DEFAULT_SUMMARY_LENGTH: SummaryLength = 'short';
-const DEFAULT_AI_MODEL_LANE: AiModelLane = 'pipeline';
+const DEFAULT_AI_MODEL_LANE: AiModelLane = 'model_a';
 const DEFAULT_ARTICLE_CARD_LAYOUT: ArticleCardLayout = 'split';
 const DEFAULT_DASHBOARD_TOP_RATED_LAYOUT: DashboardTopRatedLayout = 'stacked';
 const DEFAULT_AUTO_READ_DELAY_MS = 4000;
@@ -120,22 +118,18 @@ const MIN_SCHEDULER_JOB_BUDGET_WHILE_PULL_MS = 500;
 const MAX_SCHEDULER_JOB_BUDGET_WHILE_PULL_MS = 10000;
 const DEFAULT_SCHEDULER_AUTO_QUEUE_TODAY_MISSING = true;
 const FEATURE_LANE_DEFAULTS: Record<AiFeature, AiModelLane> = {
-  summaries: 'pipeline',
-  scoring: 'pipeline',
-  profile_refresh: 'pipeline',
-  key_points: 'pipeline',
-  auto_tagging: 'pipeline',
-  article_chat: 'chat',
-  global_chat: 'chat'
+  summaries: 'model_a',
+  scoring: 'model_a',
+  profile_refresh: 'model_a',
+  key_points: 'model_a',
+  auto_tagging: 'model_a'
 };
 const FEATURE_LANE_KEYS: Record<AiFeature, string> = {
   summaries: 'lane_summaries',
   scoring: 'lane_scoring',
   profile_refresh: 'lane_profile_refresh',
   key_points: 'lane_key_points',
-  auto_tagging: 'lane_auto_tagging',
-  article_chat: 'lane_article_chat',
-  global_chat: 'lane_global_chat'
+  auto_tagging: 'lane_auto_tagging'
 };
 
 export { DEFAULT_SCORE_SYSTEM_PROMPT, DEFAULT_SCORE_USER_PROMPT_TEMPLATE };
@@ -236,7 +230,8 @@ const toSummaryLength = (value: string | null): SummaryLength => {
 };
 
 const toAiModelLane = (value: string | null): AiModelLane => {
-  if (value === 'chat' || value === 'pipeline') return value;
+  if (value === 'model_a' || value === 'pipeline') return 'model_a';
+  if (value === 'model_b' || value === 'chat') return 'model_b';
   return DEFAULT_AI_MODEL_LANE;
 };
 
@@ -519,21 +514,21 @@ export async function getProviderModel(db: Db, env: App.Platform['env']) {
   return getIngestProviderModel(db, env);
 }
 
-async function resolveIngestProviderModel(db: Db, env: App.Platform['env']): Promise<ProviderModelConfig> {
+async function resolveModelAProviderModel(db: Db, env: App.Platform['env']): Promise<ProviderModelConfig> {
   const provider = toProvider(
     (await getFirstSetting(db, ['ingest_provider', 'default_provider'])) ??
-      env.DEFAULT_INGEST_PROVIDER ??
+      env.DEFAULT_MODEL_A_PROVIDER ??
       env.DEFAULT_PROVIDER ??
       null
   );
   const model =
     (await getFirstSetting(db, ['ingest_model', 'default_model'])) ??
-    env.DEFAULT_INGEST_MODEL ??
+    env.DEFAULT_MODEL_A ??
     env.DEFAULT_MODEL ??
     DEFAULT_MODEL;
   const reasoningEffort = toReasoningEffort(
     (await getFirstSetting(db, ['ingest_reasoning_effort', 'reasoning_effort'])) ??
-      env.DEFAULT_INGEST_REASONING_EFFORT ??
+      env.DEFAULT_MODEL_A_REASONING_EFFORT ??
       env.DEFAULT_REASONING_EFFORT ??
       null
   );
@@ -541,21 +536,21 @@ async function resolveIngestProviderModel(db: Db, env: App.Platform['env']): Pro
   return { provider, model, reasoningEffort };
 }
 
-async function resolveChatProviderModel(db: Db, env: App.Platform['env']): Promise<ProviderModelConfig> {
+async function resolveModelBProviderModel(db: Db, env: App.Platform['env']): Promise<ProviderModelConfig> {
   const provider = toProvider(
     (await getFirstSetting(db, ['chat_provider', 'default_provider'])) ??
-      env.DEFAULT_CHAT_PROVIDER ??
+      env.DEFAULT_MODEL_B_PROVIDER ??
       env.DEFAULT_PROVIDER ??
       null
   );
   const model =
     (await getFirstSetting(db, ['chat_model', 'default_model'])) ??
-    env.DEFAULT_CHAT_MODEL ??
+    env.DEFAULT_MODEL_B ??
     env.DEFAULT_MODEL ??
     DEFAULT_MODEL;
   const reasoningEffort = toReasoningEffort(
     (await getFirstSetting(db, ['chat_reasoning_effort', 'reasoning_effort'])) ??
-      env.DEFAULT_CHAT_REASONING_EFFORT ??
+      env.DEFAULT_MODEL_B_REASONING_EFFORT ??
       env.DEFAULT_REASONING_EFFORT ??
       null
   );
@@ -563,12 +558,12 @@ async function resolveChatProviderModel(db: Db, env: App.Platform['env']): Promi
   return { provider, model, reasoningEffort };
 }
 
-export async function getConfiguredIngestProviderModel(db: Db, env: App.Platform['env']): Promise<ProviderModelConfig> {
-  return resolveIngestProviderModel(db, env);
+export async function getConfiguredModelA(db: Db, env: App.Platform['env']): Promise<ProviderModelConfig> {
+  return resolveModelAProviderModel(db, env);
 }
 
-export async function getConfiguredChatProviderModel(db: Db, env: App.Platform['env']): Promise<ProviderModelConfig> {
-  return resolveChatProviderModel(db, env);
+export async function getConfiguredModelB(db: Db, env: App.Platform['env']): Promise<ProviderModelConfig> {
+  return resolveModelBProviderModel(db, env);
 }
 
 export async function getFeatureModelLane(db: Db, feature: AiFeature): Promise<AiModelLane> {
@@ -586,9 +581,7 @@ export async function getFeatureModelLanes(db: Db): Promise<Record<AiFeature, Ai
     scoring: await getFeatureModelLane(db, 'scoring'),
     profile_refresh: await getFeatureModelLane(db, 'profile_refresh'),
     key_points: await getFeatureModelLane(db, 'key_points'),
-    auto_tagging: await getFeatureModelLane(db, 'auto_tagging'),
-    article_chat: await getFeatureModelLane(db, 'article_chat'),
-    global_chat: await getFeatureModelLane(db, 'global_chat')
+    auto_tagging: await getFeatureModelLane(db, 'auto_tagging')
   };
 }
 
@@ -602,16 +595,16 @@ export async function getFeatureProviderModel(
   feature: AiFeature
 ): Promise<ProviderModelConfig> {
   const lane = await getFeatureModelLane(db, feature);
-  if (lane === 'chat') return resolveChatProviderModel(db, env);
-  return resolveIngestProviderModel(db, env);
+  if (lane === 'model_b') return resolveModelBProviderModel(db, env);
+  return resolveModelAProviderModel(db, env);
 }
 
 export async function getIngestProviderModel(db: Db, env: App.Platform['env']): Promise<ProviderModelConfig> {
-  return resolveIngestProviderModel(db, env);
+  return resolveModelAProviderModel(db, env);
 }
 
-export async function getChatProviderModel(db: Db, env: App.Platform['env']): Promise<ProviderModelConfig> {
-  return resolveChatProviderModel(db, env);
+export async function getModelBProviderModel(db: Db, env: App.Platform['env']): Promise<ProviderModelConfig> {
+  return resolveModelBProviderModel(db, env);
 }
 
 export async function getScorePromptConfig(db: Db): Promise<ScorePromptConfig> {

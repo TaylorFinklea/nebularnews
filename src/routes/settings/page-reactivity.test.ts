@@ -13,20 +13,18 @@ vi.mock('$app/navigation', () => ({
 const createData = (overrides = {}) => ({
   settings: {
     featureLanes: {
-      summaries: 'pipeline',
-      scoring: 'pipeline',
-      profileRefresh: 'pipeline',
-      keyPoints: 'pipeline',
-      autoTagging: 'pipeline',
-      articleChat: 'chat',
-      globalChat: 'chat'
+      summaries: 'model_a',
+      scoring: 'model_a',
+      profileRefresh: 'model_a',
+      keyPoints: 'model_a',
+      autoTagging: 'model_a'
     },
-    ingestProvider: 'openai',
-    ingestModel: 'gpt-4o-mini',
-    ingestReasoningEffort: 'low',
-    chatProvider: 'openai',
-    chatModel: 'gpt-4o',
-    chatReasoningEffort: 'medium',
+    modelAProvider: 'openai',
+    modelAModel: 'gpt-4o-mini',
+    modelAReasoningEffort: 'low',
+    modelBProvider: 'openai',
+    modelBModel: 'gpt-4o',
+    modelBReasoningEffort: 'medium',
     scoreSystemPrompt: 'Default system prompt',
     scoreUserPromptTemplate: 'Default user prompt',
     summaryStyle: 'concise',

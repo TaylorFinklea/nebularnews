@@ -32,8 +32,8 @@ import {
   getTaggingMethod,
   getArticleCardLayout,
   getDashboardQueueConfig,
-  getConfiguredChatProviderModel,
-  getConfiguredIngestProviderModel,
+  getConfiguredModelB,
+  getConfiguredModelA,
   getJobProcessorBatchSize,
   getSchedulerJobsIntervalMinutes,
   getSchedulerPollIntervalMinutes,
@@ -65,8 +65,8 @@ import { recordAuditEvent } from '$lib/server/audit';
 export const GET = async ({ platform }) => {
   const db = platform.env.DB;
   const featureLanes = await getFeatureModelLanes(db);
-  const ingestModel = await getConfiguredIngestProviderModel(db, platform.env);
-  const chatModel = await getConfiguredChatProviderModel(db, platform.env);
+  const modelA = await getConfiguredModelA(db, platform.env);
+  const modelB = await getConfiguredModelB(db, platform.env);
   const scorePrompt = await getScorePromptConfig(db);
   const dashboardQueue = await getDashboardQueueConfig(db);
   const newsBrief = await getNewsBriefConfig(db);
@@ -78,16 +78,14 @@ export const GET = async ({ platform }) => {
       scoring: featureLanes.scoring,
       profileRefresh: featureLanes.profile_refresh,
       keyPoints: featureLanes.key_points,
-      autoTagging: featureLanes.auto_tagging,
-      articleChat: featureLanes.article_chat,
-      globalChat: featureLanes.global_chat
+      autoTagging: featureLanes.auto_tagging
     },
-    ingestProvider: ingestModel.provider,
-    ingestModel: ingestModel.model,
-    ingestReasoningEffort: ingestModel.reasoningEffort,
-    chatProvider: chatModel.provider,
-    chatModel: chatModel.model,
-    chatReasoningEffort: chatModel.reasoningEffort,
+    modelAProvider: modelA.provider,
+    modelAModel: modelA.model,
+    modelAReasoningEffort: modelA.reasoningEffort,
+    modelBProvider: modelB.provider,
+    modelBModel: modelB.model,
+    modelBReasoningEffort: modelB.reasoningEffort,
     scoreSystemPrompt: scorePrompt.systemPrompt,
     scoreUserPromptTemplate: scorePrompt.userPromptTemplate,
     summaryStyle: (await getSetting(db, 'summary_style')) ?? 'concise',
@@ -150,7 +148,7 @@ export const POST = async ({ request, platform, locals }) => {
   const entries: [string, string][] = [];
   const validProviders = new Set(['openai', 'anthropic']);
   const validEfforts = new Set(['minimal', 'low', 'medium', 'high']);
-  const validModelLanes = new Set(['pipeline', 'chat']);
+  const validModelLanes = new Set(['model_a', 'model_b']);
   const validArticleCardLayouts = new Set(['split', 'stacked']);
   const validRetentionModes = new Set(['archive', 'delete']);
   const featureLaneKeys: Record<string, string> = {
@@ -158,9 +156,7 @@ export const POST = async ({ request, platform, locals }) => {
     scoring: 'lane_scoring',
     profileRefresh: 'lane_profile_refresh',
     keyPoints: 'lane_key_points',
-    autoTagging: 'lane_auto_tagging',
-    articleChat: 'lane_article_chat',
-    globalChat: 'lane_global_chat'
+    autoTagging: 'lane_auto_tagging'
   };
 
   for (const [bodyKey, settingKey] of Object.entries(featureLaneKeys)) {
@@ -170,24 +166,24 @@ export const POST = async ({ request, platform, locals }) => {
     }
   }
 
-  if (body?.ingestProvider && validProviders.has(body.ingestProvider)) {
-    entries.push(['ingest_provider', body.ingestProvider]);
+  if (body?.modelAProvider && validProviders.has(body.modelAProvider)) {
+    entries.push(['ingest_provider', body.modelAProvider]);
   }
-  if (body?.ingestModel && String(body.ingestModel).trim()) {
-    entries.push(['ingest_model', String(body.ingestModel).trim()]);
+  if (body?.modelAModel && String(body.modelAModel).trim()) {
+    entries.push(['ingest_model', String(body.modelAModel).trim()]);
   }
-  if (body?.ingestReasoningEffort && validEfforts.has(body.ingestReasoningEffort)) {
-    entries.push(['ingest_reasoning_effort', body.ingestReasoningEffort]);
+  if (body?.modelAReasoningEffort && validEfforts.has(body.modelAReasoningEffort)) {
+    entries.push(['ingest_reasoning_effort', body.modelAReasoningEffort]);
   }
 
-  if (body?.chatProvider && validProviders.has(body.chatProvider)) {
-    entries.push(['chat_provider', body.chatProvider]);
+  if (body?.modelBProvider && validProviders.has(body.modelBProvider)) {
+    entries.push(['chat_provider', body.modelBProvider]);
   }
-  if (body?.chatModel && String(body.chatModel).trim()) {
-    entries.push(['chat_model', String(body.chatModel).trim()]);
+  if (body?.modelBModel && String(body.modelBModel).trim()) {
+    entries.push(['chat_model', String(body.modelBModel).trim()]);
   }
-  if (body?.chatReasoningEffort && validEfforts.has(body.chatReasoningEffort)) {
-    entries.push(['chat_reasoning_effort', body.chatReasoningEffort]);
+  if (body?.modelBReasoningEffort && validEfforts.has(body.modelBReasoningEffort)) {
+    entries.push(['chat_reasoning_effort', body.modelBReasoningEffort]);
   }
 
   // Backward-compatible keys used by earlier builds.

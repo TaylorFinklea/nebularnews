@@ -1,4 +1,4 @@
-export type Lane = 'pipeline' | 'chat';
+export type Lane = 'model_a' | 'model_b';
 export type Provider = 'openai' | 'anthropic';
 export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
 export type SummaryStyle = 'concise' | 'detailed' | 'bullet';
@@ -24,14 +24,12 @@ export type SettingsDraft = {
   laneProfileRefresh: Lane;
   laneKeyPoints: Lane;
   laneAutoTagging: Lane;
-  laneArticleChat: Lane;
-  laneGlobalChat: Lane;
-  ingestProvider: Provider;
-  ingestModel: string;
-  ingestReasoningEffort: ReasoningEffort;
-  chatProvider: Provider;
-  chatModel: string;
-  chatReasoningEffort: ReasoningEffort;
+  modelAProvider: Provider;
+  modelAModel: string;
+  modelAReasoningEffort: ReasoningEffort;
+  modelBProvider: Provider;
+  modelBModel: string;
+  modelBReasoningEffort: ReasoningEffort;
   scoreSystemPrompt: string;
   scoreUserPromptTemplate: string;
   summaryStyle: SummaryStyle;

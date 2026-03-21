@@ -9,20 +9,18 @@ vi.mock('$app/navigation', () => ({
 const baseData = {
   settings: {
     featureLanes: {
-      summaries: 'pipeline',
-      scoring: 'pipeline',
-      profileRefresh: 'pipeline',
-      keyPoints: 'pipeline',
-      autoTagging: 'pipeline',
-      articleChat: 'chat',
-      globalChat: 'chat'
+      summaries: 'model_a',
+      scoring: 'model_a',
+      profileRefresh: 'model_a',
+      keyPoints: 'model_a',
+      autoTagging: 'model_a'
     },
-    ingestProvider: 'openai',
-    ingestModel: 'gpt-5-mini',
-    ingestReasoningEffort: 'medium',
-    chatProvider: 'openai',
-    chatModel: 'gpt-5.2',
-    chatReasoningEffort: 'medium',
+    modelAProvider: 'openai',
+    modelAModel: 'gpt-5-mini',
+    modelAReasoningEffort: 'medium',
+    modelBProvider: 'openai',
+    modelBModel: 'gpt-5.2',
+    modelBReasoningEffort: 'medium',
     scoreSystemPrompt: 'sys',
     scoreUserPromptTemplate: 'user',
     summaryStyle: 'concise',
@@ -63,13 +61,13 @@ describe('settings-state', () => {
     const state = createSettingsState(baseData as never);
     expect(get(state as never).hasUnsavedChanges).toBe(false);
 
-    state.setDraftField('chatModel', 'gpt-5.3');
+    state.setDraftField('modelBModel', 'gpt-5.3');
     expect(get(state as never).hasUnsavedChanges).toBe(true);
 
     state.discardChanges();
     const snapshot = get(state as never);
     expect(snapshot.hasUnsavedChanges).toBe(false);
-    expect(snapshot.draft.chatModel).toBe('gpt-5.2');
+    expect(snapshot.draft.modelBModel).toBe('gpt-5.2');
   });
 
   it('saves settings and clears dirty flag', async () => {

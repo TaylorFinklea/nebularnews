@@ -15,12 +15,12 @@ declare namespace App {
       DEFAULT_PROVIDER?: string;
       DEFAULT_MODEL?: string;
       DEFAULT_REASONING_EFFORT?: string;
-      DEFAULT_INGEST_PROVIDER?: string;
-      DEFAULT_INGEST_MODEL?: string;
-      DEFAULT_INGEST_REASONING_EFFORT?: string;
-      DEFAULT_CHAT_PROVIDER?: string;
-      DEFAULT_CHAT_MODEL?: string;
-      DEFAULT_CHAT_REASONING_EFFORT?: string;
+      DEFAULT_MODEL_A_PROVIDER?: string;
+      DEFAULT_MODEL_A?: string;
+      DEFAULT_MODEL_A_REASONING_EFFORT?: string;
+      DEFAULT_MODEL_B_PROVIDER?: string;
+      DEFAULT_MODEL_B?: string;
+      DEFAULT_MODEL_B_REASONING_EFFORT?: string;
       MCP_BEARER_TOKEN?: string;
       MCP_SERVER_NAME?: string;
       MCP_SERVER_VERSION?: string;

@@ -7,7 +7,7 @@
   import AppSidebar from '$lib/components/navigation/AppSidebar.svelte';
   import MobileBottomNav from '$lib/components/navigation/MobileBottomNav.svelte';
   import Toast from '$lib/components/Toast.svelte';
-  import { IconSettings } from '$lib/icons';
+  import { IconMoonStars, IconSettings, IconSun } from '$lib/icons';
 
   const THEME_KEY = 'nebular-theme';
   const SIDEBAR_COLLAPSED_KEY = 'nebular-sidebar-collapsed';
@@ -177,6 +177,18 @@
   <div class="main-column" class:with-mobile-nav={!isLoginRoute}>
     {#if !isLoginRoute}
       <header class="mobile-header">
+        <button
+          type="button"
+          class="mobile-theme-btn"
+          on:click={toggleTheme}
+          aria-label={theme === 'dark' ? 'Light mode' : 'Dark mode'}
+        >
+          {#if theme === 'dark'}
+            <IconSun size={20} stroke={1.9} />
+          {:else}
+            <IconMoonStars size={20} stroke={1.9} />
+          {/if}
+        </button>
         <a href="/settings" class="mobile-settings-btn" aria-label="Settings">
           <IconSettings size={20} stroke={1.9} />
         </a>
@@ -404,7 +416,8 @@
       padding: calc(env(safe-area-inset-top) + var(--space-3)) var(--space-4) var(--space-2);
     }
 
-    .mobile-settings-btn {
+    .mobile-settings-btn,
+    .mobile-theme-btn {
       display: flex;
       align-items: center;
       justify-content: center;
@@ -412,10 +425,15 @@
       height: 2.2rem;
       border-radius: var(--radius-md);
       color: var(--muted-text);
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      font: inherit;
       transition: background 0.15s ease, color 0.15s ease;
     }
 
-    .mobile-settings-btn:hover {
+    .mobile-settings-btn:hover,
+    .mobile-theme-btn:hover {
       background: var(--primary-soft);
       color: var(--text-color);
     }

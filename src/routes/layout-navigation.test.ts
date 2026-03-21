@@ -96,20 +96,18 @@ describe('Layout navigation shell', () => {
     const sidebar = await screen.findByLabelText('App sidebar');
     const sidebarScope = within(sidebar);
 
-    expect(sidebarScope.getByRole('link', { name: 'Dashboard' })).toBeTruthy();
+    expect(sidebarScope.getByRole('link', { name: 'Today' })).toBeTruthy();
     expect(sidebarScope.getByRole('link', { name: 'Articles' })).toBeTruthy();
-    expect(sidebarScope.getByRole('link', { name: 'Chat' })).toBeTruthy();
+    expect(sidebarScope.getByRole('link', { name: 'Discover' })).toBeTruthy();
+    expect(sidebarScope.getByRole('link', { name: 'Lists' })).toBeTruthy();
     expect(sidebarScope.getByRole('link', { name: 'Settings' })).toBeTruthy();
-    expect(sidebarScope.getByRole('link', { name: 'Tags' })).toBeTruthy();
-    expect(sidebarScope.getByRole('link', { name: 'Feeds' })).toBeTruthy();
-    expect(sidebarScope.getByRole('link', { name: 'Jobs' })).toBeTruthy();
 
-    const jobsLink = sidebarScope.getByRole('link', { name: 'Jobs' });
+    const listsLink = sidebarScope.getByRole('link', { name: 'Lists' });
     const lightModeButton = sidebarScope.getByRole('button', { name: 'Light mode' });
     const settingsLink = sidebarScope.getByRole('link', { name: 'Settings' });
     const collapseButton = sidebarScope.getByRole('button', { name: 'Collapse sidebar' });
 
-    expect(jobsLink.compareDocumentPosition(lightModeButton) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    expect(listsLink.compareDocumentPosition(lightModeButton) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
     expect(lightModeButton.compareDocumentPosition(settingsLink) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
     expect(settingsLink.compareDocumentPosition(collapseButton) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
   });
@@ -130,8 +128,8 @@ describe('Layout navigation shell', () => {
     });
   });
 
-  it('marks settings as active on settings-family routes', async () => {
-    setPath('/tags');
+  it('marks settings as active on the settings route', async () => {
+    setPath('/settings');
     render(Layout);
 
     const sidebar = await screen.findByLabelText('App sidebar');
@@ -145,7 +143,7 @@ describe('Layout navigation shell', () => {
     const sidebar = await screen.findByLabelText('App sidebar');
     const sidebarScope = within(sidebar);
 
-    expect(sidebarScope.getByRole('link', { name: 'Dashboard' }).getAttribute('aria-current')).toBe(
+    expect(sidebarScope.getByRole('link', { name: 'Today' }).getAttribute('aria-current')).toBe(
       'page'
     );
     expect(sidebarScope.getByRole('link', { name: 'Articles' }).getAttribute('aria-current')).toBeNull();
@@ -154,55 +152,12 @@ describe('Layout navigation shell', () => {
 
     await waitFor(() => {
       expect(
-        sidebarScope.getByRole('link', { name: 'Dashboard' }).getAttribute('aria-current')
+        sidebarScope.getByRole('link', { name: 'Today' }).getAttribute('aria-current')
       ).toBeNull();
       expect(sidebarScope.getByRole('link', { name: 'Articles' }).getAttribute('aria-current')).toBe(
         'page'
       );
     });
-  });
-
-  it('opens and closes mobile more sheet with management links', async () => {
-    render(Layout);
-
-    const bottomNav = await screen.findByRole('navigation', { name: 'Bottom navigation' });
-    expect(within(bottomNav).queryByRole('link', { name: 'Settings' })).toBeNull();
-
-    const moreButton = await screen.findByRole('button', { name: 'More navigation' });
-    await fireEvent.click(moreButton);
-
-    const dialog = await screen.findByRole('dialog', { name: 'More navigation' });
-    expect(within(dialog).getByRole('link', { name: 'Settings' })).toBeTruthy();
-    expect(within(dialog).getByRole('link', { name: 'Tags' })).toBeTruthy();
-    expect(within(dialog).getByRole('link', { name: 'Feeds' })).toBeTruthy();
-    expect(within(dialog).getByRole('link', { name: 'Jobs' })).toBeTruthy();
-
-    await waitFor(() => {
-      expect(document.activeElement?.getAttribute('href')).toBe('/settings');
-    });
-
-    await fireEvent.keyDown(window, { key: 'Escape' });
-    await waitFor(() => {
-      expect(screen.queryByRole('dialog', { name: 'More navigation' })).toBeNull();
-    });
-  });
-
-  it('marks the more trigger active on settings-family routes', async () => {
-    setPath('/tags');
-    render(Layout);
-
-    const moreButton = await screen.findByRole('button', { name: 'More navigation' });
-    expect(moreButton.classList.contains('active')).toBe(true);
-
-    await fireEvent.click(moreButton);
-
-    const dialog = await screen.findByRole('dialog', { name: 'More navigation' });
-    expect(within(dialog).getByRole('link', { name: 'Tags' }).getAttribute('aria-current')).toBe(
-      'page'
-    );
-    expect(
-      within(dialog).getByRole('link', { name: 'Settings' }).getAttribute('aria-current')
-    ).toBeNull();
   });
 
   it('hides sidebar and bottom rail on login route', () => {
@@ -227,7 +182,8 @@ describe('Layout navigation shell', () => {
       expect(document.documentElement.style.colorScheme).toBe('dark');
     });
 
-    await fireEvent.click(await screen.findByRole('button', { name: 'Light mode' }));
+    const sidebar = await screen.findByLabelText('App sidebar');
+    await fireEvent.click(within(sidebar).getByRole('button', { name: 'Light mode' }));
 
     await waitFor(() => {
       expect(document.querySelector('meta[name="theme-color"]')?.getAttribute('content')).toBe(

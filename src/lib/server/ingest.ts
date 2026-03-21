@@ -1,7 +1,8 @@
 import { nanoid } from 'nanoid';
 import { dbAll, dbGet, dbRun, getAffectedRows, now, type Db } from './db';
 import { fetchAndParseFeed, type FeedItem } from './feeds';
-import { extractMainContent, computeWordCount } from './text';
+import { extractMainContent, computeWordCount, BROWSER_USER_AGENT, BROWSER_ACCEPT } from './text';
+import { logWarn } from './log';
 import { normalizeUrl } from './urls';
 import { extractLeadImageUrlFromHtml, normalizeImageUrl } from './images';
 import { enqueueNewArticleArtifactJobs } from './job-queue';
@@ -261,7 +262,10 @@ export async function ingestFeedItem(
     const timeout = setTimeout(() => controller.abort(), ARTICLE_FETCH_TIMEOUT_MS);
     try {
       const res = await fetch(url, {
-        headers: { 'user-agent': 'NebularNews/0.1 (+article)' },
+        headers: {
+          'user-agent': BROWSER_USER_AGENT,
+          'accept': BROWSER_ACCEPT
+        },
         signal: controller.signal
       });
       if (res.ok) {
@@ -273,8 +277,8 @@ export async function ingestFeedItem(
           imageUrl = extractLeadImageUrlFromHtml(html, url);
         }
       }
-    } catch {
-      // ignore fetch failures
+    } catch (err) {
+      logWarn('ingest.article_fetch_failed', { url, error: err instanceof Error ? err.message : 'unknown' });
     } finally {
       clearTimeout(timeout);
     }

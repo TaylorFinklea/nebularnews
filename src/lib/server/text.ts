@@ -1,6 +1,12 @@
 import { Readability } from '@mozilla/readability';
 import { DOMParser } from 'linkedom';
 
+export const BROWSER_USER_AGENT =
+  'Mozilla/5.0 (compatible; NebularNews/1.0; +https://nebularnews.app)';
+
+export const BROWSER_ACCEPT =
+  'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8';
+
 const stripWhitespace = (text: string) => text.replace(/\s+/g, ' ').trim();
 
 const escapeHtml = (value: string) =>

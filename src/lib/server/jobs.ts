@@ -9,6 +9,7 @@ import {
   summarizeArticle
 } from './llm';
 import { extractLeadImageUrlFromHtml } from './images';
+import { BROWSER_USER_AGENT, BROWSER_ACCEPT } from './text';
 import {
   getAutoTagMaxPerArticle,
   getFeatureProviderModel,
@@ -471,7 +472,7 @@ async function runImageBackfillJob(db: Db, articleId: string): Promise<JobRunMet
   const timeout = setTimeout(() => controller.abort(), IMAGE_FETCH_TIMEOUT_MS);
   try {
     const res = await fetch(article.canonical_url, {
-      headers: { 'user-agent': 'NebularNews/0.1 (+image-backfill)' },
+      headers: { 'user-agent': BROWSER_USER_AGENT, 'accept': BROWSER_ACCEPT },
       signal: controller.signal
     });
     if (res.ok) {

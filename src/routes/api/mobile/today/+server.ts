@@ -26,7 +26,7 @@ export const GET = async ({ request, platform }) => {
       referenceAt
     }),
     listArticlesWithFilters(db, {
-      limit: 11,
+      limit: queueConfig.limit + 1,
       offset: 0,
       selectedScores: [...SCORE_VALUES],
       selectedReactions: [...REACTION_VALUES],
@@ -38,7 +38,7 @@ export const GET = async ({ request, platform }) => {
   ]);
 
   const hero = topUnread.articles.length > 0 ? topUnread.articles[0] : null;
-  const upNext = topUnread.articles.slice(1, 11);
+  const upNext = topUnread.articles.slice(1, queueConfig.limit + 1);
 
   const newToday = await dbGet<{ count: number }>(
     db,

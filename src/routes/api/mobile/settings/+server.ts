@@ -4,11 +4,13 @@ import {
   clampSchedulerPollIntervalMinutes,
   clampNewsBriefLookbackHours,
   clampNewsBriefScoreCutoff,
+  clampDashboardQueueLimit,
   getSchedulerPollIntervalMinutes,
   getSetting,
   setSetting,
   getScoringMethod,
   getNewsBriefConfig,
+  getDashboardQueueConfig,
   parseBooleanSetting,
   validateNewsBriefTimezone,
   validateNewsBriefTime
@@ -18,13 +20,15 @@ const validSummaryStyles = new Set(['concise', 'detailed', 'bullet']);
 const validScoringMethods = new Set(['ai', 'algorithmic', 'hybrid']);
 
 async function aggregateSettings(db: D1Database) {
-  const [pollIntervalMinutes, summaryStyle, scoringMethod, newsBriefConfig] = await Promise.all([
-    getSchedulerPollIntervalMinutes(db),
-    getSetting(db, 'summary_style').then((v) => v ?? 'concise'),
-    getScoringMethod(db),
-    getNewsBriefConfig(db)
-  ]);
-  return { pollIntervalMinutes, summaryStyle, scoringMethod, newsBriefConfig };
+  const [pollIntervalMinutes, summaryStyle, scoringMethod, newsBriefConfig, queueConfig] =
+    await Promise.all([
+      getSchedulerPollIntervalMinutes(db),
+      getSetting(db, 'summary_style').then((v) => v ?? 'concise'),
+      getScoringMethod(db),
+      getNewsBriefConfig(db),
+      getDashboardQueueConfig(db)
+    ]);
+  return { pollIntervalMinutes, summaryStyle, scoringMethod, newsBriefConfig, upNextLimit: queueConfig.limit };
 }
 
 export const GET = async ({ request, platform }) => {
@@ -51,6 +55,10 @@ export const PATCH = async ({ request, platform }) => {
 
   if (body?.scoringMethod && validScoringMethods.has(body.scoringMethod)) {
     entries.push(['scoring_method', body.scoringMethod]);
+  }
+
+  if (body?.upNextLimit !== undefined && body?.upNextLimit !== null) {
+    entries.push(['dashboard_queue_limit', String(clampDashboardQueueLimit(body.upNextLimit))]);
   }
 
   if (body?.newsBriefConfig !== undefined && body?.newsBriefConfig !== null) {

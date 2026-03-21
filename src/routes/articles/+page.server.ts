@@ -74,8 +74,8 @@ export const load = async ({ platform, url, setHeaders }) => {
       .getAll('reaction')
       .flatMap((entry) => entry.split(','))
   );
-  const readFilterRaw = (url.searchParams.get('read') ?? 'all').trim().toLowerCase();
-  const readFilter = readFilterRaw === 'read' || readFilterRaw === 'unread' ? readFilterRaw : 'all';
+  const readFilterRaw = (url.searchParams.get('read') ?? 'unread').trim().toLowerCase();
+  const readFilter = readFilterRaw === 'read' || readFilterRaw === 'unread' || readFilterRaw === 'all' ? readFilterRaw : 'unread';
   const sort = normalizeSort(url.searchParams.get('sort'));
 
   const requestedTagTokens = [

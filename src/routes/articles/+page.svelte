@@ -50,7 +50,7 @@
 
   let query = data.q ?? '';
   let selectedScores = [...(data.selectedScores ?? DEFAULT_SCORE_FILTER)];
-  let readFilter = data.readFilter ?? 'all';
+  let readFilter = data.readFilter ?? 'unread';
   let sinceDays = data.sinceDays ?? null;
   let sort = data.sort ?? 'newest';
   let view = data.view ?? 'list';
@@ -355,7 +355,7 @@
     const params = new URLSearchParams();
     if (data.q) params.set('q', data.q);
     for (const score of data.selectedScores ?? []) params.append('score', score);
-    if (data.readFilter && data.readFilter !== 'all') params.set('read', data.readFilter);
+    if (data.readFilter && data.readFilter !== 'unread') params.set('read', data.readFilter);
     if (data.sinceDays) params.set('sinceDays', String(data.sinceDays));
     if (data.sort && data.sort !== 'newest') params.set('sort', data.sort);
     if (data.view && data.view !== 'list') params.set('view', data.view);
@@ -371,12 +371,12 @@
     return `/articles/${articleId}?from=${encodeURIComponent(from)}`;
   };
 
-  $: hasActiveFilters = (data.q || data.sinceDays || (data.selectedScores?.length ?? 0) < 7 || data.readFilter !== 'all' || (data.selectedReactions?.length ?? 0) < 3 || (data.selectedTagIds?.length ?? 0) > 0);
+  $: hasActiveFilters = (data.q || data.sinceDays || (data.selectedScores?.length ?? 0) < 7 || data.readFilter !== 'unread' || (data.selectedReactions?.length ?? 0) < 3 || (data.selectedTagIds?.length ?? 0) > 0);
   $: activeFilterCount = [
     data.q ? 1 : 0,
     data.sinceDays ? 1 : 0,
     (data.selectedScores?.length ?? 7) < 7 ? 1 : 0,
-    data.readFilter && data.readFilter !== 'all' ? 1 : 0,
+    data.readFilter && data.readFilter !== 'unread' ? 1 : 0,
     (data.selectedReactions?.length ?? 3) < 3 ? 1 : 0,
     (data.selectedTagIds?.length ?? 0) > 0 ? 1 : 0
   ].reduce((a, b) => a + b, 0);

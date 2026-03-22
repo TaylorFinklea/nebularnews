@@ -228,6 +228,21 @@
     return Number.isNaN(parsed.getTime()) ? 'No date' : parsed.toLocaleString();
   };
 
+  const relativeTime = (article) => {
+    const value = article.published_at ?? article.fetched_at;
+    if (!value) return '';
+    const diff = Date.now() - new Date(value).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+  };
+
+  $: heroArticle = queueItems.length > 0 ? queueItems[0] : null;
+  $: restOfQueue = queueItems.length > 1 ? queueItems.slice(1) : [];
+
   const formatDateTime = (value) => {
     if (!value) return '';
     const parsed = new Date(value);
@@ -333,71 +348,56 @@
   };
 </script>
 
-<section class="hero-utility">
-  <div>
-    <h1>Your Reading Queue</h1>
-    <p class="hero-desc">Pick up where you left off with the most relevant unread stories.</p>
-  </div>
-
-  <div class="pull-section">
-    <Button
-      variant="primary"
-      size="inline"
-      on:click={runManualPull}
-      disabled={isPulling}
-      title={isPulling ? 'Pull in progress' : 'Pull feeds now'}
-    >
-      <span class="icon-wrap" class:spinning={isPulling}><IconClockPlay size={16} stroke={1.9} /></span>
-      <span>{isPulling ? 'Pulling...' : 'Pull feeds now'}</span>
-    </Button>
-    {#if pullMessage}
-      <p class="pull-msg" role="status" aria-live="polite">{pullMessage}</p>
-    {/if}
-    <span class="live-badge" class:live={liveConnected}>
-      {#if liveConnected}
-        {heartbeatDegraded ? '◐ Live (throttled)' : '● Live'}
-      {:else}
-        ○ Connecting...
-      {/if}
-    </span>
+<!-- 1. Stat pills (momentum) -->
+<section class="stat-pills">
+  <div class="pills-row">
+    <a class="pill" href={data.momentumLinks?.unreadTotal ?? '/articles?read=unread&sort=unread_first'}>
+      <span class="pill-num">{momentum.unreadTotal}</span>
+      <span class="pill-label">Unread total</span>
+    </a>
+    <a class="pill" href={data.momentumLinks?.unread24h ?? '/articles?read=unread&sort=unread_first&sinceDays=1'}>
+      <span class="pill-num">{momentum.unread24h}</span>
+      <span class="pill-label">Unread 24h</span>
+    </a>
+    <a class="pill" href={data.momentumLinks?.unread7d ?? '/articles?read=unread&sort=unread_first&sinceDays=7'}>
+      <span class="pill-num">{momentum.unread7d}</span>
+      <span class="pill-label">Unread 7d</span>
+    </a>
+    <a class="pill" href={data.momentumLinks?.highFitUnread7d ?? '/articles?read=unread&sort=unread_first&sinceDays=7&score=5&score=4&score=3'}>
+      <span class="pill-num">{momentum.highFitUnread7d}</span>
+      <span class="pill-label">High fit 7d</span>
+    </a>
   </div>
 </section>
 
-<section class="momentum">
-  <div class="section-head">
-    <h2>Reading Momentum</h2>
-    <a href="/articles" class="view-all">
-      <IconExternalLink size={13} stroke={1.9} />
-      <span>Articles</span>
+<!-- 2. Hero card (first queue article) -->
+{#if heroArticle}
+  <section class="hero-card-section">
+    <a class="hero-card" href={queueArticleHref(heroArticle.id)}>
+      <img
+        class="hero-card-img"
+        src={resolveArticleImageUrl(heroArticle)}
+        alt=""
+        loading="eager"
+        decoding="async"
+      />
+      <div class="hero-card-overlay">
+        <span
+          class={`fit-pill ${getFitScoreTone(heroArticle.score, heroArticle.score_status)}`}
+          title={getFitScoreAria(heroArticle.score, heroArticle.score_status)}
+          aria-label={getFitScoreAria(heroArticle.score, heroArticle.score_status)}
+        >
+          <IconStars size={13} stroke={1.9} />
+          <span>{getFitScoreText(heroArticle.score, heroArticle.score_status)}</span>
+        </span>
+        <h2 class="hero-card-title">{heroArticle.title ?? 'Untitled article'}</h2>
+        <span class="hero-card-source">{heroArticle.source_name ?? 'Unknown source'}</span>
+      </div>
     </a>
-  </div>
+  </section>
+{/if}
 
-  <div class="momentum-grid">
-    <a class="momentum-card is-link" href={data.momentumLinks?.unreadTotal ?? '/articles?read=unread&sort=unread_first'}>
-      <div class="momentum-num">{momentum.unreadTotal}</div>
-      <div class="momentum-label">Unread total</div>
-    </a>
-    <a class="momentum-card is-link" href={data.momentumLinks?.unread24h ?? '/articles?read=unread&sort=unread_first&sinceDays=1'}>
-      <div class="momentum-num">{momentum.unread24h}</div>
-      <div class="momentum-label">Unread · 24h</div>
-    </a>
-    <a class="momentum-card is-link" href={data.momentumLinks?.unread7d ?? '/articles?read=unread&sort=unread_first&sinceDays=7'}>
-      <div class="momentum-num">{momentum.unread7d}</div>
-      <div class="momentum-label">Unread · 7d</div>
-    </a>
-    <a class="momentum-card is-link" href={data.momentumLinks?.highFitUnread7d ?? '/articles?read=unread&sort=unread_first&sinceDays=7&score=5&score=4&score=3'}>
-      <div class="momentum-num">{momentum.highFitUnread7d}</div>
-      <div class="momentum-label">High fit · 7d</div>
-    </a>
-  </div>
-
-  <div class="quick-links">
-    <a href={data.queueConfig?.hrefUnread ?? '/articles?read=unread&sort=unread_first'}>Open unread queue</a>
-    <a href={data.queueConfig?.hrefHighFitUnread ?? '/articles?read=unread&sort=unread_first&sinceDays=7&score=5&score=4&score=3'}>Open high-fit unread</a>
-    <a href="/articles">Browse all articles</a>
-  </div>
-</section>
-
+<!-- 3. News Brief -->
 {#if data.newsBrief}
   <section class="news-brief">
     <div class="section-head">
@@ -458,9 +458,10 @@
   </section>
 {/if}
 
+<!-- 4. Up Next rows (remaining queue articles) -->
 <section class="reading-queue">
   <div class="section-head">
-    <h2>Top Unread · Last {data.queueConfig?.windowDays ?? 7} Days</h2>
+    <h2>Up Next · Last {data.queueConfig?.windowDays ?? 7} Days</h2>
     <a href={data.queueConfig?.hrefUnread ?? '/articles?read=unread&sort=unread_first'} class="view-all">
       <IconExternalLink size={13} stroke={1.9} />
       <span>View unread</span>
@@ -479,22 +480,14 @@
       </div>
     </div>
   {:else}
-    <div class="queue-grid">
-      {#each queueItems as article}
-        <article class="queue-card">
-          <a class="card-img-wrap" href={queueArticleHref(article.id)}>
-            <img
-              class="card-img"
-              src={resolveArticleImageUrl(article)}
-              alt=""
-              loading="lazy"
-              decoding="async"
-            />
-          </a>
-
-          <div class="card-body">
-            <div class="card-top-row">
-              <a class="card-title" href={queueArticleHref(article.id)}>{article.title ?? 'Untitled article'}</a>
+    <div class="queue-rows">
+      {#each restOfQueue as article}
+        <article class="queue-row">
+          <div class="accent-bar {getFitScoreTone(article.score, article.score_status)}"></div>
+          <div class="row-body">
+            <a class="row-title" href={queueArticleHref(article.id)}>{article.title ?? 'Untitled article'}</a>
+            <div class="row-meta">
+              <span>{article.source_name ?? 'Unknown source'}</span>
               <span
                 class={`fit-pill ${getFitScoreTone(article.score, article.score_status)}`}
                 title={getFitScoreAria(article.score, article.score_status)}
@@ -503,23 +496,7 @@
                 <IconStars size={13} stroke={1.9} />
                 <span>{getFitScoreText(article.score, article.score_status)}</span>
               </span>
-            </div>
-
-            <div class="reason-row">
-              <span class="reason-chip" class:high={article.queue_reason === 'high_fit'}>
-                {article.queue_reason === 'high_fit' ? 'High fit' : 'Recent unread'}
-              </span>
-            </div>
-
-            <p class="card-excerpt">{articleSnippet(article)}</p>
-
-            <div class="card-meta">
-              <span>{article.source_name ?? 'Unknown source'}</span>
-              <span>{formatTimestamp(article)}</span>
-            </div>
-
-            <div class="card-actions">
-              <a class="open-link" href={queueArticleHref(article.id)}>Open</a>
+              <span class="row-time">{relativeTime(article)}</span>
               <button
                 type="button"
                 class="mark-read"
@@ -536,6 +513,32 @@
   {/if}
 </section>
 
+<!-- 5. Pull feeds utility -->
+<section class="pull-utility">
+  <div class="pull-section">
+    <Button
+      variant="primary"
+      size="inline"
+      on:click={runManualPull}
+      disabled={isPulling}
+      title={isPulling ? 'Pull in progress' : 'Pull feeds now'}
+    >
+      <span class="icon-wrap" class:spinning={isPulling}><IconClockPlay size={16} stroke={1.9} /></span>
+      <span>{isPulling ? 'Pulling...' : 'Pull feeds now'}</span>
+    </Button>
+    {#if pullMessage}
+      <p class="pull-msg" role="status" aria-live="polite">{pullMessage}</p>
+    {/if}
+    <span class="live-badge" class:live={liveConnected}>
+      {#if liveConnected}
+        {heartbeatDegraded ? '◐ Live (throttled)' : '● Live'}
+      {:else}
+        ○ Connecting...
+      {/if}
+    </span>
+  </div>
+</section>
+
 {#if !data.hasFeeds}
   <Card variant="default">
     <h3>Get started</h3>
@@ -548,68 +551,108 @@
 {/if}
 
 <style>
-  .hero-utility {
-    background: var(--surface);
-    border-radius: var(--radius-xl);
-    padding: var(--space-6) var(--space-8);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: var(--space-5);
+  /* ── Stat Pills ── */
+  .stat-pills {
     margin-bottom: var(--space-6);
-    backdrop-filter: blur(var(--blur-md));
-    -webkit-backdrop-filter: blur(var(--blur-md));
   }
 
-  h1 {
-    font-size: 2.2rem;
-    font-weight: 700;
-    margin: 0 0 var(--space-2);
-    line-height: var(--leading-tight);
-    letter-spacing: var(--tracking-tight);
+  .pills-row {
+    display: flex;
+    gap: var(--space-3);
+    flex-wrap: wrap;
   }
 
-  .hero-desc {
-    color: var(--muted-text);
-    margin: 0;
-    line-height: 1.5;
-  }
-
-  .pull-section {
-    min-width: 260px;
-    display: grid;
-    gap: var(--space-2);
-    justify-items: end;
-  }
-
-  .icon-wrap {
-    display: inline-flex;
+  .pill {
+    display: flex;
+    flex-direction: column;
     align-items: center;
+    background: var(--surface-strong);
+    border-radius: var(--radius-xl);
+    padding: var(--space-3) var(--space-5);
+    border: 1px solid var(--surface-border);
+    text-decoration: none;
+    color: inherit;
+    flex: 1 1 0;
+    min-width: 100px;
+    transition: transform var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
   }
 
-  .icon-wrap.spinning {
-    animation: spin 1s linear infinite;
+  .pill:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+    border-color: var(--surface-border-hover);
   }
 
-  @keyframes spin {
-    to { transform: rotate(360deg); }
+  .pill:nth-child(1) .pill-num { color: var(--primary); }
+  .pill:nth-child(2) .pill-num { color: var(--accent); }
+  .pill:nth-child(3) .pill-num { color: #e8a060; }
+  .pill:nth-child(4) .pill-num { color: #7aded0; }
+
+  .pill-num {
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1;
   }
 
-  .pull-msg {
+  .pill-label {
+    font-size: 0.8rem;
+    color: var(--muted-text);
+    margin-top: 0.25rem;
+  }
+
+  /* ── Hero Card ── */
+  .hero-card-section {
+    margin-bottom: var(--space-6);
+  }
+
+  .hero-card {
+    display: block;
+    position: relative;
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+    text-decoration: none;
+    color: #fff;
+    height: 320px;
+    transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+  }
+
+  .hero-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+  }
+
+  .hero-card-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  .hero-card-overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(to bottom, transparent 30%, rgba(0,0,0,0.75) 100%);
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: var(--space-6);
+    gap: var(--space-2);
+  }
+
+  .hero-card-title {
     margin: 0;
+    font-size: 1.6rem;
+    font-weight: 700;
+    line-height: 1.25;
+    color: #fff;
+  }
+
+  .hero-card-source {
     font-size: var(--text-sm);
-    color: var(--muted-text);
+    opacity: 0.8;
   }
 
-  .live-badge {
-    font-size: var(--text-xs);
-    color: var(--muted-text);
-  }
-
-  .live-badge.live {
-    color: var(--accent);
-  }
-
+  /* ── News Brief ── */
   .news-brief {
     background: var(--surface);
     border-radius: var(--radius-xl);
@@ -696,6 +739,7 @@
     font-size: var(--text-sm);
   }
 
+  /* ── Reading Queue (Up Next) ── */
   .reading-queue {
     background: var(--surface);
     border-radius: var(--radius-xl);
@@ -731,65 +775,77 @@
     font-size: var(--text-sm);
   }
 
-  .queue-grid {
+  /* ── Queue Rows (compact) ── */
+  .queue-rows {
     display: grid;
-    gap: var(--space-4);
+    gap: var(--space-2);
   }
 
-  .queue-card {
+  .queue-row {
+    display: flex;
+    align-items: stretch;
     background: var(--surface-strong);
     border-radius: var(--radius-lg);
     overflow: hidden;
-    display: grid;
-    grid-template-columns: 180px 1fr;
     border: 1px solid var(--surface-border);
-    transition: transform var(--transition-fast), box-shadow var(--transition-fast), border-color var(--transition-fast);
+    transition: border-color var(--transition-fast);
   }
 
-  .queue-card:hover {
-    transform: translateY(-1px);
-    box-shadow: var(--shadow-md);
+  .queue-row:hover {
     border-color: var(--surface-border-hover);
   }
 
-  .card-img-wrap {
-    display: block;
-    background: var(--surface-soft);
-    height: 140px;
+  .accent-bar {
+    width: 4px;
+    flex-shrink: 0;
+    background: var(--muted-text);
   }
+  .accent-bar.fit-1 { background: #fca5a5; }
+  .accent-bar.fit-2 { background: #fdba74; }
+  .accent-bar.fit-3 { background: #c4b5fd; }
+  .accent-bar.fit-4 { background: #67e8f9; }
+  .accent-bar.fit-5 { background: #86efac; }
+  .accent-bar.fit-none,
+  .accent-bar.fit-learning { background: var(--muted-text); }
 
-  .card-img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    display: block;
-  }
-
-  .card-body {
-    padding: var(--space-4);
-    display: grid;
-    gap: var(--space-2);
-    align-content: start;
-  }
-
-  .card-top-row {
+  .row-body {
+    flex: 1;
+    padding: var(--space-3) var(--space-4);
     display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: var(--space-3);
+    flex-direction: column;
+    gap: var(--space-1);
+    min-width: 0;
   }
 
-  .card-title {
-    font-weight: 650;
+  .row-title {
+    font-weight: 600;
     color: var(--text-color);
     text-decoration: none;
-    line-height: 1.34;
+    line-height: 1.35;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
   }
 
-  .card-title:hover {
+  .row-title:hover {
     color: var(--primary);
   }
 
+  .row-meta {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--text-xs);
+    color: var(--muted-text);
+    flex-wrap: wrap;
+  }
+
+  .row-time {
+    color: var(--muted-text);
+  }
+
+  /* ── Fit Pill ── */
   .fit-pill {
     display: inline-flex;
     align-items: center;
@@ -835,75 +891,17 @@
     background: rgba(122, 222, 208, 0.10);
   }
 
-  .reason-row {
-    display: flex;
-    align-items: center;
-  }
-
-  .reason-chip {
-    border-radius: var(--radius-sm);
-    background: var(--surface-soft);
-    color: var(--muted-text);
-    font-size: 0.68rem;
-    font-weight: 600;
-    letter-spacing: 0.03em;
-    text-transform: uppercase;
-    padding: 0.18rem 0.48rem;
-  }
-
-  .reason-chip.high {
-    color: var(--accent);
-    background: var(--accent-soft);
-  }
-
-  .card-excerpt {
-    margin: 0;
-    color: var(--muted-text);
-    line-height: 1.45;
-    font-size: var(--text-sm);
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-
-  .card-meta {
-    display: flex;
-    justify-content: space-between;
-    gap: var(--space-3);
-    font-size: var(--text-xs);
-    color: var(--muted-text);
-    flex-wrap: wrap;
-  }
-
-  .card-actions {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: var(--space-2);
-    margin-top: var(--space-1);
-  }
-
-  .open-link {
-    font-size: var(--text-sm);
-    color: var(--muted-text);
-    text-decoration: none;
-    padding: 0.35rem 0.5rem;
-  }
-
-  .open-link:hover {
-    color: var(--text-color);
-  }
-
+  /* ── Mark Read ── */
   .mark-read {
     border: none;
     background: var(--surface-soft);
     color: var(--ghost-color);
     border-radius: var(--radius-md);
-    padding: 0.35rem 0.75rem;
+    padding: 0.25rem 0.6rem;
     font-family: inherit;
-    font-size: var(--text-sm);
+    font-size: var(--text-xs);
     cursor: pointer;
+    margin-left: auto;
   }
 
   .mark-read:disabled {
@@ -911,6 +909,7 @@
     cursor: wait;
   }
 
+  /* ── Queue Empty ── */
   .queue-empty {
     padding: var(--space-8) var(--space-2);
     color: var(--muted-text);
@@ -945,96 +944,51 @@
     cursor: pointer;
   }
 
-  .momentum {
+  /* ── Pull Utility ── */
+  .pull-utility {
     background: var(--surface);
     border-radius: var(--radius-xl);
-    padding: var(--space-6);
+    padding: var(--space-5) var(--space-6);
     margin-bottom: var(--space-6);
   }
 
-  .momentum-grid {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+  .pull-section {
+    display: flex;
+    align-items: center;
     gap: var(--space-3);
-    margin-bottom: var(--space-4);
+    flex-wrap: wrap;
   }
 
-  .momentum-card {
-    background: var(--surface-strong);
-    border-radius: var(--radius-lg);
-    padding: var(--space-4);
-    text-align: center;
-    border: 1px solid var(--surface-border);
+  .icon-wrap {
+    display: inline-flex;
+    align-items: center;
   }
 
-  .momentum-card:nth-child(1) {
-    border-color: rgba(124, 106, 239, 0.15);
+  .icon-wrap.spinning {
+    animation: spin 1s linear infinite;
   }
 
-  .momentum-card:nth-child(2) {
-    border-color: rgba(61, 200, 192, 0.15);
+  @keyframes spin {
+    to { transform: rotate(360deg); }
   }
 
-  .momentum-card:nth-child(2) .momentum-num {
+  .pull-msg {
+    margin: 0;
+    font-size: var(--text-sm);
+    color: var(--muted-text);
+  }
+
+  .live-badge {
+    font-size: var(--text-xs);
+    color: var(--muted-text);
+    margin-left: auto;
+  }
+
+  .live-badge.live {
     color: var(--accent);
   }
 
-  .momentum-card:nth-child(3) {
-    border-color: rgba(232, 160, 96, 0.15);
-  }
-
-  .momentum-card:nth-child(3) .momentum-num {
-    color: #e8a060;
-  }
-
-  .momentum-card:nth-child(4) {
-    border-color: rgba(122, 222, 208, 0.15);
-  }
-
-  .momentum-card:nth-child(4) .momentum-num {
-    color: #7aded0;
-  }
-
-  .momentum-card.is-link {
-    text-decoration: none;
-    color: inherit;
-    transition: transform var(--transition-fast), border-color var(--transition-fast), box-shadow var(--transition-fast);
-  }
-
-  .momentum-card.is-link:hover {
-    transform: translateY(-1px);
-    box-shadow: var(--shadow-md);
-    border-color: var(--surface-border-hover);
-  }
-
-  .momentum-num {
-    font-size: 2rem;
-    line-height: 1;
-    font-weight: 700;
-    color: var(--primary);
-  }
-
-  .momentum-label {
-    margin-top: var(--space-1);
-    color: var(--muted-text);
-    font-size: var(--text-sm);
-  }
-
-  .quick-links {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-3);
-  }
-
-  .quick-links a {
-    border: none;
-    background: var(--surface-soft);
-    border-radius: var(--radius-md);
-    padding: 0.35rem 0.78rem;
-    text-decoration: none;
-    font-size: var(--text-sm);
-  }
-
+  /* ── Shared ── */
   :global(.card) ul {
     padding-left: 1.2rem;
     margin: 0;
@@ -1044,41 +998,46 @@
     margin: 0;
   }
 
+  /* ── Responsive ── */
   @media (max-width: 940px) {
-    .hero-utility {
-      flex-direction: column;
-      align-items: flex-start;
+    .hero-card {
+      height: 240px;
     }
 
-    .pull-section {
-      justify-items: start;
-      min-width: 0;
-    }
-
-    .queue-card {
-      grid-template-columns: 1fr;
-    }
-
-    .card-img-wrap {
-      height: 180px;
-    }
-
-    .momentum-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+    .hero-card-title {
+      font-size: 1.3rem;
     }
   }
 
   @media (max-width: 560px) {
-    h1 {
-      font-size: 1.85rem;
+    .pills-row {
+      gap: var(--space-2);
     }
 
-    .momentum-grid {
-      grid-template-columns: 1fr 1fr;
+    .pill {
+      padding: var(--space-2) var(--space-3);
+      min-width: 70px;
     }
 
-    .card-actions {
-      justify-content: flex-start;
+    .pill-num {
+      font-size: 1.2rem;
+    }
+
+    .hero-card {
+      height: 200px;
+    }
+
+    .hero-card-title {
+      font-size: 1.15rem;
+    }
+
+    .pull-section {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .live-badge {
+      margin-left: 0;
     }
   }
 </style>

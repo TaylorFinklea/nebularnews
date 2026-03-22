@@ -357,7 +357,7 @@
     </a>
     <a class="pill" href={data.momentumLinks?.unread24h ?? '/articles?read=unread&sort=unread_first&sinceDays=1'}>
       <span class="pill-num">{momentum.unread24h}</span>
-      <span class="pill-label">Unread 24h</span>
+      <span class="pill-label">Last 24h</span>
     </a>
     <a class="pill" href={data.momentumLinks?.unread7d ?? '/articles?read=unread&sort=unread_first&sinceDays=7'}>
       <span class="pill-num">{momentum.unread7d}</span>

@@ -63,6 +63,7 @@ export const GET = async ({ request, platform }) => {
     stats: {
       unreadTotal: momentum.unreadTotal ?? 0,
       newToday: Number(newToday?.count ?? 0),
+      newLast24h: Number(newToday?.count ?? 0),
       highFitUnread: Number(highFit?.count ?? 0)
     },
     newsBrief

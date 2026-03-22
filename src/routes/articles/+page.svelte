@@ -556,7 +556,7 @@
           <h2 class="date-heading">{publishDateLabel(article)}</h2>
         {/if}
       {/if}
-      <article class="card layout-{cardLayout}" id="article-{article.id}">
+      <article class="card layout-{cardLayout}" class:read={isArticleRead(article)} id="article-{article.id}">
         <div
           class="accent-bar {getFitScoreTone(article.score, article.score_status)}"
           class:read={isArticleRead(article)}
@@ -604,89 +604,60 @@
             </div>
           </div>
           <div class="card-meta">
-            <span>{article.source_name ?? 'Unknown source'}{#if article.source_feedback_count} · rep {article.source_reputation.toFixed(2)}{/if}</span>
-            <span>{article.published_at ? new Date(article.published_at).toLocaleString() : ''}</span>
+            <span>{article.source_name ?? 'Unknown source'}{#if article.source_feedback_count} · rep {article.source_reputation.toFixed(2)}{/if} · {article.published_at ? new Date(article.published_at).toLocaleString() : ''}</span>
+            <div class="card-actions-inline" class:pending={pending}>
+              <button
+                type="button"
+                class="icon-btn-sm"
+                class:active={reactionNumber(article.reaction_value) === 1}
+                on:click={() => openReactionDialog(article.id, 1)}
+                title="Thumbs up feed"
+                aria-label="Thumbs up feed"
+                disabled={pending}
+              >
+                <IconThumbUp size={13} stroke={1.9} />
+              </button>
+              <button
+                type="button"
+                class="icon-btn-sm"
+                class:active={reactionNumber(article.reaction_value) === -1}
+                on:click={() => openReactionDialog(article.id, -1)}
+                title="Thumbs down feed"
+                aria-label="Thumbs down feed"
+                disabled={pending}
+              >
+                <IconThumbDown size={13} stroke={1.9} />
+              </button>
+              <button
+                type="button"
+                class="icon-btn-sm"
+                on:click={() => setReadState(article.id, !isArticleRead(article))}
+                title={isArticleRead(article) ? 'Mark unread' : 'Mark read'}
+                aria-label={isArticleRead(article) ? 'Mark unread' : 'Mark read'}
+                disabled={pending}
+              >
+                {#if isArticleRead(article)}
+                  <IconEyeOff size={13} stroke={1.9} />
+                {:else}
+                  <IconEye size={13} stroke={1.9} />
+                {/if}
+              </button>
+            </div>
           </div>
           {#if article.author}
             <div class="byline">By {article.author}</div>
           {/if}
           {#if article.tags?.length}
             <div class="tag-row">
-              {#each article.tags as tag}
+              {#each article.tags.slice(0, 3) as tag}
                 <span class="tag-chip">{tag.name}</span>
               {/each}
-            </div>
-          {/if}
-          {#if article.tag_suggestions?.length}
-            <div class="tag-suggestion-row">
-              {#each article.tag_suggestions as suggestion}
-                <span class="tag-suggestion-chip">
-                  <span>{suggestion.name}</span>
-                  <button
-                    type="button"
-                    class="suggestion-action"
-                    on:click={() => acceptTagSuggestion(article.id, suggestion)}
-                    title={`Accept suggested tag ${suggestion.name}`}
-                    aria-label={`Accept suggested tag ${suggestion.name}`}
-                    disabled={pending}
-                  >
-                    <IconPlus size={11} stroke={2} />
-                  </button>
-                  <button
-                    type="button"
-                    class="suggestion-action"
-                    on:click={() => dismissTagSuggestion(article.id, suggestion)}
-                    title={`Dismiss suggested tag ${suggestion.name}`}
-                    aria-label={`Dismiss suggested tag ${suggestion.name}`}
-                    disabled={pending}
-                  >
-                    <IconX size={11} stroke={2} />
-                  </button>
-                </span>
-              {/each}
+              {#if article.tags.length > 3}
+                <span class="tag-chip muted">+{article.tags.length - 3}</span>
+              {/if}
             </div>
           {/if}
           <p class="excerpt">{article.summary_text ?? article.excerpt ?? ''}</p>
-        </div>
-        <div class="card-actions" class:pending={pending}>
-          <div class="reactions">
-            <button
-              type="button"
-              class="reaction-btn"
-              class:active={reactionNumber(article.reaction_value) === 1}
-              on:click={() => openReactionDialog(article.id, 1)}
-              title="Thumbs up feed"
-              aria-label="Thumbs up feed"
-              disabled={pending}
-            >
-              <IconThumbUp size={15} stroke={1.9} />
-            </button>
-            <button
-              type="button"
-              class="reaction-btn"
-              class:active={reactionNumber(article.reaction_value) === -1}
-              on:click={() => openReactionDialog(article.id, -1)}
-              title="Thumbs down feed"
-              aria-label="Thumbs down feed"
-              disabled={pending}
-            >
-              <IconThumbDown size={15} stroke={1.9} />
-            </button>
-          </div>
-          <button
-            type="button"
-            class="read-btn"
-            on:click={() => setReadState(article.id, !isArticleRead(article))}
-            title={isArticleRead(article) ? 'Mark unread' : 'Mark read'}
-            aria-label={isArticleRead(article) ? 'Mark unread' : 'Mark read'}
-            disabled={pending}
-          >
-            {#if isArticleRead(article)}
-              <IconEyeOff size={15} stroke={1.9} />
-            {:else}
-              <IconEye size={15} stroke={1.9} />
-            {/if}
-          </button>
         </div>
       </article>
     {/each}
@@ -952,9 +923,9 @@
     box-shadow: none;
     border: 1px solid var(--surface-border);
     display: grid;
-    gap: var(--space-4);
+    gap: var(--space-3);
     align-items: start;
-    transition: box-shadow var(--transition-normal), transform var(--transition-fast), border-color var(--transition-fast);
+    transition: box-shadow var(--transition-normal), transform var(--transition-fast), border-color var(--transition-fast), opacity var(--transition-fast);
     overflow: hidden;
   }
 
@@ -962,6 +933,13 @@
     transform: translateY(-1px);
     box-shadow: var(--shadow-md);
     border-color: var(--surface-border-hover);
+  }
+
+  .card.read {
+    opacity: 0.65;
+  }
+  .card.read:hover {
+    opacity: 1;
   }
 
   .accent-bar {
@@ -981,29 +959,21 @@
   .accent-bar.fit-learning { background: var(--muted-text); opacity: 0.2; }
 
   .card.layout-split {
-    grid-template-columns: 4px 180px minmax(0, 1fr);
-    grid-template-rows: 1fr auto;
-    grid-template-areas:
-      'bar image main'
-      'bar actions actions';
+    grid-template-columns: 4px 140px minmax(0, 1fr);
+    grid-template-rows: 1fr;
+    grid-template-areas: 'bar image main';
   }
 
   .card.layout-stacked {
     grid-template-columns: 4px 1fr;
     grid-template-areas:
       'bar image'
-      'bar main'
-      'bar actions';
+      'bar main';
     padding: 0;
   }
 
   .card.layout-stacked .card-main {
-    padding: var(--space-5);
-    padding-bottom: 0;
-  }
-
-  .card.layout-stacked .card-actions {
-    padding: var(--space-3) var(--space-5);
+    padding: var(--space-3);
   }
 
   .card.layout-split {
@@ -1011,11 +981,7 @@
   }
 
   .card.layout-split .card-main {
-    padding: var(--space-5) var(--space-5) 0 0;
-  }
-
-  .card.layout-split .card-actions {
-    padding: var(--space-3) var(--space-5);
+    padding: var(--space-3);
   }
 
   .card-img-link {
@@ -1029,7 +995,7 @@
   }
 
   .card.layout-stacked .card-img-link {
-    height: 200px;
+    height: 160px;
   }
 
   .card-img {
@@ -1048,7 +1014,7 @@
   .card-main {
     grid-area: main;
     display: grid;
-    gap: var(--space-2);
+    gap: 0.5rem;
     min-width: 0;
     align-content: start;
   }
@@ -1062,7 +1028,7 @@
 
   h3 {
     margin: 0;
-    font-size: 1rem;
+    font-size: 0.95rem;
     line-height: 1.35;
     flex: 1 1 0;
     min-width: 0;
@@ -1156,100 +1122,60 @@
     color: var(--muted-text);
   }
 
-  .tag-suggestion-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.35rem;
-  }
-
-  .tag-suggestion-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.2rem;
-    border-radius: var(--radius-sm);
-    background: color-mix(in srgb, #4ade80 14%, transparent);
-    padding: 0.12rem 0.3rem 0.12rem 0.52rem;
-    font-size: 0.7rem;
-    color: var(--text-color);
-  }
-
-  .suggestion-action {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 1.05rem;
-    height: 1.05rem;
-    border-radius: var(--radius-full);
-    border: 1px solid transparent;
-    background: transparent;
-    color: var(--text-color);
-    cursor: pointer;
-    padding: 0;
-  }
-
-  .suggestion-action:hover:not(:disabled) {
-    border-color: var(--surface-border);
-    background: color-mix(in srgb, var(--surface-strong) 55%, transparent);
-  }
-
-  .suggestion-action:disabled {
-    opacity: 0.55;
-    cursor: default;
+  .tag-chip.muted {
+    color: var(--muted-text);
+    border-color: transparent;
   }
 
   .excerpt {
     margin: 0;
     color: var(--muted-text);
     display: -webkit-box;
-    -webkit-line-clamp: 4;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
-    font-size: var(--text-sm);
+    font-size: var(--text-xs);
     line-height: 1.5;
   }
 
-  .card-actions {
-    grid-area: actions;
-    display: flex;
-    align-items: center;
-    gap: var(--space-3);
-    flex-wrap: wrap;
-  }
-
-  .card-actions.pending { opacity: 0.85; }
-
-  .reactions {
+  .card-actions-inline {
     display: inline-flex;
-    gap: var(--space-1);
-  }
-
-  .reaction-btn, .read-btn {
-    border: none;
-    background: var(--surface-soft);
-    border-radius: var(--radius-full);
-    width: 2rem;
-    height: 2rem;
-    display: inline-flex;
+    gap: 0.3rem;
     align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    color: var(--text-color);
-    transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
-  }
-
-  .reaction-btn:disabled, .read-btn:disabled { opacity: 0.6; cursor: wait; }
-
-  .reaction-btn.active {
-    background: var(--primary-soft);
-    color: var(--primary);
-  }
-
-  .read-btn {
-    color: var(--ghost-color);
     margin-left: auto;
   }
 
-  .read-btn:hover:not(:disabled) { background: var(--primary-soft); }
+  .card-actions-inline.pending { opacity: 0.85; }
+
+  .icon-btn-sm {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.6rem;
+    height: 1.6rem;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--input-border);
+    background: var(--surface-soft);
+    color: var(--text-color);
+    cursor: pointer;
+    padding: 0;
+  }
+
+  .icon-btn-sm:hover {
+    background: var(--primary-soft);
+  }
+
+  .icon-btn-sm.active {
+    background: var(--primary-soft);
+    color: var(--primary);
+    border-color: var(--primary);
+  }
+
+  .icon-btn-sm:disabled {
+    opacity: 0.5;
+    cursor: wait;
+  }
 
   /* Date grouping */
   .date-heading {
@@ -1277,20 +1203,15 @@
       grid-template-columns: 4px 1fr;
       grid-template-areas:
         'bar image'
-        'bar main'
-        'bar actions';
+        'bar main';
     }
 
     .card.layout-split .card-img-link {
-      height: 160px;
+      height: 140px;
     }
 
     .card.layout-split .card-main {
-      padding: var(--space-4) var(--space-4) 0;
-    }
-
-    .card.layout-split .card-actions {
-      padding: var(--space-3) var(--space-4);
+      padding: var(--space-3) var(--space-3) var(--space-3);
     }
   }
 </style>

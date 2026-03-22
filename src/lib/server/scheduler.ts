@@ -2,6 +2,7 @@ import { pollFeeds, type FeedPollSummary } from './ingest';
 import { processJobs } from './jobs';
 import { processPullRuns, recoverStalePullRuns } from './manual-pull';
 import { runNewsBriefSchedulerTick } from './news-brief';
+import { runNotificationDigest } from './push/digest';
 import { queueMissingRecentArticleJobs } from './jobs-admin';
 import { ensureSchema } from './migrations';
 import { assertRuntimeConfig } from './runtime-config';
@@ -72,6 +73,7 @@ const runJobsTick = async (
     timeBudgetMs: pullRunning ? scheduler.jobBudgetWhilePullMs : scheduler.jobBudgetIdleMs
   });
   const newsBrief = await runNewsBriefSchedulerTick(env.DB, env);
+  await runNotificationDigest(env.DB, env);
 
   let orphanCleanup = null;
   if (!pullRunning) {

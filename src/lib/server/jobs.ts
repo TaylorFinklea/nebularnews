@@ -38,7 +38,6 @@ import {
 } from './tags';
 import { logInfo } from './log';
 import { isJobBatchV2Enabled } from './flags';
-import { notifyAllDevices } from './push/apns';
 
 const MAX_JOB_ATTEMPTS = 3;
 const JOB_LEASE_MS = 1000 * 60 * 3;
@@ -894,21 +893,6 @@ export async function runScoreJob(db: Db, env: App.Platform['env'], articleId: s
     ]
   );
 
-  if (finalScore >= 4) {
-    const notifArticle = await dbGet<{ title: string | null }>(
-      db, 'SELECT title FROM articles WHERE id = ?', [articleId]
-    );
-    if (notifArticle) {
-      await notifyAllDevices(db, env, {
-        alert: {
-          title: `High-fit article (${finalScore}/5)`,
-          body: notifArticle.title ?? 'New article scored highly for you'
-        },
-        data: { articleId }
-      });
-    }
-  }
-
   return { provider: usedProvider, model: usedModel };
 }
 
@@ -967,16 +951,6 @@ async function runScoreJobAiOnly(db: Db, env: App.Platform['env'], articleId: st
       null
     ]
   );
-
-  if (scored.score >= 4) {
-    await notifyAllDevices(db, env, {
-      alert: {
-        title: `High-fit article (${scored.score}/5)`,
-        body: article.title ?? 'New article scored highly for you'
-      },
-      data: { articleId }
-    });
-  }
 
   return { provider, model };
 }

@@ -1,129 +1,13 @@
 <script>
   import { invalidateAll } from '$app/navigation';
-  import { onMount, tick } from 'svelte';
+  import { onMount } from 'svelte';
   import { apiFetch } from '$lib/client/api-fetch';
-  import { IconDeviceFloppy, IconRefresh, IconRestore, IconTrash } from '$lib/icons';
+  import { IconRefresh, IconRestore, IconTrash, IconDeviceFloppy } from '$lib/icons';
   import PageHeader from '$lib/components/PageHeader.svelte';
-  import Card from '$lib/components/Card.svelte';
   import Button from '$lib/components/Button.svelte';
-  import SettingsSectionCard from '$lib/components/settings/SettingsSectionCard.svelte';
   import { showToast } from '$lib/client/toast';
 
   export let data;
-
-  /** @typedef {'ai' | 'scoring' | 'reading' | 'profile' | 'keys' | 'apps' | 'intake' | 'operations'} SettingsSectionId */
-
-  const sectionConfig = [
-    {
-      id: 'ai',
-      title: 'AI setup',
-      description: 'Route features between model lanes and choose deterministic or hybrid tagging.',
-      defaultOpen: true
-    },
-    {
-      id: 'scoring',
-      title: 'Scoring engine',
-      description: 'Choose between algorithmic, AI, or hybrid scoring and tune learning.',
-      defaultOpen: true
-    },
-    {
-      id: 'reading',
-      title: 'Reading defaults',
-      description: 'Set how summaries, cards, and queue defaults behave.',
-      defaultOpen: true
-    },
-    {
-      id: 'profile',
-      title: 'Profile & prompts',
-      description: 'Maintain your preference profile and fit-score instructions.',
-      defaultOpen: false
-    },
-    {
-      id: 'keys',
-      title: 'Provider keys',
-      description: 'Manage provider credentials and encryption rotation.',
-      defaultOpen: false
-    },
-    {
-      id: 'apps',
-      title: 'Connected apps',
-      description: 'Inspect OAuth clients for MCP and mobile access and revoke their sessions.',
-      defaultOpen: false
-    },
-    {
-      id: 'intake',
-      title: 'Intake & retention',
-      description: 'Control feed backfill, polling limits, and cleanup rules.',
-      defaultOpen: false
-    },
-    {
-      id: 'operations',
-      title: 'Operations',
-      description: 'Tune scheduler throughput and clean up orphaned records.',
-      defaultOpen: false
-    }
-  ];
-
-  const defaultSectionState = Object.fromEntries(sectionConfig.map((section) => [section.id, section.defaultOpen]));
-  const sectionFields = {
-    ai: [
-      'laneSummaries',
-      'laneScoring',
-      'laneProfileRefresh',
-      'laneKeyPoints',
-      'laneAutoTagging',
-      'modelAProvider',
-      'modelAModel',
-      'modelAReasoningEffort',
-      'modelBProvider',
-      'modelBModel',
-      'modelBReasoningEffort',
-      'taggingMethod',
-      'autoTagMaxPerArticle'
-    ],
-    scoring: [
-      'scoringMethod',
-      'scoringAiEnhancementThreshold',
-      'scoringLearningRate'
-    ],
-    reading: [
-      'summaryStyle',
-      'summaryLength',
-      'autoReadDelayMs',
-      'articleCardLayout',
-      'dashboardQueueWindowDays',
-      'dashboardQueueLimit',
-      'dashboardQueueScoreCutoff',
-      'newsBriefEnabled',
-      'newsBriefTimezone',
-      'newsBriefMorningTime',
-      'newsBriefEveningTime',
-      'newsBriefLookbackHours',
-      'newsBriefScoreCutoff'
-    ],
-    profile: ['scoreSystemPrompt', 'scoreUserPromptTemplate', 'profileText'],
-    keys: [],
-    apps: [],
-    intake: [
-      'initialFeedLookbackDays',
-      'maxFeedsPerPoll',
-      'maxItemsPerPoll',
-      'eventsPollMs',
-      'dashboardRefreshMinMs',
-      'retentionArchiveDays',
-      'retentionDeleteDays'
-    ],
-    operations: [
-      'jobProcessorBatchSize',
-      'jobsIntervalMinutes',
-      'pollIntervalMinutes',
-      'pullSlicesPerTick',
-      'pullSliceBudgetMs',
-      'jobBudgetIdleMs',
-      'jobBudgetWhilePullMs',
-      'autoQueueTodayMissing'
-    ]
-  };
 
   let laneSummaries = data.settings.featureLanes?.summaries ?? 'model_a';
   let laneScoring = data.settings.featureLanes?.scoring ?? 'model_a';
@@ -230,7 +114,6 @@
   let revokingConnectedAppId = '';
   let maintenanceRunning = '';
   let maintenanceResult = '';
-  let sectionOpen = { ...defaultSectionState };
   $: connectedApps = data.connectedApps ?? [];
   $: autoReadDelaySeconds = (Number(autoReadDelayMs) / 1000).toFixed(2);
 
@@ -253,9 +136,10 @@
   let isResettingDismissedSuggestions = false;
   let keyLoading = { openai: false, anthropic: false };
   let rotatingKeys = false;
-  let hasUnsavedChanges = false;
-  let modifiedSectionCount = 0;
-  let dirtySections = Object.fromEntries(sectionConfig.map((section) => [section.id, false]));
+
+  let showAdvanced = false;
+  let showAdmin = false;
+  let saveTimeout;
 
   $: keyStatus = {
     openai: Boolean(data.keyMap.openai),
@@ -472,6 +356,7 @@
     pullSliceBudgetMs = preset.values.pullSliceBudgetMs;
     jobsIntervalMinutes = preset.values.jobsIntervalMinutes;
     pollIntervalMinutes = preset.values.pollIntervalMinutes;
+    autoSave();
   };
 
   const getProviderModels = (provider) => (provider === 'anthropic' ? anthropicModels : openaiModels);
@@ -524,164 +409,97 @@
     }
   };
 
-  const initialSnapshot = () => ({
-    laneSummaries,
-    laneScoring,
-    laneProfileRefresh,
-    laneKeyPoints,
-    laneAutoTagging,
-    modelAProvider,
-    modelAModel,
-    modelAReasoningEffort,
-    modelBProvider,
-    modelBModel,
-    modelBReasoningEffort,
-    summaryStyle,
-    summaryLength,
-    initialFeedLookbackDays: Number(initialFeedLookbackDays ?? 0),
-    maxFeedsPerPoll: Number(maxFeedsPerPoll ?? 0),
-    maxItemsPerPoll: Number(maxItemsPerPoll ?? 0),
-    eventsPollMs: Number(eventsPollMs ?? 0),
-    dashboardRefreshMinMs: Number(dashboardRefreshMinMs ?? 0),
-    retentionArchiveDays: Number(retentionArchiveDays ?? 0),
-    retentionDeleteDays: Number(retentionDeleteDays ?? 0),
-    autoReadDelayMs: Number(autoReadDelayMs ?? 0),
-    taggingMethod,
-    autoTagMaxPerArticle: Number(autoTagMaxPerArticle ?? 0),
-    jobProcessorBatchSize: Number(jobProcessorBatchSize ?? 0),
-    jobsIntervalMinutes: Number(jobsIntervalMinutes ?? 0),
-    pollIntervalMinutes: Number(pollIntervalMinutes ?? 0),
-    pullSlicesPerTick: Number(pullSlicesPerTick ?? 0),
-    pullSliceBudgetMs: Number(pullSliceBudgetMs ?? 0),
-    jobBudgetIdleMs: Number(jobBudgetIdleMs ?? 0),
-    jobBudgetWhilePullMs: Number(jobBudgetWhilePullMs ?? 0),
-    autoQueueTodayMissing: Boolean(autoQueueTodayMissing),
-    articleCardLayout,
-    dashboardQueueWindowDays: Number(dashboardQueueWindowDays ?? 0),
-    dashboardQueueLimit: Number(dashboardQueueLimit ?? 0),
-    dashboardQueueScoreCutoff: Number(dashboardQueueScoreCutoff ?? 0),
-    newsBriefEnabled: Boolean(newsBriefEnabled),
-    newsBriefTimezone,
-    newsBriefMorningTime,
-    newsBriefEveningTime,
-    newsBriefLookbackHours: Number(newsBriefLookbackHours ?? 0),
-    newsBriefScoreCutoff: Number(newsBriefScoreCutoff ?? 0),
-    scoreSystemPrompt,
-    scoreUserPromptTemplate,
-    profileText,
-    scoringMethod,
-    scoringAiEnhancementThreshold: Number(scoringAiEnhancementThreshold ?? 0.5),
-    scoringLearningRate: Number(scoringLearningRate ?? 0.1)
-  });
+  /* ─── Save logic (immediate per-field) ─────────────── */
 
-  let savedSnapshot = initialSnapshot();
-  let currentSnapshot = initialSnapshot();
-  $: currentSnapshot = {
-    laneSummaries,
-    laneScoring,
-    laneProfileRefresh,
-    laneKeyPoints,
-    laneAutoTagging,
-    modelAProvider,
-    modelAModel,
-    modelAReasoningEffort,
-    modelBProvider,
-    modelBModel,
-    modelBReasoningEffort,
-    summaryStyle,
-    summaryLength,
-    initialFeedLookbackDays: Number(initialFeedLookbackDays ?? 0),
-    maxFeedsPerPoll: Number(maxFeedsPerPoll ?? 0),
-    maxItemsPerPoll: Number(maxItemsPerPoll ?? 0),
-    eventsPollMs: Number(eventsPollMs ?? 0),
-    dashboardRefreshMinMs: Number(dashboardRefreshMinMs ?? 0),
-    retentionArchiveDays: Number(retentionArchiveDays ?? 0),
-    retentionDeleteDays: Number(retentionDeleteDays ?? 0),
-    autoReadDelayMs: Number(autoReadDelayMs ?? 0),
-    taggingMethod,
-    autoTagMaxPerArticle: Number(autoTagMaxPerArticle ?? 0),
-    jobProcessorBatchSize: Number(jobProcessorBatchSize ?? 0),
-    jobsIntervalMinutes: Number(jobsIntervalMinutes ?? 0),
-    pollIntervalMinutes: Number(pollIntervalMinutes ?? 0),
-    pullSlicesPerTick: Number(pullSlicesPerTick ?? 0),
-    pullSliceBudgetMs: Number(pullSliceBudgetMs ?? 0),
-    jobBudgetIdleMs: Number(jobBudgetIdleMs ?? 0),
-    jobBudgetWhilePullMs: Number(jobBudgetWhilePullMs ?? 0),
-    autoQueueTodayMissing: Boolean(autoQueueTodayMissing),
-    articleCardLayout,
-    dashboardQueueWindowDays: Number(dashboardQueueWindowDays ?? 0),
-    dashboardQueueLimit: Number(dashboardQueueLimit ?? 0),
-    dashboardQueueScoreCutoff: Number(dashboardQueueScoreCutoff ?? 0),
-    newsBriefEnabled: Boolean(newsBriefEnabled),
-    newsBriefTimezone,
-    newsBriefMorningTime,
-    newsBriefEveningTime,
-    newsBriefLookbackHours: Number(newsBriefLookbackHours ?? 0),
-    newsBriefScoreCutoff: Number(newsBriefScoreCutoff ?? 0),
-    scoreSystemPrompt,
-    scoreUserPromptTemplate,
-    profileText,
-    scoringMethod,
-    scoringAiEnhancementThreshold: Number(scoringAiEnhancementThreshold ?? 0.5),
-    scoringLearningRate: Number(scoringLearningRate ?? 0.1)
+  const saveSettings = async () => {
+    isSavingSettings = true;
+    try {
+      const settingsRes = await apiFetch('/api/settings', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          featureLanes: {
+            summaries: laneSummaries,
+            scoring: laneScoring,
+            profileRefresh: laneProfileRefresh,
+            keyPoints: laneKeyPoints,
+            autoTagging: laneAutoTagging
+          },
+          modelAProvider,
+          modelAModel,
+          modelAReasoningEffort,
+          modelBProvider,
+          modelBModel,
+          modelBReasoningEffort,
+          summaryStyle,
+          summaryLength,
+          initialFeedLookbackDays,
+          maxFeedsPerPoll,
+          maxItemsPerPoll,
+          eventsPollMs,
+          dashboardRefreshMinMs,
+          retentionArchiveDays,
+          retentionDeleteDays,
+          autoReadDelayMs,
+          taggingMethod,
+          autoTagMaxPerArticle,
+          jobProcessorBatchSize,
+          jobsIntervalMinutes,
+          pollIntervalMinutes,
+          pullSlicesPerTick,
+          pullSliceBudgetMs,
+          jobBudgetIdleMs,
+          jobBudgetWhilePullMs,
+          autoQueueTodayMissing,
+          articleCardLayout,
+          dashboardQueueWindowDays,
+          dashboardQueueLimit,
+          dashboardQueueScoreCutoff,
+          newsBriefEnabled,
+          newsBriefTimezone,
+          newsBriefMorningTime,
+          newsBriefEveningTime,
+          newsBriefLookbackHours,
+          newsBriefScoreCutoff,
+          scoreSystemPrompt,
+          scoreUserPromptTemplate,
+          scoringMethod,
+          scoringAiEnhancementThreshold,
+          scoringLearningRate
+        })
+      });
+      if (!settingsRes.ok) {
+        throw new Error(await readApiError(settingsRes, 'Failed to save settings'));
+      }
+
+      const nextProfile = profileText.trim();
+      if (nextProfile) {
+        const profileRes = await apiFetch('/api/profile', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ profileText: nextProfile })
+        });
+        if (!profileRes.ok) {
+          throw new Error(await readApiError(profileRes, 'Failed to save profile'));
+        }
+      }
+
+      await invalidateAll();
+    } finally {
+      isSavingSettings = false;
+    }
   };
-  $: hasUnsavedChanges = JSON.stringify(currentSnapshot) !== JSON.stringify(savedSnapshot);
-  $: dirtySections = Object.fromEntries(
-    sectionConfig.map((section) => [
-      section.id,
-      (sectionFields[section.id] ?? []).some((field) => currentSnapshot[field] !== savedSnapshot[field])
-    ])
-  );
-  $: modifiedSectionCount = Object.values(dirtySections).filter(Boolean).length;
 
-  const applySnapshot = (snapshot) => {
-    laneSummaries = snapshot.laneSummaries;
-    laneScoring = snapshot.laneScoring;
-    laneProfileRefresh = snapshot.laneProfileRefresh;
-    laneKeyPoints = snapshot.laneKeyPoints;
-    laneAutoTagging = snapshot.laneAutoTagging;
-    modelAProvider = snapshot.modelAProvider;
-    modelAModel = snapshot.modelAModel;
-    modelAReasoningEffort = snapshot.modelAReasoningEffort;
-    modelBProvider = snapshot.modelBProvider;
-    modelBModel = snapshot.modelBModel;
-    modelBReasoningEffort = snapshot.modelBReasoningEffort;
-    summaryStyle = snapshot.summaryStyle;
-    summaryLength = snapshot.summaryLength;
-    initialFeedLookbackDays = Number(snapshot.initialFeedLookbackDays ?? 0);
-    maxFeedsPerPoll = Number(snapshot.maxFeedsPerPoll ?? 0);
-    maxItemsPerPoll = Number(snapshot.maxItemsPerPoll ?? 0);
-    eventsPollMs = Number(snapshot.eventsPollMs ?? 0);
-    dashboardRefreshMinMs = Number(snapshot.dashboardRefreshMinMs ?? 0);
-    retentionArchiveDays = Number(snapshot.retentionArchiveDays ?? 0);
-    retentionDeleteDays = Number(snapshot.retentionDeleteDays ?? 0);
-    autoReadDelayMs = Number(snapshot.autoReadDelayMs ?? 0);
-    taggingMethod = snapshot.taggingMethod;
-    autoTagMaxPerArticle = Number(snapshot.autoTagMaxPerArticle ?? 0);
-    jobProcessorBatchSize = Number(snapshot.jobProcessorBatchSize ?? 0);
-    jobsIntervalMinutes = Number(snapshot.jobsIntervalMinutes ?? 0);
-    pollIntervalMinutes = Number(snapshot.pollIntervalMinutes ?? 0);
-    pullSlicesPerTick = Number(snapshot.pullSlicesPerTick ?? 0);
-    pullSliceBudgetMs = Number(snapshot.pullSliceBudgetMs ?? 0);
-    jobBudgetIdleMs = Number(snapshot.jobBudgetIdleMs ?? 0);
-    jobBudgetWhilePullMs = Number(snapshot.jobBudgetWhilePullMs ?? 0);
-    autoQueueTodayMissing = Boolean(snapshot.autoQueueTodayMissing);
-    articleCardLayout = snapshot.articleCardLayout;
-    dashboardQueueWindowDays = Number(snapshot.dashboardQueueWindowDays ?? 0);
-    dashboardQueueLimit = Number(snapshot.dashboardQueueLimit ?? 0);
-    dashboardQueueScoreCutoff = Number(snapshot.dashboardQueueScoreCutoff ?? 0);
-    newsBriefEnabled = Boolean(snapshot.newsBriefEnabled);
-    newsBriefTimezone = snapshot.newsBriefTimezone;
-    newsBriefMorningTime = snapshot.newsBriefMorningTime;
-    newsBriefEveningTime = snapshot.newsBriefEveningTime;
-    newsBriefLookbackHours = Number(snapshot.newsBriefLookbackHours ?? 0);
-    newsBriefScoreCutoff = Number(snapshot.newsBriefScoreCutoff ?? 0);
-    scoreSystemPrompt = snapshot.scoreSystemPrompt;
-    scoreUserPromptTemplate = snapshot.scoreUserPromptTemplate;
-    profileText = snapshot.profileText;
-    scoringMethod = snapshot.scoringMethod;
-    scoringAiEnhancementThreshold = Number(snapshot.scoringAiEnhancementThreshold ?? 0.5);
-    scoringLearningRate = Number(snapshot.scoringLearningRate ?? 0.1);
+  const autoSave = () => {
+    if (saveTimeout) clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(async () => {
+      try {
+        await saveSettings();
+        showToast('Settings saved', 'success', 2000);
+      } catch {
+        showToast('Failed to save', 'error');
+      }
+    }, 500);
   };
 
   const resetScoringWeights = async () => {
@@ -785,97 +603,7 @@
   const resetScorePromptDefaults = () => {
     scoreSystemPrompt = data.scorePromptDefaults.scoreSystemPrompt;
     scoreUserPromptTemplate = data.scorePromptDefaults.scoreUserPromptTemplate;
-  };
-
-  const discardChanges = () => {
-    if (isSavingSettings) return;
-    applySnapshot(savedSnapshot);
-  };
-
-  const saveAllChanges = async () => {
-    if (isSavingSettings || !hasUnsavedChanges) return;
-    isSavingSettings = true;
-    try {
-      const settingsRes = await apiFetch('/api/settings', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          featureLanes: {
-            summaries: laneSummaries,
-            scoring: laneScoring,
-            profileRefresh: laneProfileRefresh,
-            keyPoints: laneKeyPoints,
-            autoTagging: laneAutoTagging
-          },
-          modelAProvider,
-          modelAModel,
-          modelAReasoningEffort,
-          modelBProvider,
-          modelBModel,
-          modelBReasoningEffort,
-          summaryStyle,
-          summaryLength,
-          initialFeedLookbackDays,
-          maxFeedsPerPoll,
-          maxItemsPerPoll,
-          eventsPollMs,
-          dashboardRefreshMinMs,
-          retentionArchiveDays,
-          retentionDeleteDays,
-          autoReadDelayMs,
-          taggingMethod,
-          autoTagMaxPerArticle,
-          jobProcessorBatchSize,
-          jobsIntervalMinutes,
-          pollIntervalMinutes,
-          pullSlicesPerTick,
-          pullSliceBudgetMs,
-          jobBudgetIdleMs,
-          jobBudgetWhilePullMs,
-          autoQueueTodayMissing,
-          articleCardLayout,
-          dashboardQueueWindowDays,
-          dashboardQueueLimit,
-          dashboardQueueScoreCutoff,
-          newsBriefEnabled,
-          newsBriefTimezone,
-          newsBriefMorningTime,
-          newsBriefEveningTime,
-          newsBriefLookbackHours,
-          newsBriefScoreCutoff,
-          scoreSystemPrompt,
-          scoreUserPromptTemplate,
-          scoringMethod,
-          scoringAiEnhancementThreshold,
-          scoringLearningRate
-        })
-      });
-      if (!settingsRes.ok) {
-        showToast(await readApiError(settingsRes, 'Failed to save settings'), 'error');
-        return;
-      }
-
-      const nextProfile = profileText.trim();
-      if (nextProfile) {
-        const profileRes = await apiFetch('/api/profile', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ profileText: nextProfile })
-        });
-        if (!profileRes.ok) {
-          showToast(await readApiError(profileRes, 'Failed to save profile'), 'error');
-          return;
-        }
-      }
-
-      savedSnapshot = { ...currentSnapshot };
-      showToast('Settings saved.', 'success');
-      await invalidateAll();
-    } catch {
-      showToast('Failed to save settings', 'error');
-    } finally {
-      isSavingSettings = false;
-    }
+    autoSave();
   };
 
   const resetDismissedTagSuggestions = async () => {
@@ -1086,94 +814,16 @@
     }
   };
 
-  const sectionSummary = (sectionId) => {
-    switch (sectionId) {
-      case 'ai':
-        return `Model A: ${modelAProvider}/${modelAModel} · Model B: ${modelBProvider}/${modelBModel} · Tagging ${taggingMethod}`;
-      case 'scoring':
-        return `${scoringMethod} · threshold ${scoringAiEnhancementThreshold} · ${signalWeights.length} signal${signalWeights.length === 1 ? '' : 's'}`;
-      case 'reading':
-        return `${summaryStyle} / ${summaryLength} · ${articleCardLayout} cards · Queue ${dashboardQueueLimit} · Brief ${newsBriefLookbackHours}h`;
-      case 'profile':
-        return `Profile v${data.profile.version} · Prompt ${
-          scoreSystemPrompt === data.scorePromptDefaults.scoreSystemPrompt &&
-          scoreUserPromptTemplate === data.scorePromptDefaults.scoreUserPromptTemplate
-            ? 'default'
-            : 'custom'
-        }`;
-      case 'keys':
-        return `OpenAI ${keyStatus.openai ? 'connected' : 'missing'} · Anthropic ${
-          keyStatus.anthropic ? 'connected' : 'missing'
-        }`;
-      case 'apps':
-        return `${connectedApps.length} connected app${connectedApps.length === 1 ? '' : 's'}`;
-      case 'intake':
-        return `${initialFeedLookbackDays}-day backfill · ${maxFeedsPerPoll} feeds/${maxItemsPerPoll} items · archive ${retentionArchiveDays}d / delete ${retentionDeleteDays}d`;
-      case 'operations':
-        return `${activeSchedulerPresetLabel} · ${orphanCount} orphan article${orphanCount === 1 ? '' : 's'}`;
-      default:
-        return '';
-    }
-  };
-
-  const getSectionIdFromHash = (hashValue) => {
-    const nextHash = String(hashValue ?? '').replace(/^#/, '');
-    return sectionConfig.some((section) => section.id === nextHash) ? nextHash : null;
-  };
-
-  const toggleSection = (sectionId) => {
-    const nextOpen = !sectionOpen[sectionId];
-    sectionOpen = { ...sectionOpen, [sectionId]: nextOpen };
-    if (nextOpen && typeof history !== 'undefined') {
-      history.replaceState(null, '', `#${sectionId}`);
-    }
-  };
-
-  const openSection = async (sectionId, { scroll = true, updateHash = true } = {}) => {
-    if (!sectionConfig.some((section) => section.id === sectionId)) return;
-    if (!sectionOpen[sectionId]) {
-      sectionOpen = { ...sectionOpen, [sectionId]: true };
-      await tick();
-    }
-    if (updateHash && typeof history !== 'undefined') {
-      history.replaceState(null, '', `#${sectionId}`);
-    }
-    if (scroll) {
-      document.getElementById(sectionId)?.scrollIntoView?.({
-        behavior: 'smooth',
-        block: 'start'
-      });
-    }
-  };
-
-  const openSectionFromHash = async (hashValue, { scroll = false } = {}) => {
-    const sectionId = getSectionIdFromHash(hashValue);
-    if (!sectionId) return;
-    await openSection(sectionId, { scroll, updateHash: false });
-  };
-
   onMount(() => {
     if (!newsBriefTimezoneExplicit && typeof Intl !== 'undefined') {
       const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
       if (browserTimezone) {
         newsBriefTimezone = browserTimezone;
-        savedSnapshot = initialSnapshot();
       }
     }
 
     if (keyStatus.openai) void syncModels('openai', { silent: true });
     if (keyStatus.anthropic) void syncModels('anthropic', { silent: true });
-
-    if (typeof window !== 'undefined') {
-      void openSectionFromHash(window.location.hash, { scroll: false });
-
-      const handleHashChange = () => {
-        void openSectionFromHash(window.location.hash, { scroll: true });
-      };
-
-      window.addEventListener('hashchange', handleHashChange);
-      return () => window.removeEventListener('hashchange', handleHashChange);
-    }
 
     return undefined;
   });
@@ -1185,1155 +835,865 @@
 />
 
 <div class="settings-quick-links">
-  <a href="/jobs" class="quick-link">Jobs →</a>
-  <a href="/tags" class="quick-link">Tags →</a>
-  <a href="/feeds" class="quick-link">Feeds →</a>
+  <a href="/jobs" class="quick-link">Jobs</a>
+  <a href="/tags" class="quick-link">Tags</a>
+  <a href="/feeds" class="quick-link">Feeds</a>
 </div>
 
-<div class="settings-layout">
-  <div class="settings-main">
-    <SettingsSectionCard
-      id="ai"
-      title="AI setup"
-      summary={sectionSummary('ai')}
-      description={sectionConfig[0].description}
-      open={sectionOpen.ai}
-      dirty={dirtySections.ai}
-      onToggle={() => toggleSection('ai')}
-    >
-      <div class="section-block">
-        <div class="subsection">
-          <div class="subsection-header">
-            <h3>Feature routing</h3>
-            <p class="muted">Choose which model lane each AI feature should use.</p>
-          </div>
-          <div class="feature-lanes">
-            {#each featureLaneOptions as feature}
-              <div class="feature-lane">
-                <div class="feature-name">{feature.label}</div>
-                <div class="lane-toggle" role="radiogroup" aria-label={`${feature.label} lane`}>
-                  <label class:active={feature.get() === 'model_a'}>
-                    <input
-                      type="radio"
-                      name={feature.name}
-                      value="model_a"
-                      checked={feature.get() === 'model_a'}
-                      on:change={() => feature.set('model_a')}
-                    />
-                    <span>Model A</span>
-                  </label>
-                  <label class:active={feature.get() === 'model_b'}>
-                    <input
-                      type="radio"
-                      name={feature.name}
-                      value="model_b"
-                      checked={feature.get() === 'model_b'}
-                      on:change={() => feature.set('model_b')}
-                    />
-                    <span>Model B</span>
-                  </label>
-                </div>
-              </div>
-            {/each}
-          </div>
-        </div>
+<div class="settings-page">
+  <!-- ═══════════════════════════════════════════════════
+       TIER 1 — Essential (always visible)
+       ═══════════════════════════════════════════════════ -->
+  <div class="settings-card">
+    <!-- AI Models -->
+    <div class="settings-section-title">AI Models</div>
 
-        <div class="subsection">
-          <div class="subsection-header">
-            <h3>Tagging engine</h3>
-            <p class="muted">Choose a deterministic baseline or add AI augmentation on top.</p>
-          </div>
-          <label>
-            Method
-            <select bind:value={taggingMethod}>
-              <option value="algorithmic">Algorithmic only</option>
-              <option value="hybrid">Hybrid (algorithmic + AI)</option>
-            </select>
-            <span class="hint">
-              {#if taggingMethod === 'algorithmic'}
-                Deterministic tagging only. Works without provider keys and writes system tags.
-              {:else}
-                Deterministic tagging first, then AI augments with existing canonical tags and suggestions when keys are available.
-              {/if}
-            </span>
-          </label>
-          <div class="two-col">
-            <label>
-              Max tags per article
-              <input
-                type="number"
-                min={data.autoTagging?.maxPerArticle?.min ?? 1}
-                max={data.autoTagging?.maxPerArticle?.max ?? 5}
-                step="1"
-                bind:value={autoTagMaxPerArticle}
-              />
-              <span class="hint">Applies across deterministic tags, AI-applied tags, and suggestions.</span>
-            </label>
-            <div class="inline-actions">
-              <p class="muted small">Dismissed AI suggestions</p>
-              <Button
-                variant="ghost"
-                size="inline"
-                on:click={resetDismissedTagSuggestions}
-                disabled={isResettingDismissedSuggestions}
-              >
-                <IconRefresh size={14} stroke={1.9} />
-                <span>{isResettingDismissedSuggestions ? 'Resetting...' : 'Reset dismissed suggestions'}</span>
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        <div class="model-sections">
-          <div class="subsection soft-panel">
-            <div class="subsection-header">
-              <h3>Model A</h3>
-              <p class="muted">Faster and lower-cost lane for background jobs and bulk processing.</p>
-            </div>
-            <label>
-              Provider
-              <select bind:value={modelAProvider}>
-                <option value="openai">OpenAI</option>
-                <option value="anthropic">Anthropic</option>
-              </select>
-            </label>
-            <label>
-              Model
-              <input
-                bind:value={modelAModel}
-                placeholder="gpt-4o-mini"
-                list={modelAProvider === 'anthropic' ? 'anthropic-model-options' : 'openai-model-options'}
-              />
-            </label>
-            <div class="model-tools">
-              <Button
-                variant="ghost"
-                size="inline"
-                on:click={() => syncModels(modelAProvider)}
-                disabled={isLoadingModels(modelAProvider)}
-              >
-                <IconRefresh size={14} stroke={1.9} />
-                <span>{isLoadingModels(modelAProvider) ? 'Loading...' : `Refresh ${modelAProvider}`}</span>
-              </Button>
-              <p class="muted small">{modelStatus(modelAProvider)}</p>
-            </div>
-            <label>
-              Reasoning level
-              <select bind:value={modelAReasoningEffort}>
-                <option value="minimal">Minimal</option>
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-              </select>
-            </label>
-          </div>
-
-          <div class="subsection soft-panel">
-            <div class="subsection-header">
-              <h3>Model B</h3>
-              <p class="muted">Higher-capability lane for more complex tasks.</p>
-            </div>
-            <label>
-              Provider
-              <select bind:value={modelBProvider}>
-                <option value="openai">OpenAI</option>
-                <option value="anthropic">Anthropic</option>
-              </select>
-            </label>
-            <label>
-              Model
-              <input
-                bind:value={modelBModel}
-                placeholder="gpt-4o"
-                list={modelBProvider === 'anthropic' ? 'anthropic-model-options' : 'openai-model-options'}
-              />
-            </label>
-            <div class="model-tools">
-              <Button
-                variant="ghost"
-                size="inline"
-                on:click={() => syncModels(modelBProvider)}
-                disabled={isLoadingModels(modelBProvider)}
-              >
-                <IconRefresh size={14} stroke={1.9} />
-                <span>{isLoadingModels(modelBProvider) ? 'Loading...' : `Refresh ${modelBProvider}`}</span>
-              </Button>
-              <p class="muted small">{modelStatus(modelBProvider)}</p>
-            </div>
-            <label>
-              Reasoning level
-              <select bind:value={modelBReasoningEffort}>
-                <option value="minimal">Minimal</option>
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-              </select>
-            </label>
-          </div>
-        </div>
-      </div>
-    </SettingsSectionCard>
-
-    <SettingsSectionCard
-      id="scoring"
-      title="Scoring engine"
-      summary={sectionSummary('scoring')}
-      description={sectionConfig[1].description}
-      open={sectionOpen.scoring}
-      dirty={dirtySections.scoring}
-      onToggle={() => toggleSection('scoring')}
-    >
-      <div class="section-block">
-        <div class="subsection">
-          <div class="subsection-header">
-            <h3>Scoring method</h3>
-            <p class="muted">Choose how article fit scores are computed.</p>
-          </div>
-          <label>
-            Method
-            <select bind:value={scoringMethod}>
-              <option value="algorithmic">Algorithmic only</option>
-              <option value="hybrid">Hybrid (algorithmic + AI)</option>
-              <option value="ai">AI only (legacy)</option>
-            </select>
-            <span class="hint">
-              {#if scoringMethod === 'algorithmic'}
-                Fast, deterministic scoring using learned signal weights. No LLM calls.
-              {:else if scoringMethod === 'hybrid'}
-                Algorithmic base score with optional AI refinement when confidence is low.
-              {:else}
-                Legacy single-prompt LLM scoring. Higher cost and latency.
-              {/if}
-            </span>
-          </label>
-        </div>
-
-        {#if scoringMethod === 'hybrid'}
-          <div class="subsection soft-panel">
-            <div class="subsection-header">
-              <h3>AI enhancement</h3>
-              <p class="muted">AI refines the algorithmic score when confidence is below this threshold.</p>
-            </div>
-            <label>
-              Confidence threshold
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.05"
-                bind:value={scoringAiEnhancementThreshold}
-              />
-              <span class="hint">
-                Current: {scoringAiEnhancementThreshold.toFixed(2)}. Lower = fewer AI calls. 0 = never enhance. 1 = almost always enhance.
-              </span>
-            </label>
-          </div>
-        {/if}
-
-        <div class="subsection soft-panel">
-          <div class="subsection-header">
-            <h3>Learning rate</h3>
-            <p class="muted">How quickly signal weights adapt to your feedback.</p>
-          </div>
-          <label>
-            EMA learning rate
-            <input
-              type="range"
-              min="0.01"
-              max="0.5"
-              step="0.01"
-              bind:value={scoringLearningRate}
-            />
-            <span class="hint">
-              Current: {scoringLearningRate.toFixed(2)}. Lower = slower adaptation, more stable. Higher = faster adaptation, more volatile.
-            </span>
-          </label>
-        </div>
-
-        <div class="subsection">
-          <div class="split-header">
-            <div class="subsection-header">
-              <h3>Signal weights</h3>
-              <p class="muted">Learned weights from your reactions and feedback. Higher weight = more influence on score.</p>
-            </div>
-            <Button
-              variant="ghost"
-              size="inline"
-              on:click={resetScoringWeights}
-              disabled={isResettingWeights}
-            >
-              <IconRestore size={14} stroke={1.9} />
-              <span>{isResettingWeights ? 'Resetting...' : 'Reset to defaults'}</span>
-            </Button>
-          </div>
-
-          {#if signalWeights.length > 0}
-            <div class="signal-weights-table">
-              <div class="signal-header">
-                <span>Signal</span>
-                <span>Weight</span>
-                <span>Samples</span>
-              </div>
-              {#each signalWeights as sw}
-                <div class="signal-row">
-                  <span class="signal-name">{sw.name.replace(/_/g, ' ')}</span>
-                  <span class="signal-weight">
-                    <span class="weight-bar" style="width: {Math.min(100, (sw.weight / 2) * 100)}%"></span>
-                    <span class="weight-value">{sw.weight.toFixed(2)}</span>
-                  </span>
-                  <span class="signal-samples">{sw.sampleCount}</span>
-                </div>
-              {/each}
-            </div>
-          {:else}
-            <p class="muted small">No signal weights loaded. Weights are seeded on first migration.</p>
-          {/if}
-        </div>
-
-        <div class="subsection soft-panel">
-          <div class="subsection-header">
-            <h3>Scoring QA</h3>
-            <p class="muted">Read-only health checks for score readiness and tag coverage.</p>
-          </div>
-          <div class="qa-grid">
-            <div class="qa-card">
-              <span class="qa-label">Score status</span>
-              <strong>{data.scoringObservability?.scoreStatusCounts?.ready ?? 0} ready</strong>
-              <span class="muted small">{data.scoringObservability?.scoreStatusCounts?.insufficientSignal ?? 0} learning</span>
-            </div>
-            <div class="qa-card">
-              <span class="qa-label">Confidence buckets</span>
-              <strong>
-                {data.scoringObservability?.confidenceBuckets?.low ?? 0} low ·
-                {data.scoringObservability?.confidenceBuckets?.medium ?? 0} medium ·
-                {data.scoringObservability?.confidenceBuckets?.high ?? 0} high
-              </strong>
-              <span class="muted small">Latest score rows only</span>
-            </div>
-            <div class="qa-card">
-              <span class="qa-label">Tag sources</span>
-              <strong>
-                {data.scoringObservability?.tagSourceCounts?.manual ?? 0} manual ·
-                {data.scoringObservability?.tagSourceCounts?.system ?? 0} system ·
-                {data.scoringObservability?.tagSourceCounts?.ai ?? 0} AI
-              </strong>
-              <span class="muted small">Current article tag rows</span>
-            </div>
-            <div class="qa-card">
-              <span class="qa-label">Recent tag coverage</span>
-              <strong>{data.scoringObservability?.recentCoverage?.taggedArticlePercent ?? 0}% tagged</strong>
-              <span class="muted small">Across the last {data.scoringObservability?.recentCoverage?.windowDays ?? 30} days</span>
-            </div>
-            <div class="qa-card">
-              <span class="qa-label">Preference-backed scores</span>
-              <strong>{data.scoringObservability?.recentCoverage?.preferenceBackedScorePercent ?? 0}% with taste signals</strong>
-              <span class="muted small">
-                {data.scoringObservability?.recentCoverage?.recentScoredArticles ?? 0} recent scored article{(data.scoringObservability?.recentCoverage?.recentScoredArticles ?? 0) === 1 ? '' : 's'}
-              </span>
-            </div>
-            <div class="qa-card">
-              <span class="qa-label">Recent missing jobs</span>
-              <strong>
-                {data.scoringObservability?.recentJobCoverage?.missingScoreJobs ?? 0} score ·
-                {data.scoringObservability?.recentJobCoverage?.missingAutoTagJobs ?? 0} tag ·
-                {data.scoringObservability?.recentJobCoverage?.missingImageBackfillJobs ?? 0} image
-              </strong>
-              <span class="muted small">
-                Across the last {data.scoringObservability?.recentJobCoverage?.windowHours ?? 24} hours
-              </span>
-            </div>
-            <div class="qa-card">
-              <span class="qa-label">Recent tagged articles</span>
-              <strong>{data.scoringObservability?.recentJobCoverage?.recentTaggedArticles ?? 0} tagged</strong>
-              <span class="muted small">
-                Out of {data.scoringObservability?.recentJobCoverage?.recentArticles ?? 0} recent article{(data.scoringObservability?.recentJobCoverage?.recentArticles ?? 0) === 1 ? '' : 's'}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </SettingsSectionCard>
-
-    <SettingsSectionCard
-      id="reading"
-      title="Reading defaults"
-      summary={sectionSummary('reading')}
-      description={sectionConfig[2].description}
-      open={sectionOpen.reading}
-      dirty={dirtySections.reading}
-      onToggle={() => toggleSection('reading')}
-    >
-      <div class="section-block">
-        <div class="two-col">
-          <label>
-            Summary style
-            <select bind:value={summaryStyle}>
-              <option value="concise">Concise</option>
-              <option value="detailed">Detailed</option>
-              <option value="bullet">Bullet-heavy</option>
-            </select>
-          </label>
-          <label>
-            Summary length
-            <select bind:value={summaryLength}>
-              <option value="short">Short</option>
-              <option value="medium">Medium</option>
-              <option value="long">Long</option>
-            </select>
-          </label>
-        </div>
-
-        <div class="two-col">
-          <label>
-            Mark read after (ms)
-            <input
-              type="number"
-              min={data.autoReadDelayRange.min}
-              max={data.autoReadDelayRange.max}
-              step="250"
-              bind:value={autoReadDelayMs}
-            />
-            <span class="hint">Current: {autoReadDelaySeconds}s. 0 = immediate.</span>
-          </label>
-
-          <div class="field">
-            <div class="field-label">Article card layout</div>
-            <div class="lane-toggle" role="radiogroup" aria-label="Article card layout">
-              <label class:active={articleCardLayout === 'split'}>
-                <input type="radio" name="articleCardLayout" value="split" bind:group={articleCardLayout} />
-                <span>Split</span>
-              </label>
-              <label class:active={articleCardLayout === 'stacked'}>
-                <input type="radio" name="articleCardLayout" value="stacked" bind:group={articleCardLayout} />
-                <span>Stacked</span>
-              </label>
-            </div>
-          </div>
-        </div>
-
-        <div class="subsection soft-panel">
-          <div class="subsection-header">
-            <h3>Dashboard queue</h3>
-            <p class="muted">Control how many high-fit stories surface in the dashboard reading queue.</p>
-          </div>
-          <div class="field-grid field-grid-compact">
-            <label>
-              Queue window (days)
-              <input
-                type="number"
-                min={data.dashboardQueueRange.windowDays.min}
-                max={data.dashboardQueueRange.windowDays.max}
-                step="1"
-                bind:value={dashboardQueueWindowDays}
-              />
-            </label>
-            <label>
-              Queue count
-              <input
-                type="number"
-                min={data.dashboardQueueRange.limit.min}
-                max={data.dashboardQueueRange.limit.max}
-                step="1"
-                bind:value={dashboardQueueLimit}
-              />
-            </label>
-            <label>
-              High-fit cutoff (1-5)
-              <input
-                type="number"
-                min={data.dashboardQueueRange.scoreCutoff.min}
-                max={data.dashboardQueueRange.scoreCutoff.max}
-                step="1"
-                bind:value={dashboardQueueScoreCutoff}
-              />
-            </label>
-          </div>
-        </div>
-
-        <div class="subsection soft-panel">
-          <div class="split-header">
-            <div class="subsection-header">
-              <h3>News Brief</h3>
-              <p class="muted">Twice-daily AI briefing for high-fit developments across the last configured window.</p>
-            </div>
-            <Button
-              variant="ghost"
-              size="inline"
-              on:click={generateNewsBriefNow}
-              disabled={isGeneratingNewsBrief}
-            >
-              <IconRefresh size={14} stroke={1.9} />
-              <span>{isGeneratingNewsBrief ? 'Generating...' : 'Generate now'}</span>
-            </Button>
-          </div>
-
-          <div class="field-grid field-grid-compact">
-            <label class="checkbox-field">
-              <span>Enable News Brief</span>
-              <input type="checkbox" bind:checked={newsBriefEnabled} />
-            </label>
-            <label>
-              Timezone
-              <input bind:value={newsBriefTimezone} placeholder="America/Chicago" />
-              <span class="hint">Uses IANA timezone names for morning/evening scheduling.</span>
-            </label>
-            <label>
-              Morning time
-              <input bind:value={newsBriefMorningTime} placeholder="08:00" />
-            </label>
-            <label>
-              Evening time
-              <input bind:value={newsBriefEveningTime} placeholder="17:00" />
-            </label>
-            <label>
-              Lookback (hours)
-              <input
-                type="number"
-                min={data.newsBriefRange.lookbackHours.min}
-                max={data.newsBriefRange.lookbackHours.max}
-                step="1"
-                bind:value={newsBriefLookbackHours}
-              />
-            </label>
-            <label>
-              Minimum fit score
-              <input
-                type="number"
-                min={data.newsBriefRange.scoreCutoff.min}
-                max={data.newsBriefRange.scoreCutoff.max}
-                step="1"
-                bind:value={newsBriefScoreCutoff}
-              />
-            </label>
-          </div>
-
-          {#if newsBriefLatestEdition}
-            <p class="muted small">
-              Latest edition: {newsBriefLatestEdition.editionLabel ?? 'Update'} · {newsBriefLatestEdition.status}
-              {#if newsBriefLatestEdition.generatedAt}
-                · {new Date(newsBriefLatestEdition.generatedAt).toLocaleString()}
-              {/if}
-              {#if newsBriefLatestEdition.candidateCount !== undefined}
-                · {newsBriefLatestEdition.candidateCount} candidate{newsBriefLatestEdition.candidateCount === 1 ? '' : 's'}
-              {/if}
-            </p>
-          {/if}
-        </div>
-      </div>
-    </SettingsSectionCard>
-
-    <SettingsSectionCard
-      id="profile"
-      title="Profile & prompts"
-      summary={sectionSummary('profile')}
-      description={sectionConfig[3].description}
-      open={sectionOpen.profile}
-      dirty={dirtySections.profile}
-      onToggle={() => toggleSection('profile')}
-    >
-      <div class="section-block">
-        <div class="subsection">
-          <div class="subsection-header">
-            <h3>AI preference profile</h3>
-            <p class="muted">
-              Version {data.profile.version} · Updated {new Date(data.profile.updated_at).toLocaleString()}
-            </p>
-          </div>
-          <textarea rows="8" bind:value={profileText}></textarea>
-          <p class="muted small">Profile edits are saved with the global Save changes action.</p>
-        </div>
-
-        <div class="subsection">
-          <div class="subsection-header split-header">
-            <div>
-              <h3>AI fit score prompts</h3>
-              <p class="muted">
-                Variables: <code>{'{{profile}}'}</code>, <code>{'{{title}}'}</code>, <code>{'{{url}}'}</code>,
-                <code>{'{{content}}'}</code>.
-              </p>
-            </div>
-            <Button variant="ghost" size="inline" on:click={resetScorePromptDefaults}>
-              <IconRestore size={14} stroke={1.9} />
-              <span>Reset defaults</span>
-            </Button>
-          </div>
-          <label>
-            System prompt
-            <textarea rows="4" bind:value={scoreSystemPrompt}></textarea>
-          </label>
-          <label>
-            User prompt template
-            <textarea rows="12" bind:value={scoreUserPromptTemplate}></textarea>
-          </label>
-          <p class="muted small">Prompt edits are saved with the global Save changes action.</p>
-        </div>
-      </div>
-    </SettingsSectionCard>
-
-    <SettingsSectionCard
-      id="keys"
-      title="Provider keys"
-      summary={sectionSummary('keys')}
-      description={sectionConfig[4].description}
-      open={sectionOpen.keys}
-      dirty={dirtySections.keys}
-      onToggle={() => toggleSection('keys')}
-    >
-      <div class="section-block">
-        <div class="split-header">
-          <div class="subsection-header">
-            <h3>Provider credentials</h3>
-            <p class="muted">Stored server-side and used for model sync and runtime requests.</p>
-          </div>
-          <Button variant="ghost" size="inline" on:click={() => rotateKeys()} disabled={rotatingKeys}>
-            <IconRefresh size={14} stroke={1.9} />
-            <span>{rotatingKeys ? 'Rotating...' : 'Rotate ciphers'}</span>
-          </Button>
-        </div>
-
-        <div class="key-provider-grid">
-          <div class="subsection soft-panel">
-            <div class="key-provider-header">
-              <div>
-                <h3>OpenAI</h3>
-                <p class="muted small">{keyStatus.openai ? 'Key stored' : 'No key yet'}</p>
-              </div>
-              <Button
-                variant="danger"
-                size="icon"
-                on:click={() => removeKey('openai')}
-                disabled={!keyStatus.openai || keyLoading.openai}
-                title="Remove OpenAI key"
-              >
-                <IconTrash size={15} stroke={1.9} />
-              </Button>
-            </div>
-            <input type="password" placeholder="Paste OpenAI key" bind:value={openaiKey} />
-            <Button size="inline" on:click={() => saveKey('openai')} disabled={!openaiKey || keyLoading.openai}>
-              <IconDeviceFloppy size={15} stroke={1.9} />
-              <span>{keyLoading.openai ? 'Saving...' : 'Save OpenAI key'}</span>
-            </Button>
-          </div>
-
-          <div class="subsection soft-panel">
-            <div class="key-provider-header">
-              <div>
-                <h3>Anthropic</h3>
-                <p class="muted small">{keyStatus.anthropic ? 'Key stored' : 'No key yet'}</p>
-              </div>
-              <Button
-                variant="danger"
-                size="icon"
-                on:click={() => removeKey('anthropic')}
-                disabled={!keyStatus.anthropic || keyLoading.anthropic}
-                title="Remove Anthropic key"
-              >
-                <IconTrash size={15} stroke={1.9} />
-              </Button>
-            </div>
-            <input type="password" placeholder="Paste Anthropic key" bind:value={anthropicKey} />
-            <Button
-              size="inline"
-              on:click={() => saveKey('anthropic')}
-              disabled={!anthropicKey || keyLoading.anthropic}
-            >
-              <IconDeviceFloppy size={15} stroke={1.9} />
-              <span>{keyLoading.anthropic ? 'Saving...' : 'Save Anthropic key'}</span>
-            </Button>
-          </div>
-        </div>
-      </div>
-    </SettingsSectionCard>
-
-    <SettingsSectionCard
-      id="apps"
-      title="Connected apps"
-      summary={sectionSummary('apps')}
-      description={sectionConfig[5].description}
-      open={sectionOpen.apps}
-      dirty={dirtySections.apps}
-      onToggle={() => toggleSection('apps')}
-    >
-      <div class="section-block">
-        <div class="subsection">
-          <div class="subsection-header">
-            <h3>Connected OAuth clients</h3>
-            <p class="muted">Registered MCP and mobile companion clients using the public OAuth surfaces.</p>
-          </div>
-
-          {#if connectedApps.length === 0}
-            <div class="soft-panel">
-              <p class="muted">No connected apps have authorized access yet.</p>
-            </div>
-          {:else}
-            <div class="mcp-client-list">
-              {#each connectedApps as client}
-                <div class="soft-panel mcp-client-card">
-                  <div class="split-header">
-                    <div>
-                      <h3>{client.clientName}</h3>
-                      <p class="muted small">
-                        <code>{client.clientId}</code>
-                      </p>
-                      <p class="muted small">{appKindLabel(client.clientKind)}</p>
-                    </div>
-                    <Button
-                      variant="danger"
-                      size="inline"
-                      on:click={() => revokeConnectedApp(client.clientId)}
-                      disabled={revokingConnectedAppId === client.clientId}
-                    >
-                      <IconTrash size={14} stroke={1.9} />
-                      <span>{revokingConnectedAppId === client.clientId ? 'Revoking...' : 'Revoke access'}</span>
-                    </Button>
-                  </div>
-
-                  <div class="mcp-client-metrics">
-                    <span>{client.activeAccessTokens} access token{client.activeAccessTokens === 1 ? '' : 's'}</span>
-                    <span>{client.activeRefreshTokens} refresh token{client.activeRefreshTokens === 1 ? '' : 's'}</span>
-                    <span>{client.activeConsentCount} consent{client.activeConsentCount === 1 ? '' : 's'}</span>
-                    <span>{client.lastUsedAt ? `Last used ${new Date(client.lastUsedAt).toLocaleString()}` : 'Never used'}</span>
-                  </div>
-
-                  <div class="mcp-client-meta">
-                    <div>
-                      <div class="muted small">Redirect URIs</div>
-                      <ul>
-                        {#each client.redirectUris as redirectUri}
-                          <li><code>{redirectUri}</code></li>
-                        {/each}
-                      </ul>
-                    </div>
-                    <div>
-                      <div class="muted small">Scope</div>
-                      <p><code>{client.scope ?? 'mcp:read'}</code></p>
-                    </div>
-                  </div>
-                </div>
-              {/each}
-            </div>
-          {/if}
-        </div>
-      </div>
-    </SettingsSectionCard>
-
-    <SettingsSectionCard
-      id="intake"
-      title="Intake & retention"
-      summary={sectionSummary('intake')}
-      description={sectionConfig[6].description}
-      open={sectionOpen.intake}
-      dirty={dirtySections.intake}
-      onToggle={() => toggleSection('intake')}
-    >
-      <div class="section-block">
-        <div class="subsection">
-          <div class="subsection-header">
-            <h3>Feed intake</h3>
-            <p class="muted">Set how much history to backfill and how many items a poll run can pull.</p>
-          </div>
-          <label>
-            Initial feed backfill window (days)
-            <input
-              type="number"
-              min={data.initialFeedLookbackRange.min}
-              max={data.initialFeedLookbackRange.max}
-              step="1"
-              bind:value={initialFeedLookbackDays}
-            />
-            <span class="hint">Default {data.initialFeedLookbackRange.default} days. 0 = include all history.</span>
-          </label>
-
-          <div class="field-grid field-grid-compact">
-            <label>
-              Max feeds per poll
-              <input
-                type="number"
-                min={data.feedPollingRange.maxFeedsPerPoll.min}
-                max={data.feedPollingRange.maxFeedsPerPoll.max}
-                step="1"
-                bind:value={maxFeedsPerPoll}
-              />
-            </label>
-            <label>
-              Max items per poll
-              <input
-                type="number"
-                min={data.feedPollingRange.maxItemsPerPoll.min}
-                max={data.feedPollingRange.maxItemsPerPoll.max}
-                step="1"
-                bind:value={maxItemsPerPoll}
-              />
-            </label>
-            <label>
-              Events poll interval (ms)
-              <input
-                type="number"
-                min={data.feedPollingRange.eventsPollMs.min}
-                max={data.feedPollingRange.eventsPollMs.max}
-                step="1000"
-                bind:value={eventsPollMs}
-              />
-            </label>
-          </div>
-
-          <label>
-            Dashboard refresh floor (ms)
-            <input
-              type="number"
-              min={data.feedPollingRange.dashboardRefreshMinMs.min}
-              max={data.feedPollingRange.dashboardRefreshMinMs.max}
-              step="1000"
-              bind:value={dashboardRefreshMinMs}
-            />
-          </label>
-        </div>
-
-        <div class="subsection soft-panel">
-          <div class="subsection-header">
-            <h3>Retention</h3>
-            <p class="muted">Trim or archive older article content on the daily cleanup schedule.</p>
-          </div>
-          <label>
-            Archive after (days)
-            <input
-              type="number"
-              min={data.retentionRange.min}
-              max={data.retentionRange.max}
-              step="1"
-              bind:value={retentionArchiveDays}
-            />
-          </label>
-          <label>
-            Delete after (days)
-            <input
-              type="number"
-              min={data.retentionRange.min}
-              max={data.retentionRange.max}
-              step="1"
-              bind:value={retentionDeleteDays}
-            />
-          </label>
-          <span class="hint">Daily cleanup at 03:30 UTC. Archive strips body text; delete removes records. Saved articles are never touched. 0 disables.</span>
-        </div>
-
-        <div class="subsection">
-          <div class="subsection-header">
-            <h3>Maintenance</h3>
-            <p class="muted">One-time actions to backfill missing data or re-fetch failed content.</p>
-          </div>
-          <div class="field-grid field-grid-compact">
-            <div class="field">
-              <button
-                type="button"
-                class="action-btn"
-                disabled={maintenanceRunning}
-                on:click={runBackfillKeyPoints}
-              >
-                {maintenanceRunning === 'key_points' ? 'Running…' : 'Backfill key points'}
-              </button>
-              <span class="hint">Generate key points for articles that have summaries but no key points.</span>
-            </div>
-            <div class="field">
-              <button
-                type="button"
-                class="action-btn"
-                disabled={maintenanceRunning}
-                on:click={runRefetchContent}
-              >
-                {maintenanceRunning === 'refetch' ? 'Running…' : 'Re-fetch missing content'}
-              </button>
-              <span class="hint">Re-download article text for articles with missing or short body content.</span>
-            </div>
-          </div>
-          {#if maintenanceResult}
-            <span class="hint">{maintenanceResult}</span>
-          {/if}
-        </div>
-      </div>
-    </SettingsSectionCard>
-
-    <SettingsSectionCard
-      id="operations"
-      title="Operations"
-      summary={sectionSummary('operations')}
-      description={sectionConfig[7].description}
-      open={sectionOpen.operations}
-      dirty={dirtySections.operations}
-      onToggle={() => toggleSection('operations')}
-    >
-      <div class="section-block">
-        <div class="subsection">
-          <div class="subsection-header">
-            <h3>Scheduler presets</h3>
-            <p class="muted">Tune pull and queue throughput while keeping Worker resource use stable.</p>
-          </div>
-
-          <div class="preset-grid">
-            {#each schedulerPresets as preset}
-              <button
-                type="button"
-                class="preset-btn"
-                class:active={activeSchedulerPreset === preset.id}
-                on:click={() => applySchedulerPreset(preset.id)}
-              >
-                <span class="preset-title">{preset.label}</span>
-                <span class="preset-desc">{preset.description}</span>
-              </button>
-            {/each}
-          </div>
-
-          <p class="hint">
-            Current profile:
-            <strong>{activeSchedulerPreset === 'custom' ? `${schedulerMode} (custom)` : activeSchedulerPresetLabel}</strong>
-          </p>
-
-          <details class="advanced" bind:open={schedulerAdvancedOpen}>
-            <summary>Advanced scheduler controls</summary>
-
-            <div class="advanced-content">
-              <div class="field-grid field-grid-compact">
-                <label>
-                  Job processor batch size
-                  <input
-                    type="number"
-                    min={data.jobProcessorBatchRange.min}
-                    max={data.jobProcessorBatchRange.max}
-                    step="1"
-                    bind:value={jobProcessorBatchSize}
-                  />
-                </label>
-                <label>
-                  Pull slices per tick
-                  <input
-                    type="number"
-                    min={data.schedulerRange.pullSlicesPerTick.min}
-                    max={data.schedulerRange.pullSlicesPerTick.max}
-                    step="1"
-                    bind:value={pullSlicesPerTick}
-                  />
-                </label>
-                <label>
-                  Pull slice budget (ms)
-                  <input
-                    type="number"
-                    min={data.schedulerRange.pullSliceBudgetMs.min}
-                    max={data.schedulerRange.pullSliceBudgetMs.max}
-                    step="100"
-                    bind:value={pullSliceBudgetMs}
-                  />
-                </label>
-              </div>
-
-              <div class="two-col">
-                <label>
-                  Job budget when idle (ms)
-                  <input
-                    type="number"
-                    min={data.schedulerRange.jobBudgetIdleMs.min}
-                    max={data.schedulerRange.jobBudgetIdleMs.max}
-                    step="100"
-                    bind:value={jobBudgetIdleMs}
-                  />
-                </label>
-                <label>
-                  Job budget while pull is active (ms)
-                  <input
-                    type="number"
-                    min={data.schedulerRange.jobBudgetWhilePullMs.min}
-                    max={data.schedulerRange.jobBudgetWhilePullMs.max}
-                    step="100"
-                    bind:value={jobBudgetWhilePullMs}
-                  />
-                </label>
-              </div>
-
-              <label class="checkbox-row">
-                <input type="checkbox" bind:checked={autoQueueTodayMissing} />
-                <span>Auto queue recent missing article jobs on scheduler ticks</span>
-              </label>
-
-              <div class="two-col">
-                <label>
-                  Jobs scheduler interval (minutes)
-                  <input
-                    type="number"
-                    min={data.schedulerRange.jobsIntervalMinutes.min}
-                    max={data.schedulerRange.jobsIntervalMinutes.max}
-                    step="1"
-                    bind:value={jobsIntervalMinutes}
-                  />
-                  <span class="hint">Applies after running the command below and deploying.</span>
-                </label>
-                <label>
-                  Poll scheduler interval (minutes)
-                  <input
-                    type="number"
-                    min={data.schedulerRange.pollIntervalMinutes.min}
-                    max={data.schedulerRange.pollIntervalMinutes.max}
-                    step="1"
-                    bind:value={pollIntervalMinutes}
-                  />
-                  <span class="hint">Applies after running the command below and deploying.</span>
-                </label>
-              </div>
-
-              <p class="hint">Estimated mode: <strong>{schedulerMode}</strong></p>
-
-              <div class="scheduler-apply">
-                <div class="scheduler-apply-row">
-                  <label>
-                    Apply target
-                    <select bind:value={schedulerApplyEnv}>
-                      <option value="production">Production</option>
-                      <option value="staging">Staging</option>
-                    </select>
-                  </label>
-                  <Button variant="ghost" size="inline" on:click={copySchedulerCommand}>
-                    <span>Copy command</span>
-                  </Button>
-                </div>
-                <code class="command-code">{schedulerApplyCommand}</code>
-              </div>
-            </div>
-          </details>
-        </div>
-
-        <div class="subsection soft-panel">
-          <div class="subsection-header">
-            <h3>Orphan cleanup</h3>
-            <p class="muted">Clean up orphaned articles that no longer have any source feed linkage.</p>
-          </div>
-
-          <div class="maintenance-row">
-            <div>
-              <div class="maintenance-label">Orphan articles</div>
-              <div class="maintenance-value">{orphanCount}</div>
-              {#if orphanSampleArticleIds.length > 0}
-                <p class="muted small">
-                  Sample IDs: {orphanSampleArticleIds.slice(0, 3).join(', ')}{orphanSampleArticleIds.length > 3 ? '…' : ''}
-                </p>
-              {/if}
-            </div>
-            <div class="maintenance-actions">
-              <Button variant="ghost" size="inline" on:click={refreshOrphanPreview} disabled={orphanCleanupLoading}>
-                <IconRefresh size={14} stroke={1.9} />
-                <span>{orphanCleanupLoading ? 'Loading...' : 'Preview'}</span>
-              </Button>
-              <Button
-                variant="danger"
-                size="inline"
-                on:click={runOrphanCleanup}
-                disabled={orphanCleanupLoading || orphanCount === 0}
-              >
-                <IconTrash size={14} stroke={1.9} />
-                <span>{orphanCleanupLoading ? 'Cleaning...' : 'Clean now'}</span>
-              </Button>
-            </div>
-          </div>
-
-          <p class="hint">
-            Batch size: {orphanSuggestedBatchSize} per run. Re-run while “has more” is true.
-            {#if orphanCleanupLastRun}
-              {' '}Last run: deleted {Number(orphanCleanupLastRun?.deleted_articles ?? 0)}, remaining
-              {' '}{Number(orphanCleanupLastRun?.orphan_count_after ?? 0)}, has more:
-              {' '}{orphanCleanupHasMore ? 'yes' : 'no'}.
-            {/if}
-          </p>
-        </div>
-      </div>
-    </SettingsSectionCard>
-  </div>
-
-  <aside class="settings-rail">
-    <Card variant="default" class="overview-card">
-      <div class="overview-header">
-        <div>
-          <h2 class="overview-title">Settings overview</h2>
-          <p class="muted">Use sections to jump straight to the workflow you need.</p>
-        </div>
-        {#if hasUnsavedChanges}
-          <span class="unsaved-badge">
-            {modifiedSectionCount} section{modifiedSectionCount === 1 ? '' : 's'} changed
-          </span>
-        {:else}
-          <span class="overview-status">All changes saved</span>
-        {/if}
-      </div>
-
-      <div class="save-actions">
-        <Button
-          variant="ghost"
-          size="inline"
-          on:click={discardChanges}
-          disabled={!hasUnsavedChanges || isSavingSettings}
-        >
-          <IconRestore size={15} stroke={1.9} />
-          <span>Discard</span>
-        </Button>
-        <Button
-          variant="primary"
-          size="inline"
-          on:click={saveAllChanges}
-          disabled={!hasUnsavedChanges || isSavingSettings}
-        >
-          <IconDeviceFloppy size={15} stroke={1.9} />
-          <span>{isSavingSettings ? 'Saving...' : 'Save changes'}</span>
-        </Button>
-      </div>
-
-      <nav class="overview-shortcuts" aria-label="Settings sections">
-        {#each sectionConfig as section}
-          <button
-            type="button"
-            class="section-shortcut"
-            class:dirty={dirtySections[section.id]}
-            class:open={sectionOpen[section.id]}
-            aria-label={`Open ${section.title} section`}
-            on:click={() => openSection(section.id)}
-          >
-            <span class="shortcut-copy">
-              <span class="shortcut-title-row">
-                <span class="shortcut-title">{section.title}</span>
-                {#if dirtySections[section.id]}
-                  <span class="shortcut-badge">Changed</span>
-                {/if}
-              </span>
-              <span class="shortcut-summary">{sectionSummary(section.id)}</span>
-            </span>
-          </button>
-        {/each}
-      </nav>
-    </Card>
-  </aside>
-</div>
-
-{#if hasUnsavedChanges}
-  <div class="mobile-save-bar">
-    <div class="mobile-save-copy">
-      <strong>{modifiedSectionCount} section{modifiedSectionCount === 1 ? '' : 's'} changed</strong>
-      <span>Save or discard before leaving the page.</span>
-    </div>
-    <div class="mobile-save-actions">
+    <div class="settings-row">
+      <label class="row-label">Model A</label>
+      <select bind:value={modelAProvider} on:change={autoSave}>
+        <option value="openai">OpenAI</option>
+        <option value="anthropic">Anthropic</option>
+      </select>
+      <input
+        bind:value={modelAModel}
+        placeholder="gpt-4o-mini"
+        list={modelAProvider === 'anthropic' ? 'anthropic-model-options' : 'openai-model-options'}
+        on:input={autoSave}
+      />
       <Button
         variant="ghost"
         size="inline"
-        on:click={discardChanges}
-        disabled={!hasUnsavedChanges || isSavingSettings}
+        on:click={() => syncModels(modelAProvider)}
+        disabled={isLoadingModels(modelAProvider)}
       >
-        <span>Discard</span>
-      </Button>
-      <Button
-        variant="primary"
-        size="inline"
-        on:click={saveAllChanges}
-        disabled={!hasUnsavedChanges || isSavingSettings}
-      >
-        <span>{isSavingSettings ? 'Saving...' : 'Save changes'}</span>
+        <IconRefresh size={14} stroke={1.9} />
       </Button>
     </div>
+
+    <div class="settings-row">
+      <label class="row-label">Model B</label>
+      <select bind:value={modelBProvider} on:change={autoSave}>
+        <option value="openai">OpenAI</option>
+        <option value="anthropic">Anthropic</option>
+      </select>
+      <input
+        bind:value={modelBModel}
+        placeholder="gpt-4o"
+        list={modelBProvider === 'anthropic' ? 'anthropic-model-options' : 'openai-model-options'}
+        on:input={autoSave}
+      />
+      <Button
+        variant="ghost"
+        size="inline"
+        on:click={() => syncModels(modelBProvider)}
+        disabled={isLoadingModels(modelBProvider)}
+      >
+        <IconRefresh size={14} stroke={1.9} />
+      </Button>
+    </div>
+
+    <!-- Content -->
+    <div class="settings-section-title">Content</div>
+
+    <div class="settings-row">
+      <label class="row-label">Summary style</label>
+      <select bind:value={summaryStyle} on:change={autoSave}>
+        <option value="concise">Concise</option>
+        <option value="detailed">Detailed</option>
+        <option value="bullet">Bullet-heavy</option>
+      </select>
+      <label class="row-label">Length</label>
+      <select bind:value={summaryLength} on:change={autoSave}>
+        <option value="short">Short</option>
+        <option value="medium">Medium</option>
+        <option value="long">Long</option>
+      </select>
+    </div>
+
+    <div class="settings-row">
+      <label class="row-label">Scoring</label>
+      <select bind:value={scoringMethod} on:change={autoSave}>
+        <option value="algorithmic">Algorithmic</option>
+        <option value="hybrid">Hybrid</option>
+        <option value="ai">AI only</option>
+      </select>
+      <label class="row-label">Tagging</label>
+      <select bind:value={taggingMethod} on:change={autoSave}>
+        <option value="algorithmic">Algorithmic</option>
+        <option value="hybrid">Hybrid</option>
+      </select>
+    </div>
+
+    <!-- Dashboard -->
+    <div class="settings-section-title">Dashboard</div>
+
+    <div class="settings-row">
+      <label class="row-label">Queue count</label>
+      <input
+        type="number"
+        min={data.dashboardQueueRange.limit.min}
+        max={data.dashboardQueueRange.limit.max}
+        step="1"
+        bind:value={dashboardQueueLimit}
+        on:input={autoSave}
+      />
+      <label class="row-label">High-fit cutoff</label>
+      <input
+        type="number"
+        min={data.dashboardQueueRange.scoreCutoff.min}
+        max={data.dashboardQueueRange.scoreCutoff.max}
+        step="1"
+        bind:value={dashboardQueueScoreCutoff}
+        on:input={autoSave}
+      />
+    </div>
+
+    <div class="settings-row">
+      <label class="row-label">News Brief</label>
+      <label class="toggle-label">
+        <input type="checkbox" bind:checked={newsBriefEnabled} on:change={autoSave} />
+        <span>Enabled</span>
+      </label>
+    </div>
+
+    <!-- Retention -->
+    <div class="settings-section-title">Retention</div>
+
+    <div class="settings-row">
+      <label class="row-label">Archive after</label>
+      <input
+        type="number"
+        min={data.retentionRange.min}
+        max={data.retentionRange.max}
+        step="1"
+        bind:value={retentionArchiveDays}
+        on:input={autoSave}
+      />
+      <span class="unit">days</span>
+      <label class="row-label">Delete after</label>
+      <input
+        type="number"
+        min={data.retentionRange.min}
+        max={data.retentionRange.max}
+        step="1"
+        bind:value={retentionDeleteDays}
+        on:input={autoSave}
+      />
+      <span class="unit">days</span>
+    </div>
+    <p class="hint">Saved articles are never touched. 0 disables.</p>
   </div>
-{/if}
+
+  <!-- ═══════════════════════════════════════════════════
+       TIER 2 — Advanced (collapsible)
+       ═══════════════════════════════════════════════════ -->
+  <button type="button" class="settings-toggle" on:click={() => (showAdvanced = !showAdvanced)}>
+    {showAdvanced ? 'Hide' : 'Show'} advanced settings
+  </button>
+
+  {#if showAdvanced}
+    <div class="settings-card">
+      <!-- Feature lanes -->
+      <div class="settings-section-title">Feature lanes</div>
+      <div class="feature-lanes">
+        {#each featureLaneOptions as feature}
+          <div class="feature-lane">
+            <div class="feature-name">{feature.label}</div>
+            <div class="lane-toggle" role="radiogroup" aria-label={`${feature.label} lane`}>
+              <label class:active={feature.get() === 'model_a'}>
+                <input
+                  type="radio"
+                  name={feature.name}
+                  value="model_a"
+                  checked={feature.get() === 'model_a'}
+                  on:change={() => { feature.set('model_a'); autoSave(); }}
+                />
+                <span>Model A</span>
+              </label>
+              <label class:active={feature.get() === 'model_b'}>
+                <input
+                  type="radio"
+                  name={feature.name}
+                  value="model_b"
+                  checked={feature.get() === 'model_b'}
+                  on:change={() => { feature.set('model_b'); autoSave(); }}
+                />
+                <span>Model B</span>
+              </label>
+            </div>
+          </div>
+        {/each}
+      </div>
+
+      <!-- Reasoning effort -->
+      <div class="settings-section-title">Reasoning effort</div>
+      <div class="settings-row">
+        <label class="row-label">Model A</label>
+        <select bind:value={modelAReasoningEffort} on:change={autoSave}>
+          <option value="minimal">Minimal</option>
+          <option value="low">Low</option>
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+        </select>
+        <label class="row-label">Model B</label>
+        <select bind:value={modelBReasoningEffort} on:change={autoSave}>
+          <option value="minimal">Minimal</option>
+          <option value="low">Low</option>
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+        </select>
+      </div>
+
+      <!-- Scoring tuning -->
+      <div class="settings-section-title">Scoring tuning</div>
+      {#if scoringMethod === 'hybrid'}
+        <div class="settings-row">
+          <label class="row-label">AI enhancement threshold</label>
+          <input
+            type="range"
+            min="0"
+            max="1"
+            step="0.05"
+            bind:value={scoringAiEnhancementThreshold}
+            on:input={autoSave}
+          />
+          <span class="hint">{scoringAiEnhancementThreshold.toFixed(2)}</span>
+        </div>
+      {/if}
+      <div class="settings-row">
+        <label class="row-label">Learning rate</label>
+        <input
+          type="range"
+          min="0.01"
+          max="0.5"
+          step="0.01"
+          bind:value={scoringLearningRate}
+          on:input={autoSave}
+        />
+        <span class="hint">{scoringLearningRate.toFixed(2)}</span>
+      </div>
+
+      <div class="subsection">
+        <div class="split-header">
+          <div class="subsection-header">
+            <h3>Signal weights</h3>
+            <p class="muted">Learned from your reactions. Higher = more influence.</p>
+          </div>
+          <Button
+            variant="ghost"
+            size="inline"
+            on:click={resetScoringWeights}
+            disabled={isResettingWeights}
+          >
+            <IconRestore size={14} stroke={1.9} />
+            <span>{isResettingWeights ? 'Resetting...' : 'Reset to defaults'}</span>
+          </Button>
+        </div>
+
+        {#if signalWeights.length > 0}
+          <div class="signal-weights-table">
+            <div class="signal-header">
+              <span>Signal</span>
+              <span>Weight</span>
+              <span>Samples</span>
+            </div>
+            {#each signalWeights as sw}
+              <div class="signal-row">
+                <span class="signal-name">{sw.name.replace(/_/g, ' ')}</span>
+                <span class="signal-weight">
+                  <span class="weight-bar" style="width: {Math.min(100, (sw.weight / 2) * 100)}%"></span>
+                  <span class="weight-value">{sw.weight.toFixed(2)}</span>
+                </span>
+                <span class="signal-samples">{sw.sampleCount}</span>
+              </div>
+            {/each}
+          </div>
+        {:else}
+          <p class="muted small">No signal weights loaded.</p>
+        {/if}
+      </div>
+
+      <!-- Scoring QA -->
+      <div class="settings-section-title">Scoring QA</div>
+      <div class="qa-grid">
+        <div class="qa-card">
+          <span class="qa-label">Score status</span>
+          <strong>{data.scoringObservability?.scoreStatusCounts?.ready ?? 0} ready</strong>
+          <span class="muted small">{data.scoringObservability?.scoreStatusCounts?.insufficientSignal ?? 0} learning</span>
+        </div>
+        <div class="qa-card">
+          <span class="qa-label">Confidence buckets</span>
+          <strong>
+            {data.scoringObservability?.confidenceBuckets?.low ?? 0} low ·
+            {data.scoringObservability?.confidenceBuckets?.medium ?? 0} medium ·
+            {data.scoringObservability?.confidenceBuckets?.high ?? 0} high
+          </strong>
+        </div>
+        <div class="qa-card">
+          <span class="qa-label">Tag sources</span>
+          <strong>
+            {data.scoringObservability?.tagSourceCounts?.manual ?? 0} manual ·
+            {data.scoringObservability?.tagSourceCounts?.system ?? 0} system ·
+            {data.scoringObservability?.tagSourceCounts?.ai ?? 0} AI
+          </strong>
+        </div>
+        <div class="qa-card">
+          <span class="qa-label">Recent tag coverage</span>
+          <strong>{data.scoringObservability?.recentCoverage?.taggedArticlePercent ?? 0}% tagged</strong>
+          <span class="muted small">Last {data.scoringObservability?.recentCoverage?.windowDays ?? 30} days</span>
+        </div>
+        <div class="qa-card">
+          <span class="qa-label">Preference-backed scores</span>
+          <strong>{data.scoringObservability?.recentCoverage?.preferenceBackedScorePercent ?? 0}%</strong>
+          <span class="muted small">
+            {data.scoringObservability?.recentCoverage?.recentScoredArticles ?? 0} scored
+          </span>
+        </div>
+        <div class="qa-card">
+          <span class="qa-label">Missing jobs</span>
+          <strong>
+            {data.scoringObservability?.recentJobCoverage?.missingScoreJobs ?? 0} score ·
+            {data.scoringObservability?.recentJobCoverage?.missingAutoTagJobs ?? 0} tag ·
+            {data.scoringObservability?.recentJobCoverage?.missingImageBackfillJobs ?? 0} image
+          </strong>
+          <span class="muted small">
+            Last {data.scoringObservability?.recentJobCoverage?.windowHours ?? 24}h
+          </span>
+        </div>
+      </div>
+
+      <!-- News Brief schedule -->
+      <div class="settings-section-title">News Brief schedule</div>
+      <div class="settings-row">
+        <label class="row-label">Timezone</label>
+        <input bind:value={newsBriefTimezone} placeholder="America/Chicago" on:input={autoSave} />
+      </div>
+      <div class="settings-row">
+        <label class="row-label">Morning</label>
+        <input bind:value={newsBriefMorningTime} placeholder="08:00" on:input={autoSave} />
+        <label class="row-label">Evening</label>
+        <input bind:value={newsBriefEveningTime} placeholder="17:00" on:input={autoSave} />
+      </div>
+      <div class="settings-row">
+        <label class="row-label">Lookback (hours)</label>
+        <input
+          type="number"
+          min={data.newsBriefRange.lookbackHours.min}
+          max={data.newsBriefRange.lookbackHours.max}
+          step="1"
+          bind:value={newsBriefLookbackHours}
+          on:input={autoSave}
+        />
+        <label class="row-label">Min fit score</label>
+        <input
+          type="number"
+          min={data.newsBriefRange.scoreCutoff.min}
+          max={data.newsBriefRange.scoreCutoff.max}
+          step="1"
+          bind:value={newsBriefScoreCutoff}
+          on:input={autoSave}
+        />
+      </div>
+      <div class="settings-row">
+        <Button
+          variant="ghost"
+          size="inline"
+          on:click={generateNewsBriefNow}
+          disabled={isGeneratingNewsBrief}
+        >
+          <IconRefresh size={14} stroke={1.9} />
+          <span>{isGeneratingNewsBrief ? 'Generating...' : 'Generate now'}</span>
+        </Button>
+        {#if newsBriefLatestEdition}
+          <span class="hint">
+            Latest: {newsBriefLatestEdition.editionLabel ?? 'Update'} · {newsBriefLatestEdition.status}
+            {#if newsBriefLatestEdition.generatedAt}
+              · {new Date(newsBriefLatestEdition.generatedAt).toLocaleString()}
+            {/if}
+          </span>
+        {/if}
+      </div>
+
+      <!-- Auto-read delay -->
+      <div class="settings-section-title">Reading</div>
+      <div class="settings-row">
+        <label class="row-label">Mark read after (ms)</label>
+        <input
+          type="number"
+          min={data.autoReadDelayRange.min}
+          max={data.autoReadDelayRange.max}
+          step="250"
+          bind:value={autoReadDelayMs}
+          on:input={autoSave}
+        />
+        <span class="hint">{autoReadDelaySeconds}s</span>
+      </div>
+
+      <!-- Article card layout -->
+      <div class="settings-row">
+        <label class="row-label">Card layout</label>
+        <div class="lane-toggle" role="radiogroup" aria-label="Article card layout">
+          <label class:active={articleCardLayout === 'split'}>
+            <input type="radio" name="articleCardLayout" value="split" bind:group={articleCardLayout} on:change={autoSave} />
+            <span>Split</span>
+          </label>
+          <label class:active={articleCardLayout === 'stacked'}>
+            <input type="radio" name="articleCardLayout" value="stacked" bind:group={articleCardLayout} on:change={autoSave} />
+            <span>Stacked</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Feed intake -->
+      <div class="settings-section-title">Feed intake</div>
+      <div class="settings-row">
+        <label class="row-label">Initial backfill (days)</label>
+        <input
+          type="number"
+          min={data.initialFeedLookbackRange.min}
+          max={data.initialFeedLookbackRange.max}
+          step="1"
+          bind:value={initialFeedLookbackDays}
+          on:input={autoSave}
+        />
+        <label class="row-label">Max feeds</label>
+        <input
+          type="number"
+          min={data.feedPollingRange.maxFeedsPerPoll.min}
+          max={data.feedPollingRange.maxFeedsPerPoll.max}
+          step="1"
+          bind:value={maxFeedsPerPoll}
+          on:input={autoSave}
+        />
+      </div>
+      <div class="settings-row">
+        <label class="row-label">Max items per poll</label>
+        <input
+          type="number"
+          min={data.feedPollingRange.maxItemsPerPoll.min}
+          max={data.feedPollingRange.maxItemsPerPoll.max}
+          step="1"
+          bind:value={maxItemsPerPoll}
+          on:input={autoSave}
+        />
+        <label class="row-label">Events poll (ms)</label>
+        <input
+          type="number"
+          min={data.feedPollingRange.eventsPollMs.min}
+          max={data.feedPollingRange.eventsPollMs.max}
+          step="1000"
+          bind:value={eventsPollMs}
+          on:input={autoSave}
+        />
+      </div>
+      <div class="settings-row">
+        <label class="row-label">Dashboard refresh (ms)</label>
+        <input
+          type="number"
+          min={data.feedPollingRange.dashboardRefreshMinMs.min}
+          max={data.feedPollingRange.dashboardRefreshMinMs.max}
+          step="1000"
+          bind:value={dashboardRefreshMinMs}
+          on:input={autoSave}
+        />
+      </div>
+
+      <!-- Tagging extras -->
+      <div class="settings-section-title">Tagging</div>
+      <div class="settings-row">
+        <label class="row-label">Max tags per article</label>
+        <input
+          type="number"
+          min={data.autoTagging?.maxPerArticle?.min ?? 1}
+          max={data.autoTagging?.maxPerArticle?.max ?? 5}
+          step="1"
+          bind:value={autoTagMaxPerArticle}
+          on:input={autoSave}
+        />
+        <Button
+          variant="ghost"
+          size="inline"
+          on:click={resetDismissedTagSuggestions}
+          disabled={isResettingDismissedSuggestions}
+        >
+          <IconRefresh size={14} stroke={1.9} />
+          <span>{isResettingDismissedSuggestions ? 'Resetting...' : 'Reset dismissed'}</span>
+        </Button>
+      </div>
+
+      <!-- Prompts -->
+      <div class="settings-section-title">Prompts</div>
+      <div class="subsection">
+        <div class="subsection-header">
+          <h3>AI preference profile</h3>
+          <p class="muted">
+            Version {data.profile.version} · Updated {new Date(data.profile.updated_at).toLocaleString()}
+          </p>
+        </div>
+        <textarea rows="8" bind:value={profileText} on:input={autoSave}></textarea>
+      </div>
+
+      <div class="subsection">
+        <div class="split-header">
+          <div class="subsection-header">
+            <h3>AI fit score prompts</h3>
+            <p class="muted">
+              Variables: <code>{'{{profile}}'}</code>, <code>{'{{title}}'}</code>, <code>{'{{url}}'}</code>,
+              <code>{'{{content}}'}</code>.
+            </p>
+          </div>
+          <Button variant="ghost" size="inline" on:click={resetScorePromptDefaults}>
+            <IconRestore size={14} stroke={1.9} />
+            <span>Reset defaults</span>
+          </Button>
+        </div>
+        <label>
+          System prompt
+          <textarea rows="4" bind:value={scoreSystemPrompt} on:input={autoSave}></textarea>
+        </label>
+        <label>
+          User prompt template
+          <textarea rows="12" bind:value={scoreUserPromptTemplate} on:input={autoSave}></textarea>
+        </label>
+      </div>
+
+      <!-- Dashboard queue window -->
+      <div class="settings-section-title">Dashboard queue window</div>
+      <div class="settings-row">
+        <label class="row-label">Window (days)</label>
+        <input
+          type="number"
+          min={data.dashboardQueueRange.windowDays.min}
+          max={data.dashboardQueueRange.windowDays.max}
+          step="1"
+          bind:value={dashboardQueueWindowDays}
+          on:input={autoSave}
+        />
+      </div>
+
+      <!-- Maintenance buttons -->
+      <div class="settings-section-title">Maintenance</div>
+      <div class="settings-row">
+        <button
+          type="button"
+          class="action-btn"
+          disabled={maintenanceRunning}
+          on:click={runBackfillKeyPoints}
+        >
+          {maintenanceRunning === 'key_points' ? 'Running...' : 'Backfill key points'}
+        </button>
+        <button
+          type="button"
+          class="action-btn"
+          disabled={maintenanceRunning}
+          on:click={runRefetchContent}
+        >
+          {maintenanceRunning === 'refetch' ? 'Running...' : 'Re-fetch missing content'}
+        </button>
+      </div>
+      {#if maintenanceResult}
+        <p class="hint">{maintenanceResult}</p>
+      {/if}
+    </div>
+  {/if}
+
+  <!-- ═══════════════════════════════════════════════════
+       TIER 3 — Admin (collapsible)
+       ═══════════════════════════════════════════════════ -->
+  <button type="button" class="settings-toggle" on:click={() => (showAdmin = !showAdmin)}>
+    {showAdmin ? 'Hide' : 'Show'} admin settings
+  </button>
+
+  {#if showAdmin}
+    <div class="settings-card">
+      <!-- API Keys -->
+      <div class="settings-section-title">API Keys</div>
+      <div class="split-header">
+        <p class="muted">Stored server-side for model sync and runtime requests.</p>
+        <Button variant="ghost" size="inline" on:click={() => rotateKeys()} disabled={rotatingKeys}>
+          <IconRefresh size={14} stroke={1.9} />
+          <span>{rotatingKeys ? 'Rotating...' : 'Rotate ciphers'}</span>
+        </Button>
+      </div>
+
+      <div class="key-provider-grid">
+        <div class="subsection soft-panel">
+          <div class="key-provider-header">
+            <div>
+              <h3>OpenAI</h3>
+              <p class="muted small">{keyStatus.openai ? 'Key stored' : 'No key yet'}</p>
+            </div>
+            <Button
+              variant="danger"
+              size="icon"
+              on:click={() => removeKey('openai')}
+              disabled={!keyStatus.openai || keyLoading.openai}
+              title="Remove OpenAI key"
+            >
+              <IconTrash size={15} stroke={1.9} />
+            </Button>
+          </div>
+          <input type="password" placeholder="Paste OpenAI key" bind:value={openaiKey} />
+          <Button size="inline" on:click={() => saveKey('openai')} disabled={!openaiKey || keyLoading.openai}>
+            <IconDeviceFloppy size={15} stroke={1.9} />
+            <span>{keyLoading.openai ? 'Saving...' : 'Save OpenAI key'}</span>
+          </Button>
+        </div>
+
+        <div class="subsection soft-panel">
+          <div class="key-provider-header">
+            <div>
+              <h3>Anthropic</h3>
+              <p class="muted small">{keyStatus.anthropic ? 'Key stored' : 'No key yet'}</p>
+            </div>
+            <Button
+              variant="danger"
+              size="icon"
+              on:click={() => removeKey('anthropic')}
+              disabled={!keyStatus.anthropic || keyLoading.anthropic}
+              title="Remove Anthropic key"
+            >
+              <IconTrash size={15} stroke={1.9} />
+            </Button>
+          </div>
+          <input type="password" placeholder="Paste Anthropic key" bind:value={anthropicKey} />
+          <Button
+            size="inline"
+            on:click={() => saveKey('anthropic')}
+            disabled={!anthropicKey || keyLoading.anthropic}
+          >
+            <IconDeviceFloppy size={15} stroke={1.9} />
+            <span>{keyLoading.anthropic ? 'Saving...' : 'Save Anthropic key'}</span>
+          </Button>
+        </div>
+      </div>
+
+      <!-- Connected Apps -->
+      <div class="settings-section-title">Connected Apps</div>
+      {#if connectedApps.length === 0}
+        <p class="muted">No connected apps have authorized access yet.</p>
+      {:else}
+        <div class="mcp-client-list">
+          {#each connectedApps as client}
+            <div class="soft-panel mcp-client-card">
+              <div class="split-header">
+                <div>
+                  <h3>{client.clientName}</h3>
+                  <p class="muted small">
+                    <code>{client.clientId}</code>
+                  </p>
+                  <p class="muted small">{appKindLabel(client.clientKind)}</p>
+                </div>
+                <Button
+                  variant="danger"
+                  size="inline"
+                  on:click={() => revokeConnectedApp(client.clientId)}
+                  disabled={revokingConnectedAppId === client.clientId}
+                >
+                  <IconTrash size={14} stroke={1.9} />
+                  <span>{revokingConnectedAppId === client.clientId ? 'Revoking...' : 'Revoke access'}</span>
+                </Button>
+              </div>
+
+              <div class="mcp-client-metrics">
+                <span>{client.activeAccessTokens} access token{client.activeAccessTokens === 1 ? '' : 's'}</span>
+                <span>{client.activeRefreshTokens} refresh token{client.activeRefreshTokens === 1 ? '' : 's'}</span>
+                <span>{client.activeConsentCount} consent{client.activeConsentCount === 1 ? '' : 's'}</span>
+                <span>{client.lastUsedAt ? `Last used ${new Date(client.lastUsedAt).toLocaleString()}` : 'Never used'}</span>
+              </div>
+
+              <div class="mcp-client-meta">
+                <div>
+                  <div class="muted small">Redirect URIs</div>
+                  <ul>
+                    {#each client.redirectUris as redirectUri}
+                      <li><code>{redirectUri}</code></li>
+                    {/each}
+                  </ul>
+                </div>
+                <div>
+                  <div class="muted small">Scope</div>
+                  <p><code>{client.scope ?? 'mcp:read'}</code></p>
+                </div>
+              </div>
+            </div>
+          {/each}
+        </div>
+      {/if}
+
+      <!-- Scheduler -->
+      <div class="settings-section-title">Scheduler</div>
+      <div class="preset-grid">
+        {#each schedulerPresets as preset}
+          <button
+            type="button"
+            class="preset-btn"
+            class:active={activeSchedulerPreset === preset.id}
+            on:click={() => applySchedulerPreset(preset.id)}
+          >
+            <span class="preset-title">{preset.label}</span>
+            <span class="preset-desc">{preset.description}</span>
+          </button>
+        {/each}
+      </div>
+      <p class="hint">
+        Current:
+        <strong>{activeSchedulerPreset === 'custom' ? `${schedulerMode} (custom)` : activeSchedulerPresetLabel}</strong>
+      </p>
+
+      <details class="advanced" bind:open={schedulerAdvancedOpen}>
+        <summary>Advanced scheduler controls</summary>
+        <div class="advanced-content">
+          <div class="field-grid field-grid-compact">
+            <label>
+              Job batch size
+              <input
+                type="number"
+                min={data.jobProcessorBatchRange.min}
+                max={data.jobProcessorBatchRange.max}
+                step="1"
+                bind:value={jobProcessorBatchSize}
+                on:input={autoSave}
+              />
+            </label>
+            <label>
+              Pull slices/tick
+              <input
+                type="number"
+                min={data.schedulerRange.pullSlicesPerTick.min}
+                max={data.schedulerRange.pullSlicesPerTick.max}
+                step="1"
+                bind:value={pullSlicesPerTick}
+                on:input={autoSave}
+              />
+            </label>
+            <label>
+              Pull budget (ms)
+              <input
+                type="number"
+                min={data.schedulerRange.pullSliceBudgetMs.min}
+                max={data.schedulerRange.pullSliceBudgetMs.max}
+                step="100"
+                bind:value={pullSliceBudgetMs}
+                on:input={autoSave}
+              />
+            </label>
+          </div>
+
+          <div class="two-col">
+            <label>
+              Job budget idle (ms)
+              <input
+                type="number"
+                min={data.schedulerRange.jobBudgetIdleMs.min}
+                max={data.schedulerRange.jobBudgetIdleMs.max}
+                step="100"
+                bind:value={jobBudgetIdleMs}
+                on:input={autoSave}
+              />
+            </label>
+            <label>
+              Job budget while pull (ms)
+              <input
+                type="number"
+                min={data.schedulerRange.jobBudgetWhilePullMs.min}
+                max={data.schedulerRange.jobBudgetWhilePullMs.max}
+                step="100"
+                bind:value={jobBudgetWhilePullMs}
+                on:input={autoSave}
+              />
+            </label>
+          </div>
+
+          <label class="checkbox-row">
+            <input type="checkbox" bind:checked={autoQueueTodayMissing} on:change={autoSave} />
+            <span>Auto queue recent missing article jobs on ticks</span>
+          </label>
+
+          <div class="two-col">
+            <label>
+              Jobs interval (min)
+              <input
+                type="number"
+                min={data.schedulerRange.jobsIntervalMinutes.min}
+                max={data.schedulerRange.jobsIntervalMinutes.max}
+                step="1"
+                bind:value={jobsIntervalMinutes}
+                on:input={autoSave}
+              />
+            </label>
+            <label>
+              Poll interval (min)
+              <input
+                type="number"
+                min={data.schedulerRange.pollIntervalMinutes.min}
+                max={data.schedulerRange.pollIntervalMinutes.max}
+                step="1"
+                bind:value={pollIntervalMinutes}
+                on:input={autoSave}
+              />
+            </label>
+          </div>
+
+          <p class="hint">Estimated mode: <strong>{schedulerMode}</strong></p>
+
+          <div class="scheduler-apply">
+            <div class="scheduler-apply-row">
+              <label>
+                Apply target
+                <select bind:value={schedulerApplyEnv}>
+                  <option value="production">Production</option>
+                  <option value="staging">Staging</option>
+                </select>
+              </label>
+              <Button variant="ghost" size="inline" on:click={copySchedulerCommand}>
+                <span>Copy command</span>
+              </Button>
+            </div>
+            <code class="command-code">{schedulerApplyCommand}</code>
+          </div>
+        </div>
+      </details>
+
+      <!-- Orphan cleanup -->
+      <div class="settings-section-title">Orphan cleanup</div>
+      <div class="maintenance-row">
+        <div>
+          <div class="maintenance-label">Orphan articles</div>
+          <div class="maintenance-value">{orphanCount}</div>
+          {#if orphanSampleArticleIds.length > 0}
+            <p class="muted small">
+              Sample IDs: {orphanSampleArticleIds.slice(0, 3).join(', ')}{orphanSampleArticleIds.length > 3 ? '...' : ''}
+            </p>
+          {/if}
+        </div>
+        <div class="maintenance-actions">
+          <Button variant="ghost" size="inline" on:click={refreshOrphanPreview} disabled={orphanCleanupLoading}>
+            <IconRefresh size={14} stroke={1.9} />
+            <span>{orphanCleanupLoading ? 'Loading...' : 'Preview'}</span>
+          </Button>
+          <Button
+            variant="danger"
+            size="inline"
+            on:click={runOrphanCleanup}
+            disabled={orphanCleanupLoading || orphanCount === 0}
+          >
+            <IconTrash size={14} stroke={1.9} />
+            <span>{orphanCleanupLoading ? 'Cleaning...' : 'Clean now'}</span>
+          </Button>
+        </div>
+      </div>
+      <p class="hint">
+        Batch size: {orphanSuggestedBatchSize} per run.
+        {#if orphanCleanupLastRun}
+          Last run: deleted {Number(orphanCleanupLastRun?.deleted_articles ?? 0)}, remaining
+          {Number(orphanCleanupLastRun?.orphan_count_after ?? 0)}, has more:
+          {orphanCleanupHasMore ? 'yes' : 'no'}.
+        {/if}
+      </p>
+    </div>
+  {/if}
+</div>
 
 <datalist id="openai-model-options">
   {#each openaiModels as model}
@@ -2348,6 +1708,132 @@
 </datalist>
 
 <style>
+  /* ─── Page layout ──────────────────────────────────── */
+
+  .settings-page {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: var(--space-5);
+    display: grid;
+    gap: var(--space-4);
+  }
+
+  .settings-card {
+    background: var(--surface-strong);
+    border: 1px solid var(--surface-border);
+    border-radius: var(--radius-xl);
+    padding: var(--space-5);
+    display: grid;
+    gap: var(--space-3);
+  }
+
+  .settings-section-title {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted-text);
+    margin-top: var(--space-2);
+  }
+
+  .settings-section-title:first-child {
+    margin-top: 0;
+  }
+
+  /* ─── Rows ─────────────────────────────────────────── */
+
+  .settings-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) 0;
+    flex-wrap: wrap;
+  }
+
+  .row-label {
+    min-width: 120px;
+    font-size: var(--text-sm);
+    font-weight: 500;
+    color: var(--text-color);
+    display: inline;
+  }
+
+  .settings-row select,
+  .settings-row input[type="number"] {
+    padding: 0.35rem 0.6rem;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--input-border);
+    background: var(--surface-soft);
+    font-size: var(--text-sm);
+    color: var(--text-color);
+    font-family: inherit;
+  }
+
+  .settings-row input[type="number"] {
+    width: 70px;
+  }
+
+  .settings-row input[type="range"] {
+    flex: 1;
+    min-width: 100px;
+  }
+
+  .settings-row input:not([type="number"]):not([type="radio"]):not([type="checkbox"]):not([type="range"]):not([type="password"]) {
+    padding: 0.35rem 0.6rem;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--input-border);
+    background: var(--surface-soft);
+    font-size: var(--text-sm);
+    color: var(--text-color);
+    font-family: inherit;
+    flex: 1;
+    min-width: 100px;
+  }
+
+  .unit {
+    font-size: var(--text-sm);
+    color: var(--muted-text);
+  }
+
+  /* ─── Toggle buttons ───────────────────────────────── */
+
+  .settings-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 1rem;
+    background: var(--surface-strong);
+    border: 1px solid var(--input-border);
+    border-radius: var(--radius-md);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    cursor: pointer;
+    color: var(--text-color);
+    font-family: inherit;
+    margin-right: var(--space-2);
+  }
+
+  .settings-toggle:hover {
+    background: var(--primary-soft);
+  }
+
+  .toggle-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: var(--text-sm);
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .toggle-label input[type="checkbox"] {
+    width: 1rem;
+    height: 1rem;
+    margin: 0;
+  }
+
+  /* ─── Quick links ──────────────────────────────────── */
+
   .settings-quick-links {
     display: flex;
     gap: var(--space-2);
@@ -2373,132 +1859,79 @@
     border-color: var(--surface-border-hover);
   }
 
-  .settings-layout {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 20rem;
-    gap: var(--space-5);
-    align-items: start;
+  /* ─── Hint ─────────────────────────────────────────── */
+
+  .hint {
+    font-size: var(--text-xs);
+    color: var(--muted-text);
+    font-weight: 400;
   }
 
-  .settings-main {
-    display: grid;
-    gap: var(--space-5);
-    min-width: 0;
-  }
-
-  .settings-rail {
-    position: sticky;
-    top: var(--space-6);
-    align-self: start;
-  }
-
-  :global(.overview-card) {
-    display: grid;
-    gap: var(--space-4);
-  }
-
-  .overview-header {
-    display: grid;
-    gap: var(--space-2);
-  }
-
-  .overview-title {
+  .muted {
+    color: var(--muted-text);
     margin: 0;
-    font-size: var(--text-xl);
   }
 
-  .overview-status {
+  .small {
+    font-size: var(--text-sm);
+  }
+
+  /* ─── Feature lanes ────────────────────────────────── */
+
+  .feature-lanes {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+    gap: var(--space-3);
+  }
+
+  .feature-lane {
+    display: grid;
+    gap: 0.4rem;
+  }
+
+  .feature-name {
     font-size: var(--text-sm);
     color: var(--muted-text);
     font-weight: 500;
   }
 
-  .save-actions {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    flex-wrap: wrap;
-  }
-
-  .unsaved-badge {
-    width: fit-content;
-    border-radius: var(--radius-sm);
-    padding: 0.25rem 0.7rem;
-    font-size: var(--text-xs);
-    color: var(--primary);
-    background: var(--primary-soft);
-    font-weight: 600;
-  }
-
-  .overview-shortcuts {
-    display: grid;
-    gap: var(--space-2);
-  }
-
-  .section-shortcut {
-    display: block;
-    width: 100%;
-    padding: var(--space-3);
-    border: 1px solid var(--surface-border);
-    border-radius: var(--radius-lg);
+  .lane-toggle {
+    display: inline-grid;
+    grid-template-columns: 1fr 1fr;
+    border-radius: var(--radius-md);
+    padding: 0.2rem;
     background: var(--surface-soft);
-    color: inherit;
-    text-align: left;
-    cursor: pointer;
-    transition:
-      border-color var(--transition-fast),
-      background var(--transition-fast),
-      transform var(--transition-fast);
+    max-width: 22rem;
+    width: 100%;
   }
 
-  .section-shortcut:hover {
-    background: var(--primary-soft);
-  }
-
-  .section-shortcut.open {
-    border-color: color-mix(in srgb, var(--primary) 30%, var(--surface-border));
-  }
-
-  .section-shortcut.dirty {
-    border-color: color-mix(in srgb, var(--primary) 40%, var(--surface-border));
-  }
-
-  .shortcut-copy {
-    display: grid;
-    gap: 0.35rem;
-  }
-
-  .shortcut-title-row {
+  .lane-toggle label {
     display: flex;
     align-items: center;
-    gap: var(--space-2);
-    flex-wrap: wrap;
-  }
-
-  .shortcut-title {
-    font-size: var(--text-sm);
-    font-weight: 600;
-  }
-
-  .shortcut-summary {
-    font-size: var(--text-xs);
-    line-height: 1.4;
-    color: var(--muted-text);
-  }
-
-  .shortcut-badge {
+    justify-content: center;
     border-radius: var(--radius-sm);
-    padding: 0.12rem 0.45rem;
-    background: var(--primary-soft);
-    color: var(--primary);
-    font-size: 0.7rem;
-    font-weight: 600;
+    padding: 0.4rem 0.75rem;
+    cursor: pointer;
+    font-weight: 500;
+    font-size: var(--text-sm);
+    color: var(--muted-text);
+    transition: background var(--transition-fast), color var(--transition-fast);
   }
 
-  .section-block {
-    display: grid;
-    gap: var(--space-4);
+  .lane-toggle label.active {
+    background: var(--button-bg);
+    color: var(--button-text);
   }
+
+  .lane-toggle input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+    width: 1px;
+    height: 1px;
+  }
+
+  /* ─── Subsections / panels ─────────────────────────── */
 
   .subsection {
     display: grid;
@@ -2539,34 +1972,24 @@
     min-width: 0;
   }
 
-  .field {
-    display: grid;
-    gap: 0.4rem;
+  /* ─── Inputs (for subsection contexts like keys, scheduler, prompts) ── */
+
+  input:not([type='radio']):not([type='checkbox']):not([type='range']),
+  select,
+  textarea {
+    width: 100%;
+    padding: 0.65rem 0.75rem;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--input-border);
+    background: var(--input-bg);
+    color: var(--text-color);
+    font-family: inherit;
+    min-width: 0;
+    max-width: 100%;
   }
 
-  .field-label {
-    font-size: var(--text-sm);
-    font-weight: 500;
-  }
+  /* ─── Two-col / field grids ────────────────────────── */
 
-  .feature-lanes {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
-    gap: var(--space-3);
-  }
-
-  .feature-lane {
-    display: grid;
-    gap: 0.4rem;
-  }
-
-  .feature-name {
-    font-size: var(--text-sm);
-    color: var(--muted-text);
-    font-weight: 500;
-  }
-
-  .model-sections,
   .key-provider-grid,
   .two-col {
     display: grid;
@@ -2579,6 +2002,12 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--space-4);
   }
+
+  .field-grid-compact {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  /* ─── QA grid ──────────────────────────────────────── */
 
   .qa-grid {
     display: grid;
@@ -2603,101 +2032,7 @@
     color: var(--muted-text);
   }
 
-  .field-grid-compact {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .model-tools,
-  .inline-actions {
-    display: grid;
-    gap: var(--space-2);
-  }
-
-  .inline-actions {
-    align-content: end;
-  }
-
-  input:not([type='radio']):not([type='checkbox']),
-  select,
-  textarea {
-    width: 100%;
-    padding: 0.65rem 0.75rem;
-    border-radius: var(--radius-md);
-    border: 1px solid var(--input-border);
-    background: var(--input-bg);
-    color: var(--text-color);
-    font-family: inherit;
-    min-width: 0;
-    max-width: 100%;
-  }
-
-  .checkbox-row {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    font-weight: 500;
-  }
-
-  .checkbox-field {
-    display: grid;
-    gap: var(--space-2);
-    align-content: start;
-    font-weight: 500;
-  }
-
-  .checkbox-field input[type='checkbox'] {
-    width: 1rem;
-    height: 1rem;
-    margin: 0;
-  }
-
-  .checkbox-row input[type='checkbox'] {
-    width: 1rem;
-    height: 1rem;
-    margin: 0;
-  }
-
-  .hint {
-    font-size: var(--text-xs);
-    color: var(--muted-text);
-    font-weight: 400;
-  }
-
-  .lane-toggle {
-    display: inline-grid;
-    grid-template-columns: 1fr 1fr;
-    border-radius: var(--radius-md);
-    padding: 0.2rem;
-    background: var(--surface-soft);
-    max-width: 22rem;
-    width: 100%;
-  }
-
-  .lane-toggle label {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: var(--radius-sm);
-    padding: 0.4rem 0.75rem;
-    cursor: pointer;
-    font-weight: 500;
-    font-size: var(--text-sm);
-    color: var(--muted-text);
-    transition: background var(--transition-fast), color var(--transition-fast);
-  }
-
-  .lane-toggle label.active {
-    background: var(--button-bg);
-    color: var(--button-text);
-  }
-
-  .lane-toggle input {
-    position: absolute;
-    opacity: 0;
-    pointer-events: none;
-    width: 1px;
-    height: 1px;
-  }
+  /* ─── Presets ──────────────────────────────────────── */
 
   .preset-grid {
     display: grid;
@@ -2715,6 +2050,7 @@
     background: var(--surface-soft);
     color: var(--text-color);
     cursor: pointer;
+    font-family: inherit;
     transition:
       background var(--transition-fast),
       box-shadow var(--transition-fast);
@@ -2739,6 +2075,8 @@
     color: var(--muted-text);
     line-height: 1.35;
   }
+
+  /* ─── Advanced details ─────────────────────────────── */
 
   .advanced {
     border-radius: var(--radius-lg);
@@ -2789,7 +2127,31 @@
     line-height: 1.4;
   }
 
-  .key-provider-header,
+  .checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-weight: 500;
+  }
+
+  .checkbox-row input[type='checkbox'] {
+    width: 1rem;
+    height: 1rem;
+    margin: 0;
+  }
+
+  /* ─── Key provider ─────────────────────────────────── */
+
+  .key-provider-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+  }
+
+  /* ─── Maintenance / orphan ─────────────────────────── */
+
   .maintenance-row {
     display: flex;
     justify-content: space-between;
@@ -2817,6 +2179,8 @@
     flex-wrap: wrap;
     align-items: center;
   }
+
+  /* ─── Connected apps ───────────────────────────────── */
 
   .mcp-client-list {
     display: grid;
@@ -2852,76 +2216,7 @@
     word-break: break-word;
   }
 
-  .muted {
-    color: var(--muted-text);
-    margin: 0;
-  }
-
-  .small {
-    font-size: var(--text-sm);
-  }
-
-  .mobile-save-bar {
-    display: none;
-  }
-
-  code {
-    background: var(--surface-soft);
-    border-radius: var(--radius-sm);
-    padding: 0.1rem 0.35rem;
-    font-size: var(--text-sm);
-  }
-
-  @media (max-width: 1100px) {
-    .settings-layout {
-      grid-template-columns: 1fr;
-    }
-
-    .settings-rail {
-      position: static;
-      order: -1;
-    }
-  }
-
-  @media (max-width: 800px) {
-    .model-sections,
-    .key-provider-grid,
-    .two-col,
-    .field-grid,
-    .field-grid-compact,
-    .preset-grid,
-    .mcp-client-meta {
-      grid-template-columns: 1fr;
-    }
-
-    .mobile-save-bar {
-      position: sticky;
-      bottom: var(--space-4);
-      display: grid;
-      gap: var(--space-3);
-      margin-top: var(--space-5);
-      padding: var(--space-4);
-      border: 1px solid var(--surface-border);
-      border-radius: var(--radius-xl);
-      background: color-mix(in srgb, var(--surface-strong) 92%, transparent);
-      box-shadow: var(--shadow-lg);
-      z-index: 10;
-    }
-
-    .mobile-save-copy {
-      display: grid;
-      gap: 0.2rem;
-      font-size: var(--text-sm);
-    }
-
-    .mobile-save-actions {
-      display: flex;
-      gap: var(--space-2);
-      flex-wrap: wrap;
-    }
-  }
-
-  /* ─── Signal weights table ──────────────────────────── */
+  /* ─── Signal weights table ─────────────────────────── */
 
   .signal-weights-table {
     display: grid;
@@ -2994,6 +2289,8 @@
     color: var(--muted-text);
   }
 
+  /* ─── Action button ────────────────────────────────── */
+
   .action-btn {
     background: var(--surface-soft);
     border: 1px solid var(--input-border);
@@ -3015,5 +2312,30 @@
   .action-btn:disabled {
     opacity: 0.5;
     cursor: wait;
+  }
+
+  code {
+    background: var(--surface-soft);
+    border-radius: var(--radius-sm);
+    padding: 0.1rem 0.35rem;
+    font-size: var(--text-sm);
+  }
+
+  /* ─── Responsive ───────────────────────────────────── */
+
+  @media (max-width: 800px) {
+    .key-provider-grid,
+    .two-col,
+    .field-grid,
+    .field-grid-compact,
+    .preset-grid,
+    .mcp-client-meta {
+      grid-template-columns: 1fr;
+    }
+
+    .settings-row {
+      flex-direction: column;
+      align-items: flex-start;
+    }
   }
 </style>

@@ -65,7 +65,17 @@ vi.mock('./settings', () => ({
     jobBudgetWhilePullMs: 3000,
     autoQueueTodayMissing: true
   })),
-  intervalMinutesToCronExpression: vi.fn((minutes: number) => `*/${minutes} * * * *`)
+  intervalMinutesToCronExpression: vi.fn((minutes: number) => `*/${minutes} * * * *`),
+  getNewsBriefConfig: vi.fn(async () => ({
+    enabled: false,
+    timezone: 'America/Chicago',
+    morningTime: '08:00',
+    eveningTime: '17:00',
+    lookbackHours: 48,
+    scoreCutoff: 3
+  })),
+  getSetting: vi.fn(async () => null),
+  setSetting: vi.fn(async () => undefined)
 }));
 
 import { runScheduledTasks } from './scheduler';

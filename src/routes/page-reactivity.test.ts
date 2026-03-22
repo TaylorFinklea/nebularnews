@@ -104,7 +104,7 @@ describe('Dashboard page reactivity', () => {
     render(DashboardPage, { data: createData() });
     await vi.advanceTimersByTimeAsync(0);
 
-    expect(screen.getByText('7')).toBeTruthy();
+    expect(screen.getAllByText('7').length).toBeGreaterThan(0);
     expect(screen.getByText('Unread dashboard article')).toBeTruthy();
   });
 

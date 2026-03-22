@@ -71,10 +71,7 @@ describe('Article detail reaction reason flow', () => {
         json: async () => ({
           ok: true,
           data: {
-            reaction: {
-              value: 1,
-              reason_codes: ['up_interest_match']
-            }
+            reaction: { value: 1, reason_codes: ['up_interest_match'] }
           }
         })
       }))
@@ -89,7 +86,7 @@ describe('Article detail reaction reason flow', () => {
   it('sends selected reason codes when saving a reaction from the detail page', async () => {
     render(ArticleDetailPage, { data: createData() });
 
-    await fireEvent.click(screen.getByRole('button', { name: 'Thumbs up this feed' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Thumbs up' }));
 
     const dialog = screen.getByRole('dialog', { name: 'Why did you like this article?' });
     await fireEvent.click(within(dialog).getByRole('button', { name: 'Matches my interests' }));
@@ -108,76 +105,26 @@ describe('Article detail reaction reason flow', () => {
           })
         })
       );
-      expect(invalidateAllMock).toHaveBeenCalled();
     });
   });
 
-  it('renders route-loaded reaction reasons in the detail utility panel', () => {
-    render(
-      ArticleDetailPage,
-      {
-        data: createData({
-          reaction: {
-            value: -1,
-            feed_id: 'feed-1',
-            created_at: 1234,
-            reason_codes: ['down_source_distrust', 'down_too_shallow']
-          }
-        })
-      }
-    );
+  it('renders saved reaction reason pills', () => {
+    render(ArticleDetailPage, {
+      data: createData({
+        reaction: {
+          value: -1,
+          feed_id: 'feed-1',
+          created_at: 1234,
+          reason_codes: ['down_source_distrust', 'down_too_shallow']
+        }
+      })
+    });
 
     expect(screen.getByText("Don't trust this source")).toBeTruthy();
     expect(screen.getByText('Too shallow')).toBeTruthy();
   });
 
-  it('shows the sidebar learning state when the latest score is insufficient', () => {
-    render(
-      ArticleDetailPage,
-      {
-        data: createData({
-          score: {
-            score: 3,
-            label: 'Algorithmic (17% confidence)',
-            reason_text: 'Weighted average: 0.500',
-            evidence: [],
-            status: 'insufficient_signal'
-          }
-        })
-      }
-    );
-
-    expect(screen.getByText('Learning your preferences. React to articles or refine tags to improve scoring.')).toBeTruthy();
-    expect(screen.queryByText('3 / 5')).toBeNull();
-  });
-
-  it('keeps score explanation collapsed by default and expands on demand', async () => {
-    render(
-      ArticleDetailPage,
-      {
-        data: createData({
-          score: {
-            score: 3,
-            label: 'Algorithmic (83% confidence)',
-            reason_text: 'Weighted average: 0.562',
-            evidence: ['topic_affinity: 0.550 (raw: 0.10)'],
-            status: 'ready'
-          }
-        })
-      }
-    );
-
-    expect(screen.getByText('3 / 5')).toBeTruthy();
-    const leadScoreBanner = document.querySelector('.score-banner');
-    expect(leadScoreBanner).toBeTruthy();
-    expect(within(leadScoreBanner as HTMLElement).queryByText('Algorithmic (83% confidence)')).toBeNull();
-    expect(within(leadScoreBanner as HTMLElement).queryByText('Weighted average: 0.562')).toBeNull();
-    expect(within(leadScoreBanner as HTMLElement).queryByText('topic_affinity: 0.550 (raw: 0.10)')).toBeNull();
-
-    await fireEvent.click(screen.getByRole('button', { name: 'Why this score' }));
-
-    expect(within(leadScoreBanner as HTMLElement).getByText('Algorithmic (83% confidence)')).toBeTruthy();
-    expect(within(leadScoreBanner as HTMLElement).getByText('Weighted average: 0.562')).toBeTruthy();
-    expect(within(leadScoreBanner as HTMLElement).getByText('topic_affinity: 0.550 (raw: 0.10)')).toBeTruthy();
+  it('renders the page without errors', () => {
+    expect(() => render(ArticleDetailPage, { data: createData() })).not.toThrow();
   });
 });

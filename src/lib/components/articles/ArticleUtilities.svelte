@@ -73,10 +73,10 @@
       {#if isRead}<IconEyeOff size={14} />{:else}<IconEye size={14} />{/if}
       {isRead ? 'Read' : 'Unread'}
     </button>
-    <button class="action-btn" class:active={reaction?.value === 1} on:click={() => openReactionDialog(1)}>
+    <button class="action-btn" class:active={reaction?.value === 1} on:click={() => openReactionDialog(1)} title="Thumbs up" aria-label="Thumbs up">
       <IconThumbUp size={14} />
     </button>
-    <button class="action-btn" class:active={reaction?.value === -1} on:click={() => openReactionDialog(-1)}>
+    <button class="action-btn" class:active={reaction?.value === -1} on:click={() => openReactionDialog(-1)} title="Thumbs down" aria-label="Thumbs down">
       <IconThumbDown size={14} />
     </button>
     {#if score && score.score}

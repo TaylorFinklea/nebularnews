@@ -323,43 +323,39 @@
     on:toggleRead={() => setReadState(!data.article.is_read)}
   />
 
-  <ArticleQuickTake
-    summary={data.summary}
-    keyPoints={data.keyPoints}
-    {rerunBusy}
-    on:rerun={(e) => rerunJobs(e.detail.types)}
-  />
+  <div class="article-detail">
+    <ArticleQuickTake
+      summary={data.summary}
+      keyPoints={data.keyPoints}
+      {rerunBusy}
+      on:rerun={(e) => rerunJobs(e.detail.types)}
+    />
 
-  <div class="article-layout">
-    <div class="content-col">
-      <Card>
-        <h2>Full text</h2>
-        <ArticleProse blocks={articleBlocks} />
-      </Card>
-    </div>
+    <Card>
+      <h2>Full text</h2>
+      <ArticleProse blocks={articleBlocks} />
+    </Card>
 
-    <div class="sidebar-col">
-      <ArticleUtilities
-        article={data.article}
-        score={data.score}
-        reaction={data.reaction}
-        {tags}
-        {tagSuggestions}
-        availableTags={data.availableTags ?? []}
-        sources={data.sources ?? []}
-        {rerunBusy}
-        {tagBusy}
-        {tagError}
-        bind:tagInput
-        on:react={(e) => setReaction(e.detail.value, e.detail.reasonCodes ?? [])}
-        on:rerun={(e) => rerunJobs(e.detail.types)}
-        on:addTags={addTags}
-        on:removeTag={(e) => removeTag(e.detail.tagId)}
-        on:acceptTagSuggestion={(e) => acceptTagSuggestion(e.detail.suggestion)}
-        on:dismissTagSuggestion={(e) => dismissTagSuggestion(e.detail.suggestion)}
-        on:submitFeedback={(e) => submitFeedback(e.detail.rating, e.detail.comment)}
-      />
-    </div>
+    <ArticleUtilities
+      article={data.article}
+      score={data.score}
+      reaction={data.reaction}
+      {tags}
+      {tagSuggestions}
+      availableTags={data.availableTags ?? []}
+      sources={data.sources ?? []}
+      {rerunBusy}
+      {tagBusy}
+      {tagError}
+      bind:tagInput
+      on:react={(e) => setReaction(e.detail.value, e.detail.reasonCodes ?? [])}
+      on:rerun={(e) => rerunJobs(e.detail.types)}
+      on:addTags={addTags}
+      on:removeTag={(e) => removeTag(e.detail.tagId)}
+      on:acceptTagSuggestion={(e) => acceptTagSuggestion(e.detail.suggestion)}
+      on:dismissTagSuggestion={(e) => dismissTagSuggestion(e.detail.suggestion)}
+      on:submitFeedback={(e) => submitFeedback(e.detail.rating, e.detail.comment)}
+    />
   </div>
 {/if}
 
@@ -370,31 +366,17 @@
 </datalist>
 
 <style>
-  .article-layout {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 320px;
-    gap: var(--space-8);
-    align-items: start;
-    margin-top: var(--space-5);
-  }
-
-  .content-col, .sidebar-col {
+  .article-detail {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 0 var(--space-4);
     display: grid;
     gap: var(--space-5);
+    margin-top: var(--space-5);
   }
 
   h2 {
     margin: 0;
     font-size: var(--text-lg);
-  }
-
-  @media (max-width: 900px) {
-    .article-layout {
-      grid-template-columns: 1fr;
-    }
-
-    .sidebar-col {
-      order: -1;
-    }
   }
 </style>

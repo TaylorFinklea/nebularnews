@@ -155,7 +155,7 @@
     height: 100%;
     object-fit: cover;
     display: block;
-    aspect-ratio: 21/9;
+    aspect-ratio: 16/9;
   }
 
   @media (max-width: 900px) {

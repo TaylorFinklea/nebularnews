@@ -12,6 +12,24 @@
   let opmlText = '';
   let removingFeedId = '';
 
+  const feedStatusColor = (feed) => {
+    if (feed.disabled) return 'gray';
+    if ((feed.error_count ?? 0) >= 3) return 'red';
+    if ((feed.error_count ?? 0) > 0) return 'yellow';
+    return 'green';
+  };
+
+  const relativeTime = (timestamp) => {
+    if (!timestamp) return '';
+    const diff = Date.now() - new Date(timestamp).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+  };
+
   const addFeed = async () => {
     if (!newUrl) return;
     const res = await apiFetch('/api/feeds', {
@@ -129,10 +147,22 @@
         {#each data.lowestRatedFeeds as feed}
           <li>
             <div class="feed-info">
-              <strong>{feed.title ?? feed.url}</strong>
+              <div class="feed-title-row">
+                <span class="status-dot {feedStatusColor(feed)}"></span>
+                <strong>{feed.title ?? feed.url}</strong>
+                {#if feed.disabled}
+                  <span class="health-badge paused">Paused</span>
+                {/if}
+                {#if (feed.error_count ?? 0) > 0}
+                  <span class="health-badge error">⚠ {feed.error_count} {feed.error_count === 1 ? 'error' : 'errors'}</span>
+                {/if}
+              </div>
               <div class="meta">{feed.url}</div>
               <div class="meta">
                 Reputation: {Number(feed.reputation ?? 0).toFixed(2)} ({feed.feedback_count} votes)
+                {#if feed.last_polled_at}
+                  · Polled {relativeTime(feed.last_polled_at)}
+                {/if}
               </div>
             </div>
             <Button
@@ -165,7 +195,16 @@
         {#each data.feeds as feed}
           <li>
             <div class="feed-info">
-              <strong>{feed.title ?? feed.url}</strong>
+              <div class="feed-title-row">
+                <span class="status-dot {feedStatusColor(feed)}"></span>
+                <strong>{feed.title ?? feed.url}</strong>
+                {#if feed.disabled}
+                  <span class="health-badge paused">Paused</span>
+                {/if}
+                {#if (feed.error_count ?? 0) > 0}
+                  <span class="health-badge error">⚠ {feed.error_count} {feed.error_count === 1 ? 'error' : 'errors'}</span>
+                {/if}
+              </div>
               <div class="meta">{feed.url}</div>
               <div class="meta">
                 Reputation: {Number(feed.reputation ?? 0).toFixed(2)}
@@ -173,6 +212,9 @@
                   ({feed.feedback_count} votes)
                 {:else}
                   (no votes yet)
+                {/if}
+                {#if feed.last_polled_at}
+                  · Polled {relativeTime(feed.last_polled_at)}
                 {/if}
               </div>
             </div>
@@ -254,10 +296,37 @@
     min-width: 0;
   }
 
+  .feed-title-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+  }
+
   .feed-info strong {
-    display: block;
     word-break: break-word;
   }
+
+  .status-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .status-dot.green { background: #86efac; }
+  .status-dot.yellow { background: #fde047; }
+  .status-dot.red { background: #fca5a5; }
+  .status-dot.gray { background: #9ca3af; }
+
+  .health-badge {
+    font-size: 0.75rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 999px;
+    font-weight: 500;
+  }
+  .health-badge.error { background: rgba(252, 165, 165, 0.15); color: #fca5a5; }
+  .health-badge.paused { background: rgba(156, 163, 175, 0.15); color: #9ca3af; }
 
   .meta {
     font-size: var(--text-sm);

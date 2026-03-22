@@ -32,6 +32,7 @@
     "@tabler/icons-svelte": "^3.36.1",
     "cookie": "0.6.0",
     "fast-xml-parser": "4.4.1",
+    "jose": "^6.2.2",
     "linkedom": "0.16.11",
     "luxon": "^3.7.2",
     "nanoid": "5.0.7",

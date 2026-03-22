@@ -43,6 +43,11 @@ declare namespace App {
       EVENTS_POLL_MS?: string;
       DASHBOARD_REFRESH_MIN_MS?: string;
       JOB_PROCESSOR_BATCH_SIZE?: string;
+      APNS_KEY_P8?: string;
+      APNS_KEY_ID?: string;
+      APNS_TEAM_ID?: string;
+      APNS_BUNDLE_ID?: string;
+      APNS_SANDBOX?: string;
     };
     context: ExecutionContext;
   }

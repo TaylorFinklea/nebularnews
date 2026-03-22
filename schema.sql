@@ -397,6 +397,14 @@ CREATE TABLE IF NOT EXISTS oauth_refresh_tokens (
   FOREIGN KEY(rotated_from_id) REFERENCES oauth_refresh_tokens(id) ON DELETE SET NULL
 );
 
+CREATE TABLE IF NOT EXISTS device_tokens (
+  id TEXT PRIMARY KEY,
+  token TEXT NOT NULL UNIQUE,
+  platform TEXT NOT NULL DEFAULT 'ios',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_feeds_next_poll ON feeds(next_poll_at);
 CREATE INDEX IF NOT EXISTS idx_articles_published ON articles(published_at);
 CREATE INDEX IF NOT EXISTS idx_articles_image_status ON articles(image_status, image_checked_at);

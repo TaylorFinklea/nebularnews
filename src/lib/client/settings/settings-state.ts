@@ -1,5 +1,5 @@
 import { get, writable, type Writable } from 'svelte/store';
-import { invalidate } from '$app/navigation';
+import { invalidateAll } from '$app/navigation';
 import { apiFetch } from '$lib/client/api-fetch';
 import { readApiData, readApiErrorMessage } from '$lib/client/api-result';
 import type {
@@ -292,7 +292,7 @@ export const createSettingsState = (data: SettingsPageData) => {
         })
       );
 
-      await invalidate();
+      await invalidateAll();
     } catch {
       store.update((state) => ({
         ...state,
@@ -343,7 +343,7 @@ export const createSettingsState = (data: SettingsPageData) => {
       },
       saveError: ''
     }));
-    await invalidate();
+    await invalidateAll();
     await syncModels(provider);
   };
 
@@ -370,7 +370,7 @@ export const createSettingsState = (data: SettingsPageData) => {
       },
       saveError: ''
     }));
-    await invalidate();
+    await invalidateAll();
   };
 
   const rotateKeys = async (provider: Provider | null = null) => {
@@ -389,7 +389,7 @@ export const createSettingsState = (data: SettingsPageData) => {
       return;
     }
 
-    await invalidate();
+    await invalidateAll();
   };
 
   return {

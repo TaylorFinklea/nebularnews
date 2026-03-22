@@ -3,7 +3,7 @@ import { get } from 'svelte/store';
 import { createSettingsState } from './settings-state';
 
 vi.mock('$app/navigation', () => ({
-  invalidate: vi.fn(async () => undefined)
+  invalidateAll: vi.fn(async () => undefined)
 }));
 
 const baseData = {

@@ -320,10 +320,33 @@
     {articleImageUrl}
     isRead={data.article.is_read}
     {readStateBusy}
-    on:toggleRead={() => setReadState(!data.article.is_read)}
   />
 
   <div class="article-detail">
+    <ArticleUtilities
+      article={data.article}
+      score={data.score}
+      reaction={data.reaction}
+      isRead={data.article.is_read}
+      {readStateBusy}
+      {tags}
+      {tagSuggestions}
+      availableTags={data.availableTags ?? []}
+      sources={data.sources ?? []}
+      {rerunBusy}
+      {tagBusy}
+      {tagError}
+      bind:tagInput
+      on:toggleRead={() => setReadState(!data.article.is_read)}
+      on:react={(e) => setReaction(e.detail.value, e.detail.reasonCodes ?? [])}
+      on:rerun={(e) => rerunJobs(e.detail.types)}
+      on:addTags={addTags}
+      on:removeTag={(e) => removeTag(e.detail.tagId)}
+      on:acceptTagSuggestion={(e) => acceptTagSuggestion(e.detail.suggestion)}
+      on:dismissTagSuggestion={(e) => dismissTagSuggestion(e.detail.suggestion)}
+      on:submitFeedback={(e) => submitFeedback(e.detail.rating, e.detail.comment)}
+    />
+
     <ArticleQuickTake
       summary={data.summary}
       keyPoints={data.keyPoints}
@@ -335,27 +358,6 @@
       <h2>Full text</h2>
       <ArticleProse blocks={articleBlocks} />
     </Card>
-
-    <ArticleUtilities
-      article={data.article}
-      score={data.score}
-      reaction={data.reaction}
-      {tags}
-      {tagSuggestions}
-      availableTags={data.availableTags ?? []}
-      sources={data.sources ?? []}
-      {rerunBusy}
-      {tagBusy}
-      {tagError}
-      bind:tagInput
-      on:react={(e) => setReaction(e.detail.value, e.detail.reasonCodes ?? [])}
-      on:rerun={(e) => rerunJobs(e.detail.types)}
-      on:addTags={addTags}
-      on:removeTag={(e) => removeTag(e.detail.tagId)}
-      on:acceptTagSuggestion={(e) => acceptTagSuggestion(e.detail.suggestion)}
-      on:dismissTagSuggestion={(e) => dismissTagSuggestion(e.detail.suggestion)}
-      on:submitFeedback={(e) => submitFeedback(e.detail.rating, e.detail.comment)}
-    />
   </div>
 {/if}
 

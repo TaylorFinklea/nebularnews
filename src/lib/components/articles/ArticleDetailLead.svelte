@@ -1,13 +1,5 @@
 <script>
-  import { createEventDispatcher } from 'svelte';
-  import {
-    IconArrowLeft,
-    IconEye,
-    IconEyeOff,
-    IconExternalLink
-  } from '$lib/icons';
-  import Button from '$lib/components/Button.svelte';
-  import Pill from '$lib/components/Pill.svelte';
+  import { IconArrowLeft } from '$lib/icons';
 
   export let article;
   export let preferredSource = null;
@@ -15,8 +7,6 @@
   export let articleImageUrl = '';
   export let isRead = false;
   export let readStateBusy = false;
-
-  const dispatch = createEventDispatcher();
 </script>
 
 <div class="article-header">
@@ -24,48 +14,16 @@
     <IconArrowLeft size={16} stroke={1.9} />
     <span>Back to list</span>
   </a>
-  <div class="header-row">
-    <div class="header-meta">
-      <h1>{article.title ?? 'Untitled article'}</h1>
-      <div class="meta-row">
-        <span>{preferredSource?.sourceName ?? 'Unknown source'}</span>
-        {#if preferredSource?.feedbackCount}
-          <span>· rep {preferredSource.reputation.toFixed(2)} ({preferredSource.feedbackCount} votes)</span>
-        {/if}
-        {#if article.author}
-          <span>· {article.author}</span>
-        {/if}
-      </div>
-    </div>
-    <div class="header-actions">
-      {#if article.canonical_url}
-        <a
-          class="open-btn"
-          href={article.canonical_url}
-          target="_blank"
-          rel="noopener noreferrer"
-          title="Open original article"
-        >
-          <IconExternalLink size={15} stroke={1.9} />
-          <span>Open article</span>
-        </a>
+  <div class="header-meta">
+    <h1>{article.title ?? 'Untitled article'}</h1>
+    <div class="meta-row">
+      <span>{preferredSource?.sourceName ?? 'Unknown source'}</span>
+      {#if preferredSource?.feedbackCount}
+        <span>· rep {preferredSource.reputation.toFixed(2)} ({preferredSource.feedbackCount} votes)</span>
       {/if}
-      <Button
-        variant="ghost"
-        size="icon"
-        on:click={() => dispatch('toggleRead')}
-        disabled={readStateBusy}
-        title={isRead ? 'Mark unread' : 'Mark read'}
-      >
-        {#if isRead}
-          <IconEyeOff size={16} stroke={1.9} />
-        {:else}
-          <IconEye size={16} stroke={1.9} />
-        {/if}
-      </Button>
-      <Pill variant={isRead ? 'muted' : 'default'}>
-        {isRead ? 'Read' : 'Unread'}
-      </Pill>
+      {#if article.author}
+        <span>· {article.author}</span>
+      {/if}
     </div>
   </div>
 </div>
@@ -93,16 +51,7 @@
 
   .back-link:hover { color: var(--primary); }
 
-  .header-row {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: var(--space-4);
-    flex-wrap: wrap;
-  }
-
   .header-meta {
-    flex: 1 1 0;
     min-width: 0;
   }
 
@@ -120,26 +69,6 @@
     gap: 0.35rem;
     font-size: var(--text-sm);
     color: var(--muted-text);
-  }
-
-  .header-actions {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    flex-shrink: 0;
-  }
-
-  .open-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    background: var(--button-bg);
-    color: var(--button-text);
-    border-radius: var(--radius-md);
-    padding: 0.48rem 0.95rem;
-    font-size: var(--text-sm);
-    font-weight: 500;
-    text-decoration: none;
   }
 
   .article-hero {
@@ -161,18 +90,6 @@
   @media (max-width: 900px) {
     h1 {
       font-size: var(--text-2xl);
-    }
-
-    .header-row {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr);
-      gap: var(--space-3);
-    }
-
-    .header-actions {
-      width: 100%;
-      flex-wrap: wrap;
-      justify-content: flex-start;
     }
   }
 </style>

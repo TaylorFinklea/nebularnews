@@ -1,9 +1,12 @@
 <script>
   import { createEventDispatcher } from 'svelte';
   import { getReactionReasonLabel } from '$lib/article-reactions';
+  import { getFitScoreTone } from '$lib/fit-score';
   import {
     IconCheck,
-    IconChevronDown,
+    IconExternalLink,
+    IconEye,
+    IconEyeOff,
     IconPlus,
     IconStars,
     IconTag,
@@ -11,9 +14,6 @@
     IconThumbUp,
     IconX
   } from '$lib/icons';
-  import Button from '$lib/components/Button.svelte';
-  import Pill from '$lib/components/Pill.svelte';
-  import ArticleUtilitySection from './ArticleUtilitySection.svelte';
   import ReactionReasonDialog from './ReactionReasonDialog.svelte';
 
   export let article;
@@ -28,7 +28,8 @@
   export let tagError = '';
   export let tagInput = '';
   export let feedback = [];
-  export let density = 'default';
+  export let isRead = false;
+  export let readStateBusy = false;
 
   let rating = 3;
   let comment = '';
@@ -38,21 +39,6 @@
   let scoreDetailsOpen = false;
 
   const dispatch = createEventDispatcher();
-
-  /** @type {Record<string, boolean>} */
-  let openSections = { tags: true, feedback: false, sources: false };
-
-  const toggleSection = (e) => {
-    const id = e.detail.id;
-    openSections[id] = !openSections[id];
-    openSections = openSections;
-  };
-
-  $: utilityHighlights = [
-    tags.length > 0 && { label: 'Tags', count: tags.length },
-    feedback.length > 0 && { label: 'Feedback', count: feedback.length },
-    sources.length > 0 && { label: 'Sources', count: sources.length }
-  ].filter(Boolean);
 
   const openReactionDialog = (value) => {
     pendingReactionValue = value;
@@ -73,194 +59,121 @@
   $: savedReactionReasonLabels = Array.isArray(reaction?.reason_codes)
     ? reaction.reason_codes.map((reasonCode) => getReactionReasonLabel(reasonCode))
     : [];
-  $: hasScoreDetails = Boolean(score?.label) || Boolean(score?.reason_text) || Boolean(score?.evidence?.length);
 </script>
 
-<div class="utilities-panel" class:compact={density === 'compact'}>
-  {#if utilityHighlights.length > 0}
-    <div class="panel-highlights">
-      {#each utilityHighlights as highlight}
-        <span class="highlight-chip">{highlight.label}: {highlight.count}</span>
+<div class="article-utilities">
+  <!-- Action bar -->
+  <div class="action-bar">
+    {#if article.canonical_url}
+      <a class="action-btn primary" href={article.canonical_url} target="_blank" rel="noopener noreferrer">
+        <IconExternalLink size={14} /> Open article
+      </a>
+    {/if}
+    <button class="action-btn" on:click={() => dispatch('toggleRead')} disabled={readStateBusy}>
+      {#if isRead}<IconEyeOff size={14} />{:else}<IconEye size={14} />{/if}
+      {isRead ? 'Read' : 'Unread'}
+    </button>
+    <button class="action-btn" class:active={reaction?.value === 1} on:click={() => openReactionDialog(1)}>
+      <IconThumbUp size={14} />
+    </button>
+    <button class="action-btn" class:active={reaction?.value === -1} on:click={() => openReactionDialog(-1)}>
+      <IconThumbDown size={14} />
+    </button>
+    {#if score && score.score}
+      <button class="score-pill {getFitScoreTone(score.score, score.status)}" on:click={() => scoreDetailsOpen = !scoreDetailsOpen}>
+        <IconStars size={13} /> {score.score}/5
+      </button>
+    {/if}
+  </div>
+
+  <!-- Saved reaction reasons -->
+  {#if savedReactionReasonLabels.length > 0}
+    <div class="reason-pills">
+      {#each savedReactionReasonLabels as label}
+        <span class="reason-pill">{label}</span>
       {/each}
     </div>
   {/if}
 
-  {#if score}
-    <div class="score-banner" aria-label="Fit score">
-      {#if score.status === 'insufficient_signal'}
-        <div class="score-header-row">
-          <p class="score-title">Fit score</p>
-          <Button variant="ghost" size="icon" on:click={() => dispatch('rerun', { types: ['score'] })} disabled={rerunBusy} title="Re-score article">
-            <IconStars size={15} stroke={1.9} />
-          </Button>
-        </div>
-        <p class="muted small">Learning your preferences. React to articles or refine tags to improve scoring.</p>
-      {:else}
-        <div class="score-header-row">
-          <div class="score-val">
-            <IconStars size={18} stroke={1.9} />
-            <span>{score.score} / 5</span>
-          </div>
-          <Button variant="ghost" size="icon" on:click={() => dispatch('rerun', { types: ['score'] })} disabled={rerunBusy} title="Re-score article">
-            <IconStars size={15} stroke={1.9} />
-          </Button>
-        </div>
-        {#if hasScoreDetails}
-          <button
-            type="button"
-            class="score-details-toggle"
-            aria-expanded={scoreDetailsOpen}
-            on:click={() => (scoreDetailsOpen = !scoreDetailsOpen)}
-          >
-            <span>{scoreDetailsOpen ? 'Hide score details' : 'Why this score'}</span>
-            <IconChevronDown class={scoreDetailsOpen ? 'rotated' : ''} size={15} stroke={1.9} />
-          </button>
-        {/if}
-        {#if scoreDetailsOpen}
-          {#if score.label}
-            <p class="score-method">{score.label}</p>
-          {/if}
-          {#if score.reason_text}
-            <p class="score-reason">{score.reason_text}</p>
-          {/if}
-          {#if score.evidence?.length}
-            <ul class="score-evidence">
-              {#each score.evidence as evidence}
-                <li>{evidence}</li>
-              {/each}
-            </ul>
-          {/if}
-        {/if}
-      {/if}
-    </div>
-  {/if}
-
-  <!-- Feed vote -->
-  <ArticleUtilitySection id="reaction" title="Feed vote" summary="Tune source reputation" open={true} on:toggle={() => {}}>
-    <p class="muted small">Tune source reputation without affecting AI score.</p>
-    <div class="reaction-row">
-      <button
-        class="reaction-btn"
-        class:active={reaction?.value === 1}
-        on:click={() => openReactionDialog(1)}
-        title="Thumbs up feed"
-        aria-label="Thumbs up this feed"
-      >
-        <IconThumbUp size={16} stroke={1.9} />
-      </button>
-      <button
-        class="reaction-btn"
-        class:active={reaction?.value === -1}
-        on:click={() => openReactionDialog(-1)}
-        title="Thumbs down feed"
-        aria-label="Thumbs down this feed"
-      >
-        <IconThumbDown size={16} stroke={1.9} />
-      </button>
-    </div>
-    {#if savedReactionReasonLabels.length > 0}
-      <div class="reaction-reason-row" aria-label="Saved reaction reasons">
-        {#each savedReactionReasonLabels as label}
-          <Pill variant="muted">{label}</Pill>
-        {/each}
-      </div>
-    {/if}
-  </ArticleUtilitySection>
-
-  <!-- Tags -->
-  <ArticleUtilitySection id="tags" title="Tags" summary={tags.length ? `${tags.length} tags` : ''} open={openSections.tags} on:toggle={toggleSection}>
-    <div class="section-header-row">
-      <Button variant="ghost" size="icon" on:click={() => dispatch('rerun', { types: ['auto_tag'] })} disabled={rerunBusy || tagBusy} title="Run AI tagging">
-        <IconTag size={15} stroke={1.9} />
-      </Button>
-    </div>
+  <!-- Tags section (always visible) -->
+  <div class="tags-section">
     {#if tags?.length}
-      <div class="tag-row">
-        {#each tags as tag}
-          <button
-            class="tag-chip"
-            on:click={() => dispatch('removeTag', { tagId: tag.id })}
-            disabled={tagBusy}
-            title={`Remove ${tag.name}`}
-          >
-            <span>{tag.name}</span>
-            {#if tag.source === 'ai'}<span class="tag-ai">AI</span>{/if}
-            <IconX size={11} stroke={2} />
-          </button>
-        {/each}
-      </div>
-    {:else}
-      <p class="muted small">No tags yet.</p>
+      {#each tags as tag}
+        <button class="tag-chip" on:click={() => dispatch('removeTag', { tagId: tag.id })} disabled={tagBusy} title={`Remove ${tag.name}`}>
+          {tag.name} {#if tag.source === 'ai'}<span class="tag-ai">AI</span>{/if}
+          <IconX size={10} />
+        </button>
+      {/each}
     {/if}
     {#if tagSuggestions?.length}
-      <div class="suggestion-row">
-        {#each tagSuggestions as suggestion}
-          <span class="suggestion-chip">
-            <span>{suggestion.name}</span>
-            <button
-              type="button"
-              class="suggestion-action"
-              on:click={() => dispatch('acceptTagSuggestion', { suggestion })}
-              title={`Accept suggested tag ${suggestion.name}`}
-              aria-label={`Accept suggested tag ${suggestion.name}`}
-              disabled={tagBusy}
-            >
-              <IconPlus size={11} stroke={2} />
-            </button>
-            <button
-              type="button"
-              class="suggestion-action"
-              on:click={() => dispatch('dismissTagSuggestion', { suggestion })}
-              title={`Dismiss suggested tag ${suggestion.name}`}
-              aria-label={`Dismiss suggested tag ${suggestion.name}`}
-              disabled={tagBusy}
-            >
-              <IconX size={11} stroke={2} />
-            </button>
-          </span>
-        {/each}
-      </div>
+      {#each tagSuggestions as suggestion}
+        <span class="suggestion-chip">
+          {suggestion.name}
+          <button class="suggestion-action" on:click={() => dispatch('acceptTagSuggestion', { suggestion })} disabled={tagBusy} title={`Accept suggested tag ${suggestion.name}`}>
+            <IconPlus size={10} />
+          </button>
+          <button class="suggestion-action" on:click={() => dispatch('dismissTagSuggestion', { suggestion })} disabled={tagBusy} title={`Dismiss suggested tag ${suggestion.name}`}>
+            <IconX size={10} />
+          </button>
+        </span>
+      {/each}
     {/if}
-    <div class="input-row">
+    <div class="tag-add-inline">
       <input
         list="article-tag-options"
-        placeholder="Add tags (comma-separated)"
+        placeholder="Add tag"
         bind:value={tagInput}
         disabled={tagBusy}
+        on:keydown={(e) => { if (e.key === 'Enter') dispatch('addTags', { names: tagInput.split(',').map(t => t.trim()).filter(Boolean) }); }}
       />
-      <Button variant="ghost" size="icon" on:click={() => dispatch('addTags', { names: tagInput.split(',').map(e => e.trim()).filter(Boolean) })} disabled={tagBusy} title="Add tags">
-        <IconPlus size={15} stroke={1.9} />
-      </Button>
     </div>
-    {#if tagError}<p class="muted small err">{tagError}</p>{/if}
-  </ArticleUtilitySection>
+    <button class="action-btn-sm" on:click={() => dispatch('rerun', { types: ['auto_tag'] })} disabled={rerunBusy || tagBusy} title="AI tag">
+      <IconTag size={12} />
+    </button>
+    {#if tagError}<span class="tag-error">{tagError}</span>{/if}
+  </div>
 
-  <!-- Feedback -->
-  <ArticleUtilitySection id="feedback" title="Feedback" open={openSections.feedback} on:toggle={toggleSection}>
-    <label class="form-label">
-      Rating (1–5)
-      <input type="number" min="1" max="5" bind:value={rating} />
-    </label>
-    <textarea rows="3" placeholder="What did the AI miss?" bind:value={comment}></textarea>
-    <Button size="inline" on:click={() => dispatch('submitFeedback', { rating, comment })}>
-      <IconCheck size={15} stroke={1.9} />
-      <span>Save feedback</span>
-    </Button>
-  </ArticleUtilitySection>
+  <!-- Score details (toggled from action bar pill) -->
+  {#if scoreDetailsOpen && score}
+    <div class="score-details">
+      {#if score.label}<p class="score-method">{score.label}</p>{/if}
+      {#if score.reason_text}<p class="score-reason">{score.reason_text}</p>{/if}
+      {#if score.evidence?.length}
+        <ul class="score-evidence">
+          {#each score.evidence as evidence}<li>{evidence}</li>{/each}
+        </ul>
+      {/if}
+      <button class="action-btn-sm" on:click={() => dispatch('rerun', { types: ['score'] })} disabled={rerunBusy}>
+        <IconStars size={12} /> Re-score
+      </button>
+    </div>
+  {/if}
 
   <!-- Sources -->
   {#if sources?.length}
-    <ArticleUtilitySection id="sources" title="Source ranking" summary={`${sources.length} sources`} open={openSections.sources} on:toggle={toggleSection}>
+    <details class="extras-section">
+      <summary>Sources ({sources.length})</summary>
       <ul class="source-list">
         {#each sources as source}
-          <li>
-            <strong>{source.sourceName}</strong>
-            <span class="muted">rep {source.reputation.toFixed(2)} ({source.feedbackCount} votes)</span>
-          </li>
+          <li>{source.sourceName} <span class="muted">rep {source.reputation.toFixed(2)}</span></li>
         {/each}
       </ul>
-    </ArticleUtilitySection>
+    </details>
   {/if}
+
+  <!-- Feedback -->
+  <details class="extras-section">
+    <summary>Feedback</summary>
+    <div class="feedback-form">
+      <div class="feedback-row">
+        <label>Rating <input type="number" min="1" max="5" bind:value={rating} /></label>
+        <textarea rows="2" placeholder="What did the AI miss?" bind:value={comment}></textarea>
+        <button class="action-btn" on:click={() => dispatch('submitFeedback', { rating, comment })}>
+          <IconCheck size={13} /> Save
+        </button>
+      </div>
+    </div>
+  </details>
 
   <ReactionReasonDialog
     open={reactionDialogOpen}
@@ -273,23 +186,75 @@
 </div>
 
 <style>
-  .utilities-panel {
+  .article-utilities {
     display: grid;
     gap: var(--space-3);
   }
 
-  .panel-highlights {
+  /* ── Action bar ── */
+  .action-bar {
     display: flex;
+    align-items: center;
+    gap: 0.5rem;
     flex-wrap: wrap;
-    gap: var(--space-2);
-    padding-bottom: var(--space-3);
+    padding: var(--space-3) 0;
+    border-top: 1px solid var(--surface-border);
     border-bottom: 1px solid var(--surface-border);
   }
 
-  .highlight-chip {
+  .action-btn {
     display: inline-flex;
     align-items: center;
     gap: 0.3rem;
+    padding: 0.35rem 0.7rem;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--input-border);
+    background: var(--surface-soft);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    color: var(--text-color);
+    cursor: pointer;
+    text-decoration: none;
+    font-family: inherit;
+  }
+
+  .action-btn:hover { background: var(--primary-soft); }
+  .action-btn.active { background: var(--primary-soft); color: var(--primary); border-color: var(--primary); }
+  .action-btn.primary { background: var(--button-bg); color: var(--button-text); border-color: transparent; }
+  .action-btn:disabled { opacity: 0.5; cursor: wait; }
+
+  .score-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.3rem 0.65rem;
+    border-radius: 999px;
+    border: 1px solid var(--input-border);
+    background: var(--surface-soft);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    margin-left: auto;
+    font-family: inherit;
+    color: var(--muted-text);
+  }
+
+  .score-pill.fit-1 { color: #fca5a5; border-color: rgba(252,165,165,0.4); }
+  .score-pill.fit-2 { color: #fdba74; border-color: rgba(253,186,116,0.4); }
+  .score-pill.fit-3 { color: #c4b5fd; border-color: rgba(196,181,253,0.4); }
+  .score-pill.fit-4 { color: #67e8f9; border-color: rgba(103,232,249,0.4); }
+  .score-pill.fit-5 { color: #86efac; border-color: rgba(134,239,172,0.4); }
+
+  /* ── Reaction reasons ── */
+  .reason-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+
+  .reason-pill {
+    display: inline-flex;
+    align-items: center;
     background: var(--surface-soft);
     border-radius: var(--radius-sm);
     padding: 0.2rem 0.55rem;
@@ -298,130 +263,13 @@
     color: var(--muted-text);
   }
 
-  .score-banner {
-    background: var(--primary-soft);
-    border-radius: var(--radius-lg);
-    padding: var(--space-4);
-    display: grid;
-    gap: var(--space-2);
-    border: 1px solid var(--surface-border);
-  }
-
-  .score-header-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-2);
-  }
-
-  .score-title {
-    margin: 0;
-    font-size: var(--text-base);
-    font-weight: 600;
-    color: var(--primary);
-  }
-
-  .score-val {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.45rem;
-    font-size: var(--text-lg);
-    color: var(--primary);
-    font-weight: 700;
-  }
-
-  .score-details-toggle {
-    width: fit-content;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    border: 1px solid var(--border-subtle);
-    border-radius: 999px;
-    background: var(--surface-soft);
-    color: var(--text-color);
-    font-size: var(--text-xs);
-    font-weight: 600;
-    line-height: 1.2;
-    padding: 0.35rem 0.7rem;
-  }
-
-  .score-details-toggle :global(svg) {
-    transition: transform var(--transition-fast);
-  }
-
-  .score-details-toggle :global(svg.rotated) {
-    transform: rotate(180deg);
-  }
-
-  .score-method {
-    margin: 0;
-    font-size: var(--text-sm);
-    color: var(--primary);
-    font-weight: 600;
-  }
-
-  .score-reason {
-    margin: 0;
-    font-size: var(--text-sm);
-    color: var(--text-color);
-  }
-
-  .score-evidence {
-    margin: 0;
-    padding-left: 1.1rem;
-    display: grid;
-    gap: 0.25rem;
-  }
-
-  .score-evidence li {
-    font-size: var(--text-sm);
-    color: var(--muted-text);
-  }
-
-  .section-header-row {
-    display: flex;
-    justify-content: flex-end;
-  }
-
-  .muted { color: var(--muted-text); margin: 0; }
-  .small { font-size: var(--text-sm); }
-  .err { color: var(--danger); }
-
-  .reaction-row {
-    display: flex;
-    gap: var(--space-2);
-  }
-
-  .reaction-reason-row {
+  /* ── Tags ── */
+  .tags-section {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.45rem;
-    margin-top: var(--space-2);
-  }
-
-  .reaction-btn {
-    background: var(--surface-soft);
-    border: none;
-    border-radius: var(--radius-full);
-    width: 2.2rem;
-    height: 2.2rem;
-    display: inline-flex;
     align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    color: var(--text-color);
-    transition: background var(--transition-fast), color var(--transition-fast);
-  }
-
-  .reaction-btn.active {
-    background: var(--primary-soft);
-    color: var(--primary);
-  }
-
-  .tag-row {
-    display: flex;
-    flex-wrap: wrap;
     gap: 0.4rem;
+    padding: var(--space-2) 0;
   }
 
   .tag-chip {
@@ -430,7 +278,7 @@
     gap: 0.3rem;
     background: var(--surface-soft);
     border-radius: var(--radius-sm);
-    padding: 0.25rem 0.6rem;
+    padding: 0.2rem 0.55rem;
     font-size: var(--text-sm);
     cursor: pointer;
     color: var(--text-color);
@@ -448,12 +296,6 @@
     border-radius: var(--radius-sm);
     background: var(--surface-soft);
     padding: 0 0.3rem;
-  }
-
-  .suggestion-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem;
   }
 
   .suggestion-chip {
@@ -491,36 +333,76 @@
     cursor: default;
   }
 
-  .input-row {
-    display: flex;
-    gap: var(--space-2);
-  }
-
-  input:not([type='number']),
-  textarea {
-    width: 100%;
-    padding: 0.62rem 0.72rem;
+  .tag-add-inline input {
+    padding: 0.25rem 0.5rem;
     border-radius: var(--radius-md);
     border: 1px solid var(--input-border);
     background: var(--input-bg);
-    color: var(--text-color);
-    font-family: inherit;
-  }
-
-  input[type='number'] {
-    padding: 0.5rem 0.7rem;
-    border-radius: var(--radius-md);
-    border: 1px solid var(--input-border);
-    background: var(--input-bg);
-    color: var(--text-color);
-    font-family: inherit;
-    width: 100%;
-  }
-
-  .form-label {
-    display: grid;
-    gap: 0.35rem;
     font-size: var(--text-sm);
+    width: 100px;
+    font-family: inherit;
+    color: var(--text-color);
+  }
+
+  .tag-error {
+    font-size: var(--text-sm);
+    color: var(--danger);
+  }
+
+  /* ── Score details ── */
+  .score-details {
+    background: var(--primary-soft);
+    border-radius: var(--radius-lg);
+    padding: var(--space-3);
+    display: grid;
+    gap: var(--space-2);
+    border: 1px solid var(--surface-border);
+  }
+
+  .score-method {
+    margin: 0;
+    font-size: var(--text-sm);
+    color: var(--primary);
+    font-weight: 600;
+  }
+
+  .score-reason {
+    margin: 0;
+    font-size: var(--text-sm);
+    color: var(--text-color);
+  }
+
+  .score-evidence {
+    margin: 0;
+    padding-left: 1.1rem;
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  .score-evidence li {
+    font-size: var(--text-sm);
+    color: var(--muted-text);
+  }
+
+  /* ── Collapsible extras ── */
+  .extras-section {
+    border: 1px solid var(--surface-border);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+  }
+
+  .extras-section summary {
+    padding: var(--space-3);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    cursor: pointer;
+    color: var(--muted-text);
+  }
+
+  .extras-section summary:hover { color: var(--text-color); }
+
+  .extras-section > :not(summary) {
+    padding: 0 var(--space-3) var(--space-3);
   }
 
   .source-list {
@@ -532,5 +414,54 @@
     font-size: var(--text-sm);
   }
 
-  .source-list strong { display: block; }
+  .muted { color: var(--muted-text); }
+
+  .feedback-row {
+    display: grid;
+    gap: var(--space-2);
+  }
+
+  .feedback-row label {
+    display: grid;
+    gap: 0.35rem;
+    font-size: var(--text-sm);
+  }
+
+  .feedback-row input[type='number'] {
+    padding: 0.5rem 0.7rem;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--input-border);
+    background: var(--input-bg);
+    color: var(--text-color);
+    font-family: inherit;
+    width: 100%;
+  }
+
+  .feedback-row textarea {
+    width: 100%;
+    padding: 0.62rem 0.72rem;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--input-border);
+    background: var(--input-bg);
+    color: var(--text-color);
+    font-family: inherit;
+  }
+
+  /* ── Small action button ── */
+  .action-btn-sm {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.2rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--input-border);
+    background: var(--surface-soft);
+    font-size: var(--text-xs);
+    color: var(--muted-text);
+    cursor: pointer;
+    font-family: inherit;
+  }
+
+  .action-btn-sm:hover { background: var(--primary-soft); }
+  .action-btn-sm:disabled { opacity: 0.5; cursor: wait; }
 </style>

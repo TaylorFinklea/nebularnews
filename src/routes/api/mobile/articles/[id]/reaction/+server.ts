@@ -17,14 +17,12 @@ export const POST = async ({ params, request, platform }) => {
   await requireMobileAccess(request, platform.env, platform.env.DB, 'app:write');
 
   const articleId = params.id;
-  const body = (await request.json().catch(() => ({}))) as {
-    value?: unknown;
-    feedId?: unknown;
-    reasonCodes?: unknown;
-  };
+  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
   const value = Number(body?.value);
-  const feedIdInput = typeof body?.feedId === 'string' ? body.feedId.trim() : '';
-  const rawReasonCodes = Array.isArray(body?.reasonCodes) ? body.reasonCodes : [];
+  const feedIdRaw = body?.feedId ?? body?.feed_id;
+  const feedIdInput = typeof feedIdRaw === 'string' ? feedIdRaw.trim() : '';
+  const reasonCodesRaw = body?.reasonCodes ?? body?.reason_codes;
+  const rawReasonCodes = Array.isArray(reasonCodesRaw) ? reasonCodesRaw : [];
 
   if (!isReactionValue(value)) {
     return json({ error: 'Invalid reaction value' }, { status: 400 });

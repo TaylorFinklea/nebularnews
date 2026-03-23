@@ -6,7 +6,7 @@ export const POST = async ({ params, request, platform }) => {
   await requireMobileAccess(request, platform.env, platform.env.DB, 'app:write');
 
   const body = await request.json().catch(() => ({}));
-  const isRead = Boolean(body?.isRead);
+  const isRead = Boolean(body?.isRead ?? body?.is_read);
   const mutatedAt = now();
 
   await dbRun(

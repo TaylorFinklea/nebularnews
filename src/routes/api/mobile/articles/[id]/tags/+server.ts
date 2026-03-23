@@ -47,10 +47,10 @@ export const POST = async ({ params, request, platform }) => {
   const body = await request.json().catch(() => ({}));
   const source = normalizeSource(body?.source);
   const confidence = normalizeConfidence(body?.confidence);
-  const addTagIds = normalizeTokenList(body?.addTagIds);
-  const addTagNames = normalizeTokenList(body?.addTagNames);
-  const removeTagIds = normalizeTokenList(body?.removeTagIds);
-  const replace = body?.replace === true;
+  const addTagIds = normalizeTokenList(body?.addTagIds ?? body?.add_tag_ids);
+  const addTagNames = normalizeTokenList(body?.addTagNames ?? body?.add_tag_names);
+  const removeTagIds = normalizeTokenList(body?.removeTagIds ?? body?.remove_tag_ids);
+  const replace = (body?.replace === true);
 
   const addByIdRows = await resolveTagsByTokens(platform.env.DB, addTagIds);
   const addIds = new Set(addByIdRows.map((row) => row.id));

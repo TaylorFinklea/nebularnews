@@ -920,3 +920,80 @@ export async function rotateProviderKeyEncryption(db: Db, env: App.Platform['env
 
   return rotated;
 }
+
+// --- Browser scraping settings ---
+
+import type { BrowserScrapeProvider, BrowserScrapeConfig } from './browser-scrape';
+
+const VALID_BROWSER_SCRAPE_PROVIDERS = new Set<BrowserScrapeProvider>(['browserless', 'scrapingbee', 'generic']);
+
+const DEFAULT_PROVIDER_URLS: Record<BrowserScrapeProvider, string> = {
+  browserless: 'https://chrome.browserless.io',
+  scrapingbee: 'https://app.scrapingbee.com/api/v1',
+  generic: ''
+};
+
+export async function getBrowserScrapingEnabled(db: Db): Promise<boolean> {
+  const value = await getSetting(db, 'browser_scraping_enabled');
+  return value === '1' || value === 'true';
+}
+
+export async function getBrowserScrapeProvider(db: Db): Promise<BrowserScrapeProvider> {
+  const raw = await getSetting(db, 'browser_scrape_provider');
+  if (raw && VALID_BROWSER_SCRAPE_PROVIDERS.has(raw as BrowserScrapeProvider)) {
+    return raw as BrowserScrapeProvider;
+  }
+  return 'browserless';
+}
+
+export async function getBrowserScrapeConfig(
+  db: Db,
+  env: App.Platform['env']
+): Promise<BrowserScrapeConfig | null> {
+  const enabled = await getBrowserScrapingEnabled(db);
+  if (!enabled) return null;
+
+  const provider = await getBrowserScrapeProvider(db);
+  const customUrl = await getSetting(db, 'browser_scrape_api_url');
+
+  // Read API key from provider_keys table (bypassing Provider type constraint)
+  const row = await dbGet<{ encrypted_key: string }>(
+    db,
+    "SELECT encrypted_key FROM provider_keys WHERE provider = 'browser_scrape'",
+    []
+  );
+  if (!row) return null;
+
+  const apiKey = await decryptString(row.encrypted_key, env.ENCRYPTION_KEY);
+  return {
+    provider,
+    apiUrl: customUrl || DEFAULT_PROVIDER_URLS[provider],
+    apiKey
+  };
+}
+
+export async function setBrowserScrapeKey(db: Db, env: App.Platform['env'], apiKey: string) {
+  const encrypted = await encryptString(apiKey, env.ENCRYPTION_KEY);
+  const existing = await dbGet<{ id: string }>(
+    db,
+    "SELECT id FROM provider_keys WHERE provider = 'browser_scrape'",
+    []
+  );
+  if (existing) {
+    await dbRun(
+      db,
+      "UPDATE provider_keys SET encrypted_key = ?, key_version = key_version + 1, last_used_at = ?, status = ? WHERE provider = 'browser_scrape'",
+      [encrypted, now(), 'active']
+    );
+  } else {
+    await dbRun(
+      db,
+      'INSERT INTO provider_keys (id, provider, encrypted_key, key_version, created_at, last_used_at, status) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [nanoid(), 'browser_scrape', encrypted, 1, now(), now(), 'active']
+    );
+  }
+}
+
+export async function deleteBrowserScrapeKey(db: Db) {
+  await dbRun(db, "DELETE FROM provider_keys WHERE provider = 'browser_scrape'", []);
+}

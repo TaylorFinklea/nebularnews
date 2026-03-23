@@ -9,6 +9,7 @@ type ArticleForScoring = {
   content_text: string | null;
   published_at: number | null;
   source_feed_id: string | null;
+  extraction_quality: number | null;
 };
 
 /** Sigmoid normalization centered at 0 */
@@ -99,7 +100,7 @@ function extractContentFreshness(publishedAt: number | null): SignalResult {
   };
 }
 
-function extractContentDepth(contentText: string | null): SignalResult {
+function extractContentDepth(contentText: string | null, extractionQuality?: number | null): SignalResult {
   if (!contentText) {
     return { signal: 'content_depth', rawValue: 0, normalizedValue: 0.5, isDataBacked: false };
   }
@@ -107,7 +108,15 @@ function extractContentDepth(contentText: string | null): SignalResult {
   const wordCount = contentText.split(/\s+/).filter(Boolean).length;
   const MIN_WORDS = 200;
   const MAX_WORDS = 2000;
-  const normalized = logisticRamp(wordCount, MIN_WORDS, MAX_WORDS);
+  const wordNormalized = logisticRamp(wordCount, MIN_WORDS, MAX_WORDS);
+
+  // Poor extraction quality penalizes the depth signal — articles with bad
+  // extraction shouldn't score highly even if the word count looks OK
+  let normalized = wordNormalized;
+  if (typeof extractionQuality === 'number' && extractionQuality < 0.5) {
+    const penalty = Math.max(0.3, extractionQuality / 0.5);
+    normalized = wordNormalized * penalty;
+  }
 
   return {
     signal: 'content_depth',
@@ -206,7 +215,7 @@ export async function extractSignals(db: Db, article: ArticleForScoring): Promis
   ]);
 
   const contentFreshness = extractContentFreshness(article.published_at);
-  const contentDepth = extractContentDepth(article.content_text);
+  const contentDepth = extractContentDepth(article.content_text, article.extraction_quality);
 
   return [topicAffinity, sourceReputation, contentFreshness, contentDepth, authorAffinity, tagMatchRatio];
 }

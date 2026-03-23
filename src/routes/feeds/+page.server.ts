@@ -12,6 +12,9 @@ export const load = async ({ platform }) => {
       f.next_poll_at,
       f.error_count,
       f.disabled,
+      f.extraction_success_count,
+      f.extraction_fail_count,
+      f.browser_scrape_enabled,
       COALESCE((SELECT COUNT(*) FROM article_reactions ar WHERE ar.feed_id = f.id), 0) as feedback_count,
       COALESCE((SELECT SUM(ar.value) * 1.0 / (COUNT(*) + 5.0) FROM article_reactions ar WHERE ar.feed_id = f.id), 0) as reputation
     FROM feeds f

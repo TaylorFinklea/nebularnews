@@ -1,6 +1,10 @@
 import { json } from '@sveltejs/kit';
 import { dbAll } from '$lib/server/db';
 import {
+  getBrowserScrapingEnabled,
+  getBrowserScrapeProvider,
+  setBrowserScrapeKey,
+  deleteBrowserScrapeKey,
   DEFAULT_SCORE_SYSTEM_PROMPT,
   DEFAULT_SCORE_USER_PROMPT_TEMPLATE,
   DEFAULT_AUTO_TAGGING_ENABLED,
@@ -124,13 +128,16 @@ export const GET = async ({ platform }) => {
     newsBriefScoreCutoff: newsBrief.scoreCutoff,
     scoringMethod: await getScoringMethod(db),
     scoringAiEnhancementThreshold: await getScoringAiEnhancementThreshold(db),
-    scoringLearningRate: await getScoringLearningRate(db)
+    scoringLearningRate: await getScoringLearningRate(db),
+    browserScrapingEnabled: await getBrowserScrapingEnabled(db),
+    browserScrapeProvider: await getBrowserScrapeProvider(db),
+    browserScrapeApiUrl: (await getSetting(db, 'browser_scrape_api_url')) ?? ''
   };
 
   const keys = await dbAll<{ provider: string }>(db, 'SELECT provider FROM provider_keys');
-  const keyMap = { openai: false, anthropic: false };
+  const keyMap: Record<string, boolean> = { openai: false, anthropic: false, browser_scrape: false };
   for (const key of keys) {
-    if (key.provider in keyMap) keyMap[key.provider as 'openai' | 'anthropic'] = true;
+    if (key.provider in keyMap) keyMap[key.provider] = true;
   }
 
   return json({
@@ -365,6 +372,23 @@ export const POST = async ({ request, platform, locals }) => {
   }
   if (typeof body?.scoreUserPromptTemplate === 'string' && body.scoreUserPromptTemplate.trim()) {
     entries.push(['score_user_prompt_template', body.scoreUserPromptTemplate.trim()]);
+  }
+
+  // Browser scraping settings
+  if (body?.browserScrapingEnabled !== undefined && body?.browserScrapingEnabled !== null) {
+    entries.push(['browser_scraping_enabled', parseBooleanSetting(body.browserScrapingEnabled, false) ? '1' : '0']);
+  }
+  const validBrowserScrapeProviders = new Set(['browserless', 'scrapingbee', 'generic']);
+  if (body?.browserScrapeProvider && validBrowserScrapeProviders.has(body.browserScrapeProvider)) {
+    entries.push(['browser_scrape_provider', body.browserScrapeProvider]);
+  }
+  if (typeof body?.browserScrapeApiUrl === 'string') {
+    entries.push(['browser_scrape_api_url', body.browserScrapeApiUrl.trim()]);
+  }
+  if (typeof body?.browserScrapeApiKey === 'string' && body.browserScrapeApiKey.trim()) {
+    await setBrowserScrapeKey(platform.env.DB, platform.env, body.browserScrapeApiKey.trim());
+  } else if (body?.browserScrapeApiKey === null) {
+    await deleteBrowserScrapeKey(platform.env.DB);
   }
 
   for (const [key, value] of entries) {

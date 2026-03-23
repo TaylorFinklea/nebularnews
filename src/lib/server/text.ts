@@ -61,7 +61,8 @@ export function extractMainContent(html: string, url?: string) {
       title: null,
       contentHtml: html,
       contentText: text,
-      excerpt: text.slice(0, 300)
+      excerpt: text.slice(0, 300),
+      readabilitySucceeded: false
     };
   }
   if (url) {
@@ -79,7 +80,8 @@ export function extractMainContent(html: string, url?: string) {
       title: document.title ?? null,
       contentHtml: html,
       contentText: text,
-      excerpt: text.slice(0, 300)
+      excerpt: text.slice(0, 300),
+      readabilitySucceeded: false
     };
   }
   const text = stripWhitespace(parsed.textContent ?? '');
@@ -87,7 +89,8 @@ export function extractMainContent(html: string, url?: string) {
     title: parsed.title ?? null,
     contentHtml: parsed.content ?? html,
     contentText: text,
-    excerpt: parsed.excerpt ?? text.slice(0, 300)
+    excerpt: parsed.excerpt ?? text.slice(0, 300),
+    readabilitySucceeded: true
   };
 }
 

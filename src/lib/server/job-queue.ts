@@ -7,15 +7,17 @@ export type ArticleJobType =
   | 'key_points'
   | 'auto_tag'
   | 'image_backfill'
-  | 'refetch_content';
+  | 'refetch_content'
+  | 'browser_scrape';
 
 const DEFAULT_JOB_PRIORITY: Record<ArticleJobType, number> = {
   summarize: 100,
   score: 100,
   key_points: 100,
   auto_tag: 100,
-  image_backfill: 120,
-  refetch_content: 90
+  browser_scrape: 85,
+  refetch_content: 90,
+  image_backfill: 120
 };
 
 export const enqueueArticleJob = async (

@@ -5,7 +5,14 @@ import { extractMainContent, computeWordCount, BROWSER_USER_AGENT, BROWSER_ACCEP
 import { logWarn } from './log';
 import { normalizeUrl } from './urls';
 import { extractLeadImageUrlFromHtml, normalizeImageUrl } from './images';
-import { enqueueNewArticleArtifactJobs } from './job-queue';
+import { enqueueArticleJob, enqueueNewArticleArtifactJobs } from './job-queue';
+import {
+  assessExtractionQuality,
+  POOR_EXTRACTION_THRESHOLD,
+  BROWSER_SCRAPE_QUALITY_THRESHOLD,
+  shouldAutoEnableBrowserScrape,
+  type ExtractionMethod
+} from './content-quality';
 import {
   clampInitialFeedLookbackDays,
   getInitialFeedLookbackDays,
@@ -251,6 +258,8 @@ export async function ingestFeedItem(
   let contentText = item.contentText ?? null;
   let imageUrl = normalizeImageUrl(item.imageUrl, url);
   const shouldFetchFullArticle = shouldAutoQueueArticleJobs(normalizedPublishedAt, fetchedAt);
+  let readabilitySucceeded = false;
+  let didFullPageFetch = false;
 
   if (!imageUrl && contentHtml) {
     imageUrl = extractLeadImageUrlFromHtml(contentHtml, url);
@@ -273,6 +282,8 @@ export async function ingestFeedItem(
         const extracted = extractMainContent(html, url);
         contentHtml = extracted.contentHtml;
         contentText = extracted.contentText;
+        readabilitySucceeded = extracted.readabilitySucceeded;
+        didFullPageFetch = true;
         if (!imageUrl) {
           imageUrl = extractLeadImageUrlFromHtml(html, url);
         }
@@ -283,6 +294,19 @@ export async function ingestFeedItem(
       clearTimeout(timeout);
     }
   }
+
+  const feedExcerpt = item.contentText ?? null;
+  const extractionResult = assessExtractionQuality({
+    contentText,
+    contentHtml,
+    feedExcerpt: didFullPageFetch ? feedExcerpt : null,
+    feedContentText: null,
+    title: item.title ?? null,
+    readabilitySucceeded
+  });
+  const extractionMethod: ExtractionMethod = didFullPageFetch
+    ? extractionResult.method
+    : 'feed_only';
 
   const safeText = contentText ?? item.title ?? url;
   const contentHash = await sha256(safeText);
@@ -309,8 +333,9 @@ export async function ingestFeedItem(
       `INSERT OR IGNORE INTO articles (
          id, canonical_url, guid, title, author, published_at, fetched_at,
          content_html, content_text, excerpt, word_count, content_hash,
-         image_url, image_status, image_checked_at, status
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         image_url, image_status, image_checked_at,
+         extraction_method, extraction_quality, status
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         articleId,
         url,
@@ -327,6 +352,8 @@ export async function ingestFeedItem(
         imageUrl,
         imageUrl ? 'found' : 'pending',
         imageUrl ? fetchedAt : null,
+        extractionMethod,
+        extractionResult.quality,
         'ingested'
       ]
     );
@@ -350,6 +377,21 @@ export async function ingestFeedItem(
         includeSummaries: false,
         includeImageBackfill: !imageUrl
       });
+
+      // Update feed extraction stats and auto-learn
+      await updateFeedExtractionStats(db, feedId, extractionResult.quality);
+
+      // Queue browser scrape if quality is very low and feed is flagged
+      if (extractionResult.quality < BROWSER_SCRAPE_QUALITY_THRESHOLD) {
+        const feed = await dbGet<{ browser_scrape_enabled: number }>(
+          db,
+          'SELECT browser_scrape_enabled FROM feeds WHERE id = ?',
+          [feedId]
+        );
+        if (feed?.browser_scrape_enabled) {
+          await enqueueArticleJob(db, 'browser_scrape', articleId);
+        }
+      }
     }
   } else if (imageUrl) {
     await dbRun(
@@ -378,4 +420,35 @@ export async function ingestFeedItem(
   );
 
   return true;
+}
+
+async function updateFeedExtractionStats(db: Db, feedId: string, quality: number) {
+  if (quality >= POOR_EXTRACTION_THRESHOLD) {
+    await dbRun(
+      db,
+      'UPDATE feeds SET extraction_success_count = extraction_success_count + 1 WHERE id = ?',
+      [feedId]
+    );
+  } else {
+    await dbRun(
+      db,
+      'UPDATE feeds SET extraction_fail_count = extraction_fail_count + 1 WHERE id = ?',
+      [feedId]
+    );
+
+    // Check if feed should be auto-flagged for browser scraping
+    const stats = await dbGet<{
+      extraction_success_count: number;
+      extraction_fail_count: number;
+      browser_scrape_enabled: number;
+    }>(db, 'SELECT extraction_success_count, extraction_fail_count, browser_scrape_enabled FROM feeds WHERE id = ?', [
+      feedId
+    ]);
+
+    if (stats && !stats.browser_scrape_enabled) {
+      if (shouldAutoEnableBrowserScrape(stats.extraction_success_count, stats.extraction_fail_count)) {
+        await dbRun(db, 'UPDATE feeds SET browser_scrape_enabled = 1 WHERE id = ?', [feedId]);
+      }
+    }
+  }
 }

@@ -29,6 +29,9 @@ import {
   generateDeterministicTagDecisions
 } from './tagging/rules';
 import { enqueueScoreJob } from './job-queue';
+import { assessExtractionQuality } from './content-quality';
+import { fetchWithBrowser } from './browser-scrape';
+import { getBrowserScrapeConfig } from './settings';
 import {
   attachTagToArticle,
   listDismissedSuggestionNamesForArticle,
@@ -149,6 +152,8 @@ export async function processJobs(
         runMetadata = await runScoreJob(db, env, job.article_id);
       } else if (job.type === 'refetch_content' && job.article_id) {
         runMetadata = await runRefetchContentJob(db, job.article_id);
+      } else if (job.type === 'browser_scrape' && job.article_id) {
+        runMetadata = await runBrowserScrapeJob(db, env, job.article_id);
       } else if (job.type === 'refresh_profile') {
         runMetadata = await runRefreshProfile(db, env);
       }
@@ -303,7 +308,7 @@ export async function processJobs(
 
 export async function runArticleJobImmediately(
   env: App.Platform['env'],
-  type: 'summarize' | 'score' | 'key_points' | 'auto_tag' | 'image_backfill',
+  type: 'summarize' | 'score' | 'key_points' | 'auto_tag' | 'image_backfill' | 'browser_scrape',
   articleId: string
 ): Promise<JobRunMetadata> {
   const db = env.DB;
@@ -374,6 +379,8 @@ export async function runArticleJobImmediately(
       runMetadata = await runAutoTagJob(db, env, articleId);
     } else if (type === 'score') {
       runMetadata = await runScoreJob(db, env, articleId);
+    } else if (type === 'browser_scrape') {
+      runMetadata = await runBrowserScrapeJob(db, env, articleId);
     }
 
     const finishedAt = now();
@@ -462,15 +469,83 @@ async function runRefetchContentJob(db: Db, articleId: string): Promise<JobRunMe
     const extracted = extractMainContent(html, article.canonical_url);
     if (extracted.contentText && extracted.contentText.length >= 200) {
       const wordCount = computeWordCount(extracted.contentText);
+      const quality = assessExtractionQuality({
+        contentText: extracted.contentText,
+        contentHtml: extracted.contentHtml,
+        feedExcerpt: null,
+        feedContentText: null,
+        title: null,
+        readabilitySucceeded: extracted.readabilitySucceeded
+      });
       await dbRun(
         db,
-        `UPDATE articles SET content_html = ?, content_text = ?, word_count = ?, updated_at = ? WHERE id = ?`,
-        [extracted.contentHtml, extracted.contentText, wordCount, now(), articleId]
+        `UPDATE articles
+         SET content_html = ?, content_text = ?, word_count = ?,
+             extraction_method = ?, extraction_quality = ?, updated_at = ?
+         WHERE id = ?`,
+        [
+          extracted.contentHtml, extracted.contentText, wordCount,
+          quality.method, quality.quality, now(), articleId
+        ]
       );
     }
   } finally {
     clearTimeout(timeout);
   }
+  return null;
+}
+
+async function runBrowserScrapeJob(
+  db: Db,
+  env: App.Platform['env'],
+  articleId: string
+): Promise<JobRunMetadata> {
+  const article = await dbGet<{
+    canonical_url: string | null;
+    extraction_quality: number | null;
+  }>(db, 'SELECT canonical_url, extraction_quality FROM articles WHERE id = ?', [articleId]);
+
+  if (!article?.canonical_url) return null;
+  // Skip if quality has already been improved by another job
+  if (article.extraction_quality !== null && article.extraction_quality >= 0.5) return null;
+
+  const config = await getBrowserScrapeConfig(db, env);
+  if (!config) throw new Error('Browser scraping not configured');
+
+  const result = await fetchWithBrowser(article.canonical_url, config, { timeoutMs: 20_000 });
+  const extracted = extractMainContent(result.html, article.canonical_url);
+  const quality = assessExtractionQuality({
+    contentText: extracted.contentText,
+    contentHtml: extracted.contentHtml,
+    feedExcerpt: null,
+    feedContentText: null,
+    title: extracted.title,
+    readabilitySucceeded: extracted.readabilitySucceeded
+  });
+
+  // Only update if browser scraping actually improved quality
+  if (quality.quality > (article.extraction_quality ?? 0)) {
+    const wordCount = computeWordCount(extracted.contentText);
+    await dbRun(
+      db,
+      `UPDATE articles
+       SET content_html = ?, content_text = ?, word_count = ?, excerpt = ?,
+           extraction_method = 'browser', extraction_quality = ?, updated_at = ?
+       WHERE id = ?`,
+      [extracted.contentHtml, extracted.contentText, wordCount, extracted.excerpt, quality.quality, now(), articleId]
+    );
+
+    // Update search index with improved content
+    await dbRun(
+      db,
+      'UPDATE article_search SET content_text = ? WHERE article_id = ?',
+      [extracted.contentText, articleId]
+    );
+
+    // Re-queue score job since content changed significantly
+    await enqueueScoreJob(db, articleId);
+  }
+
   return null;
 }
 

@@ -119,7 +119,7 @@ export async function scoreArticleAlgorithmic(
   // Load article data needed for signal extraction
   const article = await dbGet<ArticleForScoring>(
     db,
-    `SELECT a.id, a.title, a.author, a.content_text, a.published_at,
+    `SELECT a.id, a.title, a.author, a.content_text, a.published_at, a.extraction_quality,
             (SELECT src.feed_id FROM article_sources src WHERE src.article_id = a.id
              ORDER BY src.published_at DESC NULLS LAST LIMIT 1) as source_feed_id
      FROM articles a

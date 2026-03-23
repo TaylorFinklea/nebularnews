@@ -16,7 +16,10 @@ CREATE TABLE IF NOT EXISTS feeds (
   last_polled_at INTEGER,
   next_poll_at INTEGER,
   error_count INTEGER NOT NULL DEFAULT 0,
-  disabled INTEGER NOT NULL DEFAULT 0
+  disabled INTEGER NOT NULL DEFAULT 0,
+  extraction_success_count INTEGER NOT NULL DEFAULT 0,
+  extraction_fail_count INTEGER NOT NULL DEFAULT 0,
+  browser_scrape_enabled INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS articles (
@@ -35,6 +38,8 @@ CREATE TABLE IF NOT EXISTS articles (
   image_url TEXT,
   image_status TEXT,
   image_checked_at INTEGER,
+  extraction_method TEXT,
+  extraction_quality REAL,
   status TEXT
 );
 
@@ -408,6 +413,7 @@ CREATE TABLE IF NOT EXISTS device_tokens (
 CREATE INDEX IF NOT EXISTS idx_feeds_next_poll ON feeds(next_poll_at);
 CREATE INDEX IF NOT EXISTS idx_articles_published ON articles(published_at);
 CREATE INDEX IF NOT EXISTS idx_articles_image_status ON articles(image_status, image_checked_at);
+CREATE INDEX IF NOT EXISTS idx_articles_extraction_quality ON articles(extraction_quality, extraction_method);
 CREATE INDEX IF NOT EXISTS idx_news_brief_editions_status_run_after ON news_brief_editions(status, run_after);
 CREATE INDEX IF NOT EXISTS idx_news_brief_editions_generated_at ON news_brief_editions(generated_at DESC, scheduled_for DESC);
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status, run_after);

@@ -5,7 +5,7 @@ let schemaReady = false;
 let schemaInitPromise: Promise<void> | null = null;
 
 const MAX_PUBLISHED_FUTURE_MS = 1000 * 60 * 60 * 24;
-export const EXPECTED_SCHEMA_VERSION = 13;
+export const EXPECTED_SCHEMA_VERSION = 14;
 
 const runSafe = async (db: Db, sql: string, params: unknown[] = []) => {
   try {
@@ -642,6 +642,38 @@ const applyV13 = async (db: Db) => {
   await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_article_read_state_saved ON article_read_state(saved_at)');
 };
 
+const applyV14 = async (db: Db) => {
+  // Article extraction metadata
+  await runSafe(db, 'ALTER TABLE articles ADD COLUMN extraction_method TEXT');
+  await runSafe(db, 'ALTER TABLE articles ADD COLUMN extraction_quality REAL');
+
+  // Feed extraction stats for auto-learning
+  await runSafe(db, 'ALTER TABLE feeds ADD COLUMN extraction_success_count INTEGER NOT NULL DEFAULT 0');
+  await runSafe(db, 'ALTER TABLE feeds ADD COLUMN extraction_fail_count INTEGER NOT NULL DEFAULT 0');
+  await runSafe(db, 'ALTER TABLE feeds ADD COLUMN browser_scrape_enabled INTEGER NOT NULL DEFAULT 0');
+
+  await runSafe(
+    db,
+    'CREATE INDEX IF NOT EXISTS idx_articles_extraction_quality ON articles(extraction_quality, extraction_method)'
+  );
+
+  // Backfill: estimate quality from word_count for existing articles
+  await runSafe(
+    db,
+    `UPDATE articles
+     SET extraction_method = 'readability',
+         extraction_quality = MIN(1.0, CAST(word_count AS REAL) / 800.0)
+     WHERE extraction_method IS NULL AND word_count IS NOT NULL AND word_count >= 200`
+  );
+  await runSafe(
+    db,
+    `UPDATE articles
+     SET extraction_method = 'feed_only',
+         extraction_quality = 0.2
+     WHERE extraction_method IS NULL`
+  );
+};
+
 export async function ensureSchema(db: Db) {
   if (schemaReady) return;
   if (schemaInitPromise) return schemaInitPromise;
@@ -700,6 +732,10 @@ export async function ensureSchema(db: Db) {
     if (currentVersion < 13) {
       await applyV13(db);
       await markVersionApplied(db, 13, 'v13_reading_list_saved_at');
+    }
+    if (currentVersion < 14) {
+      await applyV14(db);
+      await markVersionApplied(db, 14, 'v14_content_quality_tracking');
     }
     schemaReady = true;
   })();
@@ -811,6 +847,21 @@ const assertRequiredV12Objects = async (db: Db) => {
   }
 };
 
+const assertRequiredV14Objects = async (db: Db) => {
+  const requiredArticleColumns = ['extraction_method', 'extraction_quality'];
+  for (const columnName of requiredArticleColumns) {
+    if (!(await columnExists(db, 'articles', columnName))) {
+      throw new Error(`Missing required articles column: ${columnName}`);
+    }
+  }
+  const requiredFeedColumns = ['extraction_success_count', 'extraction_fail_count', 'browser_scrape_enabled'];
+  for (const columnName of requiredFeedColumns) {
+    if (!(await columnExists(db, 'feeds', columnName))) {
+      throw new Error(`Missing required feeds column: ${columnName}`);
+    }
+  }
+};
+
 export async function assertSchemaVersion(db: Db, expected = EXPECTED_SCHEMA_VERSION) {
   const version = await getSchemaVersion(db);
   if (version < expected) {
@@ -841,6 +892,9 @@ export async function assertSchemaVersion(db: Db, expected = EXPECTED_SCHEMA_VER
   }
   if (expected >= 12) {
     await assertRequiredV12Objects(db);
+  }
+  if (expected >= 14) {
+    await assertRequiredV14Objects(db);
   }
   return version;
 }

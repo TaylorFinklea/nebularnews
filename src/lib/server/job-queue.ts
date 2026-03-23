@@ -60,7 +60,7 @@ export const enqueueNewArticleArtifactJobs = async (
   }
 ) => {
   const queuedAt = options?.queuedAt ?? now();
-  const jobTypes: ArticleJobType[] = ['score', 'auto_tag'];
+  const jobTypes: ArticleJobType[] = ['score', 'auto_tag', 'key_points'];
 
   if (options?.includeSummaries) {
     jobTypes.unshift('summarize');

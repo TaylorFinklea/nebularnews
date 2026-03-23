@@ -5,7 +5,7 @@ let schemaReady = false;
 let schemaInitPromise: Promise<void> | null = null;
 
 const MAX_PUBLISHED_FUTURE_MS = 1000 * 60 * 60 * 24;
-export const EXPECTED_SCHEMA_VERSION = 14;
+export const EXPECTED_SCHEMA_VERSION = 15;
 
 const runSafe = async (db: Db, sql: string, params: unknown[] = []) => {
   try {
@@ -674,6 +674,36 @@ const applyV14 = async (db: Db) => {
   );
 };
 
+const applyV15 = async (db: Db) => {
+  await runSafe(
+    db,
+    `CREATE TABLE IF NOT EXISTS chat_threads (
+      id TEXT PRIMARY KEY,
+      article_id TEXT UNIQUE,
+      title TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE
+    )`
+  );
+  await runSafe(
+    db,
+    `CREATE TABLE IF NOT EXISTS chat_messages (
+      id TEXT PRIMARY KEY,
+      thread_id TEXT NOT NULL,
+      role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
+      content TEXT NOT NULL,
+      token_count INTEGER,
+      provider TEXT,
+      model TEXT,
+      created_at INTEGER NOT NULL,
+      FOREIGN KEY(thread_id) REFERENCES chat_threads(id) ON DELETE CASCADE
+    )`
+  );
+  await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_chat_threads_article ON chat_threads(article_id)');
+  await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_chat_messages_thread ON chat_messages(thread_id, created_at)');
+};
+
 export async function ensureSchema(db: Db) {
   if (schemaReady) return;
   if (schemaInitPromise) return schemaInitPromise;
@@ -736,6 +766,10 @@ export async function ensureSchema(db: Db) {
     if (currentVersion < 14) {
       await applyV14(db);
       await markVersionApplied(db, 14, 'v14_content_quality_tracking');
+    }
+    if (currentVersion < 15) {
+      await applyV15(db);
+      await markVersionApplied(db, 15, 'v15_article_chat');
     }
     schemaReady = true;
   })();
@@ -896,5 +930,16 @@ export async function assertSchemaVersion(db: Db, expected = EXPECTED_SCHEMA_VER
   if (expected >= 14) {
     await assertRequiredV14Objects(db);
   }
+  if (expected >= 15) {
+    await assertRequiredV15Objects(db);
+  }
   return version;
 }
+
+const assertRequiredV15Objects = async (db: Db) => {
+  for (const tableName of ['chat_threads', 'chat_messages']) {
+    if (!(await tableExists(db, tableName))) {
+      throw new Error(`Missing required table: ${tableName}`);
+    }
+  }
+};

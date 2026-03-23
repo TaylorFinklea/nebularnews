@@ -3,7 +3,7 @@ export type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: stri
 export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
 export type SummaryStyle = 'concise' | 'detailed' | 'bullet';
 export type SummaryLength = 'short' | 'medium' | 'long';
-export type LlmOptions = { reasoningEffort?: ReasoningEffort };
+export type LlmOptions = { reasoningEffort?: ReasoningEffort; maxTokens?: number };
 export type ScorePromptConfig = {
   systemPrompt: string;
   userPromptTemplate: string;
@@ -313,7 +313,7 @@ const callOpenAI = async (apiKey: string, model: string, messages: ChatMessage[]
   throw new Error(lastError || 'OpenAI error: unknown request failure');
 };
 
-const callAnthropic = async (apiKey: string, model: string, messages: ChatMessage[]) => {
+const callAnthropic = async (apiKey: string, model: string, messages: ChatMessage[], options?: LlmOptions) => {
   const system = messages.find((m) => m.role === 'system')?.content ?? '';
   const userMessages = messages
     .filter((m) => m.role !== 'system')
@@ -329,7 +329,7 @@ const callAnthropic = async (apiKey: string, model: string, messages: ChatMessag
     body: JSON.stringify({
       model,
       system,
-      max_tokens: 800,
+      max_tokens: options?.maxTokens ?? 800,
       temperature: 0.2,
       messages: userMessages
     })
@@ -356,7 +356,7 @@ export async function runChat(
   options?: LlmOptions
 ) {
   if (provider === 'openai') return callOpenAI(apiKey, model, messages, options);
-  return callAnthropic(apiKey, model, messages);
+  return callAnthropic(apiKey, model, messages, options);
 }
 
 export async function summarizeArticle(

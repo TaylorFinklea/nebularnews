@@ -378,7 +378,7 @@ export const POST = async ({ request, platform, locals }) => {
   if (body?.browserScrapingEnabled !== undefined && body?.browserScrapingEnabled !== null) {
     entries.push(['browser_scraping_enabled', parseBooleanSetting(body.browserScrapingEnabled, false) ? '1' : '0']);
   }
-  const validBrowserScrapeProviders = new Set(['cloudflare', 'browserless', 'scrapingbee', 'generic']);
+  const validBrowserScrapeProviders = new Set(['cloudflare', 'steel', 'browserless', 'scrapingbee', 'generic']);
   if (body?.browserScrapeProvider && validBrowserScrapeProviders.has(body.browserScrapeProvider)) {
     entries.push(['browser_scrape_provider', body.browserScrapeProvider]);
   }

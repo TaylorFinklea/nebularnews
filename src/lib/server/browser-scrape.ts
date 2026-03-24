@@ -1,6 +1,6 @@
 import puppeteer from '@cloudflare/puppeteer';
 
-export type BrowserScrapeProvider = 'cloudflare' | 'browserless' | 'scrapingbee' | 'generic';
+export type BrowserScrapeProvider = 'cloudflare' | 'steel' | 'browserless' | 'scrapingbee' | 'generic';
 
 export type BrowserScrapeConfig = {
   provider: BrowserScrapeProvider;
@@ -37,6 +37,8 @@ export async function fetchWithBrowser(
     switch (config.provider) {
       case 'browserless':
         return await fetchBrowserless(url, config, controller.signal);
+      case 'steel':
+        return await fetchSteel(url, config, controller.signal);
       case 'scrapingbee':
         return await fetchScrapingBee(url, config, controller.signal);
       case 'generic':
@@ -103,6 +105,29 @@ async function fetchScrapingBee(
     throw new Error(`ScrapingBee returned ${res.status}: ${await res.text()}`);
   }
   return { html: await res.text(), statusCode: res.status, provider: 'scrapingbee' };
+}
+
+async function fetchSteel(
+  url: string,
+  config: BrowserScrapeConfig,
+  signal: AbortSignal
+): Promise<BrowserScrapeResult> {
+  const endpoint = `${config.apiUrl}/v1/scrape`;
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${config.apiKey}`
+    },
+    body: JSON.stringify({ url }),
+    signal
+  });
+  if (!res.ok) {
+    throw new Error(`Steel returned ${res.status}: ${await res.text()}`);
+  }
+  const data = (await res.json()) as { content?: string };
+  const html = data.content ?? '';
+  return { html, statusCode: res.status, provider: 'steel' };
 }
 
 async function fetchGeneric(

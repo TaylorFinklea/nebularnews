@@ -1534,6 +1534,7 @@
           Provider
           <select bind:value={browserScrapeProvider} on:change={autoSave}>
             <option value="cloudflare">Cloudflare (built-in)</option>
+            <option value="steel">Steel.dev</option>
             <option value="browserless">Browserless</option>
             <option value="scrapingbee">ScrapingBee</option>
             <option value="generic">Generic (custom endpoint)</option>
@@ -1546,6 +1547,7 @@
           <label>
             Custom API URL <span class="muted small">(leave blank for default)</span>
             <input type="text" bind:value={browserScrapeApiUrl} on:input={autoSave} placeholder={
+              browserScrapeProvider === 'steel' ? 'https://api.steel.dev' :
               browserScrapeProvider === 'browserless' ? 'https://chrome.browserless.io' :
               browserScrapeProvider === 'scrapingbee' ? 'https://app.scrapingbee.com/api/v1' :
               'https://your-scraper.example.com'

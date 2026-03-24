@@ -925,10 +925,11 @@ export async function rotateProviderKeyEncryption(db: Db, env: App.Platform['env
 
 import type { BrowserScrapeProvider, BrowserScrapeConfig } from './browser-scrape';
 
-const VALID_BROWSER_SCRAPE_PROVIDERS = new Set<BrowserScrapeProvider>(['cloudflare', 'browserless', 'scrapingbee', 'generic']);
+const VALID_BROWSER_SCRAPE_PROVIDERS = new Set<BrowserScrapeProvider>(['cloudflare', 'steel', 'browserless', 'scrapingbee', 'generic']);
 
 const DEFAULT_PROVIDER_URLS: Record<BrowserScrapeProvider, string> = {
   cloudflare: '',
+  steel: 'https://api.steel.dev',
   browserless: 'https://chrome.browserless.io',
   scrapingbee: 'https://app.scrapingbee.com/api/v1',
   generic: ''

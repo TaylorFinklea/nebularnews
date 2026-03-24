@@ -1,4 +1,6 @@
-export type BrowserScrapeProvider = 'browserless' | 'scrapingbee' | 'generic';
+import puppeteer from '@cloudflare/puppeteer';
+
+export type BrowserScrapeProvider = 'cloudflare' | 'browserless' | 'scrapingbee' | 'generic';
 
 export type BrowserScrapeConfig = {
   provider: BrowserScrapeProvider;
@@ -17,9 +19,17 @@ const DEFAULT_TIMEOUT_MS = 20_000;
 export async function fetchWithBrowser(
   url: string,
   config: BrowserScrapeConfig,
-  options?: { timeoutMs?: number }
+  options?: { timeoutMs?: number; browserBinding?: unknown }
 ): Promise<BrowserScrapeResult> {
   const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+
+  if (config.provider === 'cloudflare') {
+    if (!options?.browserBinding) {
+      throw new Error('Cloudflare Browser Rendering requires the BROWSER binding');
+    }
+    return fetchCloudflare(url, options.browserBinding, timeoutMs);
+  }
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -36,6 +46,26 @@ export async function fetchWithBrowser(
     }
   } finally {
     clearTimeout(timeout);
+  }
+}
+
+async function fetchCloudflare(
+  url: string,
+  browserBinding: unknown,
+  timeoutMs: number
+): Promise<BrowserScrapeResult> {
+  const browser = await puppeteer.launch(browserBinding as Fetcher);
+  try {
+    const page = await browser.newPage();
+    const response = await page.goto(url, {
+      waitUntil: 'networkidle0',
+      timeout: timeoutMs
+    });
+    const html = await page.content();
+    const statusCode = response?.status() ?? 200;
+    return { html, statusCode, provider: 'cloudflare' };
+  } finally {
+    await browser.close();
   }
 }
 

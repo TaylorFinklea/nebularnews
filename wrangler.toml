@@ -9,6 +9,9 @@ binding = "ASSETS"
 [triggers]
 crons = ["*/5 * * * *", "0 * * * *", "30 3 * * *"]
 
+[browser]
+binding = "BROWSER"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "__DEV_D1_DATABASE_NAME__"

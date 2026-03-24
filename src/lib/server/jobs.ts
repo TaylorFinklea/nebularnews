@@ -512,7 +512,10 @@ async function runBrowserScrapeJob(
   const config = await getBrowserScrapeConfig(db, env);
   if (!config) throw new Error('Browser scraping not configured');
 
-  const result = await fetchWithBrowser(article.canonical_url, config, { timeoutMs: 20_000 });
+  const result = await fetchWithBrowser(article.canonical_url, config, {
+    timeoutMs: 20_000,
+    browserBinding: config.provider === 'cloudflare' ? (env as Record<string, unknown>).BROWSER : undefined
+  });
   const extracted = extractMainContent(result.html, article.canonical_url);
   const quality = assessExtractionQuality({
     contentText: extracted.contentText,

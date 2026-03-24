@@ -925,9 +925,10 @@ export async function rotateProviderKeyEncryption(db: Db, env: App.Platform['env
 
 import type { BrowserScrapeProvider, BrowserScrapeConfig } from './browser-scrape';
 
-const VALID_BROWSER_SCRAPE_PROVIDERS = new Set<BrowserScrapeProvider>(['browserless', 'scrapingbee', 'generic']);
+const VALID_BROWSER_SCRAPE_PROVIDERS = new Set<BrowserScrapeProvider>(['cloudflare', 'browserless', 'scrapingbee', 'generic']);
 
 const DEFAULT_PROVIDER_URLS: Record<BrowserScrapeProvider, string> = {
+  cloudflare: '',
   browserless: 'https://chrome.browserless.io',
   scrapingbee: 'https://app.scrapingbee.com/api/v1',
   generic: ''
@@ -956,7 +957,12 @@ export async function getBrowserScrapeConfig(
   const provider = await getBrowserScrapeProvider(db);
   const customUrl = await getSetting(db, 'browser_scrape_api_url');
 
-  // Read API key from provider_keys table (bypassing Provider type constraint)
+  // Cloudflare Browser Rendering uses a Workers binding — no API key needed
+  if (provider === 'cloudflare') {
+    return { provider, apiUrl: '', apiKey: '' };
+  }
+
+  // External providers require an API key from provider_keys table
   const row = await dbGet<{ encrypted_key: string }>(
     db,
     "SELECT encrypted_key FROM provider_keys WHERE provider = 'browser_scrape'",

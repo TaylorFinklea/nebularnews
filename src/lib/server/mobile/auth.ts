@@ -1,6 +1,7 @@
 import { error } from '@sveltejs/kit';
 import { authenticatePublicAccessToken } from '$lib/server/oauth/tokens';
 import { hasMobileScope, type MOBILE_SUPPORTED_SCOPES } from './context';
+import { ensureSchema } from '$lib/server/migrations';
 
 export const requireMobileAccess = async (
   request: Request,
@@ -8,6 +9,8 @@ export const requireMobileAccess = async (
   db: D1Database,
   requiredScope: (typeof MOBILE_SUPPORTED_SCOPES)[number] = 'app:read'
 ) => {
+  await ensureSchema(db);
+
   const authorization = request.headers.get('authorization')?.trim() ?? '';
   const rawToken = authorization.toLowerCase().startsWith('bearer ') ? authorization.slice(7).trim() : null;
   if (!rawToken) {

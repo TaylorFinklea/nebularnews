@@ -6,6 +6,10 @@ vi.mock('$lib/server/oauth/tokens', () => ({
   authenticatePublicAccessToken: authenticatePublicAccessTokenMock
 }));
 
+vi.mock('$lib/server/migrations', () => ({
+  ensureSchema: vi.fn()
+}));
+
 import { requireMobileAccess } from './auth';
 
 const env = {} as App.Platform['env'];

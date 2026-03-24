@@ -1,7 +1,7 @@
 <script>
   import { invalidate } from '$app/navigation';
   import { apiFetch } from '$lib/client/api-fetch';
-  import { IconDownload, IconPlus, IconRss, IconTrash, IconUpload } from '$lib/icons';
+  import { IconDownload, IconPlus, IconRefresh, IconRss, IconTrash, IconUpload } from '$lib/icons';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import Card from '$lib/components/Card.svelte';
   import Button from '$lib/components/Button.svelte';
@@ -11,6 +11,26 @@
   let newUrl = '';
   let opmlText = '';
   let removingFeedId = '';
+  let resettingFeeds = false;
+
+  const resetFeeds = async () => {
+    if (resettingFeeds) return;
+    resettingFeeds = true;
+    try {
+      const res = await apiFetch('/api/admin/reset-feeds', { method: 'POST' });
+      const payload = await res.json().catch(() => ({}));
+      if (res.ok) {
+        showToast(`Reset ${payload.resetCount ?? 0} feeds for immediate polling.`, 'success');
+        await invalidate();
+      } else {
+        showToast(payload?.error ?? 'Failed to reset feeds.', 'error');
+      }
+    } catch {
+      showToast('Failed to reset feeds.', 'error');
+    } finally {
+      resettingFeeds = false;
+    }
+  };
 
   const feedStatusColor = (feed) => {
     if (feed.disabled) return 'gray';
@@ -112,6 +132,10 @@
 
 <PageHeader title="Feeds" description="Curate the signals that power your Nebular News.">
   <svelte:fragment slot="actions">
+    <Button variant="ghost" size="inline" on:click={resetFeeds} disabled={resettingFeeds} title="Reset all feeds for immediate polling">
+      <IconRefresh size={16} stroke={1.9} />
+      <span>{resettingFeeds ? 'Resetting...' : 'Reset polling'}</span>
+    </Button>
     <a class="btn-export" href="/api/feeds/export" title="Export OPML" aria-label="Export OPML">
       <IconDownload size={16} stroke={1.9} />
       <span>Export OPML</span>

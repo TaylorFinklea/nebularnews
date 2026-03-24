@@ -105,6 +105,7 @@ import {
   DEFAULT_SCORING_LEARNING_RATE
 } from '$lib/server/settings';
 import { ensurePreferenceProfile } from '$lib/server/profile';
+import { listApiKeys } from '$lib/server/api-keys';
 import { listOAuthClientSummaries } from '$lib/server/oauth/storage';
 import {
   countOrphanArticles,
@@ -341,6 +342,7 @@ export const load = async ({ platform }) => {
         learningRate: DEFAULT_SCORING_LEARNING_RATE
       }
     },
-    scoringObservability
+    scoringObservability,
+    apiKeys: await listApiKeys(db)
   };
 };

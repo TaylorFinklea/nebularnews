@@ -2,7 +2,7 @@
   import { invalidateAll } from '$app/navigation';
   import { onMount } from 'svelte';
   import { apiFetch } from '$lib/client/api-fetch';
-  import { IconRefresh, IconRestore, IconTrash, IconDeviceFloppy } from '$lib/icons';
+  import { IconPlus, IconRefresh, IconRestore, IconTrash, IconDeviceFloppy } from '$lib/icons';
   import PageHeader from '$lib/components/PageHeader.svelte';
   import Button from '$lib/components/Button.svelte';
   import { showToast } from '$lib/client/toast';
@@ -116,6 +116,65 @@
   let maintenanceResult = '';
   $: connectedApps = data.connectedApps ?? [];
   $: autoReadDelaySeconds = (Number(autoReadDelayMs) / 1000).toFixed(2);
+
+  let apiKeys = data.apiKeys ?? [];
+  let generatingApiKey = false;
+  let newApiKeyName = '';
+  let generatedToken = '';
+  let revokingKeyId = '';
+
+  const generateNewApiKey = async () => {
+    if (generatingApiKey) return;
+    generatingApiKey = true;
+    generatedToken = '';
+    try {
+      const res = await apiFetch('/api/api-keys', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name: newApiKeyName.trim() || 'API Key' })
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        showToast(payload?.error ?? 'Failed to generate key.', 'error');
+        return;
+      }
+      generatedToken = payload.token;
+      newApiKeyName = '';
+      apiKeys = [{ id: payload.id, name: payload.name, createdAt: payload.createdAt, lastUsedAt: null }, ...apiKeys];
+    } catch {
+      showToast('Failed to generate key.', 'error');
+    } finally {
+      generatingApiKey = false;
+    }
+  };
+
+  const revokeApiKey = async (keyId) => {
+    if (revokingKeyId) return;
+    revokingKeyId = keyId;
+    try {
+      const res = await apiFetch(`/api/api-keys/${keyId}`, { method: 'DELETE' });
+      if (!res.ok) {
+        showToast('Failed to revoke key.', 'error');
+        return;
+      }
+      apiKeys = apiKeys.filter((k) => k.id !== keyId);
+      showToast('API key revoked.', 'success');
+    } catch {
+      showToast('Failed to revoke key.', 'error');
+    } finally {
+      revokingKeyId = '';
+    }
+  };
+
+  const copyToken = async () => {
+    if (!generatedToken) return;
+    try {
+      await navigator.clipboard.writeText(generatedToken);
+      showToast('Token copied to clipboard.', 'success');
+    } catch {
+      showToast('Failed to copy.', 'error');
+    }
+  };
 
   let browserScrapingEnabled = Boolean(data.settings.browserScrapingEnabled);
   let browserScrapeProvider = data.settings.browserScrapeProvider ?? 'browserless';
@@ -1573,6 +1632,66 @@
             {/if}
           </div>
         </div>
+      {/if}
+
+      <!-- Generated API Keys -->
+      <div class="settings-section-title">Generated API Keys</div>
+      <p class="muted">Long-lived bearer tokens for CLI and terminal clients. Tokens are shown once on creation.</p>
+
+      {#if generatedToken}
+        <div class="subsection soft-panel" style="border: 1px solid var(--accent);">
+          <p><strong>New API key created — copy it now!</strong></p>
+          <p class="muted small">This token will not be shown again.</p>
+          <div style="display: flex; gap: 0.5rem; align-items: center;">
+            <code style="flex: 1; overflow-x: auto; padding: 0.5rem; background: var(--surface); border-radius: var(--radius-md); font-size: var(--text-xs); word-break: break-all;">{generatedToken}</code>
+            <Button size="inline" on:click={copyToken}>Copy</Button>
+          </div>
+          <Button variant="ghost" size="inline" on:click={() => { generatedToken = ''; }}>Dismiss</Button>
+        </div>
+      {/if}
+
+      <div style="display: flex; gap: 0.5rem; align-items: flex-end;">
+        <label style="flex: 1;">
+          Key name
+          <input type="text" placeholder="e.g. Larkline CLI" bind:value={newApiKeyName} />
+        </label>
+        <Button variant="primary" size="inline" on:click={generateNewApiKey} disabled={generatingApiKey}>
+          <IconPlus size={15} stroke={1.9} />
+          <span>{generatingApiKey ? 'Generating...' : 'Generate Key'}</span>
+        </Button>
+      </div>
+
+      {#if apiKeys.length > 0}
+        <div class="key-provider-grid">
+          {#each apiKeys as key (key.id)}
+            <div class="subsection soft-panel">
+              <div class="key-provider-header">
+                <div>
+                  <h3>{key.name}</h3>
+                  <p class="muted small">
+                    Created {new Date(key.createdAt).toLocaleDateString()}
+                    {#if key.lastUsedAt}
+                      · Last used {new Date(key.lastUsedAt).toLocaleDateString()}
+                    {:else}
+                      · Never used
+                    {/if}
+                  </p>
+                </div>
+                <Button
+                  variant="danger"
+                  size="icon"
+                  on:click={() => revokeApiKey(key.id)}
+                  disabled={revokingKeyId === key.id}
+                  title="Revoke key"
+                >
+                  <IconTrash size={15} stroke={1.9} />
+                </Button>
+              </div>
+            </div>
+          {/each}
+        </div>
+      {:else}
+        <p class="muted small">No API keys generated yet.</p>
       {/if}
 
       <!-- Connected Apps -->

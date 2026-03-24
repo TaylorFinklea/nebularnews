@@ -21,7 +21,7 @@ export async function generateApiKey(
 ): Promise<{ id: string; token: string; name: string; createdAt: number }> {
   const resource = getPublicMobileResource(env);
   if (!resource) {
-    throw new Error('Mobile API is not configured — cannot generate API key.');
+    throw new Error('MOBILE_PUBLIC_BASE_URL is not configured. Set it in wrangler.toml or environment variables.');
   }
 
   const rawToken = 'nn_live_' + createOpaqueToken(32);

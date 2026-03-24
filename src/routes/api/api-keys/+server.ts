@@ -10,6 +10,11 @@ export const POST = async ({ request, platform }) => {
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
   const name = typeof body?.name === 'string' ? body.name.trim() : undefined;
 
-  const result = await generateApiKey(platform.env.DB, platform.env, name);
-  return json(result);
+  try {
+    const result = await generateApiKey(platform.env.DB, platform.env, name);
+    return json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to generate API key';
+    return json({ error: message }, { status: 500 });
+  }
 };

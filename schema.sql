@@ -410,6 +410,18 @@ CREATE TABLE IF NOT EXISTS device_tokens (
   updated_at INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS users (
+  id TEXT PRIMARY KEY,
+  email TEXT UNIQUE,
+  display_name TEXT,
+  auth_provider TEXT NOT NULL DEFAULT 'local',
+  external_id TEXT UNIQUE,
+  role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('admin', 'member')),
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  last_login_at INTEGER
+);
+
 CREATE TABLE IF NOT EXISTS chat_threads (
   id TEXT PRIMARY KEY,
   article_id TEXT UNIQUE,
@@ -431,6 +443,8 @@ CREATE TABLE IF NOT EXISTS chat_messages (
   FOREIGN KEY(thread_id) REFERENCES chat_threads(id) ON DELETE CASCADE
 );
 
+CREATE INDEX IF NOT EXISTS idx_users_external ON users(external_id);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_chat_threads_article ON chat_threads(article_id);
 CREATE INDEX IF NOT EXISTS idx_chat_messages_thread ON chat_messages(thread_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_feeds_next_poll ON feeds(next_poll_at);

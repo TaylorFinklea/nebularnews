@@ -2,14 +2,14 @@
 
 declare namespace App {
   interface Locals {
-    user: { id: string } | null;
+    user: { id: string; role: 'admin' | 'member' } | null;
     requestId: string;
   }
 
   interface Platform {
     env: {
       DB: D1Database;
-      ADMIN_PASSWORD_HASH: string;
+      ADMIN_PASSWORD_HASH?: string;
       SESSION_SECRET: string;
       ENCRYPTION_KEY: string;
       DEFAULT_PROVIDER?: string;
@@ -48,6 +48,9 @@ declare namespace App {
       APNS_TEAM_ID?: string;
       APNS_BUNDLE_ID?: string;
       APNS_SANDBOX?: string;
+      SUPABASE_URL?: string;
+      SUPABASE_ANON_KEY?: string;
+      SUPABASE_JWT_SECRET?: string;
     };
     context: ExecutionContext;
   }

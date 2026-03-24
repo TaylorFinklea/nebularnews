@@ -10,6 +10,11 @@ vi.mock('$lib/server/migrations', () => ({
   ensureSchema: vi.fn()
 }));
 
+const getUserByIdMock = vi.hoisted(() => vi.fn());
+vi.mock('$lib/server/auth', () => ({
+  getUserById: getUserByIdMock
+}));
+
 import { requireMobileAccess } from './auth';
 
 const env = {} as App.Platform['env'];
@@ -79,7 +84,7 @@ describe('requireMobileAccess', () => {
         db,
         'app:write'
       )
-    ).resolves.toEqual(token);
+    ).resolves.toEqual({ token, user: { id: 'admin', role: 'admin' } });
     expect(authenticatePublicAccessTokenMock).toHaveBeenCalledWith(db, env, 'mobile', 'valid-token');
   });
 });

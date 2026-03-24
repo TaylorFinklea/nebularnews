@@ -5,7 +5,7 @@ let schemaReady = false;
 let schemaInitPromise: Promise<void> | null = null;
 
 const MAX_PUBLISHED_FUTURE_MS = 1000 * 60 * 60 * 24;
-export const EXPECTED_SCHEMA_VERSION = 15;
+export const EXPECTED_SCHEMA_VERSION = 16;
 
 const runSafe = async (db: Db, sql: string, params: unknown[] = []) => {
   try {
@@ -704,6 +704,34 @@ const applyV15 = async (db: Db) => {
   await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_chat_messages_thread ON chat_messages(thread_id, created_at)');
 };
 
+const applyV16 = async (db: Db) => {
+  await runSafe(
+    db,
+    `CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      email TEXT UNIQUE,
+      display_name TEXT,
+      auth_provider TEXT NOT NULL DEFAULT 'local',
+      external_id TEXT UNIQUE,
+      role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('admin', 'member')),
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      last_login_at INTEGER
+    )`
+  );
+  await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_users_external ON users(external_id)');
+  await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)');
+
+  // Bootstrap the admin user so existing sessions (userId='admin') resolve to a real row
+  const timestamp = Date.now();
+  await runSafe(
+    db,
+    `INSERT OR IGNORE INTO users (id, email, display_name, auth_provider, role, created_at, updated_at)
+     VALUES ('admin', NULL, 'Admin', 'local', 'admin', ?, ?)`,
+    [timestamp, timestamp]
+  );
+};
+
 export async function ensureSchema(db: Db) {
   if (schemaReady) return;
   if (schemaInitPromise) return schemaInitPromise;
@@ -770,6 +798,10 @@ export async function ensureSchema(db: Db) {
     if (currentVersion < 15) {
       await applyV15(db);
       await markVersionApplied(db, 15, 'v15_article_chat');
+    }
+    if (currentVersion < 16) {
+      await applyV16(db);
+      await markVersionApplied(db, 16, 'v16_users_table');
     }
     schemaReady = true;
   })();
@@ -933,6 +965,9 @@ export async function assertSchemaVersion(db: Db, expected = EXPECTED_SCHEMA_VER
   if (expected >= 15) {
     await assertRequiredV15Objects(db);
   }
+  if (expected >= 16) {
+    await assertRequiredV16Objects(db);
+  }
   return version;
 }
 
@@ -941,5 +976,11 @@ const assertRequiredV15Objects = async (db: Db) => {
     if (!(await tableExists(db, tableName))) {
       throw new Error(`Missing required table: ${tableName}`);
     }
+  }
+};
+
+const assertRequiredV16Objects = async (db: Db) => {
+  if (!(await tableExists(db, 'users'))) {
+    throw new Error('Missing required table: users');
   }
 };

@@ -264,11 +264,11 @@ describe('migrations', () => {
 
     await ensureSchema(db);
 
-    expect(await getSchemaVersion(db)).toBe(15);
+    expect(await getSchemaVersion(db)).toBe(16);
     expect(db.__state.tables.has('article_search')).toBe(true);
     expect(db.__state.tables.has('news_brief_editions')).toBe(true);
     expect(db.__state.tables.has('oauth_clients')).toBe(true);
-    await expect(assertSchemaVersion(db)).resolves.toBe(15);
+    await expect(assertSchemaVersion(db)).resolves.toBe(16);
   });
 
   it('applies schema v13 cleanly on a v7 database', async () => {
@@ -282,11 +282,11 @@ describe('migrations', () => {
 
     await ensureSchema(db);
 
-    expect(await getSchemaVersion(db)).toBe(15);
+    expect(await getSchemaVersion(db)).toBe(16);
     expect(db.__state.tables.get('article_scores')).toEqual(
       expect.arrayContaining(['score_status', 'confidence', 'preference_confidence', 'weighted_average'])
     );
-    await expect(assertSchemaVersion(db)).resolves.toBe(15);
+    await expect(assertSchemaVersion(db)).resolves.toBe(16);
   });
 
   it('keeps reaction-reason migration compatible from v6', async () => {
@@ -300,9 +300,9 @@ describe('migrations', () => {
 
     await ensureSchema(db);
 
-    expect(await getSchemaVersion(db)).toBe(15);
+    expect(await getSchemaVersion(db)).toBe(16);
     expect(db.__state.tables.has('article_reaction_reasons')).toBe(true);
-    await expect(assertSchemaVersion(db)).resolves.toBe(15);
+    await expect(assertSchemaVersion(db)).resolves.toBe(16);
   });
 
   it('seeds the starter tag taxonomy exactly once', async () => {

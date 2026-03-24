@@ -11,7 +11,7 @@ describe('getSessionFromRequest', () => {
     const secret = 'test-session-secret-with-minimum-length-123456';
     const value = await createSessionValue(secret);
     const session = await getSessionFromRequest(makeRequest(`${SESSION_COOKIE}=${value}`), secret);
-    expect(session).toEqual({ id: 'admin' });
+    expect(session).toEqual({ id: 'admin', role: 'admin' });
   });
 
   it('returns null for malformed session cookie payload without throwing', async () => {

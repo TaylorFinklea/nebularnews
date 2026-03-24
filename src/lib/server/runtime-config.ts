@@ -146,11 +146,15 @@ export const inspectRuntimeConfig = (env: App.Platform['env']): RuntimeConfigRep
     mobilePublicConfig: false
   };
 
+  const supabaseJwtSecret = trim(env.SUPABASE_JWT_SECRET);
   if (adminPasswordHash && isValidPbkdf2Hash(adminPasswordHash)) {
     secretChecks.adminPasswordHash = true;
+  } else if (supabaseJwtSecret) {
+    // Supabase auth is configured, admin password is optional
+    warnings.push('ADMIN_PASSWORD_HASH is not set — admin-password login is disabled. Supabase auth is active.');
   } else {
     errors.push(
-      `ADMIN_PASSWORD_HASH is missing or invalid (expected pbkdf2$iterations$salt$hash, iterations ${PBKDF2_MIN_ITERATIONS}-${PBKDF2_MAX_ITERATIONS}, valid base64 salt/hash).`
+      `ADMIN_PASSWORD_HASH is missing or invalid (expected pbkdf2$iterations$salt$hash, iterations ${PBKDF2_MIN_ITERATIONS}-${PBKDF2_MAX_ITERATIONS}, valid base64 salt/hash). Set ADMIN_PASSWORD_HASH or configure SUPABASE_JWT_SECRET.`
     );
   }
 

@@ -10,6 +10,7 @@
   import ArticleProse from '$lib/components/articles/ArticleProse.svelte';
   import ArticleQuickTake from '$lib/components/articles/ArticleQuickTake.svelte';
   import ArticleUtilities from '$lib/components/articles/ArticleUtilities.svelte';
+  import ArticleChat from '$lib/components/articles/ArticleChat.svelte';
 
   export let data;
 
@@ -353,6 +354,8 @@
       {rerunBusy}
       on:rerun={(e) => rerunJobs(e.detail.types)}
     />
+
+    <ArticleChat articleId={data.article.id} />
 
     <Card>
       <h2>Full text</h2>

@@ -98,6 +98,8 @@ import {
   getScoringMethod,
   getScoringAiEnhancementThreshold,
   getScoringLearningRate,
+  getBrowserScrapingEnabled,
+  getBrowserScrapeProvider,
   DEFAULT_SCORING_METHOD,
   DEFAULT_SCORING_AI_ENHANCEMENT_THRESHOLD,
   DEFAULT_SCORING_LEARNING_RATE
@@ -172,13 +174,16 @@ export const load = async ({ platform }) => {
     newsBriefScoreCutoff: newsBrief.scoreCutoff,
     scoringMethod: await getScoringMethod(db),
     scoringAiEnhancementThreshold: await getScoringAiEnhancementThreshold(db),
-    scoringLearningRate: await getScoringLearningRate(db)
+    scoringLearningRate: await getScoringLearningRate(db),
+    browserScrapingEnabled: await getBrowserScrapingEnabled(db),
+    browserScrapeProvider: await getBrowserScrapeProvider(db),
+    browserScrapeApiUrl: (await getSetting(db, 'browser_scrape_api_url')) ?? ''
   };
 
   const keys = await dbAll<{ provider: string }>(db, 'SELECT provider FROM provider_keys');
-  const keyMap = { openai: false, anthropic: false };
+  const keyMap: Record<string, boolean> = { openai: false, anthropic: false, browser_scrape: false };
   for (const key of keys) {
-    if (key.provider in keyMap) keyMap[key.provider as 'openai' | 'anthropic'] = true;
+    if (key.provider in keyMap) keyMap[key.provider] = true;
   }
 
   const profile = await ensurePreferenceProfile(db);

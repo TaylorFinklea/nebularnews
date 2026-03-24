@@ -117,6 +117,13 @@
   $: connectedApps = data.connectedApps ?? [];
   $: autoReadDelaySeconds = (Number(autoReadDelayMs) / 1000).toFixed(2);
 
+  let browserScrapingEnabled = Boolean(data.settings.browserScrapingEnabled);
+  let browserScrapeProvider = data.settings.browserScrapeProvider ?? 'browserless';
+  let browserScrapeApiUrl = data.settings.browserScrapeApiUrl ?? '';
+  let browserScrapeApiKey = '';
+  let browserScrapeKeyStatus = Boolean(data.keyMap.browser_scrape);
+  let browserScrapeKeySaving = false;
+
   let openaiKey = '';
   let anthropicKey = '';
   let profileText = data.profile.profile_text;
@@ -789,6 +796,51 @@
       showToast('Failed to remove provider key', 'error');
     } finally {
       setKeyLoading(provider, false);
+    }
+  };
+
+  const saveBrowserScrapeKey = async () => {
+    if (!browserScrapeApiKey || browserScrapeKeySaving) return;
+    browserScrapeKeySaving = true;
+    try {
+      const res = await apiFetch('/api/settings', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ browserScrapeApiKey })
+      });
+      if (!res.ok) {
+        showToast('Failed to save scraper key', 'error');
+        return;
+      }
+      browserScrapeApiKey = '';
+      browserScrapeKeyStatus = true;
+      showToast('Scraper API key saved.', 'success');
+    } catch {
+      showToast('Failed to save scraper key', 'error');
+    } finally {
+      browserScrapeKeySaving = false;
+    }
+  };
+
+  const removeBrowserScrapeKey = async () => {
+    if (browserScrapeKeySaving) return;
+    browserScrapeKeySaving = true;
+    try {
+      const res = await apiFetch('/api/settings', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ browserScrapeApiKey: null })
+      });
+      if (!res.ok) {
+        showToast('Failed to remove scraper key', 'error');
+        return;
+      }
+      browserScrapeKeyStatus = false;
+      showToast('Scraper API key removed.', 'success');
+    } catch {
+      showToast('Failed to remove scraper key', 'error');
+    } finally {
+      browserScrapeKeySaving = false;
     }
   };
 
@@ -1467,6 +1519,57 @@
           </Button>
         </div>
       </div>
+
+      <!-- Browser Scraping -->
+      <div class="settings-section-title">Browser Scraping</div>
+      <p class="muted">Use a headless browser service for sites where standard extraction fails. Feeds are auto-flagged when Readability consistently produces poor results.</p>
+
+      <label class="toggle-row">
+        <input type="checkbox" bind:checked={browserScrapingEnabled} on:change={autoSave} />
+        <span>Enable browser scraping</span>
+      </label>
+
+      {#if browserScrapingEnabled}
+        <label>
+          Provider
+          <select bind:value={browserScrapeProvider} on:change={autoSave}>
+            <option value="browserless">Browserless</option>
+            <option value="scrapingbee">ScrapingBee</option>
+            <option value="generic">Generic (custom endpoint)</option>
+          </select>
+        </label>
+
+        <label>
+          Custom API URL <span class="muted small">(leave blank for default)</span>
+          <input type="text" bind:value={browserScrapeApiUrl} on:input={autoSave} placeholder={
+            browserScrapeProvider === 'browserless' ? 'https://chrome.browserless.io' :
+            browserScrapeProvider === 'scrapingbee' ? 'https://app.scrapingbee.com/api/v1' :
+            'https://your-scraper.example.com'
+          } />
+        </label>
+
+        <div class="subsection soft-panel">
+          <div class="key-provider-header">
+            <div>
+              <h3>Scraper API Key</h3>
+              <p class="muted small">{browserScrapeKeyStatus ? 'Key stored' : 'No key yet'}</p>
+            </div>
+          </div>
+          <input type="password" placeholder="Paste scraper API key" bind:value={browserScrapeApiKey} />
+          <div style="display: flex; gap: 0.5rem;">
+            <Button size="inline" on:click={saveBrowserScrapeKey} disabled={!browserScrapeApiKey || browserScrapeKeySaving}>
+              <IconDeviceFloppy size={15} stroke={1.9} />
+              <span>{browserScrapeKeySaving ? 'Saving...' : 'Save key'}</span>
+            </Button>
+            {#if browserScrapeKeyStatus}
+              <Button variant="danger" size="inline" on:click={removeBrowserScrapeKey} disabled={browserScrapeKeySaving}>
+                <IconTrash size={15} stroke={1.9} />
+                <span>Remove</span>
+              </Button>
+            {/if}
+          </div>
+        </div>
+      {/if}
 
       <!-- Connected Apps -->
       <div class="settings-section-title">Connected Apps</div>

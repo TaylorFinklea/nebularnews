@@ -1,5 +1,3 @@
-import puppeteer from '@cloudflare/puppeteer';
-
 export type BrowserScrapeProvider = 'cloudflare' | 'steel' | 'browserless' | 'scrapingbee' | 'generic';
 
 export type BrowserScrapeConfig = {
@@ -56,6 +54,7 @@ async function fetchCloudflare(
   browserBinding: unknown,
   timeoutMs: number
 ): Promise<BrowserScrapeResult> {
+  const puppeteer = (await import('@cloudflare/puppeteer')).default;
   const browser = await puppeteer.launch(browserBinding as Fetcher);
   try {
     const page = await browser.newPage();

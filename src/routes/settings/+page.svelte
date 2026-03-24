@@ -1541,21 +1541,17 @@
           </select>
         </label>
 
-        {#if browserScrapeProvider === 'cloudflare'}
-          <p class="muted small">Uses Cloudflare Browser Rendering — no API key or URL needed.</p>
-        {:else}
-          <label>
-            Custom API URL <span class="muted small">(leave blank for default)</span>
-            <input type="text" bind:value={browserScrapeApiUrl} on:input={autoSave} placeholder={
-              browserScrapeProvider === 'steel' ? 'https://api.steel.dev' :
-              browserScrapeProvider === 'browserless' ? 'https://chrome.browserless.io' :
-              browserScrapeProvider === 'scrapingbee' ? 'https://app.scrapingbee.com/api/v1' :
-              'https://your-scraper.example.com'
-            } />
-          </label>
-        {/if}
+        <label>
+          API URL <span class="muted small">(leave blank for default)</span>
+          <input type="text" bind:value={browserScrapeApiUrl} on:input={autoSave} placeholder={
+            browserScrapeProvider === 'cloudflare' ? 'https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/browser-rendering' :
+            browserScrapeProvider === 'steel' ? 'https://api.steel.dev' :
+            browserScrapeProvider === 'browserless' ? 'https://chrome.browserless.io' :
+            browserScrapeProvider === 'scrapingbee' ? 'https://app.scrapingbee.com/api/v1' :
+            'https://your-scraper.example.com'
+          } />
+        </label>
 
-        {#if browserScrapeProvider !== 'cloudflare'}
         <div class="subsection soft-panel">
           <div class="key-provider-header">
             <div>
@@ -1577,7 +1573,6 @@
             {/if}
           </div>
         </div>
-        {/if}
       {/if}
 
       <!-- Connected Apps -->

@@ -928,7 +928,7 @@ import type { BrowserScrapeProvider, BrowserScrapeConfig } from './browser-scrap
 const VALID_BROWSER_SCRAPE_PROVIDERS = new Set<BrowserScrapeProvider>(['cloudflare', 'steel', 'browserless', 'scrapingbee', 'generic']);
 
 const DEFAULT_PROVIDER_URLS: Record<BrowserScrapeProvider, string> = {
-  cloudflare: '',
+  cloudflare: 'https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/browser-rendering',
   steel: 'https://api.steel.dev',
   browserless: 'https://chrome.browserless.io',
   scrapingbee: 'https://app.scrapingbee.com/api/v1',
@@ -958,12 +958,7 @@ export async function getBrowserScrapeConfig(
   const provider = await getBrowserScrapeProvider(db);
   const customUrl = await getSetting(db, 'browser_scrape_api_url');
 
-  // Cloudflare Browser Rendering uses a Workers binding — no API key needed
-  if (provider === 'cloudflare') {
-    return { provider, apiUrl: '', apiKey: '' };
-  }
-
-  // External providers require an API key from provider_keys table
+  // All providers require an API key from provider_keys table
   const row = await dbGet<{ encrypted_key: string }>(
     db,
     "SELECT encrypted_key FROM provider_keys WHERE provider = 'browser_scrape'",

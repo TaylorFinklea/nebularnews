@@ -17,22 +17,16 @@ const DEFAULT_TIMEOUT_MS = 20_000;
 export async function fetchWithBrowser(
   url: string,
   config: BrowserScrapeConfig,
-  options?: { timeoutMs?: number; browserBinding?: unknown }
+  options?: { timeoutMs?: number }
 ): Promise<BrowserScrapeResult> {
   const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-
-  if (config.provider === 'cloudflare') {
-    if (!options?.browserBinding) {
-      throw new Error('Cloudflare Browser Rendering requires the BROWSER binding');
-    }
-    return fetchCloudflare(url, options.browserBinding, timeoutMs);
-  }
-
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     switch (config.provider) {
+      case 'cloudflare':
+        return await fetchCloudflare(url, config, controller.signal);
       case 'browserless':
         return await fetchBrowserless(url, config, controller.signal);
       case 'steel':
@@ -51,23 +45,25 @@ export async function fetchWithBrowser(
 
 async function fetchCloudflare(
   url: string,
-  browserBinding: unknown,
-  timeoutMs: number
+  config: BrowserScrapeConfig,
+  signal: AbortSignal
 ): Promise<BrowserScrapeResult> {
-  const puppeteer = (await import('@cloudflare/puppeteer')).default;
-  const browser = await puppeteer.launch(browserBinding as Fetcher);
-  try {
-    const page = await browser.newPage();
-    const response = await page.goto(url, {
-      waitUntil: 'networkidle0',
-      timeout: timeoutMs
-    });
-    const html = await page.content();
-    const statusCode = response?.status() ?? 200;
-    return { html, statusCode, provider: 'cloudflare' };
-  } finally {
-    await browser.close();
+  // Cloudflare Browser Rendering REST API — /content returns fully rendered HTML
+  const endpoint = `${config.apiUrl}/content`;
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${config.apiKey}`
+    },
+    body: JSON.stringify({ url }),
+    signal
+  });
+  if (!res.ok) {
+    throw new Error(`Cloudflare Browser Rendering returned ${res.status}: ${await res.text()}`);
   }
+  const data = (await res.json()) as { html?: string };
+  return { html: data.html ?? '', statusCode: res.status, provider: 'cloudflare' };
 }
 
 async function fetchBrowserless(

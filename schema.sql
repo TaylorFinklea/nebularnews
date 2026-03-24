@@ -436,7 +436,7 @@ CREATE INDEX IF NOT EXISTS idx_chat_messages_thread ON chat_messages(thread_id, 
 CREATE INDEX IF NOT EXISTS idx_feeds_next_poll ON feeds(next_poll_at);
 CREATE INDEX IF NOT EXISTS idx_articles_published ON articles(published_at);
 CREATE INDEX IF NOT EXISTS idx_articles_image_status ON articles(image_status, image_checked_at);
-CREATE INDEX IF NOT EXISTS idx_articles_extraction_quality ON articles(extraction_quality, extraction_method);
+-- idx_articles_extraction_quality is created by migration V14 (columns added via ALTER TABLE)
 CREATE INDEX IF NOT EXISTS idx_news_brief_editions_status_run_after ON news_brief_editions(status, run_after);
 CREATE INDEX IF NOT EXISTS idx_news_brief_editions_generated_at ON news_brief_editions(generated_at DESC, scheduled_for DESC);
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status, run_after);

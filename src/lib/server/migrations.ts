@@ -5,7 +5,7 @@ let schemaReady = false;
 let schemaInitPromise: Promise<void> | null = null;
 
 const MAX_PUBLISHED_FUTURE_MS = 1000 * 60 * 60 * 24;
-export const EXPECTED_SCHEMA_VERSION = 16;
+export const EXPECTED_SCHEMA_VERSION = 17;
 
 const runSafe = async (db: Db, sql: string, params: unknown[] = []) => {
   try {
@@ -732,6 +732,269 @@ const applyV16 = async (db: Db) => {
   );
 };
 
+const SYSTEM_SETTINGS_KEYS = [
+  'scheduler_jobs_interval_min', 'scheduler_poll_interval_min',
+  'scheduler_pull_slices_per_tick', 'scheduler_pull_slice_budget_ms',
+  'scheduler_job_budget_idle_ms', 'scheduler_job_budget_while_pull_ms',
+  'scheduler_auto_queue_today_missing',
+  'retention_days', 'retention_delete_days', 'retention_mode',
+  'max_feeds_per_poll', 'max_items_per_poll',
+  'job_processor_batch_size',
+  'events_poll_ms', 'dashboard_refresh_min_ms',
+  'initial_feed_lookback_days',
+  'ingest_provider', 'ingest_model', 'ingest_reasoning_effort',
+  'chat_provider', 'chat_model', 'chat_reasoning_effort',
+  'default_provider', 'default_model', 'reasoning_effort',
+  'lane_summaries', 'lane_scoring', 'lane_profile_refresh', 'lane_key_points', 'lane_auto_tagging',
+  'score_system_prompt', 'score_user_prompt_template',
+  'scoring_method', 'scoring_ai_enhancement_threshold', 'scoring_learning_rate',
+  'browser_scraping_enabled', 'browser_scrape_provider', 'browser_scrape_api_url'
+];
+
+const applyV17 = async (db: Db) => {
+  const timestamp = Date.now();
+
+  // 1a. user_feed_subscriptions
+  await runSafe(
+    db,
+    `CREATE TABLE IF NOT EXISTS user_feed_subscriptions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      feed_id TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      UNIQUE(user_id, feed_id),
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(feed_id) REFERENCES feeds(id) ON DELETE CASCADE
+    )`
+  );
+  await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_ufs_user ON user_feed_subscriptions(user_id)');
+  await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_ufs_feed ON user_feed_subscriptions(feed_id)');
+  await runSafe(
+    db,
+    `INSERT OR IGNORE INTO user_feed_subscriptions (id, user_id, feed_id, created_at)
+     SELECT ('ufs-' || id), 'admin', id, COALESCE(last_polled_at, ?)
+     FROM feeds`,
+    [timestamp]
+  );
+
+  // 1b. Recreate article_read_state with user_id in PK
+  await runSafe(
+    db,
+    `CREATE TABLE IF NOT EXISTS article_read_state_v2 (
+      user_id TEXT NOT NULL,
+      article_id TEXT NOT NULL,
+      is_read INTEGER NOT NULL CHECK (is_read IN (0, 1)),
+      updated_at INTEGER NOT NULL,
+      saved_at INTEGER,
+      PRIMARY KEY (user_id, article_id),
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE
+    )`
+  );
+  await runSafe(
+    db,
+    `INSERT OR IGNORE INTO article_read_state_v2 (user_id, article_id, is_read, updated_at, saved_at)
+     SELECT 'admin', article_id, is_read, updated_at, saved_at FROM article_read_state`
+  );
+  await runSafe(db, 'DROP TABLE IF EXISTS article_read_state');
+  await runSafe(db, 'ALTER TABLE article_read_state_v2 RENAME TO article_read_state');
+  await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_article_read_state_user ON article_read_state(user_id)');
+  await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_article_read_state_updated ON article_read_state(updated_at)');
+  await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_article_read_state_saved ON article_read_state(saved_at)');
+
+  // 1b. Recreate article_reactions with user_id in UNIQUE
+  await runSafe(
+    db,
+    `CREATE TABLE IF NOT EXISTS article_reactions_v2 (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      article_id TEXT NOT NULL,
+      feed_id TEXT NOT NULL,
+      value INTEGER NOT NULL CHECK (value IN (-1, 1)),
+      created_at INTEGER NOT NULL,
+      UNIQUE(user_id, article_id),
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE,
+      FOREIGN KEY(feed_id) REFERENCES feeds(id) ON DELETE CASCADE
+    )`
+  );
+  await runSafe(
+    db,
+    `INSERT OR IGNORE INTO article_reactions_v2 (id, user_id, article_id, feed_id, value, created_at)
+     SELECT id, 'admin', article_id, feed_id, value, created_at FROM article_reactions`
+  );
+  await runSafe(db, 'DROP TABLE IF EXISTS article_reactions');
+  await runSafe(db, 'ALTER TABLE article_reactions_v2 RENAME TO article_reactions');
+  await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_article_reactions_user ON article_reactions(user_id)');
+  await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_article_reactions_feed ON article_reactions(feed_id)');
+
+  // 1b. Recreate article_reaction_reasons with user_id in PK
+  await runSafe(
+    db,
+    `CREATE TABLE IF NOT EXISTS article_reaction_reasons_v2 (
+      user_id TEXT NOT NULL,
+      article_id TEXT NOT NULL,
+      reason_code TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (user_id, article_id, reason_code),
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE
+    )`
+  );
+  await runSafe(
+    db,
+    `INSERT OR IGNORE INTO article_reaction_reasons_v2 (user_id, article_id, reason_code, created_at)
+     SELECT 'admin', article_id, reason_code, created_at FROM article_reaction_reasons`
+  );
+  await runSafe(db, 'DROP TABLE IF EXISTS article_reaction_reasons');
+  await runSafe(db, 'ALTER TABLE article_reaction_reasons_v2 RENAME TO article_reaction_reasons');
+  await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_article_reaction_reasons_code ON article_reaction_reasons(reason_code)');
+
+  // 1b. Recreate article_tags with user_id in UNIQUE
+  await runSafe(
+    db,
+    `CREATE TABLE IF NOT EXISTS article_tags_v2 (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      article_id TEXT NOT NULL,
+      tag_id TEXT NOT NULL,
+      source TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'ai', 'system')),
+      confidence REAL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      UNIQUE(user_id, article_id, tag_id),
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE,
+      FOREIGN KEY(tag_id) REFERENCES tags(id) ON DELETE CASCADE
+    )`
+  );
+  await runSafe(
+    db,
+    `INSERT OR IGNORE INTO article_tags_v2 (id, user_id, article_id, tag_id, source, confidence, created_at, updated_at)
+     SELECT id, 'admin', article_id, tag_id, source, confidence, created_at, updated_at FROM article_tags`
+  );
+  await runSafe(db, 'DROP TABLE IF EXISTS article_tags');
+  await runSafe(db, 'ALTER TABLE article_tags_v2 RENAME TO article_tags');
+  await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_article_tags_article ON article_tags(article_id)');
+  await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_article_tags_tag ON article_tags(tag_id)');
+  await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_article_tags_user ON article_tags(user_id)');
+  await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_tags_updated ON tags(updated_at)');
+
+  // 1b. Recreate article_tag_suggestion_dismissals with user_id in PK
+  await runSafe(
+    db,
+    `CREATE TABLE IF NOT EXISTS article_tag_suggestion_dismissals_v2 (
+      user_id TEXT NOT NULL,
+      article_id TEXT NOT NULL,
+      name_normalized TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY(user_id, article_id, name_normalized),
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE
+    )`
+  );
+  await runSafe(
+    db,
+    `INSERT OR IGNORE INTO article_tag_suggestion_dismissals_v2 (user_id, article_id, name_normalized, created_at)
+     SELECT 'admin', article_id, name_normalized, created_at FROM article_tag_suggestion_dismissals`
+  );
+  await runSafe(db, 'DROP TABLE IF EXISTS article_tag_suggestion_dismissals');
+  await runSafe(db, 'ALTER TABLE article_tag_suggestion_dismissals_v2 RENAME TO article_tag_suggestion_dismissals');
+  await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_article_tag_dismissals_article ON article_tag_suggestion_dismissals(article_id)');
+
+  // 1b. Recreate article_score_overrides with user_id in PK
+  await runSafe(
+    db,
+    `CREATE TABLE IF NOT EXISTS article_score_overrides_v2 (
+      user_id TEXT NOT NULL,
+      article_id TEXT NOT NULL,
+      score INTEGER NOT NULL CHECK (score >= 1 AND score <= 5),
+      comment TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY (user_id, article_id),
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE
+    )`
+  );
+  await runSafe(
+    db,
+    `INSERT OR IGNORE INTO article_score_overrides_v2 (user_id, article_id, score, comment, created_at, updated_at)
+     SELECT 'admin', article_id, score, comment, created_at, updated_at FROM article_score_overrides`
+  );
+  await runSafe(db, 'DROP TABLE IF EXISTS article_score_overrides');
+  await runSafe(db, 'ALTER TABLE article_score_overrides_v2 RENAME TO article_score_overrides');
+
+  // 1b. Recreate settings with user_id in UNIQUE
+  await runSafe(
+    db,
+    `CREATE TABLE IF NOT EXISTS settings_v2 (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL DEFAULT 'admin',
+      key TEXT NOT NULL,
+      value TEXT NOT NULL,
+      updated_at INTEGER NOT NULL,
+      UNIQUE(user_id, key)
+    )`
+  );
+  await runSafe(
+    db,
+    `INSERT OR IGNORE INTO settings_v2 (id, user_id, key, value, updated_at)
+     SELECT id, 'admin', key, value, updated_at FROM settings`
+  );
+  await runSafe(db, 'DROP TABLE IF EXISTS settings');
+  await runSafe(db, 'ALTER TABLE settings_v2 RENAME TO settings');
+
+  // Reclassify system settings
+  const placeholders = SYSTEM_SETTINGS_KEYS.map(() => '?').join(',');
+  await runSafe(
+    db,
+    `UPDATE settings SET user_id = '__system__' WHERE key IN (${placeholders})`,
+    SYSTEM_SETTINGS_KEYS
+  );
+
+  // 1b. Recreate chat_threads with user_id in UNIQUE
+  await runSafe(
+    db,
+    `CREATE TABLE IF NOT EXISTS chat_threads_v2 (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      article_id TEXT,
+      title TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      UNIQUE(user_id, article_id),
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE
+    )`
+  );
+  await runSafe(
+    db,
+    `INSERT OR IGNORE INTO chat_threads_v2 (id, user_id, article_id, title, created_at, updated_at)
+     SELECT id, 'admin', article_id, title, created_at, updated_at FROM chat_threads`
+  );
+  await runSafe(db, 'DROP TABLE IF EXISTS chat_threads');
+  await runSafe(db, 'ALTER TABLE chat_threads_v2 RENAME TO chat_threads');
+  await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_chat_threads_article ON chat_threads(article_id)');
+  await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_chat_threads_user ON chat_threads(user_id)');
+
+  // 1c. ALTER TABLE for remaining tables
+  await runSafe(db, "ALTER TABLE article_feedback ADD COLUMN user_id TEXT NOT NULL DEFAULT 'admin'");
+  await runSafe(db, "ALTER TABLE article_tag_suggestions ADD COLUMN user_id TEXT NOT NULL DEFAULT 'admin'");
+  await runSafe(db, "ALTER TABLE news_brief_editions ADD COLUMN user_id TEXT NOT NULL DEFAULT 'admin'");
+  await runSafe(db, "ALTER TABLE device_tokens ADD COLUMN user_id TEXT NOT NULL DEFAULT 'admin'");
+  await runSafe(db, "ALTER TABLE preference_profile ADD COLUMN user_id TEXT NOT NULL DEFAULT 'admin'");
+
+  // Add user_id to topic/author affinities for per-user learning
+  await runSafe(db, "ALTER TABLE topic_affinities ADD COLUMN user_id TEXT NOT NULL DEFAULT 'admin'");
+  await runSafe(db, "ALTER TABLE author_affinities ADD COLUMN user_id TEXT NOT NULL DEFAULT 'admin'");
+
+  // 1d. Additional indexes
+  await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_article_feedback_user ON article_feedback(user_id)');
+  await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_device_tokens_user ON device_tokens(user_id)');
+  await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_news_brief_editions_user ON news_brief_editions(user_id)');
+};
+
 export async function ensureSchema(db: Db) {
   if (schemaReady) return;
   if (schemaInitPromise) return schemaInitPromise;
@@ -802,6 +1065,10 @@ export async function ensureSchema(db: Db) {
     if (currentVersion < 16) {
       await applyV16(db);
       await markVersionApplied(db, 16, 'v16_users_table');
+    }
+    if (currentVersion < 17) {
+      await applyV17(db);
+      await markVersionApplied(db, 17, 'v17_per_user_data_isolation');
     }
     schemaReady = true;
   })();
@@ -968,6 +1235,9 @@ export async function assertSchemaVersion(db: Db, expected = EXPECTED_SCHEMA_VER
   if (expected >= 16) {
     await assertRequiredV16Objects(db);
   }
+  if (expected >= 17) {
+    await assertRequiredV17Objects(db);
+  }
   return version;
 }
 
@@ -982,5 +1252,11 @@ const assertRequiredV15Objects = async (db: Db) => {
 const assertRequiredV16Objects = async (db: Db) => {
   if (!(await tableExists(db, 'users'))) {
     throw new Error('Missing required table: users');
+  }
+};
+
+const assertRequiredV17Objects = async (db: Db) => {
+  if (!(await tableExists(db, 'user_feed_subscriptions'))) {
+    throw new Error('Missing required table: user_feed_subscriptions');
   }
 };

@@ -208,8 +208,8 @@ export async function deleteTag(db: Db, tagId: string) {
   await dbRun(db, 'DELETE FROM tags WHERE id = ?', [tagId]);
 }
 
-export async function getTagUsageCount(db: Db, tagId: string) {
-  const row = await dbGet<{ count: number }>(db, 'SELECT COUNT(*) as count FROM article_tags WHERE tag_id = ?', [tagId]);
+export async function getTagUsageCount(db: Db, userId: string, tagId: string) {
+  const row = await dbGet<{ count: number }>(db, 'SELECT COUNT(*) as count FROM article_tags WHERE tag_id = ? AND user_id = ?', [tagId, userId]);
   return Number(row?.count ?? 0);
 }
 
@@ -247,7 +247,7 @@ export async function listTags(db: Db, options?: { q?: string; limit?: number })
   return rows.map((row) => ({ ...row, article_count: Number(row.article_count ?? 0) }));
 }
 
-export async function listTagsForArticles(db: Db, articleIds: string[]) {
+export async function listTagsForArticles(db: Db, userId: string, articleIds: string[]) {
   const deduped = [...new Set(articleIds.filter(Boolean))];
   const byArticle = new Map<string, ArticleTag[]>();
   if (deduped.length === 0) return byArticle;
@@ -283,8 +283,9 @@ export async function listTagsForArticles(db: Db, articleIds: string[]) {
     FROM article_tags at
     JOIN tags t ON t.id = at.tag_id
     WHERE at.article_id IN (${placeholders(deduped.length)})
+      AND at.user_id = ?
     ORDER BY t.name COLLATE NOCASE ASC`,
-    deduped
+    [...deduped, userId]
   );
 
   for (const row of rows) {
@@ -309,13 +310,14 @@ export async function listTagsForArticles(db: Db, articleIds: string[]) {
   return byArticle;
 }
 
-export async function listTagsForArticle(db: Db, articleId: string) {
-  const byArticle = await listTagsForArticles(db, [articleId]);
+export async function listTagsForArticle(db: Db, userId: string, articleId: string) {
+  const byArticle = await listTagsForArticles(db, userId, [articleId]);
   return byArticle.get(articleId) ?? [];
 }
 
 export async function listTagLinksForArticle(
   db: Db,
+  userId: string,
   articleId: string,
   options?: { sources?: TagSource[] }
 ) {
@@ -327,9 +329,10 @@ export async function listTagLinksForArticle(
     `SELECT tag_id, source, confidence
      FROM article_tags
      WHERE article_id = ?
+       AND user_id = ?
      ${whereSource}
      ORDER BY tag_id ASC`,
-    [articleId, ...sources]
+    [articleId, userId, ...sources]
   );
 
   return rows.map((row) => ({
@@ -352,7 +355,7 @@ export const serializeArticleTagLinkState = (
     .sort()
     .join('|');
 
-export async function listTagSuggestionsForArticles(db: Db, articleIds: string[]) {
+export async function listTagSuggestionsForArticles(db: Db, userId: string, articleIds: string[]) {
   const deduped = [...new Set(articleIds.filter(Boolean))];
   const byArticle = new Map<string, ArticleTagSuggestion[]>();
   if (deduped.length === 0) return byArticle;
@@ -371,8 +374,9 @@ export async function listTagSuggestionsForArticles(db: Db, articleIds: string[]
       updated_at
     FROM article_tag_suggestions
     WHERE article_id IN (${placeholders(deduped.length)})
+      AND user_id = ?
     ORDER BY article_id ASC, confidence DESC NULLS LAST, name COLLATE NOCASE ASC`,
-    deduped
+    [...deduped, userId]
   );
 
   for (const row of rows) {
@@ -387,22 +391,23 @@ export async function listTagSuggestionsForArticles(db: Db, articleIds: string[]
   return byArticle;
 }
 
-export async function listTagSuggestionsForArticle(db: Db, articleId: string) {
-  const byArticle = await listTagSuggestionsForArticles(db, [articleId]);
+export async function listTagSuggestionsForArticle(db: Db, userId: string, articleId: string) {
+  const byArticle = await listTagSuggestionsForArticles(db, userId, [articleId]);
   return byArticle.get(articleId) ?? [];
 }
 
-export async function listDismissedSuggestionNamesForArticle(db: Db, articleId: string) {
+export async function listDismissedSuggestionNamesForArticle(db: Db, userId: string, articleId: string) {
   const rows = await dbAll<{ name_normalized: string }>(
     db,
-    'SELECT name_normalized FROM article_tag_suggestion_dismissals WHERE article_id = ?',
-    [articleId]
+    'SELECT name_normalized FROM article_tag_suggestion_dismissals WHERE article_id = ? AND user_id = ?',
+    [articleId, userId]
   );
   return new Set(rows.map((row) => row.name_normalized));
 }
 
 export async function upsertTagSuggestion(
   db: Db,
+  userId: string,
   input: {
     articleId: string;
     name: string;
@@ -423,6 +428,7 @@ export async function upsertTagSuggestion(
     db,
     `INSERT INTO article_tag_suggestions (
        id,
+       user_id,
        article_id,
        name,
        name_normalized,
@@ -432,8 +438,8 @@ export async function upsertTagSuggestion(
        created_at,
        updated_at
      )
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(article_id, name_normalized) DO UPDATE SET
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(user_id, article_id, name_normalized) DO UPDATE SET
        name = excluded.name,
        confidence = excluded.confidence,
        source_provider = excluded.source_provider,
@@ -441,6 +447,7 @@ export async function upsertTagSuggestion(
        updated_at = excluded.updated_at`,
     [
       nanoid(),
+      userId,
       input.articleId,
       name,
       nameNormalized,
@@ -455,6 +462,7 @@ export async function upsertTagSuggestion(
 
 export async function replaceTagSuggestionsForArticle(
   db: Db,
+  userId: string,
   input: {
     articleId: string;
     sourceProvider?: string | null;
@@ -483,7 +491,7 @@ export async function replaceTagSuggestionsForArticle(
   }
 
   for (const candidate of normalized.values()) {
-    await upsertTagSuggestion(db, {
+    await upsertTagSuggestion(db, userId, {
       articleId: input.articleId,
       name: candidate.name,
       confidence: candidate.confidence,
@@ -498,35 +506,37 @@ export async function replaceTagSuggestionsForArticle(
       db,
       `DELETE FROM article_tag_suggestions
        WHERE article_id = ?
+         AND user_id = ?
          AND name_normalized NOT IN (${placeholders(keys.length)})`,
-      [input.articleId, ...keys]
+      [input.articleId, userId, ...keys]
     );
   } else {
-    await dbRun(db, 'DELETE FROM article_tag_suggestions WHERE article_id = ?', [input.articleId]);
+    await dbRun(db, 'DELETE FROM article_tag_suggestions WHERE article_id = ? AND user_id = ?', [input.articleId, userId]);
   }
 }
 
-export async function dismissTagSuggestion(db: Db, articleId: string, name: string) {
+export async function dismissTagSuggestion(db: Db, userId: string, articleId: string, name: string) {
   const normalized = normalizeTagSuggestionKey(name);
   if (!normalized) return;
   const createdAt = now();
   await dbRun(
     db,
-    `INSERT INTO article_tag_suggestion_dismissals (article_id, name_normalized, created_at)
-     VALUES (?, ?, ?)
-     ON CONFLICT(article_id, name_normalized) DO UPDATE SET
+    `INSERT INTO article_tag_suggestion_dismissals (user_id, article_id, name_normalized, created_at)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(user_id, article_id, name_normalized) DO UPDATE SET
        created_at = excluded.created_at`,
-    [articleId, normalized, createdAt]
+    [userId, articleId, normalized, createdAt]
   );
   await dbRun(
     db,
-    'DELETE FROM article_tag_suggestions WHERE article_id = ? AND name_normalized = ?',
-    [articleId, normalized]
+    'DELETE FROM article_tag_suggestions WHERE article_id = ? AND user_id = ? AND name_normalized = ?',
+    [articleId, userId, normalized]
   );
 }
 
 export async function undoDismissTagSuggestion(
   db: Db,
+  userId: string,
   input: {
     articleId: string;
     name: string;
@@ -539,10 +549,10 @@ export async function undoDismissTagSuggestion(
   if (!normalized) return;
   await dbRun(
     db,
-    'DELETE FROM article_tag_suggestion_dismissals WHERE article_id = ? AND name_normalized = ?',
-    [input.articleId, normalized]
+    'DELETE FROM article_tag_suggestion_dismissals WHERE article_id = ? AND user_id = ? AND name_normalized = ?',
+    [input.articleId, userId, normalized]
   );
-  await upsertTagSuggestion(db, {
+  await upsertTagSuggestion(db, userId, {
     articleId: input.articleId,
     name: input.name,
     confidence: input.confidence ?? null,
@@ -551,12 +561,13 @@ export async function undoDismissTagSuggestion(
   });
 }
 
-export async function clearAllDismissedTagSuggestions(db: Db) {
-  await dbRun(db, 'DELETE FROM article_tag_suggestion_dismissals');
+export async function clearAllDismissedTagSuggestions(db: Db, userId: string) {
+  await dbRun(db, 'DELETE FROM article_tag_suggestion_dismissals WHERE user_id = ?', [userId]);
 }
 
 export async function listExistingTagCandidatesForArticle(
   db: Db,
+  userId: string,
   input: { title?: string | null; contentText?: string | null; limit?: number }
 ): Promise<ExistingTagCandidate[]> {
   const limit = Math.min(
@@ -571,12 +582,12 @@ export async function listExistingTagCandidatesForArticle(
     db,
     `SELECT t.id, t.name, COUNT(at.article_id) AS article_count
      FROM tags t
-     JOIN article_tags at ON at.tag_id = t.id
+     JOIN article_tags at ON at.tag_id = t.id AND at.user_id = ?
      GROUP BY t.id
      HAVING COUNT(at.article_id) > 0
      ORDER BY article_count DESC, t.updated_at DESC
      LIMIT ?`,
-    [MATCH_CANDIDATE_SCAN_LIMIT]
+    [userId, MATCH_CANDIDATE_SCAN_LIMIT]
   );
 
   const ranked = rows
@@ -655,19 +666,21 @@ export async function resolveTagsByTokens(db: Db, tokens: string[]) {
 
 export async function attachTagToArticle(
   db: Db,
+  userId: string,
   input: { articleId: string; tagId: string; source?: TagSource; confidence?: number | null }
 ) {
   const timestamp = now();
   await dbRun(
     db,
-    `INSERT INTO article_tags (id, article_id, tag_id, source, confidence, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(article_id, tag_id) DO UPDATE SET
+    `INSERT INTO article_tags (id, user_id, article_id, tag_id, source, confidence, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(user_id, article_id, tag_id) DO UPDATE SET
        source = excluded.source,
        confidence = excluded.confidence,
        updated_at = excluded.updated_at`,
     [
       nanoid(),
+      userId,
       input.articleId,
       input.tagId,
       input.source ?? 'manual',
@@ -678,8 +691,8 @@ export async function attachTagToArticle(
   );
 }
 
-export async function detachTagFromArticle(db: Db, articleId: string, tagId: string) {
-  await dbRun(db, 'DELETE FROM article_tags WHERE article_id = ? AND tag_id = ?', [articleId, tagId]);
+export async function detachTagFromArticle(db: Db, userId: string, articleId: string, tagId: string) {
+  await dbRun(db, 'DELETE FROM article_tags WHERE article_id = ? AND tag_id = ? AND user_id = ?', [articleId, tagId, userId]);
 }
 
 export async function ensureTagByName(
@@ -692,6 +705,7 @@ export async function ensureTagByName(
 
 export async function mergeTags(
   db: Db,
+  userId: string,
   input: { sourceTagId: string; targetTagId: string; deleteSource?: boolean }
 ): Promise<TagMergeResult> {
   const { sourceTagId, targetTagId, deleteSource = true } = input;
@@ -703,24 +717,24 @@ export async function mergeTags(
   const target = await getTagById(db, targetTagId);
   if (!source || !target) throw new Error('Source or target tag not found');
 
-  const movedBefore = await getTagUsageCount(db, sourceTagId);
+  const movedBefore = await getTagUsageCount(db, userId, sourceTagId);
   const timestamp = now();
   await dbRun(
     db,
-    `INSERT INTO article_tags (id, article_id, tag_id, source, confidence, created_at, updated_at)
-     SELECT lower(hex(randomblob(16))), article_id, ?, source, confidence, created_at, ?
+    `INSERT INTO article_tags (id, user_id, article_id, tag_id, source, confidence, created_at, updated_at)
+     SELECT lower(hex(randomblob(16))), user_id, article_id, ?, source, confidence, created_at, ?
      FROM article_tags
-     WHERE tag_id = ?
-     ON CONFLICT(article_id, tag_id) DO UPDATE SET
+     WHERE tag_id = ? AND user_id = ?
+     ON CONFLICT(user_id, article_id, tag_id) DO UPDATE SET
        confidence = COALESCE(excluded.confidence, article_tags.confidence),
        source = CASE
          WHEN article_tags.source = 'manual' THEN article_tags.source
          ELSE excluded.source
        END,
        updated_at = excluded.updated_at`,
-    [targetTagId, timestamp, sourceTagId]
+    [targetTagId, timestamp, sourceTagId, userId]
   );
-  await dbRun(db, 'DELETE FROM article_tags WHERE tag_id = ?', [sourceTagId]);
+  await dbRun(db, 'DELETE FROM article_tags WHERE tag_id = ? AND user_id = ?', [sourceTagId, userId]);
   if (deleteSource) {
     await deleteTag(db, sourceTagId);
   }
@@ -735,9 +749,10 @@ export async function mergeTags(
 
 export async function reassignTagUsage(
   db: Db,
+  userId: string,
   input: { fromTagId: string; toTagId: string; keepFrom?: boolean }
 ) {
-  const result = await mergeTags(db, {
+  const result = await mergeTags(db, userId, {
     sourceTagId: input.fromTagId,
     targetTagId: input.toTagId,
     deleteSource: !input.keepFrom

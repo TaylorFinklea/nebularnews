@@ -968,10 +968,15 @@ const applyV17 = async (db: Db) => {
       FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE
     )`
   );
+  // chat_threads may predate the updated_at column (old scope-based schema had no updated_at)
+  const chatThreadsHasUpdatedAt = await columnExists(db, 'chat_threads', 'updated_at');
   await runSafe(
     db,
-    `INSERT OR IGNORE INTO chat_threads_v2 (id, user_id, article_id, title, created_at, updated_at)
-     SELECT id, 'admin', article_id, title, created_at, updated_at FROM chat_threads`
+    chatThreadsHasUpdatedAt
+      ? `INSERT OR IGNORE INTO chat_threads_v2 (id, user_id, article_id, title, created_at, updated_at)
+         SELECT id, 'admin', article_id, title, created_at, updated_at FROM chat_threads`
+      : `INSERT OR IGNORE INTO chat_threads_v2 (id, user_id, article_id, title, created_at, updated_at)
+         SELECT id, 'admin', article_id, title, created_at, created_at FROM chat_threads`
   );
   await runSafe(db, 'DROP TABLE IF EXISTS chat_threads');
   await runSafe(db, 'ALTER TABLE chat_threads_v2 RENAME TO chat_threads');

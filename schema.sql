@@ -577,3 +577,18 @@ VALUES (11, 'v11_starter_tag_taxonomy', unixepoch() * 1000);
 
 INSERT OR IGNORE INTO schema_migrations (version, name, applied_at)
 VALUES (12, 'v12_public_mcp_oauth', unixepoch() * 1000);
+
+INSERT OR IGNORE INTO schema_migrations (version, name, applied_at)
+VALUES (13, 'v13_reading_list_saved_at', unixepoch() * 1000);
+
+INSERT OR IGNORE INTO schema_migrations (version, name, applied_at)
+VALUES (14, 'v14_content_quality_tracking', unixepoch() * 1000);
+
+INSERT OR IGNORE INTO schema_migrations (version, name, applied_at)
+VALUES (15, 'v15_article_chat', unixepoch() * 1000);
+
+INSERT OR IGNORE INTO schema_migrations (version, name, applied_at)
+VALUES (16, 'v16_users_table', unixepoch() * 1000);
+
+INSERT OR IGNORE INTO schema_migrations (version, name, applied_at)
+VALUES (17, 'v17_per_user_data_isolation', unixepoch() * 1000);

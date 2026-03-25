@@ -492,22 +492,54 @@ const getFirstSetting = async (db: Db, keys: string[]) => {
   return null;
 };
 
-export async function getSetting(db: Db, key: string) {
-  const row = await dbGet<{ value: string }>(db, 'SELECT value FROM settings WHERE key = ?', [key]);
+// User-scoped settings
+export async function getUserSetting(db: Db, userId: string, key: string) {
+  const row = await dbGet<{ value: string }>(
+    db,
+    'SELECT value FROM settings WHERE user_id = ? AND key = ?',
+    [userId, key]
+  );
   return row?.value ?? null;
 }
 
-export async function setSetting(db: Db, key: string, value: string) {
-  const existing = await dbGet<{ id: string }>(db, 'SELECT id FROM settings WHERE key = ?', [key]);
+export async function setUserSetting(db: Db, userId: string, key: string, value: string) {
+  const existing = await dbGet<{ id: string }>(
+    db,
+    'SELECT id FROM settings WHERE user_id = ? AND key = ?',
+    [userId, key]
+  );
   if (existing) {
-    await dbRun(db, 'UPDATE settings SET value = ?, updated_at = ? WHERE key = ?', [value, now(), key]);
+    await dbRun(db, 'UPDATE settings SET value = ?, updated_at = ? WHERE user_id = ? AND key = ?', [value, now(), userId, key]);
   } else {
     await dbRun(
       db,
-      'INSERT INTO settings (id, key, value, updated_at) VALUES (?, ?, ?, ?)',
-      [nanoid(), key, value, now()]
+      'INSERT INTO settings (id, user_id, key, value, updated_at) VALUES (?, ?, ?, ?, ?)',
+      [nanoid(), userId, key, value, now()]
     );
   }
+}
+
+// System-wide settings (scheduler, retention, global config)
+export async function getSystemSetting(db: Db, key: string) {
+  return getUserSetting(db, '__system__', key);
+}
+
+export async function setSystemSetting(db: Db, key: string, value: string) {
+  return setUserSetting(db, '__system__', key, value);
+}
+
+// Backward-compatible wrappers — these read/write as 'admin' user
+// TODO(multi-user): Replace all callers with getUserSetting/setUserSetting + explicit userId
+export async function getSetting(db: Db, key: string) {
+  // Try system settings first, then admin user settings (backward compat)
+  const system = await getUserSetting(db, '__system__', key);
+  if (system !== null) return system;
+  return getUserSetting(db, 'admin', key);
+}
+
+export async function setSetting(db: Db, key: string, value: string) {
+  // Write to admin user (backward compat)
+  return setUserSetting(db, 'admin', key, value);
 }
 
 export async function getProviderModel(db: Db, env: App.Platform['env']) {

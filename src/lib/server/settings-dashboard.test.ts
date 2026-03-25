@@ -52,8 +52,9 @@ import {
 
 const mockSettings = (values: Record<string, string | number | null | undefined>) => {
   dbGetMock.mockImplementation(async (_db: unknown, sql: string, params: unknown[]) => {
-    if (!sql.includes('SELECT value FROM settings WHERE key = ?')) return null;
-    const key = String(params?.[0] ?? '');
+    if (!sql.includes('SELECT value FROM settings WHERE')) return null;
+    // getUserSetting sends (user_id, key); extract the key from the last param
+    const key = String(params?.[params.length - 1] ?? '');
     const value = values[key];
     if (value === undefined || value === null) return null;
     return { value: String(value) };

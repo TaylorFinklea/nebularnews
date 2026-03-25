@@ -39,7 +39,7 @@ describe('article-query', () => {
   it('uses the article_search index for text queries and supports the learning score filter', async () => {
     const { listArticlesWithFilters } = await import('./article-query');
 
-    await listArticlesWithFilters({} as D1Database, {
+    await listArticlesWithFilters({} as D1Database, 'admin', {
       query: 'Puffin',
       limit: 20,
       offset: 0,
@@ -61,7 +61,7 @@ describe('article-query', () => {
   it('keeps unscored distinct from learning in score filters', async () => {
     const { listArticlesWithFilters } = await import('./article-query');
 
-    await listArticlesWithFilters({} as D1Database, {
+    await listArticlesWithFilters({} as D1Database, 'admin', {
       query: '',
       limit: 20,
       offset: 0,

@@ -28,35 +28,42 @@ export type ArticleQueryInput = {
 const sanitizeQuery = (value: string) => (value.toLowerCase().match(/\w+/g) ?? []).join(' ');
 const placeholders = (count: number) => Array.from({ length: count }, () => '?').join(', ');
 
+// Score expressions are shared (article_scores has no user_id)
 const latestScoreExpr = `(SELECT score FROM article_scores WHERE article_id = a.id ORDER BY created_at DESC LIMIT 1)`;
 const latestScoreLabelExpr = `(SELECT label FROM article_scores WHERE article_id = a.id ORDER BY created_at DESC LIMIT 1)`;
 const latestScoreStatusExpr = `(SELECT score_status FROM article_scores WHERE article_id = a.id ORDER BY created_at DESC LIMIT 1)`;
 const latestScoreConfidenceExpr = `(SELECT confidence FROM article_scores WHERE article_id = a.id ORDER BY created_at DESC LIMIT 1)`;
 const latestScorePreferenceConfidenceExpr = `(SELECT preference_confidence FROM article_scores WHERE article_id = a.id ORDER BY created_at DESC LIMIT 1)`;
-const overrideExistsExpr = `EXISTS (SELECT 1 FROM article_score_overrides WHERE article_id = a.id)`;
-const effectiveScoreExpr = `COALESCE(
-  (SELECT score FROM article_score_overrides WHERE article_id = a.id LIMIT 1),
-  CASE
-    WHEN ${latestScoreStatusExpr} = 'ready' THEN ${latestScoreExpr}
-    ELSE NULL
-  END
-)`;
-const effectiveReadExpr = `COALESCE(
-  (SELECT is_read FROM article_read_state WHERE article_id = a.id LIMIT 1),
-  0
-)`;
-const reactionExpr = '(SELECT value FROM article_reactions WHERE article_id = a.id LIMIT 1)';
 
-const sortOrderClause = (sort: SortValue) => {
+// User-scoped expression builders — userId is embedded as a quoted literal in subqueries.
+// Safe because userId is a server-generated nanoid, never user input.
+const escUid = (uid: string) => uid.replace(/'/g, "''");
+const overrideExistsExpr = (uid: string) => `EXISTS (SELECT 1 FROM article_score_overrides WHERE article_id = a.id AND user_id = '${escUid(uid)}')`;
+const effectiveScoreExpr = (uid: string) => `COALESCE(
+  (SELECT score FROM article_score_overrides WHERE article_id = a.id AND user_id = '${escUid(uid)}' LIMIT 1),
+  CASE WHEN ${latestScoreStatusExpr} = 'ready' THEN ${latestScoreExpr} ELSE NULL END
+)`;
+const effectiveReadExpr = (uid: string) => `COALESCE(
+  (SELECT is_read FROM article_read_state WHERE article_id = a.id AND user_id = '${escUid(uid)}' LIMIT 1), 0
+)`;
+const reactionExpr = (uid: string) => `(SELECT value FROM article_reactions WHERE article_id = a.id AND user_id = '${escUid(uid)}' LIMIT 1)`;
+const savedExpr = (uid: string) => `(SELECT saved_at FROM article_read_state WHERE article_id = a.id AND user_id = '${escUid(uid)}' LIMIT 1)`;
+const subscriptionFilter = (uid: string) => `EXISTS (
+  SELECT 1 FROM article_sources src
+  JOIN user_feed_subscriptions ufs ON ufs.feed_id = src.feed_id
+  WHERE src.article_id = a.id AND ufs.user_id = '${escUid(uid)}'
+)`;
+
+const sortOrderClause = (sort: SortValue, uid: string) => {
   if (sort === 'oldest') return 'COALESCE(a.published_at, a.fetched_at) ASC';
   if (sort === 'score_desc') {
-    return `CASE WHEN ${effectiveScoreExpr} IS NULL THEN 1 ELSE 0 END ASC, ${effectiveScoreExpr} DESC, a.published_at DESC NULLS LAST, a.fetched_at DESC`;
+    return `CASE WHEN ${effectiveScoreExpr(uid)} IS NULL THEN 1 ELSE 0 END ASC, ${effectiveScoreExpr(uid)} DESC, a.published_at DESC NULLS LAST, a.fetched_at DESC`;
   }
   if (sort === 'score_asc') {
-    return `CASE WHEN ${effectiveScoreExpr} IS NULL THEN 1 ELSE 0 END ASC, ${effectiveScoreExpr} ASC, a.published_at DESC NULLS LAST, a.fetched_at DESC`;
+    return `CASE WHEN ${effectiveScoreExpr(uid)} IS NULL THEN 1 ELSE 0 END ASC, ${effectiveScoreExpr(uid)} ASC, a.published_at DESC NULLS LAST, a.fetched_at DESC`;
   }
   if (sort === 'unread_first') {
-    return `${effectiveReadExpr} ASC, a.published_at DESC NULLS LAST, a.fetched_at DESC`;
+    return `${effectiveReadExpr(uid)} ASC, a.published_at DESC NULLS LAST, a.fetched_at DESC`;
   }
   if (sort === 'title_az') {
     return `COALESCE(a.title, '') COLLATE NOCASE ASC, a.published_at DESC NULLS LAST, a.fetched_at DESC`;
@@ -64,12 +71,17 @@ const sortOrderClause = (sort: SortValue) => {
   return 'a.published_at DESC NULLS LAST, a.fetched_at DESC';
 };
 
-const buildWhere = (input: ArticleQueryInput) => {
+const buildWhere = (input: ArticleQueryInput & { userId: string }) => {
   const query = input.query?.trim() ?? '';
   const safeQuery = sanitizeQuery(query);
 
   const conditions: string[] = [];
   const params: unknown[] = [];
+
+  const uid = input.userId;
+
+  // Subscription filter — only show articles from feeds the user subscribes to
+  conditions.push(subscriptionFilter(uid));
 
   if (query) {
     conditions.push('article_search MATCH ?');
@@ -87,39 +99,38 @@ const buildWhere = (input: ArticleQueryInput) => {
       .filter((value) => value !== 'learning' && value !== 'unscored')
       .map((value) => Number(value));
     if (numericScores.length > 0) {
-      scoreConditions.push(`${effectiveScoreExpr} IN (${placeholders(numericScores.length)})`);
+      scoreConditions.push(`${effectiveScoreExpr(uid)} IN (${placeholders(numericScores.length)})`);
       params.push(...numericScores);
     }
     if (input.selectedScores.includes('learning')) {
       scoreConditions.push(`${latestScoreStatusExpr} = 'insufficient_signal'`);
     }
     if (input.selectedScores.includes('unscored')) {
-      scoreConditions.push(`(${effectiveScoreExpr} IS NULL AND COALESCE(${latestScoreStatusExpr}, '') != 'insufficient_signal')`);
+      scoreConditions.push(`(${effectiveScoreExpr(uid)} IS NULL AND COALESCE(${latestScoreStatusExpr}, '') != 'insufficient_signal')`);
     }
     if (scoreConditions.length > 0) conditions.push(`(${scoreConditions.join(' OR ')})`);
   }
 
-  if (input.readFilter === 'unread') conditions.push(`${effectiveReadExpr} = 0`);
-  if (input.readFilter === 'read') conditions.push(`${effectiveReadExpr} = 1`);
+  if (input.readFilter === 'unread') conditions.push(`${effectiveReadExpr(uid)} = 0`);
+  if (input.readFilter === 'read') conditions.push(`${effectiveReadExpr(uid)} = 1`);
 
   if (input.savedOnly) {
-    conditions.push(`(SELECT saved_at FROM article_read_state WHERE article_id = a.id LIMIT 1) IS NOT NULL`);
+    conditions.push(`${savedExpr(uid)} IS NOT NULL`);
   }
 
   if (input.selectedReactions.length < REACTION_VALUES.length) {
     const reactionConditions: string[] = [];
-    if (input.selectedReactions.includes('up')) reactionConditions.push(`${reactionExpr} = 1`);
-    if (input.selectedReactions.includes('down')) reactionConditions.push(`${reactionExpr} = -1`);
-    if (input.selectedReactions.includes('none')) reactionConditions.push(`${reactionExpr} IS NULL`);
+    if (input.selectedReactions.includes('up')) reactionConditions.push(`${reactionExpr(uid)} = 1`);
+    if (input.selectedReactions.includes('down')) reactionConditions.push(`${reactionExpr(uid)} = -1`);
+    if (input.selectedReactions.includes('none')) reactionConditions.push(`${reactionExpr(uid)} IS NULL`);
     if (reactionConditions.length > 0) conditions.push(`(${reactionConditions.join(' OR ')})`);
   }
 
   if (input.selectedTagIds.length > 0) {
     conditions.push(
-      `(SELECT COUNT(DISTINCT atf.tag_id)
-         FROM article_tags atf
-        WHERE atf.article_id = a.id
-          AND atf.tag_id IN (${placeholders(input.selectedTagIds.length)})) = ?`
+      `(SELECT COUNT(DISTINCT atf.tag_id) FROM article_tags atf
+        WHERE atf.article_id = a.id AND atf.user_id = '${escUid(uid)}'
+        AND atf.tag_id IN (${placeholders(input.selectedTagIds.length)})) = ?`
     );
     params.push(...input.selectedTagIds);
     params.push(input.selectedTagIds.length);
@@ -132,12 +143,12 @@ const buildWhere = (input: ArticleQueryInput) => {
   };
 };
 
-export const listArticlesWithFilters = async (db: Db, input: ArticleQueryInput) => {
-  const clauses = buildWhere(input);
+export const listArticlesWithFilters = async (db: Db, userId: string, input: ArticleQueryInput) => {
+  const clauses = buildWhere({ ...input, userId });
   const join = clauses.query ? 'JOIN article_search ON article_search.article_id = a.id' : '';
   const orderBy = input.groupedByPublishedAt
     ? 'COALESCE(a.published_at, a.fetched_at) DESC, a.fetched_at DESC'
-    : sortOrderClause(input.sort);
+    : sortOrderClause(input.sort, userId);
 
   const totalRow = await dbGet<{ count: number }>(
     db,
@@ -178,24 +189,24 @@ export const listArticlesWithFilters = async (db: Db, input: ArticleQueryInput) 
       a.fetched_at,
       a.excerpt,
       a.word_count,
-      ${effectiveReadExpr} as is_read,
-      ${reactionExpr} as reaction_value,
+      ${effectiveReadExpr(userId)} as is_read,
+      ${reactionExpr(userId)} as reaction_value,
       (SELECT summary_text FROM article_summaries WHERE article_id = a.id ORDER BY created_at DESC LIMIT 1) as summary_text,
-      ${effectiveScoreExpr} as score,
+      ${effectiveScoreExpr(userId)} as score,
       CASE
-        WHEN ${overrideExistsExpr} THEN 'User corrected'
+        WHEN ${overrideExistsExpr(userId)} THEN 'User corrected'
         ELSE ${latestScoreLabelExpr}
       END as score_label,
       CASE
-        WHEN ${overrideExistsExpr} THEN 'ready'
+        WHEN ${overrideExistsExpr(userId)} THEN 'ready'
         ELSE ${latestScoreStatusExpr}
       END as score_status,
       CASE
-        WHEN ${overrideExistsExpr} THEN 1.0
+        WHEN ${overrideExistsExpr(userId)} THEN 1.0
         ELSE ${latestScoreConfidenceExpr}
       END as score_confidence,
       CASE
-        WHEN ${overrideExistsExpr} THEN 1.0
+        WHEN ${overrideExistsExpr(userId)} THEN 1.0
         ELSE ${latestScorePreferenceConfidenceExpr}
       END as score_preference_confidence
     FROM articles a

@@ -44,13 +44,15 @@ async function aggregateSettings(db: D1Database) {
 }
 
 export const GET = async ({ request, platform }) => {
-  await requireMobileAccess(request, platform.env, platform.env.DB, 'app:read');
+  const { user } = await requireMobileAccess(request, platform.env, platform.env.DB, 'app:read');
+  void user;
   const settings = await aggregateSettings(platform.env.DB);
   return json(settings);
 };
 
 export const PATCH = async ({ request, platform }) => {
-  await requireMobileAccess(request, platform.env, platform.env.DB, 'app:write');
+  const { user } = await requireMobileAccess(request, platform.env, platform.env.DB, 'app:write');
+  void user;
   const body = await request.json().catch(() => ({}));
   const entries: [string, string][] = [];
 

@@ -4,7 +4,7 @@ import { dbAll, dbRun, now } from '$lib/server/db';
 import { requireMobileAccess } from '$lib/server/mobile/auth';
 
 export const GET = async ({ request, platform }) => {
-  await requireMobileAccess(request, platform.env, platform.env.DB, 'app:read');
+  const { user } = await requireMobileAccess(request, platform.env, platform.env.DB, 'app:read');
 
   const feeds = await dbAll(
     platform.env.DB,
@@ -23,14 +23,19 @@ export const GET = async ({ request, platform }) => {
         WHERE src.feed_id = f.id
       ) as article_count
      FROM feeds f
-     ORDER BY COALESCE(NULLIF(f.title, ''), f.url) COLLATE NOCASE ASC`
+     WHERE EXISTS (
+       SELECT 1 FROM user_feed_subscriptions ufs
+       WHERE ufs.feed_id = f.id AND ufs.user_id = ?
+     )
+     ORDER BY COALESCE(NULLIF(f.title, ''), f.url) COLLATE NOCASE ASC`,
+    [user.id]
   );
 
   return json({ feeds });
 };
 
 export const POST = async ({ request, platform }) => {
-  await requireMobileAccess(request, platform.env, platform.env.DB, 'app:write');
+  const { user } = await requireMobileAccess(request, platform.env, platform.env.DB, 'app:write');
 
   const body = await request.json();
   const url = body?.url?.trim();
@@ -43,10 +48,17 @@ export const POST = async ({ request, platform }) => {
   }
 
   const id = nanoid();
+  const timestamp = now();
   await dbRun(
     platform.env.DB,
     'INSERT OR IGNORE INTO feeds (id, url, last_polled_at, next_poll_at) VALUES (?, ?, ?, ?)',
-    [id, url, null, now()]
+    [id, url, null, timestamp]
+  );
+  await dbRun(
+    platform.env.DB,
+    `INSERT OR IGNORE INTO user_feed_subscriptions (id, user_id, feed_id, created_at)
+     VALUES (?, ?, ?, ?)`,
+    [nanoid(), user.id, id, timestamp]
   );
 
   return json({ ok: true, id });

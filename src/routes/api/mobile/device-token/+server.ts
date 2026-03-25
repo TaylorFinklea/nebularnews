@@ -4,7 +4,7 @@ import { dbRun, dbGet, now } from '$lib/server/db';
 import { requireMobileAccess } from '$lib/server/mobile/auth';
 
 export const POST = async ({ request, platform }) => {
-  await requireMobileAccess(request, platform.env, platform.env.DB, 'app:write');
+  const { user } = await requireMobileAccess(request, platform.env, platform.env.DB, 'app:write');
 
   const body = await request.json().catch(() => ({}));
   const token = typeof body?.token === 'string' ? body.token.trim() : '';
@@ -16,23 +16,23 @@ export const POST = async ({ request, platform }) => {
 
   const timestamp = now();
   const existing = await dbGet(platform.env.DB,
-    'SELECT id FROM device_tokens WHERE token = ?', [token]);
+    'SELECT id FROM device_tokens WHERE token = ? AND user_id = ?', [token, user.id]);
 
   if (existing) {
     await dbRun(platform.env.DB,
-      'UPDATE device_tokens SET updated_at = ? WHERE token = ?',
-      [timestamp, token]);
+      'UPDATE device_tokens SET updated_at = ? WHERE token = ? AND user_id = ?',
+      [timestamp, token, user.id]);
   } else {
     await dbRun(platform.env.DB,
-      'INSERT INTO device_tokens (id, token, platform, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
-      [nanoid(), token, devicePlatform, timestamp, timestamp]);
+      'INSERT INTO device_tokens (id, user_id, token, platform, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+      [nanoid(), user.id, token, devicePlatform, timestamp, timestamp]);
   }
 
   return json({ ok: true });
 };
 
 export const DELETE = async ({ request, platform }) => {
-  await requireMobileAccess(request, platform.env, platform.env.DB, 'app:write');
+  const { user } = await requireMobileAccess(request, platform.env, platform.env.DB, 'app:write');
 
   const body = await request.json().catch(() => ({}));
   const token = typeof body?.token === 'string' ? body.token.trim() : '';
@@ -42,7 +42,7 @@ export const DELETE = async ({ request, platform }) => {
   }
 
   await dbRun(platform.env.DB,
-    'DELETE FROM device_tokens WHERE token = ?', [token]);
+    'DELETE FROM device_tokens WHERE token = ? AND user_id = ?', [token, user.id]);
 
   return json({ ok: true });
 };

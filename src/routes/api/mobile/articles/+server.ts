@@ -39,7 +39,7 @@ const normalizeSort = (value: string | null): SortValue => {
 };
 
 export const GET = async ({ request, url, platform }) => {
-  await requireMobileAccess(request, platform.env, platform.env.DB, 'app:read');
+  const { user } = await requireMobileAccess(request, platform.env, platform.env.DB, 'app:read');
 
   const startedAt = Date.now();
   const limit = Math.max(1, Math.min(50, Number(url.searchParams.get('limit') ?? 20)));
@@ -78,7 +78,7 @@ export const GET = async ({ request, url, platform }) => {
   const selectedTagIds = selectedTags.map((tag) => tag.id);
   const savedOnly = url.searchParams.get('saved') === 'true';
 
-  const result = await listArticlesWithFilters(platform.env.DB, {
+  const result = await listArticlesWithFilters(platform.env.DB, user.id, {
     query,
     limit,
     offset,

@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { XMLParser } from 'fast-xml-parser';
 import { nanoid } from 'nanoid';
-import { dbRun, now } from '$lib/server/db';
+import { dbGet, dbRun, now } from '$lib/server/db';
 import { requireMobileAccess } from '$lib/server/mobile/auth';
 
 const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: '' });
@@ -19,7 +19,7 @@ const collectOutlines = (node: any, urls: Set<string>) => {
 };
 
 export const POST = async ({ request, platform }) => {
-  await requireMobileAccess(request, platform.env, platform.env.DB, 'app:write');
+  const { user } = await requireMobileAccess(request, platform.env, platform.env.DB, 'app:write');
 
   const body = await request.json();
   const opml = body?.opml;
@@ -36,11 +36,26 @@ export const POST = async ({ request, platform }) => {
     } catch {
       continue;
     }
+    const feedId = nanoid();
+    const timestamp = now();
     await dbRun(
       platform.env.DB,
       'INSERT OR IGNORE INTO feeds (id, url, last_polled_at, next_poll_at) VALUES (?, ?, ?, ?)',
-      [nanoid(), url, null, now()]
+      [feedId, url, null, timestamp]
     );
+    const existing = await dbGet<{ id: string }>(
+      platform.env.DB,
+      'SELECT id FROM feeds WHERE url = ? LIMIT 1',
+      [url]
+    );
+    if (existing) {
+      await dbRun(
+        platform.env.DB,
+        `INSERT OR IGNORE INTO user_feed_subscriptions (id, user_id, feed_id, created_at)
+         VALUES (?, ?, ?, ?)`,
+        [nanoid(), user.id, existing.id, timestamp]
+      );
+    }
     added += 1;
   }
 

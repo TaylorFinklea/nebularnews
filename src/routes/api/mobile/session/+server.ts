@@ -3,13 +3,14 @@ import { requireMobileAccess } from '$lib/server/mobile/auth';
 import { getConfiguredPublicMobileOrigin, getPublicMobileResource } from '$lib/server/mobile/context';
 
 export const GET = async ({ request, platform }) => {
-  const token = await requireMobileAccess(request, platform.env, platform.env.DB, 'app:read');
+  const { token, user } = await requireMobileAccess(request, platform.env, platform.env.DB, 'app:read');
 
   return json({
     session: {
       authenticated: true,
       clientId: token.client_id,
-      userId: token.user_id,
+      userId: user.id,
+      role: user.role,
       scope: token.scope,
       scopes: token.scope.split(/\s+/).filter(Boolean)
     },

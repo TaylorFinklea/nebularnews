@@ -3,7 +3,8 @@ import { requireMobileAccess } from '$lib/server/mobile/auth';
 import { listTags, createTag } from '$lib/server/tags';
 
 export const GET = async ({ request, platform, url }) => {
-  await requireMobileAccess(request, platform.env, platform.env.DB, 'app:read');
+  const { user } = await requireMobileAccess(request, platform.env, platform.env.DB, 'app:read');
+  void user;
   const q = url.searchParams.get('q') ?? undefined;
   const limitParam = url.searchParams.get('limit');
   const limit = limitParam ? Number(limitParam) : undefined;
@@ -12,7 +13,8 @@ export const GET = async ({ request, platform, url }) => {
 };
 
 export const POST = async ({ request, platform }) => {
-  await requireMobileAccess(request, platform.env, platform.env.DB, 'app:write');
+  const { user } = await requireMobileAccess(request, platform.env, platform.env.DB, 'app:write');
+  void user;
   const body = await request.json().catch(() => ({}));
 
   const name = String(body?.name ?? '').trim();

@@ -3,7 +3,7 @@ import { dbRun, now } from '$lib/server/db';
 import { requireMobileAccess } from '$lib/server/mobile/auth';
 
 export const POST = async ({ params, request, platform }) => {
-  await requireMobileAccess(request, platform.env, platform.env.DB, 'app:write');
+  const { user } = await requireMobileAccess(request, platform.env, platform.env.DB, 'app:write');
 
   const body = await request.json().catch(() => ({}));
   const saved = body?.saved !== false;
@@ -12,12 +12,12 @@ export const POST = async ({ params, request, platform }) => {
 
   await dbRun(
     platform.env.DB,
-    `INSERT INTO article_read_state (article_id, is_read, updated_at, saved_at)
-     VALUES (?, 0, ?, ?)
-     ON CONFLICT(article_id) DO UPDATE SET
+    `INSERT INTO article_read_state (user_id, article_id, is_read, updated_at, saved_at)
+     VALUES (?, ?, 0, ?, ?)
+     ON CONFLICT(user_id, article_id) DO UPDATE SET
        saved_at = excluded.saved_at,
        updated_at = excluded.updated_at`,
-    [params.id, mutatedAt, savedAt]
+    [user.id, params.id, mutatedAt, savedAt]
   );
 
   return json({

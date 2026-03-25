@@ -219,9 +219,9 @@ export const listArticlesWithFilters = async (db: Db, userId: string, input: Art
 
   const articleIds = rows.map((row) => row.id);
   const sourceByArticle = await getPreferredSourcesForArticles(db, articleIds);
-  const tagsByArticle = await listTagsForArticles(db, articleIds);
-  const suggestionsByArticle = await listTagSuggestionsForArticles(db, articleIds);
-  const reactionReasonsByArticle = await listReactionReasonCodesForArticles(db, articleIds);
+  const tagsByArticle = await listTagsForArticles(db, userId, articleIds);
+  const suggestionsByArticle = await listTagSuggestionsForArticles(db, userId, articleIds);
+  const reactionReasonsByArticle = await listReactionReasonCodesForArticles(db, userId, articleIds);
 
   const articles = rows.map((row) => {
     const source = sourceByArticle.get(row.id);

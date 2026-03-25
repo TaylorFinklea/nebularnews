@@ -3,7 +3,8 @@ import { startManualPull } from '$lib/server/manual-pull';
 import { requireMobileAccess } from '$lib/server/mobile/auth';
 
 export const POST = async ({ request, platform }) => {
-  await requireMobileAccess(request, platform.env, platform.env.DB, 'app:write');
+  const { user } = await requireMobileAccess(request, platform.env, platform.env.DB, 'app:write');
+  void user;
 
   const body = await request.json().catch(() => ({}));
   const requestedCycles = Number(body?.cycles ?? 1);

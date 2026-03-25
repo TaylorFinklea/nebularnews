@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const requireMobileAccessMock = vi.hoisted(() => vi.fn(async () => ({ scope: 'app:read app:write' })));
+const requireMobileAccessMock = vi.hoisted(() => vi.fn(async () => ({ token: { scope: 'app:read app:write', client_id: 'test', user_id: 'test-user' }, user: { id: 'test-user', role: 'admin' } })));
 const dbGetMock = vi.hoisted(() => vi.fn());
 const dbRunMock = vi.hoisted(() => vi.fn(async () => undefined));
 const nowMock = vi.hoisted(() => vi.fn(() => 1234));
@@ -70,7 +70,7 @@ describe('/api/mobile/articles/[id]/reaction POST', () => {
 
     expect(response.status).toBe(200);
     expect(requireMobileAccessMock).toHaveBeenCalledWith(expect.any(Request), expect.anything(), expect.anything(), 'app:write');
-    expect(replaceReactionReasonCodesMock).toHaveBeenCalledWith(expect.anything(), 'article-1', ['up_interest_match', 'up_good_depth'], 1234);
+    expect(replaceReactionReasonCodesMock).toHaveBeenCalledWith(expect.anything(), 'test-user', 'article-1', ['up_interest_match', 'up_good_depth'], 1234);
     expect(processReactionLearningMock).toHaveBeenCalledWith(expect.anything(), 'article-1', 1, [
       'up_interest_match',
       'up_good_depth'
@@ -95,7 +95,7 @@ describe('/api/mobile/articles/[id]/reaction POST', () => {
     );
 
     expect(response.status).toBe(200);
-    expect(replaceReactionReasonCodesMock).toHaveBeenCalledWith(expect.anything(), 'article-1', [
+    expect(replaceReactionReasonCodesMock).toHaveBeenCalledWith(expect.anything(), 'test-user', 'article-1', [
       'down_stale',
       'down_too_shallow'
     ], 1234);

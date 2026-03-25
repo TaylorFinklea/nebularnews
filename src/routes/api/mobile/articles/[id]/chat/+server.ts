@@ -4,7 +4,7 @@ import { getOrCreateThreadForArticle, sendChatMessage } from '$lib/server/chat';
 import { dbGet } from '$lib/server/db';
 
 export const GET = async ({ params, request, platform }) => {
-  await requireMobileAccess(request, platform.env, platform.env.DB, 'app:read');
+  const { user } = await requireMobileAccess(request, platform.env, platform.env.DB, 'app:read');
   const articleId = params.id;
 
   const article = await dbGet<{ id: string }>(platform.env.DB, 'SELECT id FROM articles WHERE id = ?', [articleId]);
@@ -12,12 +12,12 @@ export const GET = async ({ params, request, platform }) => {
     return json({ error: 'Article not found' }, { status: 404 });
   }
 
-  const result = await getOrCreateThreadForArticle(platform.env.DB, articleId);
+  const result = await getOrCreateThreadForArticle(platform.env.DB, user.id, articleId);
   return json(result);
 };
 
 export const POST = async ({ params, request, platform }) => {
-  await requireMobileAccess(request, platform.env, platform.env.DB, 'app:write');
+  const { user } = await requireMobileAccess(request, platform.env, platform.env.DB, 'app:write');
   const articleId = params.id;
 
   const article = await dbGet<{ id: string }>(platform.env.DB, 'SELECT id FROM articles WHERE id = ?', [articleId]);
@@ -36,7 +36,7 @@ export const POST = async ({ params, request, platform }) => {
   }
 
   try {
-    const result = await sendChatMessage(platform.env.DB, platform.env, articleId, content);
+    const result = await sendChatMessage(platform.env.DB, user.id, platform.env, articleId, content);
     return json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Chat failed';

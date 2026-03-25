@@ -31,15 +31,15 @@ const normalizeTokenList = (value: unknown) =>
     : [];
 
 export const GET = async ({ params, request, platform }) => {
-  await requireMobileAccess(request, platform.env, platform.env.DB, 'app:read');
+  const { user } = await requireMobileAccess(request, platform.env, platform.env.DB, 'app:read');
   const article = await dbGet<{ id: string }>(platform.env.DB, 'SELECT id FROM articles WHERE id = ? LIMIT 1', [params.id]);
   if (!article) return json({ error: 'Article not found' }, { status: 404 });
-  const tags = await listTagsForArticle(platform.env.DB, params.id);
+  const tags = await listTagsForArticle(platform.env.DB, user.id, params.id);
   return json({ tags });
 };
 
 export const POST = async ({ params, request, platform }) => {
-  await requireMobileAccess(request, platform.env, platform.env.DB, 'app:write');
+  const { user } = await requireMobileAccess(request, platform.env, platform.env.DB, 'app:write');
 
   const article = await dbGet<{ id: string }>(platform.env.DB, 'SELECT id FROM articles WHERE id = ? LIMIT 1', [params.id]);
   if (!article) return json({ error: 'Article not found' }, { status: 404 });
@@ -62,19 +62,19 @@ export const POST = async ({ params, request, platform }) => {
 
   const removeRows = await resolveTagsByTokens(platform.env.DB, removeTagIds);
   const removeIds = new Set(removeRows.map((row) => row.id));
-  const beforeState = serializeArticleTagLinkState(await listTagLinksForArticle(platform.env.DB, params.id));
+  const beforeState = serializeArticleTagLinkState(await listTagLinksForArticle(platform.env.DB, user.id, params.id));
 
   if (replace) {
-    const current = await listTagsForArticle(platform.env.DB, params.id);
+    const current = await listTagsForArticle(platform.env.DB, user.id, params.id);
     for (const tag of current) {
       if (!addIds.has(tag.id)) {
-        await detachTagFromArticle(platform.env.DB, params.id, tag.id);
+        await detachTagFromArticle(platform.env.DB, user.id, params.id, tag.id);
       }
     }
   }
 
   for (const tagId of addIds) {
-    await attachTagToArticle(platform.env.DB, {
+    await attachTagToArticle(platform.env.DB, user.id, {
       articleId: params.id,
       tagId,
       source,
@@ -83,15 +83,15 @@ export const POST = async ({ params, request, platform }) => {
   }
 
   for (const tagId of removeIds) {
-    await detachTagFromArticle(platform.env.DB, params.id, tagId);
+    await detachTagFromArticle(platform.env.DB, user.id, params.id, tagId);
   }
 
-  const afterState = serializeArticleTagLinkState(await listTagLinksForArticle(platform.env.DB, params.id));
+  const afterState = serializeArticleTagLinkState(await listTagLinksForArticle(platform.env.DB, user.id, params.id));
   if (beforeState !== afterState) {
     await enqueueScoreJob(platform.env.DB, params.id);
   }
 
-  const tags = await listTagsForArticle(platform.env.DB, params.id);
+  const tags = await listTagsForArticle(platform.env.DB, user.id, params.id);
   return json({
     article_id: params.id,
     tags,

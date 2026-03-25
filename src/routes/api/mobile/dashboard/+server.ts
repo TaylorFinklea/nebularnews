@@ -5,7 +5,7 @@ import { getDashboardQueueConfig } from '$lib/server/settings';
 import { getDashboardNewsBrief } from '$lib/server/news-brief';
 
 export const GET = async ({ request, platform }) => {
-  await requireMobileAccess(request, platform.env, platform.env.DB, 'app:read');
+  const { user } = await requireMobileAccess(request, platform.env, platform.env.DB, 'app:read');
 
   const db = platform.env.DB;
   const referenceAt = Date.now();
@@ -13,13 +13,13 @@ export const GET = async ({ request, platform }) => {
   const [feedStatus, newsBrief, readingQueue, momentum] = await Promise.all([
     getDashboardFeedStatus(db),
     getDashboardNewsBrief(db, platform.env, referenceAt),
-    getDashboardUnreadQueue(db, {
+    getDashboardUnreadQueue(db, user.id, {
       windowDays: queueConfig.windowDays,
       scoreCutoff: queueConfig.scoreCutoff,
       limit: queueConfig.limit,
       referenceAt
     }),
-    getDashboardReadingMomentum(db, {
+    getDashboardReadingMomentum(db, user.id, {
       scoreCutoff: queueConfig.scoreCutoff,
       referenceAt
     })

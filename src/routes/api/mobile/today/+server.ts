@@ -13,7 +13,7 @@ import {
 const DAY_MS = 1000 * 60 * 60 * 24;
 
 export const GET = async ({ request, platform }) => {
-  await requireMobileAccess(request, platform.env, platform.env.DB, 'app:read');
+  const { user } = await requireMobileAccess(request, platform.env, platform.env.DB, 'app:read');
 
   const db = platform.env.DB;
   const referenceAt = Date.now();
@@ -21,11 +21,11 @@ export const GET = async ({ request, platform }) => {
 
   const [newsBrief, momentum, topUnread] = await Promise.all([
     getDashboardNewsBrief(db, platform.env, referenceAt),
-    getDashboardReadingMomentum(db, {
+    getDashboardReadingMomentum(db, user.id, {
       scoreCutoff: queueConfig.scoreCutoff,
       referenceAt
     }),
-    listArticlesWithFilters(db, {
+    listArticlesWithFilters(db, user.id, {
       limit: queueConfig.limit + 1,
       offset: 0,
       selectedScores: [...SCORE_VALUES],
@@ -51,10 +51,10 @@ export const GET = async ({ request, platform }) => {
     db,
     `SELECT COUNT(*) as count FROM articles a
      WHERE COALESCE(
-       (SELECT is_read FROM article_read_state WHERE article_id = a.id LIMIT 1), 0
+       (SELECT is_read FROM article_read_state WHERE article_id = a.id AND user_id = ? LIMIT 1), 0
      ) = 0
      AND (SELECT score FROM article_scores WHERE article_id = a.id ORDER BY created_at DESC LIMIT 1) >= ?`,
-    [queueConfig.scoreCutoff]
+    [user.id, queueConfig.scoreCutoff]
   );
 
   return json({

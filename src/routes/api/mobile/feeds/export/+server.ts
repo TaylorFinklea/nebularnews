@@ -2,11 +2,17 @@ import { dbAll } from '$lib/server/db';
 import { requireMobileAccess } from '$lib/server/mobile/auth';
 
 export const GET = async ({ request, platform }) => {
-  await requireMobileAccess(request, platform.env, platform.env.DB, 'app:read');
+  const { user } = await requireMobileAccess(request, platform.env, platform.env.DB, 'app:read');
 
   const feeds = await dbAll<{ title: string | null; url: string }>(
     platform.env.DB,
-    'SELECT title, url FROM feeds ORDER BY title ASC'
+    `SELECT f.title, f.url FROM feeds f
+     WHERE EXISTS (
+       SELECT 1 FROM user_feed_subscriptions ufs
+       WHERE ufs.feed_id = f.id AND ufs.user_id = ?
+     )
+     ORDER BY f.title ASC`,
+    [user.id]
   );
 
   const outlines = feeds

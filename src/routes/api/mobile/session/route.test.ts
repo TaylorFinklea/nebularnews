@@ -27,9 +27,12 @@ const createEvent = () =>
 describe('/api/mobile/session GET', () => {
   it('returns the authenticated mobile session and server metadata', async () => {
     requireMobileAccessMock.mockResolvedValueOnce({
-      client_id: 'nebular-news-ios',
-      user_id: 'admin',
-      scope: 'app:read app:write'
+      token: {
+        client_id: 'nebular-news-ios',
+        user_id: 'admin',
+        scope: 'app:read app:write'
+      },
+      user: { id: 'admin', role: 'admin' }
     });
 
     const response = await GET(createEvent());
@@ -42,6 +45,7 @@ describe('/api/mobile/session GET', () => {
         authenticated: true,
         clientId: 'nebular-news-ios',
         userId: 'admin',
+        role: 'admin',
         scope: 'app:read app:write',
         scopes: ['app:read', 'app:write']
       },

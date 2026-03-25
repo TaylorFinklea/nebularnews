@@ -14,7 +14,7 @@ import { getPreferredSourceForArticle, isFeedLinkedToArticle } from '$lib/server
 import { processReactionLearning } from '$lib/server/scoring/learning';
 
 export const POST = async ({ params, request, platform }) => {
-  await requireMobileAccess(request, platform.env, platform.env.DB, 'app:write');
+  const { user } = await requireMobileAccess(request, platform.env, platform.env.DB, 'app:write');
 
   const articleId = params.id;
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
@@ -58,8 +58,8 @@ export const POST = async ({ params, request, platform }) => {
 
   const existingReaction = await dbGet<{ value: number | null }>(
     platform.env.DB,
-    'SELECT value FROM article_reactions WHERE article_id = ? LIMIT 1',
-    [articleId]
+    'SELECT value FROM article_reactions WHERE article_id = ? AND user_id = ? LIMIT 1',
+    [articleId, user.id]
   );
   const previousValue = Number(existingReaction?.value);
   const shouldApplyLearning = ![1, -1].includes(previousValue) || previousValue !== value;
@@ -67,15 +67,15 @@ export const POST = async ({ params, request, platform }) => {
 
   await dbRun(
     platform.env.DB,
-    `INSERT INTO article_reactions (id, article_id, feed_id, value, created_at)
-     VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT(article_id) DO UPDATE SET
+    `INSERT INTO article_reactions (id, user_id, article_id, feed_id, value, created_at)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(user_id, article_id) DO UPDATE SET
        feed_id = excluded.feed_id,
        value = excluded.value,
        created_at = excluded.created_at`,
-    [nanoid(), articleId, feedId, value, timestamp]
+    [nanoid(), user.id, articleId, feedId, value, timestamp]
   );
-  await replaceReactionReasonCodes(platform.env.DB, articleId, reasonCodes, timestamp);
+  await replaceReactionReasonCodes(platform.env.DB, user.id, articleId, reasonCodes, timestamp);
 
   if (shouldApplyLearning) {
     processReactionLearning(platform.env.DB, articleId, value as 1 | -1, reasonCodes).catch(() => {});

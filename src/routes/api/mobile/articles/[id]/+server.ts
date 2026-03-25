@@ -6,7 +6,7 @@ import { getPreferredSourceForArticle, listSourcesForArticle } from '$lib/server
 import { listTagSuggestionsForArticle, listTagsForArticle } from '$lib/server/tags';
 
 export const GET = async ({ params, request, platform }) => {
-  await requireMobileAccess(request, platform.env, platform.env.DB, 'app:read');
+  const { user } = await requireMobileAccess(request, platform.env, platform.env.DB, 'app:read');
 
   const { id } = params;
   const article = await dbGet(
@@ -23,10 +23,10 @@ export const GET = async ({ params, request, platform }) => {
       content_text,
       excerpt,
       word_count,
-      COALESCE((SELECT is_read FROM article_read_state WHERE article_id = articles.id LIMIT 1), 0) as is_read
+      COALESCE((SELECT is_read FROM article_read_state WHERE article_id = articles.id AND user_id = ? LIMIT 1), 0) as is_read
     FROM articles
     WHERE id = ?`,
-    [id]
+    [user.id, id]
   );
   if (!article) return json({ error: 'Not found' }, { status: 404 });
 
@@ -42,8 +42,8 @@ export const GET = async ({ params, request, platform }) => {
   );
   const scoreOverride = await dbGet<{ score: number; comment: string | null; updated_at: number }>(
     platform.env.DB,
-    'SELECT score, comment, updated_at FROM article_score_overrides WHERE article_id = ? LIMIT 1',
-    [id]
+    'SELECT score, comment, updated_at FROM article_score_overrides WHERE article_id = ? AND user_id = ? LIMIT 1',
+    [id, user.id]
   );
   const aiScore = await dbGet<{
     score: number;
@@ -99,11 +99,11 @@ export const GET = async ({ params, request, platform }) => {
     'SELECT rating, comment, created_at FROM article_feedback WHERE article_id = ? ORDER BY created_at DESC',
     [id]
   );
-  const reaction = await getReactionForArticle(platform.env.DB, id);
+  const reaction = await getReactionForArticle(platform.env.DB, user.id, id);
   const preferredSource = await getPreferredSourceForArticle(platform.env.DB, id);
   const sources = await listSourcesForArticle(platform.env.DB, id);
-  const tags = await listTagsForArticle(platform.env.DB, id);
-  const tagSuggestions = await listTagSuggestionsForArticle(platform.env.DB, id);
+  const tags = await listTagsForArticle(platform.env.DB, user.id, id);
+  const tagSuggestions = await listTagSuggestionsForArticle(platform.env.DB, user.id, id);
 
   return json({
     article,

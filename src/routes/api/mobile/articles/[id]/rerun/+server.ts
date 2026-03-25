@@ -3,7 +3,7 @@ import { requireMobileAccess } from '$lib/server/mobile/auth';
 import { runArticleJobImmediately } from '$lib/server/jobs';
 
 export const POST = async ({ params, request, platform }) => {
-  await requireMobileAccess(request, platform.env, platform.env.DB, 'app:write');
+  const { user } = await requireMobileAccess(request, platform.env, platform.env.DB, 'app:write');
 
   const articleId = params.id;
 

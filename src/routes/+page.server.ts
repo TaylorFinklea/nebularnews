@@ -55,6 +55,7 @@ const queueArticleHref = (articleId: string, fromPath: string) => {
 };
 
 export const load = async ({ platform, request, depends, setHeaders, locals }) => {
+  const userId = locals.user?.id ?? 'admin';
   const startedAt = Date.now();
   depends('app:dashboard');
 
@@ -83,13 +84,13 @@ export const load = async ({ platform, request, depends, setHeaders, locals }) =
   } else {
     try {
       [readingQueue, momentum] = await Promise.all([
-        getDashboardUnreadQueue(db, {
+        getDashboardUnreadQueue(db, userId, {
           windowDays: queueConfig.windowDays,
           scoreCutoff: queueConfig.scoreCutoff,
           limit: queueConfig.limit,
           referenceAt: startedAt
         }),
-        getDashboardReadingMomentum(db, {
+        getDashboardReadingMomentum(db, userId, {
           scoreCutoff: queueConfig.scoreCutoff,
           referenceAt: startedAt
         })

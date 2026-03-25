@@ -37,7 +37,8 @@ const normalizeSort = (value: string | null): SortValue => {
   return SORT_VALUES.includes(normalized as SortValue) ? (normalized as SortValue) : 'newest';
 };
 
-export const GET = async ({ url, platform }) => {
+export const GET = async ({ url, platform, locals }) => {
+  const userId = locals.user?.id ?? 'admin';
   const startedAt = Date.now();
   const limit = Math.max(1, Math.min(50, Number(url.searchParams.get('limit') ?? 20)));
   const offset = Math.max(0, Number(url.searchParams.get('offset') ?? 0));
@@ -75,7 +76,7 @@ export const GET = async ({ url, platform }) => {
   const selectedTags = await resolveTagsByTokens(platform.env.DB, requestedTagTokens);
   const selectedTagIds = selectedTags.map((tag) => tag.id);
 
-  const result = await listArticlesWithFilters(platform.env.DB, {
+  const result = await listArticlesWithFilters(platform.env.DB, userId, {
     query,
     limit,
     offset,

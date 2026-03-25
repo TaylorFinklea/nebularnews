@@ -114,7 +114,8 @@ import {
   DEFAULT_MANUAL_ORPHAN_CLEANUP_LIMIT
 } from '$lib/server/orphan-cleanup';
 
-export const load = async ({ platform }) => {
+export const load = async ({ platform, locals }) => {
+  const userId = locals.user?.id ?? 'admin';
   const db = platform.env.DB;
   const featureLanes = await getFeatureModelLanes(db);
   const modelA = await getConfiguredModelA(db, platform.env);

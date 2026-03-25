@@ -14,7 +14,8 @@ import { replaceReactionReasonCodes } from '$lib/server/reactions';
 import { processReactionLearning } from '$lib/server/scoring/learning';
 
 export const POST = async (event) => {
-  const { params, request, platform } = event;
+  const { params, request, platform, locals } = event;
+  const userId = locals.user?.id ?? 'admin';
   const articleId = params.id;
   const body = (await request.json().catch(() => ({}))) as {
     value?: unknown;
@@ -75,7 +76,7 @@ export const POST = async (event) => {
        created_at = excluded.created_at`,
     [nanoid(), articleId, feedId, value, timestamp]
   );
-  await replaceReactionReasonCodes(platform.env.DB, articleId, reasonCodes, timestamp);
+  await replaceReactionReasonCodes(platform.env.DB, userId, articleId, reasonCodes, timestamp);
 
   if (shouldApplyLearning) {
     // Update scoring weights and affinities based on reaction changes.

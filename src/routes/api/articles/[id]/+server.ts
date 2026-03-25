@@ -4,7 +4,8 @@ import { getReactionForArticle } from '$lib/server/reactions';
 import { getPreferredSourceForArticle, listSourcesForArticle } from '$lib/server/sources';
 import { listTagSuggestionsForArticle, listTagsForArticle } from '$lib/server/tags';
 
-export const GET = async ({ params, platform }) => {
+export const GET = async ({ params, platform, locals }) => {
+  const userId = locals.user?.id ?? 'admin';
   const { id } = params;
   const article = await dbGet(
     platform.env.DB,
@@ -20,10 +21,10 @@ export const GET = async ({ params, platform }) => {
       content_text,
       excerpt,
       word_count,
-      COALESCE((SELECT is_read FROM article_read_state WHERE article_id = articles.id LIMIT 1), 0) as is_read
+      COALESCE((SELECT is_read FROM article_read_state WHERE article_id = articles.id AND user_id = ? LIMIT 1), 0) as is_read
     FROM articles
     WHERE id = ?`,
-    [id]
+    [userId, id]
   );
   if (!article) return json({ error: 'Not found' }, { status: 404 });
 
@@ -98,12 +99,12 @@ export const GET = async ({ params, platform }) => {
     'SELECT rating, comment, created_at FROM article_feedback WHERE article_id = ? ORDER BY created_at DESC',
     [id]
   );
-  const reaction = await getReactionForArticle(platform.env.DB, id);
+  const reaction = await getReactionForArticle(platform.env.DB, userId, id);
 
   const preferredSource = await getPreferredSourceForArticle(platform.env.DB, id);
   const sources = await listSourcesForArticle(platform.env.DB, id);
-  const tags = await listTagsForArticle(platform.env.DB, id);
-  const tagSuggestions = await listTagSuggestionsForArticle(platform.env.DB, id);
+  const tags = await listTagsForArticle(platform.env.DB, userId, id);
+  const tagSuggestions = await listTagSuggestionsForArticle(platform.env.DB, userId, id);
 
   return json({
     article,

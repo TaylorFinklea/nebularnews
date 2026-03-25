@@ -44,7 +44,8 @@ const normalizeSort = (value: string | null): SortValue => {
   return SORT_VALUES.includes(normalized as SortValue) ? (normalized as SortValue) : 'newest';
 };
 
-export const load = async ({ platform, url, setHeaders }) => {
+export const load = async ({ platform, url, setHeaders, locals }) => {
+  const userId = locals.user?.id ?? 'admin';
   const startedAt = Date.now();
   const defaultCardLayout = await getArticleCardLayout(platform.env.DB);
   const query = url.searchParams.get('q')?.trim() ?? '';
@@ -91,7 +92,7 @@ export const load = async ({ platform, url, setHeaders }) => {
   const selectedTagIds = selectedTags.map((tag) => tag.id);
 
   const initialOffset = (requestedPage - 1) * PAGE_SIZE;
-  const firstPass = await listArticlesWithFilters(platform.env.DB, {
+  const firstPass = await listArticlesWithFilters(platform.env.DB, userId, {
     query,
     limit: PAGE_SIZE,
     offset: initialOffset,
@@ -110,7 +111,7 @@ export const load = async ({ platform, url, setHeaders }) => {
   const result =
     offset === initialOffset
       ? firstPass
-      : await listArticlesWithFilters(platform.env.DB, {
+      : await listArticlesWithFilters(platform.env.DB, userId, {
           query,
           limit: PAGE_SIZE,
           offset,

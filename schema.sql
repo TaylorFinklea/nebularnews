@@ -98,11 +98,14 @@ CREATE TABLE IF NOT EXISTS article_scores (
 );
 
 CREATE TABLE IF NOT EXISTS article_score_overrides (
-  article_id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  article_id TEXT NOT NULL,
   score INTEGER NOT NULL CHECK (score >= 1 AND score <= 5),
   comment TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
+  PRIMARY KEY (user_id, article_id),
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE
 );
 
@@ -119,28 +122,46 @@ CREATE TABLE IF NOT EXISTS article_feedback (
 
 CREATE TABLE IF NOT EXISTS article_reactions (
   id TEXT PRIMARY KEY,
-  article_id TEXT NOT NULL UNIQUE,
+  user_id TEXT NOT NULL,
+  article_id TEXT NOT NULL,
   feed_id TEXT NOT NULL,
   value INTEGER NOT NULL CHECK (value IN (-1, 1)),
   created_at INTEGER NOT NULL,
+  UNIQUE(user_id, article_id),
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE,
   FOREIGN KEY(feed_id) REFERENCES feeds(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS article_reaction_reasons (
+  user_id TEXT NOT NULL,
   article_id TEXT NOT NULL,
   reason_code TEXT NOT NULL,
   created_at INTEGER NOT NULL,
-  PRIMARY KEY (article_id, reason_code),
+  PRIMARY KEY (user_id, article_id, reason_code),
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS article_read_state (
-  article_id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  article_id TEXT NOT NULL,
   is_read INTEGER NOT NULL CHECK (is_read IN (0, 1)),
   updated_at INTEGER NOT NULL,
   saved_at INTEGER,
+  PRIMARY KEY (user_id, article_id),
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS user_feed_subscriptions (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  feed_id TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  UNIQUE(user_id, feed_id),
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY(feed_id) REFERENCES feeds(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS tags (
@@ -156,13 +177,15 @@ CREATE TABLE IF NOT EXISTS tags (
 
 CREATE TABLE IF NOT EXISTS article_tags (
   id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
   article_id TEXT NOT NULL,
   tag_id TEXT NOT NULL,
   source TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'ai', 'system')),
   confidence REAL,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
-  UNIQUE(article_id, tag_id),
+  UNIQUE(user_id, article_id, tag_id),
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE,
   FOREIGN KEY(tag_id) REFERENCES tags(id) ON DELETE CASCADE
 );
@@ -182,10 +205,12 @@ CREATE TABLE IF NOT EXISTS article_tag_suggestions (
 );
 
 CREATE TABLE IF NOT EXISTS article_tag_suggestion_dismissals (
+  user_id TEXT NOT NULL,
   article_id TEXT NOT NULL,
   name_normalized TEXT NOT NULL,
   created_at INTEGER NOT NULL,
-  PRIMARY KEY(article_id, name_normalized),
+  PRIMARY KEY(user_id, article_id, name_normalized),
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE
 );
 
@@ -226,9 +251,11 @@ CREATE TABLE IF NOT EXISTS jobs (
 
 CREATE TABLE IF NOT EXISTS settings (
   id TEXT PRIMARY KEY,
-  key TEXT NOT NULL UNIQUE,
+  user_id TEXT NOT NULL DEFAULT 'admin',
+  key TEXT NOT NULL,
   value TEXT NOT NULL,
-  updated_at INTEGER NOT NULL
+  updated_at INTEGER NOT NULL,
+  UNIQUE(user_id, key)
 );
 
 CREATE TABLE IF NOT EXISTS news_brief_editions (
@@ -424,10 +451,13 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE TABLE IF NOT EXISTS chat_threads (
   id TEXT PRIMARY KEY,
-  article_id TEXT UNIQUE,
+  user_id TEXT NOT NULL,
+  article_id TEXT,
   title TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
+  UNIQUE(user_id, article_id),
+  FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
   FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE
 );
 

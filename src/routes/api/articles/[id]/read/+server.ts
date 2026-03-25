@@ -3,7 +3,8 @@ import { apiOkWithAliases } from '$lib/server/api';
 import { logInfo } from '$lib/server/log';
 
 export const POST = async (event) => {
-  const { params, request, platform } = event;
+  const { params, request, platform, locals } = event;
+  const userId = locals.user?.id ?? 'admin';
   const articleId = params.id;
   const body = await request.json().catch(() => ({}));
   const isRead = Boolean(body?.isRead);
@@ -11,12 +12,12 @@ export const POST = async (event) => {
 
   await dbRun(
     platform.env.DB,
-    `INSERT INTO article_read_state (article_id, is_read, updated_at)
-     VALUES (?, ?, ?)
-     ON CONFLICT(article_id) DO UPDATE SET
+    `INSERT INTO article_read_state (user_id, article_id, is_read, updated_at)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(user_id, article_id) DO UPDATE SET
        is_read = excluded.is_read,
        updated_at = excluded.updated_at`,
-    [articleId, isRead ? 1 : 0, mutatedAt]
+    [userId, articleId, isRead ? 1 : 0, mutatedAt]
   );
 
   logInfo('article.read.updated', {

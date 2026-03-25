@@ -4,7 +4,8 @@ import { dbRun, now } from '$lib/server/db';
 import { getPreferredSourceForArticle, isFeedLinkedToArticle } from '$lib/server/sources';
 import { processFeedbackLearning } from '$lib/server/scoring/learning';
 
-export const POST = async ({ params, request, platform }) => {
+export const POST = async ({ params, request, platform, locals }) => {
+  const userId = locals.user?.id ?? 'admin';
   const { id } = params;
   const body = await request.json();
   const rating = Number(body?.rating);

@@ -1,6 +1,7 @@
 import { dbAll } from '$lib/server/db';
 
-export const load = async ({ platform }) => {
+export const load = async ({ platform, locals }) => {
+  const userId = locals.user?.id ?? 'admin';
   const feeds = await dbAll(
     platform.env.DB,
     `SELECT

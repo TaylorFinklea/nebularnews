@@ -17,7 +17,8 @@ const parseStringList = (value: string | null | undefined) => {
   }
 };
 
-export const load = async ({ params, platform }) => {
+export const load = async ({ params, platform, locals }) => {
+  const userId = locals.user?.id ?? 'admin';
   const db = platform.env.DB;
   const safeLoad = async <T>(label: string, fallback: T, fn: () => Promise<T>) => {
     try {
@@ -53,10 +54,10 @@ export const load = async ({ params, platform }) => {
       published_at,
       content_html,
       content_text,
-      COALESCE((SELECT is_read FROM article_read_state WHERE article_id = articles.id LIMIT 1), 0) as is_read
+      COALESCE((SELECT is_read FROM article_read_state WHERE article_id = articles.id AND user_id = ? LIMIT 1), 0) as is_read
     FROM articles
     WHERE id = ?`,
-    [params.id]
+    [userId, params.id]
   );
   if (!article) {
     throw error(404, 'Article not found');
@@ -178,13 +179,13 @@ export const load = async ({ params, platform }) => {
   const reaction = await safeLoad(
     'reaction',
     null,
-    () => getReactionForArticle(db, params.id)
+    () => getReactionForArticle(db, userId, params.id)
   );
 
   const preferredSource = await safeLoad('preferred_source', null, () => getPreferredSourceForArticle(db, params.id));
   const sources = await safeLoad('sources', [], () => listSourcesForArticle(db, params.id));
-  const tags = await safeLoad('tags', [], () => listTagsForArticle(db, params.id));
-  const tagSuggestions = await safeLoad('tag_suggestions', [], () => listTagSuggestionsForArticle(db, params.id));
+  const tags = await safeLoad('tags', [], () => listTagsForArticle(db, userId, params.id));
+  const tagSuggestions = await safeLoad('tag_suggestions', [], () => listTagSuggestionsForArticle(db, userId, params.id));
   const availableTags = await safeLoad('available_tags', [], () => listTags(db, { limit: 200 }));
 
   const autoReadDelayMs = await getAutoReadDelayMs(db);

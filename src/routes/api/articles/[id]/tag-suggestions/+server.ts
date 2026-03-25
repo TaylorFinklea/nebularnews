@@ -16,10 +16,11 @@ import { updateTopicAffinity } from '$lib/server/scoring/learning';
 
 const pickSuggestion = async (
   db: D1Database,
+  userId: string,
   articleId: string,
   input: { suggestionId?: string | null; name?: string | null }
 ) => {
-  const suggestions = await listTagSuggestionsForArticle(db, articleId);
+  const suggestions = await listTagSuggestionsForArticle(db, userId, articleId);
   if (input.suggestionId) {
     return suggestions.find((entry) => entry.id === input.suggestionId) ?? null;
   }
@@ -29,11 +30,12 @@ const pickSuggestion = async (
 };
 
 export const GET = async (event) => {
-  const { params, platform } = event;
+  const { params, platform, locals } = event;
+  const userId = locals.user?.id ?? 'admin';
   const article = await dbGet<{ id: string }>(platform.env.DB, 'SELECT id FROM articles WHERE id = ? LIMIT 1', [params.id]);
   if (!article) return apiError(event, 404, 'not_found', 'Article not found');
 
-  const suggestions = await listTagSuggestionsForArticle(platform.env.DB, params.id);
+  const suggestions = await listTagSuggestionsForArticle(platform.env.DB, userId, params.id);
   return apiOkWithAliases(
     event,
     {
@@ -45,7 +47,8 @@ export const GET = async (event) => {
 };
 
 export const POST = async (event) => {
-  const { params, platform, request } = event;
+  const { params, platform, request, locals } = event;
+  const userId = locals.user?.id ?? 'admin';
   const article = await dbGet<{ id: string }>(platform.env.DB, 'SELECT id FROM articles WHERE id = ? LIMIT 1', [params.id]);
   if (!article) return apiError(event, 404, 'not_found', 'Article not found');
 
@@ -57,15 +60,15 @@ export const POST = async (event) => {
   if (!action) return apiError(event, 400, 'bad_request', 'Missing action');
 
   if (action === 'accept') {
-    const beforeState = serializeArticleTagLinkState(await listTagLinksForArticle(platform.env.DB, params.id));
-    const suggestion = await pickSuggestion(platform.env.DB, params.id, {
+    const beforeState = serializeArticleTagLinkState(await listTagLinksForArticle(platform.env.DB, userId, params.id));
+    const suggestion = await pickSuggestion(platform.env.DB, userId, params.id, {
       suggestionId: suggestionId || null,
       name: suggestionName || null
     });
     if (!suggestion) return apiError(event, 404, 'not_found', 'Tag suggestion not found');
 
     const tag = await ensureTagByName(platform.env.DB, suggestion.name);
-    await attachTagToArticle(platform.env.DB, {
+    await attachTagToArticle(platform.env.DB, userId, {
       articleId: params.id,
       tagId: tag.id,
       source: 'manual',
@@ -79,23 +82,23 @@ export const POST = async (event) => {
     );
     // Positive affinity signal for accepted tag
     updateTopicAffinity(platform.env.DB, suggestion.name_normalized, 1).catch(() => {});
-    const afterState = serializeArticleTagLinkState(await listTagLinksForArticle(platform.env.DB, params.id));
+    const afterState = serializeArticleTagLinkState(await listTagLinksForArticle(platform.env.DB, userId, params.id));
     if (beforeState !== afterState) {
       await enqueueScoreJob(platform.env.DB, params.id);
     }
   } else if (action === 'dismiss') {
-    const suggestion = await pickSuggestion(platform.env.DB, params.id, {
+    const suggestion = await pickSuggestion(platform.env.DB, userId, params.id, {
       suggestionId: suggestionId || null,
       name: suggestionName || null
     });
     if (!suggestion) return apiError(event, 404, 'not_found', 'Tag suggestion not found');
-    await dismissTagSuggestion(platform.env.DB, params.id, suggestion.name);
+    await dismissTagSuggestion(platform.env.DB, userId, params.id, suggestion.name);
     // Negative affinity signal for dismissed tag
     updateTopicAffinity(platform.env.DB, suggestion.name_normalized, -1).catch(() => {});
   } else if (action === 'undo_dismiss') {
     const name = suggestionName;
     if (!name) return apiError(event, 400, 'bad_request', 'Missing suggestion name');
-    await undoDismissTagSuggestion(platform.env.DB, {
+    await undoDismissTagSuggestion(platform.env.DB, userId, {
       articleId: params.id,
       name,
       confidence: body?.confidence ?? null,
@@ -106,8 +109,8 @@ export const POST = async (event) => {
     return apiError(event, 400, 'bad_request', 'Unsupported action');
   }
 
-  const tags = await listTagsForArticle(platform.env.DB, params.id);
-  const suggestions = await listTagSuggestionsForArticle(platform.env.DB, params.id);
+  const tags = await listTagsForArticle(platform.env.DB, userId, params.id);
+  const suggestions = await listTagSuggestionsForArticle(platform.env.DB, userId, params.id);
   return apiOkWithAliases(
     event,
     {

@@ -1694,6 +1694,12 @@
         <p class="muted small">No API keys generated yet.</p>
       {/if}
 
+      <!-- User Management -->
+      <div class="settings-section-title">Users</div>
+      <a href="/settings/users" class="settings-link">
+        Manage users, roles, and access control &rarr;
+      </a>
+
       <!-- Connected Apps -->
       <div class="settings-section-title">Connected Apps</div>
       {#if connectedApps.length === 0}
@@ -2100,6 +2106,16 @@
 
   .small {
     font-size: var(--text-sm);
+  }
+
+  .settings-link {
+    color: var(--accent);
+    text-decoration: none;
+    font-size: var(--text-sm);
+  }
+
+  .settings-link:hover {
+    text-decoration: underline;
   }
 
   /* ─── Feature lanes ────────────────────────────────── */

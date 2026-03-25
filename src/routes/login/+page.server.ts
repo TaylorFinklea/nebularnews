@@ -4,9 +4,38 @@ import { createCsrfToken, CSRF_COOKIE } from '$lib/server/security';
 import { clearLoginAttempts, getAuthIdentifier, getThrottleRemainingMs, registerFailedLogin } from '$lib/server/login-throttle';
 import { recordAuditEvent } from '$lib/server/audit';
 import { logError, logInfo, logWarn, summarizeError } from '$lib/server/log';
+import { isSupabaseConfigured, sendMagicLink } from '$lib/server/supabase-auth';
+
+export const load = async ({ platform, url }) => {
+  return {
+    hasPassword: Boolean(platform.env.ADMIN_PASSWORD_HASH?.trim()),
+    hasSupabase: isSupabaseConfigured(platform.env),
+    error: url.searchParams.get('error') ?? null
+  };
+};
 
 export const actions = {
-  default: async ({ request, platform, cookies, locals, url }) => {
+  magiclink: async ({ request, platform, url }) => {
+    const data = await request.formData();
+    const email = String(data.get('email') ?? '').trim().toLowerCase();
+    if (!email || !email.includes('@')) {
+      return fail(400, { magicLinkError: 'Valid email required', magicLinkSent: false });
+    }
+
+    if (!isSupabaseConfigured(platform.env)) {
+      return fail(503, { magicLinkError: 'Email login is not configured', magicLinkSent: false });
+    }
+
+    const callbackUrl = `${url.origin}/auth/callback`;
+    const result = await sendMagicLink(platform.env, email, callbackUrl);
+    if (!result.ok) {
+      return fail(500, { magicLinkError: result.error ?? 'Failed to send', magicLinkSent: false });
+    }
+
+    return { magicLinkSent: true, magicLinkEmail: email };
+  },
+
+  password: async ({ request, platform, cookies, locals, url }) => {
     const requestId = locals.requestId ?? null;
     const stage = platform.env.APP_ENV ?? 'development';
     const route = '/login';

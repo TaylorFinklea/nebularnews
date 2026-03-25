@@ -70,7 +70,8 @@ const createEvent = (body: Record<string, unknown>) =>
       env: {
         DB: {} as D1Database
       }
-    } as App.Platform
+    } as App.Platform,
+    locals: { requestId: 'req-test', user: { id: 'admin', role: 'admin' } }
   }) as unknown as Parameters<typeof POST>[0];
 
 describe('/api/articles/[id]/tag-suggestions POST', () => {
@@ -99,7 +100,7 @@ describe('/api/articles/[id]/tag-suggestions POST', () => {
     const response = await POST(createEvent({ action: 'accept', suggestionId: 'suggestion-1' }));
 
     expect(response.status).toBe(200);
-    expect(attachTagToArticleMock).toHaveBeenCalledWith(expect.anything(), {
+    expect(attachTagToArticleMock).toHaveBeenCalledWith(expect.anything(), 'admin', {
       articleId: 'article-1',
       tagId: 'tag-1',
       source: 'manual',
@@ -123,7 +124,7 @@ describe('/api/articles/[id]/tag-suggestions POST', () => {
     const response = await POST(createEvent({ action: 'dismiss', suggestionId: 'suggestion-1' }));
 
     expect(response.status).toBe(200);
-    expect(dismissTagSuggestionMock).toHaveBeenCalledWith(expect.anything(), 'article-1', 'AI Policy');
+    expect(dismissTagSuggestionMock).toHaveBeenCalledWith(expect.anything(), 'admin', 'article-1', 'AI Policy');
     expect(enqueueScoreJobMock).not.toHaveBeenCalled();
   });
 });

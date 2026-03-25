@@ -84,7 +84,7 @@ describe('/api/articles/[id]/reaction POST', () => {
     expect(dbRunMock).toHaveBeenCalledWith(
       expect.anything(),
       expect.stringContaining('INSERT INTO article_reaction_reasons'),
-      ['article-1', 'up_interest_match', 1234]
+      ['article-1', 'admin', 'up_interest_match', 1234]
     );
   });
 
@@ -153,20 +153,20 @@ describe('/api/articles/[id]/reaction POST', () => {
     expect(dbRunMock).toHaveBeenNthCalledWith(
       2,
       expect.anything(),
-      'DELETE FROM article_reaction_reasons WHERE article_id = ?',
-      ['article-1']
+      'DELETE FROM article_reaction_reasons WHERE article_id = ? AND user_id = ?',
+      ['article-1', 'admin']
     );
     expect(dbRunMock).toHaveBeenNthCalledWith(
       3,
       expect.anything(),
       expect.stringContaining('INSERT INTO article_reaction_reasons'),
-      ['article-1', 'down_off_topic', 1234]
+      ['article-1', 'admin', 'down_off_topic', 1234]
     );
     expect(dbRunMock).toHaveBeenNthCalledWith(
       4,
       expect.anything(),
       expect.stringContaining('INSERT INTO article_reaction_reasons'),
-      ['article-1', 'down_stale', 1234]
+      ['article-1', 'admin', 'down_stale', 1234]
     );
   });
 
@@ -180,7 +180,7 @@ describe('/api/articles/[id]/reaction POST', () => {
     expect(dbRunMock).toHaveBeenCalledWith(
       expect.anything(),
       expect.stringContaining('INSERT INTO article_reaction_reasons'),
-      ['article-1', 'up_author_like', 1234]
+      ['article-1', 'admin', 'up_author_like', 1234]
     );
   });
 });

@@ -66,7 +66,7 @@ const createEvent = (body: Record<string, unknown>) =>
         DB: {} as D1Database
       }
     } as App.Platform,
-    locals: { requestId: 'req-1' }
+    locals: { requestId: 'req-1', user: { id: 'admin', role: 'admin' } }
   }) as unknown as Parameters<typeof POST>[0];
 
 describe('/api/articles/[id]/tags POST', () => {
@@ -89,7 +89,7 @@ describe('/api/articles/[id]/tags POST', () => {
     const payload = await response.json();
 
     expect(response.status).toBe(200);
-    expect(attachTagToArticleMock).toHaveBeenCalledWith(expect.anything(), {
+    expect(attachTagToArticleMock).toHaveBeenCalledWith(expect.anything(), 'admin', {
       articleId: 'article-1',
       tagId: 'tag-1',
       source: 'manual',

@@ -24,6 +24,10 @@ vi.mock('./news-brief', () => ({
   runNewsBriefSchedulerTick: runNewsBriefSchedulerTickMock
 }));
 
+vi.mock('./push/digest', () => ({
+  runNotificationDigest: vi.fn(async () => undefined)
+}));
+
 vi.mock('./jobs-admin', () => ({
   queueMissingRecentArticleJobs: queueMissingRecentArticleJobsMock
 }));

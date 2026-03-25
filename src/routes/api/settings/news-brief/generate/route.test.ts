@@ -25,7 +25,8 @@ const createEvent = () =>
       }
     } as App.Platform,
     locals: {
-      requestId: 'req-1'
+      requestId: 'req-1',
+      user: { id: 'admin' }
     }
   }) as Parameters<typeof POST>[0];
 
@@ -84,7 +85,9 @@ describe('/api/settings/news-brief/generate POST', () => {
     expect(response.status).toBe(200);
     expect(createManualNewsBriefEditionMock).toHaveBeenCalledWith(
       expect.anything(),
-      expect.objectContaining({ timezone: 'America/Chicago' })
+      expect.objectContaining({ timezone: 'America/Chicago' }),
+      undefined,
+      'admin'
     );
     expect(processNewsBriefEditionByIdMock).toHaveBeenCalledWith(
       expect.anything(),

@@ -20,9 +20,12 @@ vi.mock('./sources', () => ({
   getPreferredSourcesForArticles: preferredSourcesMock
 }));
 
+const getNewsBriefConfigForUserMock = vi.hoisted(() => vi.fn());
+
 vi.mock('./settings', () => ({
   getFeatureProviderModel: getFeatureProviderModelMock,
   getNewsBriefConfig: getNewsBriefConfigMock,
+  getNewsBriefConfigForUser: getNewsBriefConfigForUserMock,
   getProviderKey: getProviderKeyMock
 }));
 
@@ -45,14 +48,16 @@ describe('news brief scheduling and queries', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     preferredSourcesMock.mockResolvedValue(new Map());
-    getNewsBriefConfigMock.mockResolvedValue({
+    const defaultConfig = {
       enabled: true,
       timezone: 'America/Chicago',
       morningTime: '08:00',
       eveningTime: '17:00',
       lookbackHours: 48,
       scoreCutoff: 3
-    });
+    };
+    getNewsBriefConfigMock.mockResolvedValue(defaultConfig);
+    getNewsBriefConfigForUserMock.mockResolvedValue(defaultConfig);
     getFeatureProviderModelMock.mockResolvedValue({
       provider: 'openai',
       model: 'gpt-4o',

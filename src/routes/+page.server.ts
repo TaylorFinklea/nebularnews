@@ -63,7 +63,7 @@ export const load = async ({ platform, request, depends, setHeaders, locals }) =
   const [queueConfig, feedStatus, newsBrief] = await Promise.all([
     getDashboardQueueConfig(db),
     getDashboardFeedStatus(db),
-    getDashboardNewsBrief(db, platform.env, startedAt).catch((error) => {
+    getDashboardNewsBrief(db, platform.env, startedAt, userId).catch((error) => {
       logWarn('dashboard.load.news_brief_failed', {
         request_id: locals.requestId ?? null,
         error: error instanceof Error ? error.message : String(error)

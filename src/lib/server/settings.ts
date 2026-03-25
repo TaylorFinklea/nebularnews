@@ -700,6 +700,27 @@ export async function getNewsBriefConfig(db: Db): Promise<NewsBriefConfig> {
   };
 }
 
+export async function getNewsBriefConfigForUser(db: Db, userId: string): Promise<NewsBriefConfig> {
+  const [enabledRaw, timezoneRaw, morningTimeRaw, eveningTimeRaw, lookbackHoursRaw, scoreCutoffRaw] =
+    await Promise.all([
+      getUserSetting(db, userId, 'news_brief_enabled'),
+      getUserSetting(db, userId, 'news_brief_timezone'),
+      getUserSetting(db, userId, 'news_brief_morning_time'),
+      getUserSetting(db, userId, 'news_brief_evening_time'),
+      getUserSetting(db, userId, 'news_brief_lookback_hours'),
+      getUserSetting(db, userId, 'news_brief_score_cutoff')
+    ]);
+
+  return {
+    enabled: parseBooleanSetting(enabledRaw, DEFAULT_NEWS_BRIEF_ENABLED),
+    timezone: validateNewsBriefTimezone(timezoneRaw) ?? DEFAULT_NEWS_BRIEF_TIMEZONE,
+    morningTime: validateNewsBriefTime(morningTimeRaw) ?? DEFAULT_NEWS_BRIEF_MORNING_TIME,
+    eveningTime: validateNewsBriefTime(eveningTimeRaw) ?? DEFAULT_NEWS_BRIEF_EVENING_TIME,
+    lookbackHours: clampNewsBriefLookbackHours(lookbackHoursRaw),
+    scoreCutoff: clampNewsBriefScoreCutoff(scoreCutoffRaw)
+  };
+}
+
 export async function getInitialFeedLookbackDays(db: Db) {
   const raw = await getSetting(db, 'initial_feed_lookback_days');
   return clampInitialFeedLookbackDays(raw);

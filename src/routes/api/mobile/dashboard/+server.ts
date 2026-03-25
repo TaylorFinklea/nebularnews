@@ -12,7 +12,7 @@ export const GET = async ({ request, platform }) => {
   const queueConfig = await getDashboardQueueConfig(db);
   const [feedStatus, newsBrief, readingQueue, momentum] = await Promise.all([
     getDashboardFeedStatus(db),
-    getDashboardNewsBrief(db, platform.env, referenceAt),
+    getDashboardNewsBrief(db, platform.env, referenceAt, user.id),
     getDashboardUnreadQueue(db, user.id, {
       windowDays: queueConfig.windowDays,
       scoreCutoff: queueConfig.scoreCutoff,

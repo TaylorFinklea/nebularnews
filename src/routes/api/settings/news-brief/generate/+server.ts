@@ -8,7 +8,8 @@ import {
 
 export const POST = async ({ platform, locals }) => {
   const db = platform.env.DB;
-  const generationContext = await resolveNewsBriefGenerationContext(db, platform.env);
+  const userId = locals.user?.id ?? 'admin';
+  const generationContext = await resolveNewsBriefGenerationContext(db, platform.env, userId);
 
   if (!generationContext.apiKey) {
     return json(
@@ -17,7 +18,7 @@ export const POST = async ({ platform, locals }) => {
     );
   }
 
-  const editionId = await createManualNewsBriefEdition(db, generationContext.config);
+  const editionId = await createManualNewsBriefEdition(db, generationContext.config, undefined, userId);
   if (!editionId) {
     return json({ error: { message: 'Unable to queue News Brief generation.' } }, { status: 500 });
   }
@@ -26,7 +27,7 @@ export const POST = async ({ platform, locals }) => {
     const edition = await processNewsBriefEditionById(db, platform.env, editionId, { skipClaim: true });
 
     await recordAuditEvent(db, {
-      actor: 'admin',
+      actor: userId,
       action: 'news_brief.generate_manual',
       requestId: locals.requestId,
       metadata: {
@@ -46,7 +47,7 @@ export const POST = async ({ platform, locals }) => {
     });
   } catch (error) {
     await recordAuditEvent(db, {
-      actor: 'admin',
+      actor: userId,
       action: 'news_brief.generate_manual_failed',
       requestId: locals.requestId,
       metadata: {

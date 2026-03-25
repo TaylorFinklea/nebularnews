@@ -194,7 +194,7 @@ export const load = async ({ platform, locals }) => {
   const [orphanCount, orphanSampleIds, newsBriefLatestEdition, newsBriefTimezoneExplicit, connectedApps] = await Promise.all([
     countOrphanArticles(db),
     listOrphanArticleIds(db, ORPHAN_PREVIEW_SAMPLE_SIZE),
-    getLatestNewsBriefEditionSummary(db),
+    getLatestNewsBriefEditionSummary(db, userId),
     getSetting(db, 'news_brief_timezone'),
     listOAuthClientSummaries(db)
   ]);

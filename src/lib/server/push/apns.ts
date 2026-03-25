@@ -95,6 +95,58 @@ export const sendPushNotification = async (
   };
 };
 
+export const notifyUserDevices = async (
+  db: D1Database,
+  env: App.Platform['env'],
+  userId: string,
+  payload: ApnsPayload
+): Promise<{ sent: number; failed: number; removed: number }> => {
+  const config = getApnsConfig(env);
+  if (!config) {
+    logWarn('push.apns.not_configured', {});
+    return { sent: 0, failed: 0, removed: 0 };
+  }
+
+  const tokens = await dbAll<{ id: string; token: string }>(
+    db,
+    'SELECT id, token FROM device_tokens WHERE platform = ? AND user_id = ?',
+    ['ios', userId]
+  );
+
+  let sent = 0;
+  let failed = 0;
+  let removed = 0;
+  const invalidTokenIds: string[] = [];
+
+  for (const { id, token } of tokens) {
+    try {
+      const result = await sendPushNotification(config, token, payload);
+      if (result.success) {
+        sent++;
+      } else if (result.statusCode === 410 || result.reason === 'Unregistered' || result.reason === 'BadDeviceToken') {
+        invalidTokenIds.push(id);
+        removed++;
+      } else {
+        failed++;
+        logWarn('push.apns.send_failed', { token: token.slice(0, 8), reason: result.reason });
+      }
+    } catch (err) {
+      failed++;
+      logWarn('push.apns.send_error', { error: err instanceof Error ? err.message : 'unknown' });
+    }
+  }
+
+  if (invalidTokenIds.length > 0) {
+    for (const id of invalidTokenIds) {
+      await dbRun(db, 'DELETE FROM device_tokens WHERE id = ?', [id]);
+    }
+    logInfo('push.apns.cleaned_invalid_tokens', { count: invalidTokenIds.length });
+  }
+
+  logInfo('push.apns.batch_complete', { userId, sent, failed, removed, total: tokens.length });
+  return { sent, failed, removed };
+};
+
 export const notifyAllDevices = async (
   db: D1Database,
   env: App.Platform['env'],

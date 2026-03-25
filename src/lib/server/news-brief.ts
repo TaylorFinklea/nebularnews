@@ -6,6 +6,7 @@ import { logInfo } from './log';
 import {
   getFeatureProviderModel,
   getNewsBriefConfig,
+  getNewsBriefConfigForUser,
   getProviderKey,
   type NewsBriefConfig,
   type ReasoningEffort
@@ -60,6 +61,7 @@ type NewsBriefCandidateRow = {
 
 type PersistedNewsBriefEdition = {
   id: string;
+  user_id: string;
   edition_key: string;
   edition_kind: NewsBriefEditionKind;
   edition_slot: NewsBriefEditionSlot;
@@ -127,6 +129,16 @@ export type NewsBriefQueueSummary = {
   readyCount: number;
   emptyCount: number;
   failedCount: number;
+};
+
+export const getNewsBriefEnabledUserIds = async (db: Db): Promise<string[]> => {
+  const rows = await dbAll<{ user_id: string }>(
+    db,
+    `SELECT DISTINCT user_id FROM settings WHERE key = 'news_brief_enabled' AND value = '1'`
+  );
+  // If no users have the setting explicitly, fall back to admin (backward compat)
+  if (rows.length === 0) return ['admin'];
+  return rows.map((row) => row.user_id);
 };
 
 const getAffectedRows = (result: unknown) => {
@@ -297,9 +309,12 @@ export const getNextScheduledNewsBriefAt = (config: NewsBriefConfig, referenceAt
 
 export async function resolveNewsBriefGenerationContext(
   db: Db,
-  env: App.Platform['env']
+  env: App.Platform['env'],
+  userId?: string
 ): Promise<NewsBriefGenerationContext> {
-  const config = await getNewsBriefConfig(db);
+  const config = userId
+    ? await getNewsBriefConfigForUser(db, userId)
+    : await getNewsBriefConfig(db);
   const { provider, model, reasoningEffort } = await getFeatureProviderModel(db, env, 'summaries');
   const apiKey = await getProviderKey(db, env, provider);
   return { config, provider, model, reasoningEffort, apiKey };
@@ -309,8 +324,19 @@ export async function listNewsBriefCandidates(
   db: Db,
   config: Pick<NewsBriefConfig, 'scoreCutoff'>,
   windowStart: number,
-  windowEnd: number
+  windowEnd: number,
+  userId?: string
 ): Promise<NewsBriefCandidate[]> {
+  const subscriptionFilter = userId
+    ? `AND EXISTS (
+         SELECT 1 FROM article_sources src
+         JOIN user_feed_subscriptions ufs ON ufs.feed_id = src.feed_id
+         WHERE src.article_id = a.id AND ufs.user_id = ?
+       )`
+    : '';
+  const params: (string | number)[] = [windowStart, windowEnd];
+  if (userId) params.push(userId);
+
   const rows = await dbAll<NewsBriefCandidateRow>(
     db,
     `WITH latest_scores AS (
@@ -368,6 +394,7 @@ export async function listNewsBriefCandidates(
        LEFT JOIN article_score_overrides o ON o.article_id = a.id
        WHERE COALESCE(a.published_at, a.fetched_at, 0) >= ?
          AND COALESCE(a.published_at, a.fetched_at, 0) < ?
+         ${subscriptionFilter}
      )
      SELECT
        article_id,
@@ -384,7 +411,7 @@ export async function listNewsBriefCandidates(
      WHERE effective_score >= ?
      ORDER BY effective_score DESC, COALESCE(published_at, fetched_at, 0) DESC
      LIMIT ?`,
-    [windowStart, windowEnd, config.scoreCutoff, NEWS_BRIEF_MAX_CANDIDATES * 3]
+    [...params, config.scoreCutoff, NEWS_BRIEF_MAX_CANDIDATES * 3]
   );
 
   const sourceByArticle = await getPreferredSourcesForArticles(
@@ -422,6 +449,7 @@ export async function listNewsBriefCandidates(
 const insertEdition = async (
   db: Db,
   input: {
+    userId: string;
     editionKey: string;
     editionKind: NewsBriefEditionKind;
     editionSlot: NewsBriefEditionSlot;
@@ -438,6 +466,7 @@ const insertEdition = async (
     db,
     `INSERT OR IGNORE INTO news_brief_editions (
       id,
+      user_id,
       edition_key,
       edition_kind,
       edition_slot,
@@ -462,9 +491,10 @@ const insertEdition = async (
       created_at,
       updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, '[]', '[]', NULL, NULL, NULL, 0, NULL, NULL, NULL, ?, NULL, ?, ?)`,
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, '[]', '[]', NULL, NULL, NULL, 0, NULL, NULL, NULL, ?, NULL, ?, ?)`,
     [
       nanoid(),
+      input.userId,
       input.editionKey,
       input.editionKind,
       input.editionSlot,
@@ -480,9 +510,10 @@ const insertEdition = async (
   );
 };
 
-export async function createManualNewsBriefEdition(db: Db, config: NewsBriefConfig, referenceAt = now()) {
-  const editionKey = `manual:${referenceAt}:${nanoid()}`;
+export async function createManualNewsBriefEdition(db: Db, config: NewsBriefConfig, referenceAt = now(), userId = 'admin') {
+  const editionKey = `manual:${userId}:${referenceAt}:${nanoid()}`;
   await insertEdition(db, {
+    userId,
     editionKey,
     editionKind: 'manual',
     editionSlot: 'manual',
@@ -502,12 +533,13 @@ export async function createManualNewsBriefEdition(db: Db, config: NewsBriefConf
   return row?.id ?? null;
 }
 
-export async function queueDueNewsBriefEditions(
+export async function queueDueNewsBriefEditionsForUser(
   db: Db,
   env: App.Platform['env'],
+  userId: string,
   referenceAt = now()
 ) {
-  const context = await resolveNewsBriefGenerationContext(db, env);
+  const context = await resolveNewsBriefGenerationContext(db, env, userId);
   if (!context.config.enabled || !context.apiKey) {
     return {
       providerReady: Boolean(context.apiKey),
@@ -517,9 +549,13 @@ export async function queueDueNewsBriefEditions(
   }
 
   const dueSlots = getDueNewsBriefSlots(context.config, referenceAt);
+  const editionKeys: string[] = [];
   for (const slot of dueSlots) {
+    const editionKey = `${userId}:${slot.editionKey}`;
+    editionKeys.push(editionKey);
     await insertEdition(db, {
-      editionKey: slot.editionKey,
+      userId,
+      editionKey,
       editionKind: 'scheduled',
       editionSlot: slot.slot,
       timezone: context.config.timezone,
@@ -535,8 +571,8 @@ export async function queueDueNewsBriefEditions(
     db,
     `SELECT edition_key
      FROM news_brief_editions
-     WHERE edition_key IN (${new Array(dueSlots.length || 1).fill('?').join(', ')})`,
-    dueSlots.length > 0 ? dueSlots.map((slot) => slot.editionKey) : ['']
+     WHERE edition_key IN (${new Array(editionKeys.length || 1).fill('?').join(', ')})`,
+    editionKeys.length > 0 ? editionKeys : ['']
   );
 
   return {
@@ -546,11 +582,36 @@ export async function queueDueNewsBriefEditions(
   };
 }
 
+export async function queueDueNewsBriefEditions(
+  db: Db,
+  env: App.Platform['env'],
+  referenceAt = now()
+) {
+  const userIds = await getNewsBriefEnabledUserIds(db);
+  let totalQueued = 0;
+  let totalDue = 0;
+  let providerReady = true;
+
+  for (const userId of userIds) {
+    const result = await queueDueNewsBriefEditionsForUser(db, env, userId, referenceAt);
+    totalQueued += result.queuedCount;
+    totalDue += result.dueCount;
+    if (!result.providerReady) providerReady = false;
+  }
+
+  return {
+    providerReady,
+    queuedCount: totalQueued,
+    dueCount: totalDue
+  };
+}
+
 const loadEditionById = async (db: Db, editionId: string) =>
   dbGet<PersistedNewsBriefEdition>(
     db,
     `SELECT
       id,
+      user_id,
       edition_key,
       edition_kind,
       edition_slot,
@@ -686,7 +747,8 @@ async function processEdition(
     db,
     { scoreCutoff: edition.score_cutoff },
     edition.window_start,
-    edition.window_end
+    edition.window_end,
+    edition.user_id
   );
 
   if (candidates.length === 0) {
@@ -773,11 +835,11 @@ export async function processNewsBriefEditionById(
   editionId: string,
   options: { skipClaim?: boolean } = {}
 ) {
-  const generationContext = await resolveNewsBriefGenerationContext(db, env);
   const edition = await loadEditionById(db, editionId);
   if (!edition) {
     throw new Error(`News Brief edition not found: ${editionId}`);
   }
+  const generationContext = await resolveNewsBriefGenerationContext(db, env, edition.user_id);
 
   if (!options.skipClaim) {
     const claimed = await claimEdition(db, editionId, `news-brief:${nanoid()}`);
@@ -825,10 +887,9 @@ export async function processPendingNewsBriefEditions(
 ): Promise<NewsBriefQueueSummary> {
   await reclaimExpiredEditions(db);
   const limit = Math.max(1, Math.min(4, Math.floor(Number(options.limit ?? 2))));
-  const generationContext = await resolveNewsBriefGenerationContext(db, env);
-  const pending = await dbAll<{ id: string }>(
+  const pending = await dbAll<{ id: string; user_id: string }>(
     db,
-    `SELECT id
+    `SELECT id, user_id
      FROM news_brief_editions
      WHERE status = 'pending'
        AND run_after <= ?
@@ -841,6 +902,10 @@ export async function processPendingNewsBriefEditions(
   let readyCount = 0;
   let emptyCount = 0;
   let failedCount = 0;
+  let providerReady = true;
+
+  // Cache generation contexts per-user to avoid redundant lookups
+  const contextCache = new Map<string, NewsBriefGenerationContext>();
 
   for (const row of pending) {
     const claimed = await claimEdition(db, row.id, `news-brief:${nanoid()}`);
@@ -848,6 +913,13 @@ export async function processPendingNewsBriefEditions(
 
     const edition = await loadEditionById(db, row.id);
     if (!edition) continue;
+
+    let generationContext = contextCache.get(edition.user_id);
+    if (!generationContext) {
+      generationContext = await resolveNewsBriefGenerationContext(db, env, edition.user_id);
+      contextCache.set(edition.user_id, generationContext);
+    }
+    if (!generationContext.apiKey) providerReady = false;
 
     try {
       const result = await processEdition(db, edition, generationContext);
@@ -862,7 +934,7 @@ export async function processPendingNewsBriefEditions(
   }
 
   return {
-    providerReady: Boolean(generationContext.apiKey),
+    providerReady,
     queuedCount: pending.length,
     dueCount: pending.length,
     processedCount,
@@ -872,11 +944,14 @@ export async function processPendingNewsBriefEditions(
   };
 }
 
-export async function getLatestNewsBriefEditionSummary(db: Db): Promise<NewsBriefEditionSummary | null> {
+export async function getLatestNewsBriefEditionSummary(db: Db, userId?: string): Promise<NewsBriefEditionSummary | null> {
+  const userFilter = userId ? 'WHERE user_id = ?' : '';
+  const params = userId ? [userId] : [];
   const edition = await dbGet<PersistedNewsBriefEdition>(
     db,
     `SELECT
       id,
+      user_id,
       edition_key,
       edition_kind,
       edition_slot,
@@ -898,8 +973,10 @@ export async function getLatestNewsBriefEditionSummary(db: Db): Promise<NewsBrie
       created_at,
       updated_at
      FROM news_brief_editions
+     ${userFilter}
      ORDER BY COALESCE(generated_at, scheduled_for, created_at) DESC
-     LIMIT 1`
+     LIMIT 1`,
+    params
   );
 
   if (!edition) return null;
@@ -916,9 +993,10 @@ export async function getLatestNewsBriefEditionSummary(db: Db): Promise<NewsBrie
 export async function getDashboardNewsBrief(
   db: Db,
   env: App.Platform['env'],
-  referenceAt = Date.now()
+  referenceAt = Date.now(),
+  userId?: string
 ): Promise<DashboardNewsBriefState | null> {
-  const generationContext = await resolveNewsBriefGenerationContext(db, env);
+  const generationContext = await resolveNewsBriefGenerationContext(db, env, userId);
   const nextScheduledAt = generationContext.config.enabled
     ? getNextScheduledNewsBriefAt(generationContext.config, referenceAt)
     : null;
@@ -927,10 +1005,14 @@ export async function getDashboardNewsBrief(
     return null;
   }
 
+  const userFilter = userId ? 'AND user_id = ?' : '';
+  const userParams = userId ? [userId] : [];
+
   const latestCompleted = await dbGet<PersistedNewsBriefEdition>(
     db,
     `SELECT
       id,
+      user_id,
       edition_key,
       edition_kind,
       edition_slot,
@@ -953,8 +1035,10 @@ export async function getDashboardNewsBrief(
       updated_at
      FROM news_brief_editions
      WHERE status IN ('ready', 'empty')
+       ${userFilter}
      ORDER BY COALESCE(generated_at, scheduled_for, created_at) DESC
-     LIMIT 1`
+     LIMIT 1`,
+    userParams
   );
 
   const latestDueSlot = getLatestDueNewsBriefSlot(generationContext.config, referenceAt);
@@ -982,6 +1066,7 @@ export async function getDashboardNewsBrief(
     db,
     `SELECT
       id,
+      user_id,
       edition_key,
       edition_kind,
       edition_slot,
@@ -1004,8 +1089,10 @@ export async function getDashboardNewsBrief(
       updated_at
      FROM news_brief_editions
      WHERE status IN ('pending', 'running')
+       ${userFilter}
      ORDER BY COALESCE(scheduled_for, created_at) DESC
-     LIMIT 1`
+     LIMIT 1`,
+    userParams
   );
 
   if (latestPending) {

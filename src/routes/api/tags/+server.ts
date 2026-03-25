@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit';
+import { requireAdmin } from '$lib/server/auth';
 import { createTag, listTags } from '$lib/server/tags';
 
 const normalizeColor = (value: unknown) => {
@@ -15,7 +16,8 @@ export const GET = async ({ url, platform }) => {
   return json({ tags });
 };
 
-export const POST = async ({ request, platform }) => {
+export const POST = async ({ request, platform, locals }) => {
+  requireAdmin(locals.user);
   const body = await request.json().catch(() => ({}));
   const name = typeof body?.name === 'string' ? body.name : '';
   const color = normalizeColor(body?.color);

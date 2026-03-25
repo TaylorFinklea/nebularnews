@@ -1,3 +1,4 @@
+import { error } from '@sveltejs/kit';
 import { serialize } from 'cookie';
 import { nanoid } from 'nanoid';
 import { hmacSign, hmacVerify, pbkdf2Verify } from './crypto';
@@ -207,6 +208,6 @@ function fromBase64Url(b64url: string): Uint8Array {
 
 export function requireAdmin(user: AuthUser | null) {
   if (!user || user.role !== 'admin') {
-    throw new Error('Admin access required.');
+    throw error(403, 'Admin access required.');
   }
 }

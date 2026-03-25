@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit';
+import { requireAdmin } from '$lib/server/auth';
 import { dbAll } from '$lib/server/db';
 import {
   getBrowserScrapingEnabled,
@@ -151,6 +152,7 @@ export const GET = async ({ platform }) => {
 };
 
 export const POST = async ({ request, platform, locals }) => {
+  requireAdmin(locals.user);
   const body = await request.json();
   const entries: [string, string][] = [];
   const validProviders = new Set(['openai', 'anthropic']);

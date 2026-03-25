@@ -1,8 +1,10 @@
 import { json } from '@sveltejs/kit';
+import { requireAdmin } from '$lib/server/auth';
 import { rotateProviderKeyEncryption } from '$lib/server/settings';
 import { recordAuditEvent } from '$lib/server/audit';
 
 export const POST = async ({ request, platform, locals }) => {
+  requireAdmin(locals.user);
   const body = await request.json().catch(() => ({}));
   const providerRaw = typeof body?.provider === 'string' ? body.provider.trim().toLowerCase() : '';
   const provider = providerRaw === 'openai' || providerRaw === 'anthropic' ? providerRaw : undefined;

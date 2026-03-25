@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit';
+import { requireAdmin } from '$lib/server/auth';
 import { deleteTag, getTagById, updateTag } from '$lib/server/tags';
 
 const normalizeColor = (value: unknown) => {
@@ -9,7 +10,8 @@ const normalizeColor = (value: unknown) => {
   return /^#[0-9a-fA-F]{6}$/.test(trimmed) ? trimmed.toLowerCase() : undefined;
 };
 
-export const PATCH = async ({ params, request, platform }) => {
+export const PATCH = async ({ params, request, platform, locals }) => {
+  requireAdmin(locals.user);
   const body = await request.json().catch(() => ({}));
   const existing = await getTagById(platform.env.DB, params.id);
   if (!existing) return json({ error: 'Tag not found' }, { status: 404 });
@@ -35,7 +37,8 @@ export const PATCH = async ({ params, request, platform }) => {
   }
 };
 
-export const DELETE = async ({ params, platform }) => {
+export const DELETE = async ({ params, platform, locals }) => {
+  requireAdmin(locals.user);
   const existing = await getTagById(platform.env.DB, params.id);
   if (!existing) return json({ error: 'Tag not found' }, { status: 404 });
   await deleteTag(platform.env.DB, params.id);

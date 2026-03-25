@@ -1,8 +1,10 @@
 import { json } from '@sveltejs/kit';
+import { requireAdmin } from '$lib/server/auth';
 import { setProviderKey } from '$lib/server/settings';
 import { recordAuditEvent } from '$lib/server/audit';
 
 export const POST = async ({ request, platform, locals }) => {
+  requireAdmin(locals.user);
   const body = await request.json();
   const provider = body?.provider;
   const apiKey = body?.apiKey?.trim();

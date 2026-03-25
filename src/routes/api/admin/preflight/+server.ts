@@ -1,4 +1,5 @@
 import { apiOk } from '$lib/server/api';
+import { requireAdmin } from '$lib/server/auth';
 import { dbAll } from '$lib/server/db';
 import { EXPECTED_SCHEMA_VERSION, getSchemaVersion } from '$lib/server/migrations';
 import { getOpsSummary } from '$lib/server/ops';
@@ -15,6 +16,7 @@ const REQUIRED_SETTINGS = [
 ];
 
 export const GET = async (event) => {
+  requireAdmin(event.locals.user);
   const schemaVersion = await getSchemaVersion(event.platform.env.DB);
   const runtime = inspectRuntimeConfig(event.platform.env);
   const ops = await getOpsSummary(event.platform.env.DB);

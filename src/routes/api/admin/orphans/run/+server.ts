@@ -1,4 +1,5 @@
 import { apiError, apiOk } from '$lib/server/api';
+import { requireAdmin } from '$lib/server/auth';
 import { recordAuditEvent } from '$lib/server/audit';
 import {
   clampOrphanCleanupLimit,
@@ -18,6 +19,7 @@ const parseBoolean = (value: unknown, fallback = false) => {
 };
 
 export const POST = async (event) => {
+  requireAdmin(event.locals.user);
   const db = event.platform.env.DB;
   try {
     const body = await event.request.json().catch(() => ({}));

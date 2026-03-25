@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit';
+import { requireAdmin } from '$lib/server/auth';
 import { nanoid } from 'nanoid';
 import { dbAll, dbRun, now } from '$lib/server/db';
 
@@ -10,7 +11,8 @@ export const GET = async ({ platform }) => {
   return json({ feeds });
 };
 
-export const POST = async ({ request, platform }) => {
+export const POST = async ({ request, platform, locals }) => {
+  requireAdmin(locals.user);
   const body = await request.json();
   const url = body?.url?.trim();
   if (!url) return json({ error: 'Missing url' }, { status: 400 });

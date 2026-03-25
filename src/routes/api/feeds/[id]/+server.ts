@@ -1,4 +1,5 @@
 import { json } from '@sveltejs/kit';
+import { requireAdmin } from '$lib/server/auth';
 import { dbBatch, dbGet, dbRun } from '$lib/server/db';
 
 const deletableArticlesCountSql = `SELECT COUNT(*) AS count
@@ -56,7 +57,8 @@ export const GET = async ({ params, platform }) => {
   return json(preview);
 };
 
-export const DELETE = async ({ params, platform }) => {
+export const DELETE = async ({ params, platform, locals }) => {
+  requireAdmin(locals.user);
   const { id } = params;
   const preview = await loadDeletePreview(platform.env.DB, id);
   if (!preview) return json({ error: 'Feed not found' }, { status: 404 });

@@ -1,4 +1,5 @@
 import { apiOk } from '$lib/server/api';
+import { requireAdmin } from '$lib/server/auth';
 import {
   countOrphanArticles,
   listOrphanArticleIds,
@@ -7,6 +8,7 @@ import {
 } from '$lib/server/orphan-cleanup';
 
 export const GET = async (event) => {
+  requireAdmin(event.locals.user);
   const db = event.platform.env.DB;
   const [orphanCount, sampleArticleIds] = await Promise.all([
     countOrphanArticles(db),

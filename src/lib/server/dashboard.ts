@@ -160,6 +160,7 @@ export async function getDashboardStats(db: Db, range: DashboardDayRange): Promi
 
 export async function getDashboardUnreadQueue(
   db: Db,
+  userId: string,
   options: {
     windowDays: number;
     scoreCutoff: number;
@@ -234,10 +235,15 @@ export async function getDashboardUnreadQueue(
      FROM articles a
      LEFT JOIN latest_summaries ls ON ls.article_id = a.id
      LEFT JOIN latest_scores lsc ON lsc.article_id = a.id
-     LEFT JOIN article_score_overrides o ON o.article_id = a.id
+     LEFT JOIN article_score_overrides o ON o.article_id = a.id AND o.user_id = ?
      WHERE COALESCE(a.published_at, a.fetched_at, 0) >= ?
+       AND EXISTS (
+         SELECT 1 FROM article_sources src
+         JOIN user_feed_subscriptions ufs ON ufs.feed_id = src.feed_id
+         WHERE src.article_id = a.id AND ufs.user_id = ?
+       )
        AND COALESCE(
-         (SELECT rs.is_read FROM article_read_state rs WHERE rs.article_id = a.id LIMIT 1),
+         (SELECT rs.is_read FROM article_read_state rs WHERE rs.article_id = a.id AND rs.user_id = ? LIMIT 1),
          0
        ) = 0
      ORDER BY
@@ -246,7 +252,7 @@ export async function getDashboardUnreadQueue(
        COALESCE(o.score, CASE WHEN lsc.score_status = 'ready' THEN lsc.score ELSE NULL END) DESC,
        COALESCE(a.published_at, a.fetched_at) DESC
      LIMIT ?`,
-    [windowStart, scoreCutoff, safeLimit]
+    [userId, windowStart, userId, userId, scoreCutoff, safeLimit]
   );
 
   const sourceByArticle = await getPreferredSourcesForArticles(
@@ -266,6 +272,7 @@ export async function getDashboardUnreadQueue(
 
 export async function getDashboardReadingMomentum(
   db: Db,
+  userId: string,
   options: {
     scoreCutoff: number;
     referenceAt?: number;
@@ -303,10 +310,15 @@ export async function getDashboardReadingMomentum(
            CASE WHEN lsc.score_status = 'ready' THEN lsc.score ELSE NULL END
          ) as score
        FROM articles a
-       LEFT JOIN article_score_overrides o ON o.article_id = a.id
+       LEFT JOIN article_score_overrides o ON o.article_id = a.id AND o.user_id = ?
        LEFT JOIN latest_scores lsc ON lsc.article_id = a.id
-       WHERE COALESCE(
-         (SELECT rs.is_read FROM article_read_state rs WHERE rs.article_id = a.id LIMIT 1),
+       WHERE EXISTS (
+         SELECT 1 FROM article_sources src
+         JOIN user_feed_subscriptions ufs ON ufs.feed_id = src.feed_id
+         WHERE src.article_id = a.id AND ufs.user_id = ?
+       )
+       AND COALESCE(
+         (SELECT rs.is_read FROM article_read_state rs WHERE rs.article_id = a.id AND rs.user_id = ? LIMIT 1),
          0
        ) = 0
      )
@@ -316,7 +328,7 @@ export async function getDashboardReadingMomentum(
        SUM(CASE WHEN article_at >= ? THEN 1 ELSE 0 END) as unread_7d,
        SUM(CASE WHEN article_at >= ? AND score >= ? THEN 1 ELSE 0 END) as high_fit_unread_7d
      FROM unread_articles`,
-    [last24hStart, last7dStart, last7dStart, scoreCutoff]
+    [userId, userId, userId, last24hStart, last7dStart, last7dStart, scoreCutoff]
   );
 
   return {

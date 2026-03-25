@@ -16,15 +16,16 @@ export type ArticleReactionRecord = {
 
 export async function listReactionReasonCodesForArticle(
   db: Db,
+  userId: string,
   articleId: string
 ): Promise<ArticleReactionReasonCode[]> {
   const rows = await dbAll<{ reason_code: ArticleReactionReasonCode }>(
     db,
     `SELECT reason_code
      FROM article_reaction_reasons
-     WHERE article_id = ?
+     WHERE article_id = ? AND user_id = ?
      ORDER BY ${REASON_ORDER_SQL}`,
-    [articleId]
+    [articleId, userId]
   );
 
   return rows.map((row) => row.reason_code);
@@ -32,6 +33,7 @@ export async function listReactionReasonCodesForArticle(
 
 export async function listReactionReasonCodesForArticles(
   db: Db,
+  userId: string,
   articleIds: readonly string[]
 ): Promise<Map<string, ArticleReactionReasonCode[]>> {
   const uniqueArticleIds = [...new Set(articleIds.filter(Boolean))];
@@ -44,9 +46,9 @@ export async function listReactionReasonCodesForArticles(
     db,
     `SELECT article_id, reason_code
      FROM article_reaction_reasons
-     WHERE article_id IN (${placeholders})
+     WHERE article_id IN (${placeholders}) AND user_id = ?
      ORDER BY article_id, ${REASON_ORDER_SQL}`,
-    uniqueArticleIds
+    [...uniqueArticleIds, userId]
   );
 
   const reasonsByArticle = new Map<string, ArticleReactionReasonCode[]>();
@@ -65,19 +67,20 @@ export async function listReactionReasonCodesForArticles(
 
 export async function getReactionForArticle(
   db: Db,
+  userId: string,
   articleId: string
 ): Promise<ArticleReactionRecord | null> {
   const reaction = await dbGet<{ value: number; feed_id: string; created_at: number }>(
     db,
-    'SELECT value, feed_id, created_at FROM article_reactions WHERE article_id = ? LIMIT 1',
-    [articleId]
+    'SELECT value, feed_id, created_at FROM article_reactions WHERE article_id = ? AND user_id = ? LIMIT 1',
+    [articleId, userId]
   );
 
   if (!reaction || (reaction.value !== 1 && reaction.value !== -1)) {
     return null;
   }
 
-  const reason_codes = await listReactionReasonCodesForArticle(db, articleId);
+  const reason_codes = await listReactionReasonCodesForArticle(db, userId, articleId);
   return {
     value: reaction.value,
     feed_id: reaction.feed_id,
@@ -88,17 +91,18 @@ export async function getReactionForArticle(
 
 export async function replaceReactionReasonCodes(
   db: Db,
+  userId: string,
   articleId: string,
   reasonCodes: readonly ArticleReactionReasonCode[],
   createdAt: number
 ) {
-  await dbRun(db, 'DELETE FROM article_reaction_reasons WHERE article_id = ?', [articleId]);
+  await dbRun(db, 'DELETE FROM article_reaction_reasons WHERE article_id = ? AND user_id = ?', [articleId, userId]);
   for (const reasonCode of reasonCodes) {
     await dbRun(
       db,
-      `INSERT INTO article_reaction_reasons (article_id, reason_code, created_at)
-       VALUES (?, ?, ?)`,
-      [articleId, reasonCode, createdAt]
+      `INSERT INTO article_reaction_reasons (article_id, user_id, reason_code, created_at)
+       VALUES (?, ?, ?, ?)`,
+      [articleId, userId, reasonCode, createdAt]
     );
   }
 }

@@ -27,12 +27,13 @@ const MAX_CONTENT_CHARS = 8000;
 
 export async function getOrCreateThreadForArticle(
   db: Db,
+  userId: string,
   articleId: string
 ): Promise<{ thread: ChatThreadRow | null; messages: ChatMessageRow[] }> {
   const thread = await dbGet<ChatThreadRow>(
     db,
-    'SELECT * FROM chat_threads WHERE article_id = ?',
-    [articleId]
+    'SELECT * FROM chat_threads WHERE article_id = ? AND user_id = ?',
+    [articleId, userId]
   );
 
   if (!thread) {
@@ -50,6 +51,7 @@ export async function getOrCreateThreadForArticle(
 
 export async function sendChatMessage(
   db: Db,
+  userId: string,
   env: App.Platform['env'],
   articleId: string,
   userContent: string
@@ -57,8 +59,8 @@ export async function sendChatMessage(
   // Get or create thread
   let thread = await dbGet<ChatThreadRow>(
     db,
-    'SELECT * FROM chat_threads WHERE article_id = ?',
-    [articleId]
+    'SELECT * FROM chat_threads WHERE article_id = ? AND user_id = ?',
+    [articleId, userId]
   );
 
   const timestamp = now();
@@ -72,8 +74,8 @@ export async function sendChatMessage(
     const threadId = nanoid();
     await dbRun(
       db,
-      'INSERT INTO chat_threads (id, article_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
-      [threadId, articleId, article?.title ?? null, timestamp, timestamp]
+      'INSERT INTO chat_threads (id, user_id, article_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+      [threadId, userId, articleId, article?.title ?? null, timestamp, timestamp]
     );
     thread = { id: threadId, article_id: articleId, title: article?.title ?? null, created_at: timestamp, updated_at: timestamp };
   }

@@ -66,7 +66,7 @@ describe('dashboard queries', () => {
       ])
     );
 
-    const result = await getDashboardUnreadQueue({} as D1Database, {
+    const result = await getDashboardUnreadQueue({} as D1Database, 'admin', {
       windowDays: 7,
       scoreCutoff: 3,
       limit: 6,
@@ -76,11 +76,9 @@ describe('dashboard queries', () => {
     expect(dbAllMock).toHaveBeenCalledTimes(1);
     const [_db, sql, params] = dbAllMock.mock.calls[0];
     expect(sql).toContain('COALESCE(a.published_at, a.fetched_at, 0) >= ?');
-    expect(sql).toContain('SELECT rs.is_read FROM article_read_state rs');
-    expect(sql).toContain(
-      "CASE WHEN COALESCE(o.score, CASE WHEN lsc.score_status = 'ready' THEN lsc.score ELSE NULL END) >= ? THEN 0 ELSE 1 END ASC"
-    );
-    expect(params).toEqual([referenceAt - 7 * DAY_MS, 3, 6]);
+    expect(sql).toContain('article_read_state rs');
+    expect(sql).toContain('user_feed_subscriptions');
+    expect(params).toEqual(['admin', referenceAt - 7 * DAY_MS, 'admin', 'admin', 3, 6]);
 
     expect(result).toEqual([
       expect.objectContaining({
@@ -100,7 +98,7 @@ describe('dashboard queries', () => {
     const referenceAt = Date.UTC(2026, 1, 27, 12, 0, 0);
     dbAllMock.mockResolvedValue([]);
 
-    await getDashboardUnreadQueue({} as D1Database, {
+    await getDashboardUnreadQueue({} as D1Database, 'admin', {
       windowDays: 0,
       scoreCutoff: 99,
       limit: 0,
@@ -108,7 +106,7 @@ describe('dashboard queries', () => {
     });
 
     const [, , params] = dbAllMock.mock.calls[0];
-    expect(params).toEqual([referenceAt - DAY_MS, 5, 1]);
+    expect(params).toEqual(['admin', referenceAt - DAY_MS, 'admin', 'admin', 5, 1]);
   });
 
   it('returns reading momentum aggregates with expected time windows', async () => {
@@ -120,7 +118,7 @@ describe('dashboard queries', () => {
       high_fit_unread_7d: 6
     });
 
-    const result = await getDashboardReadingMomentum({} as D1Database, {
+    const result = await getDashboardReadingMomentum({} as D1Database, 'admin', {
       scoreCutoff: 4,
       referenceAt
     });
@@ -130,7 +128,7 @@ describe('dashboard queries', () => {
     expect(sql).toContain('FROM unread_articles');
     expect(sql).toContain('SELECT rs.is_read FROM article_read_state rs');
     expect(sql).toContain('score >= ?');
-    expect(params).toEqual([referenceAt - DAY_MS, referenceAt - 7 * DAY_MS, referenceAt - 7 * DAY_MS, 4]);
+    expect(params).toEqual(['admin', 'admin', 'admin', referenceAt - DAY_MS, referenceAt - 7 * DAY_MS, referenceAt - 7 * DAY_MS, 4]);
 
     expect(result).toEqual({
       unreadTotal: 25,

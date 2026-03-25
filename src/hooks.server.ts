@@ -1,5 +1,5 @@
 import { json, redirect, type Handle, type HandleServerError } from '@sveltejs/kit';
-import { getSessionFromRequest } from '$lib/server/auth';
+import { getSessionFromRequest, getSupabaseSessionFromRequest } from '$lib/server/auth';
 import { assertSchemaVersion } from '$lib/server/migrations';
 import { createRequestId } from '$lib/server/api';
 import { assertRuntimeConfig } from '$lib/server/runtime-config';
@@ -25,6 +25,7 @@ const publicPaths = [
   '/robots.txt',
   '/mcp',
   '/oauth',
+  '/auth',
   '/.well-known/oauth-protected-resource',
   '/.well-known/oauth-authorization-server'
 ];
@@ -128,7 +129,12 @@ export const handle: Handle = async ({ event, resolve }) => {
     pathname.startsWith('/_app');
   const secureCookie = event.url.protocol === 'https:';
 
-  event.locals.user = await getSessionFromRequest(event.request, event.platform.env.SESSION_SECRET);
+  // Try admin-password session first, then Supabase JWT
+  const adminSession = await getSessionFromRequest(event.request, event.platform.env.SESSION_SECRET);
+  const supabaseSession = adminSession
+    ? null
+    : await getSupabaseSessionFromRequest(event.request, event.platform.env.DB, event.platform.env);
+  event.locals.user = adminSession ?? supabaseSession;
   const shouldSetCsrfCookie = Boolean(event.locals.user) && !readCsrfCookieFromRequest(event.request);
   const finalizeWithCsrf = (response: Response) => {
     const headers = new Headers(response.headers);

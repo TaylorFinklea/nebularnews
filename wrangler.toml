@@ -93,6 +93,11 @@ APNS_SANDBOX = "true"
 
 [env.production]
 name = "nebular-news"
+routes = [
+  { pattern = "app.nebularnews.com", custom_domain = true },
+  { pattern = "api.nebularnews.com", custom_domain = true },
+  { pattern = "mcp.nebularnews.com", custom_domain = true }
+]
 
 [env.production.triggers]
 crons = ["*/5 * * * *", "0 * * * *", "30 3 * * *"]

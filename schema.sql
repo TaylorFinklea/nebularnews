@@ -116,6 +116,7 @@ CREATE TABLE IF NOT EXISTS article_feedback (
   rating INTEGER NOT NULL,
   comment TEXT,
   created_at INTEGER NOT NULL,
+  user_id TEXT NOT NULL DEFAULT 'admin',
   FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE,
   FOREIGN KEY(feed_id) REFERENCES feeds(id) ON DELETE SET NULL
 );
@@ -200,6 +201,7 @@ CREATE TABLE IF NOT EXISTS article_tag_suggestions (
   source_model TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
+  user_id TEXT NOT NULL DEFAULT 'admin',
   UNIQUE(article_id, name_normalized),
   FOREIGN KEY(article_id) REFERENCES articles(id) ON DELETE CASCADE
 );
@@ -218,7 +220,8 @@ CREATE TABLE IF NOT EXISTS preference_profile (
   id TEXT PRIMARY KEY,
   profile_text TEXT NOT NULL,
   updated_at INTEGER NOT NULL,
-  version INTEGER NOT NULL
+  version INTEGER NOT NULL,
+  user_id TEXT NOT NULL DEFAULT 'admin'
 );
 
 CREATE TABLE IF NOT EXISTS provider_keys (
@@ -282,7 +285,8 @@ CREATE TABLE IF NOT EXISTS news_brief_editions (
   run_after INTEGER NOT NULL,
   generated_at INTEGER,
   created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL
+  updated_at INTEGER NOT NULL,
+  user_id TEXT NOT NULL DEFAULT 'admin'
 );
 
 CREATE VIRTUAL TABLE IF NOT EXISTS article_search USING fts5(
@@ -434,7 +438,8 @@ CREATE TABLE IF NOT EXISTS device_tokens (
   token TEXT NOT NULL UNIQUE,
   platform TEXT NOT NULL DEFAULT 'ios',
   created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL
+  updated_at INTEGER NOT NULL,
+  user_id TEXT NOT NULL DEFAULT 'admin'
 );
 
 CREATE TABLE IF NOT EXISTS users (

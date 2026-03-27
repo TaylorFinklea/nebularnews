@@ -29,6 +29,17 @@
     {/if}
 
     {#if data?.hasSupabase}
+      <form method="post" action="?/apple" class="apple-form">
+        <button type="submit" class="apple-btn">
+          <svg width="16" height="20" viewBox="0 0 16 20" fill="white" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M13.13 10.64c-.02-2.17 1.77-3.22 1.85-3.27-1.01-1.48-2.58-1.68-3.14-1.7-1.33-.14-2.6.79-3.27.79-.67 0-1.7-.77-2.8-.75-1.44.02-2.77.84-3.51 2.13C.76 10.58 1.83 14.57 3.4 16.7c.78 1.13 1.71 2.39 2.93 2.34 1.18-.05 1.62-.76 3.05-.76 1.42 0 1.83.76 3.07.73 1.27-.02 2.07-1.14 2.84-2.27.9-1.3 1.27-2.57 1.29-2.63-.03-.01-2.47-.95-2.49-3.47zM10.89 3.8C11.52 3.03 11.95 1.96 11.82.87c-.93.04-2.05.62-2.71 1.38C8.48 2.99 8.0 4.08 8.16 5.11c1.03.08 2.08-.52 2.73-1.31z"/>
+          </svg>
+          Sign in with Apple
+        </button>
+      </form>
+
+      <div class="divider"><span>or</span></div>
+
       <form method="post" action="?/magiclink">
         <label>
           Email
@@ -125,6 +136,31 @@
     color: var(--text-muted);
     font-size: var(--text-sm);
     margin-top: var(--space-2);
+  }
+
+  .apple-form {
+    margin-top: var(--space-4);
+  }
+
+  .apple-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.7rem 1rem;
+    background: #000;
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-md);
+    font-family: inherit;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .apple-btn:hover {
+    background: #1a1a1a;
   }
 
   .divider {

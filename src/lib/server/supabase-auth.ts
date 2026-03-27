@@ -3,6 +3,60 @@
  * No SDK dependency — just HTTP calls to the GoTrue API.
  */
 
+export function buildOAuthAuthorizeUrl(
+  env: App.Platform['env'],
+  provider: string,
+  redirectTo: string,
+  codeChallenge: string
+): string {
+  const params = new URLSearchParams({
+    provider,
+    redirect_to: redirectTo,
+    code_challenge: codeChallenge,
+    code_challenge_method: 'S256'
+  });
+  return `${env.SUPABASE_URL}/auth/v1/authorize?${params}`;
+}
+
+export async function exchangeOAuthCode(
+  env: App.Platform['env'],
+  authCode: string,
+  codeVerifier: string
+): Promise<{
+  ok: boolean;
+  user?: { id: string; email: string };
+  error?: string;
+}> {
+  const url = `${env.SUPABASE_URL}/auth/v1/token?grant_type=pkce`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: env.SUPABASE_ANON_KEY!
+    },
+    body: JSON.stringify({ auth_code: authCode, code_verifier: codeVerifier })
+  });
+
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    return { ok: false, error: String(data?.msg ?? data?.error_description ?? 'OAuth exchange failed') };
+  }
+
+  const data = (await res.json()) as {
+    access_token?: string;
+    user?: { id?: string; email?: string };
+  };
+
+  if (!data.user?.id || !data.user?.email) {
+    return { ok: false, error: 'Invalid OAuth response' };
+  }
+
+  return {
+    ok: true,
+    user: { id: data.user.id, email: data.user.email }
+  };
+}
+
 export function isSupabaseConfigured(env: App.Platform['env']): boolean {
   return Boolean(env.SUPABASE_URL?.trim() && env.SUPABASE_ANON_KEY?.trim());
 }

@@ -57,6 +57,7 @@ const publicMobileHostAllowedPaths = [
   '/api/health',
   '/.well-known/oauth-protected-resource',
   '/.well-known/oauth-authorization-server',
+  '/auth',
   '/oauth/authorize',
   '/oauth/token',
   '/authorize',

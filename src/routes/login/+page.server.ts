@@ -4,8 +4,7 @@ import { createCsrfToken, CSRF_COOKIE } from '$lib/server/security';
 import { clearLoginAttempts, getAuthIdentifier, getThrottleRemainingMs, registerFailedLogin } from '$lib/server/login-throttle';
 import { recordAuditEvent } from '$lib/server/audit';
 import { logError, logInfo, logWarn, summarizeError } from '$lib/server/log';
-import { buildOAuthAuthorizeUrl, isSupabaseConfigured, sendMagicLink } from '$lib/server/supabase-auth';
-import { createOpaqueToken, sha256Base64Url } from '$lib/server/oauth/crypto';
+import { isSupabaseConfigured, sendMagicLink } from '$lib/server/supabase-auth';
 
 export const load = async ({ platform, url }) => {
   return {
@@ -16,38 +15,6 @@ export const load = async ({ platform, url }) => {
 };
 
 export const actions = {
-  apple: async ({ platform, url, cookies }) => {
-    if (!isSupabaseConfigured(platform.env)) {
-      return fail(503, { error: 'Apple Sign In is not configured' });
-    }
-
-    const codeVerifier = createOpaqueToken(32);
-    const codeChallenge = await sha256Base64Url(codeVerifier);
-    const secure = url.protocol === 'https:';
-
-    cookies.set('nn_pkce_verifier', codeVerifier, {
-      httpOnly: true,
-      secure,
-      sameSite: 'lax',
-      path: '/auth/callback',
-      maxAge: 60 * 10
-    });
-
-    const next = url.searchParams.get('next') ?? '';
-    if (next) {
-      cookies.set('nn_oauth_next', next, {
-        httpOnly: true,
-        secure,
-        sameSite: 'lax',
-        path: '/auth/callback',
-        maxAge: 60 * 10
-      });
-    }
-
-    const callbackUrl = `${url.origin}/auth/callback`;
-    throw redirect(303, buildOAuthAuthorizeUrl(platform.env, 'apple', callbackUrl, codeChallenge));
-  },
-
   magiclink: async ({ request, platform, url }) => {
     const data = await request.formData();
     const email = String(data.get('email') ?? '').trim().toLowerCase();

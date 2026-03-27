@@ -74,6 +74,7 @@ describe('requireMobileAccess', () => {
       scope: 'app:read app:write'
     };
     authenticatePublicAccessTokenMock.mockResolvedValueOnce(token);
+    getUserByIdMock.mockResolvedValueOnce({ id: 'admin', role: 'admin' });
 
     await expect(
       requireMobileAccess(
@@ -86,5 +87,27 @@ describe('requireMobileAccess', () => {
       )
     ).resolves.toEqual({ token, user: { id: 'admin', role: 'admin' } });
     expect(authenticatePublicAccessTokenMock).toHaveBeenCalledWith(db, env, 'mobile', 'valid-token');
+  });
+
+  it('rejects tokens for deleted users', async () => {
+    authenticatePublicAccessTokenMock.mockResolvedValueOnce({
+      client_id: 'mobile-client',
+      user_id: 'deleted-user',
+      scope: 'app:read'
+    });
+    getUserByIdMock.mockResolvedValueOnce(null);
+
+    await expect(
+      requireMobileAccess(
+        new Request('https://api.example.com/api/mobile/articles', {
+          headers: { authorization: 'Bearer orphan-token' }
+        }),
+        env,
+        db
+      )
+    ).rejects.toMatchObject({
+      status: 401,
+      body: { message: 'User account no longer exists.' }
+    });
   });
 });

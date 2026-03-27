@@ -2,7 +2,7 @@ import { error } from '@sveltejs/kit';
 import { authenticatePublicAccessToken } from '$lib/server/oauth/tokens';
 import { hasMobileScope, type MOBILE_SUPPORTED_SCOPES } from './context';
 import { ensureSchema } from '$lib/server/migrations';
-import { getUserById, type AuthUser } from '$lib/server/auth';
+import { getUserById } from '$lib/server/auth';
 
 export const requireMobileAccess = async (
   request: Request,
@@ -28,9 +28,7 @@ export const requireMobileAccess = async (
 
   const user = await getUserById(db, token.user_id);
   if (!user) {
-    // Fallback for tokens created before users table — assume admin
-    const fallbackUser: AuthUser = { id: token.user_id, role: token.user_id === 'admin' ? 'admin' : 'member' };
-    return { token, user: fallbackUser };
+    throw error(401, 'User account no longer exists.');
   }
 
   return { token, user };

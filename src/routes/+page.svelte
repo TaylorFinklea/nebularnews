@@ -542,11 +542,8 @@
 {#if !data.hasFeeds}
   <Card variant="default">
     <h3>Get started</h3>
-    <ul>
-      <li>Add your first feed in <a href="/feeds">Feeds</a>.</li>
-      <li>Run a manual pull to ingest your first articles.</li>
-      <li>Set provider keys in <a href="/settings">Settings</a> to enable summaries and scoring.</li>
-    </ul>
+    <p>Pick feeds from our curated collection to start reading.</p>
+    <a href="/onboarding"><Button>Choose feeds</Button></a>
   </Card>
 {/if}
 

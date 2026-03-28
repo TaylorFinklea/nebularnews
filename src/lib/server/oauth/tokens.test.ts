@@ -81,7 +81,7 @@ describe('oauth token helpers', () => {
       resource: 'https://mcp.example.com/mcp',
       code_verifier: 'verifier'
     });
-    const result = await exchangeAuthorizationCodeGrant({} as D1Database, env, 'mcp', form);
+    const result = await exchangeAuthorizationCodeGrant({} as any, env, 'mcp', form);
 
     expect(result.access_token).toBe('access-1');
     expect(result.refresh_token).toBe('refresh-1');
@@ -109,7 +109,7 @@ describe('oauth token helpers', () => {
       client_id: 'client-123',
       code_verifier: 'verifier'
     });
-    const result = await exchangeAuthorizationCodeGrant({} as D1Database, env, 'mcp', form);
+    const result = await exchangeAuthorizationCodeGrant({} as any, env, 'mcp', form);
 
     expect(result.access_token).toBe('access-1');
     expect(result.resource).toBe('https://mcp.example.com/mcp');
@@ -140,7 +140,7 @@ describe('oauth token helpers', () => {
       code: 'raw-code',
       code_verifier: 'verifier'
     });
-    const result = await exchangeAuthorizationCodeGrant({} as D1Database, env, 'mcp', form);
+    const result = await exchangeAuthorizationCodeGrant({} as any, env, 'mcp', form);
 
     expect(result.access_token).toBe('access-1');
     expect(getOAuthClientMock).toHaveBeenCalledWith(expect.anything(), 'client-123');
@@ -171,7 +171,7 @@ describe('oauth token helpers', () => {
       code_verifier: 'bad-verifier'
     });
 
-    await expect(exchangeAuthorizationCodeGrant({} as D1Database, env, 'mcp', form)).rejects.toMatchObject({ status: 400 });
+    await expect(exchangeAuthorizationCodeGrant({} as any, env, 'mcp', form)).rejects.toMatchObject({ status: 400 });
   });
 
   it('rotates a refresh token', async () => {
@@ -187,7 +187,7 @@ describe('oauth token helpers', () => {
     });
 
     const result = await exchangeRefreshTokenGrant(
-      {} as D1Database,
+      {} as any,
       env,
       'mcp',
       new URLSearchParams({
@@ -219,7 +219,7 @@ describe('oauth token helpers', () => {
     });
 
     const result = await exchangeRefreshTokenGrant(
-      {} as D1Database,
+      {} as any,
       env,
       'mcp',
       new URLSearchParams({
@@ -244,7 +244,7 @@ describe('oauth token helpers', () => {
       revoked_at: null
     });
 
-    const token = await authenticatePublicAccessToken({} as D1Database, env, 'mcp', 'access-token');
+    const token = await authenticatePublicAccessToken({} as any, env, 'mcp', 'access-token');
 
     expect(token?.client_id).toBe('client-123');
     expect(touchAccessTokenMock).toHaveBeenCalledWith(expect.anything(), 'access-row', 'client-123');

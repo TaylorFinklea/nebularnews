@@ -145,10 +145,8 @@ describe('runAutoTagJob', () => {
     });
 
     const result = await runAutoTagJob(
-      {} as D1Database,
-      {
-        DB: {} as D1Database
-      } as App.Platform['env'],
+      {} as any,
+      {} as App.Platform['env'],
       'article-1'
     );
 
@@ -179,10 +177,8 @@ describe('runAutoTagJob', () => {
     });
 
     await runAutoTagJob(
-      {} as D1Database,
-      {
-        DB: {} as D1Database
-      } as App.Platform['env'],
+      {} as any,
+      {} as App.Platform['env'],
       'article-1'
     );
 
@@ -208,10 +204,8 @@ describe('runAutoTagJob', () => {
     });
 
     const result = await runAutoTagJob(
-      {} as D1Database,
-      {
-        DB: {} as D1Database
-      } as App.Platform['env'],
+      {} as any,
+      {} as App.Platform['env'],
       'article-1'
     );
 
@@ -246,10 +240,8 @@ describe('runAutoTagJob', () => {
     });
 
     const result = await runAutoTagJob(
-      {} as D1Database,
-      {
-        DB: {} as D1Database
-      } as App.Platform['env'],
+      {} as any,
+      {} as App.Platform['env'],
       'article-1'
     );
 
@@ -282,10 +274,8 @@ describe('runScoreJob', () => {
 
   it('persists score status and confidence metadata for algorithmic scores', async () => {
     const result = await runScoreJob(
-      {} as D1Database,
-      {
-        DB: {} as D1Database
-      } as App.Platform['env'],
+      {} as any,
+      {} as App.Platform['env'],
       'article-1'
     );
 
@@ -325,10 +315,8 @@ describe('runScoreJob', () => {
     });
 
     await runScoreJob(
-      {} as D1Database,
-      {
-        DB: {} as D1Database
-      } as App.Platform['env'],
+      {} as any,
+      {} as App.Platform['env'],
       'article-1'
     );
 

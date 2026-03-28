@@ -138,7 +138,7 @@ describe('news brief scheduling and queries', () => {
     );
 
     const candidates = await listNewsBriefCandidates(
-      {} as D1Database,
+      {} as any,
       { scoreCutoff: 3 },
       Date.UTC(2026, 2, 1),
       Date.UTC(2026, 2, 3)
@@ -164,8 +164,8 @@ describe('news brief scheduling and queries', () => {
     dbGetMock.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
 
     const result = await getDashboardNewsBrief(
-      {} as D1Database,
-      { DB: {} as D1Database } as App.Platform['env'],
+      {} as any,
+      {} as App.Platform['env'],
       DateTime.fromISO('2026-03-03T12:00:00', { zone: 'America/Chicago' }).toMillis()
     );
 
@@ -216,8 +216,8 @@ describe('news brief scheduling and queries', () => {
     });
 
     const result = await getDashboardNewsBrief(
-      {} as D1Database,
-      { DB: {} as D1Database } as App.Platform['env'],
+      {} as any,
+      {} as App.Platform['env'],
       DateTime.fromISO('2026-03-03T20:00:00', { zone: 'America/Chicago' }).toMillis()
     );
 

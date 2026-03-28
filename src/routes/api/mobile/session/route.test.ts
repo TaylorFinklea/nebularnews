@@ -17,11 +17,15 @@ const createEvent = () =>
     }),
     platform: {
       env: {
-        DB: {} as D1Database,
         MOBILE_PUBLIC_BASE_URL: 'https://api.example.com',
         MOBILE_PUBLIC_ENABLED: 'true'
       }
-    } as App.Platform
+    } as App.Platform,
+    locals: {
+      db: {} as any,
+      requestId: 'req-test',
+      user: null
+    }
   }) as Parameters<typeof GET>[0];
 
 describe('/api/mobile/session GET', () => {

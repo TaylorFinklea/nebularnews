@@ -55,7 +55,7 @@ describe('ingestFeedItem', () => {
   });
 
   it('queues new article jobs even when the article was published on the previous UTC day', async () => {
-    const result = await ingestFeedItem({} as D1Database, 'feed-1', {
+    const result = await ingestFeedItem({} as any, 'feed-1', {
       url: 'https://example.com/story',
       guid: 'story-1',
       title: 'Kansas City small businesses have 100 days to get World Cup ready',
@@ -84,7 +84,7 @@ describe('ingestFeedItem', () => {
       .mockResolvedValueOnce({ meta: { changes: 1 } })
       .mockResolvedValue({ meta: { changes: 1 } });
 
-    await ingestFeedItem({} as D1Database, 'feed-1', {
+    await ingestFeedItem({} as any, 'feed-1', {
       url: 'https://example.com/meta-changes',
       guid: 'story-2',
       title: 'Meta changes story',

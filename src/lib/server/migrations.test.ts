@@ -6,8 +6,9 @@ type MockDbState = {
   tagKeys: Set<string>;
 };
 
-type MockDb = D1Database & {
+type MockDb = {
   __state: MockDbState;
+  prepare(sql: string): any;
 };
 
 const createMockDb = ({
@@ -233,7 +234,7 @@ const createMockDb = ({
             return { success: true };
           }
 
-          if (sql.startsWith('INSERT OR IGNORE INTO tags')) {
+          if (sql.startsWith('INSERT INTO tags') && sql.includes('ON CONFLICT DO NOTHING')) {
             const [, , nameNormalized] = params as [string, string, string];
             state.tagKeys.add(nameNormalized);
             return { success: true };
@@ -245,7 +246,7 @@ const createMockDb = ({
 
       return statement;
     }
-  } as MockDb;
+  } as MockDb as any;
 };
 
 describe('migrations', () => {

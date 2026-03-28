@@ -4,7 +4,6 @@ import { GET, POST } from './+server';
 const createPlatform = (overrides?: Partial<App.Platform['env']>): App.Platform =>
   ({
     env: {
-      DB: {} as D1Database,
       ADMIN_PASSWORD_HASH: 'hash',
       SESSION_SECRET: 'secret',
       ENCRYPTION_KEY: 'enc',
@@ -19,6 +18,12 @@ const createPlatform = (overrides?: Partial<App.Platform['env']>): App.Platform 
       }
     } as unknown as ExecutionContext
   }) as App.Platform;
+
+const createLocals = () => ({
+  db: {} as any,
+  requestId: 'req-test',
+  user: null
+});
 
 const parseMcpPayload = async (response: Response) => {
   const contentType = response.headers.get('content-type') ?? '';
@@ -49,7 +54,8 @@ describe('/mcp route auth behavior', () => {
   it('returns 401 json on GET without auth', async () => {
     const response = await GET({
       request: new Request('http://localhost/mcp'),
-      platform: createPlatform()
+      platform: createPlatform(),
+      locals: createLocals()
     } as Parameters<typeof GET>[0]);
 
     expect(response.status).toBe(401);
@@ -64,7 +70,8 @@ describe('/mcp route auth behavior', () => {
           authorization: 'Bearer mcp-token'
         }
       }),
-      platform: createPlatform()
+      platform: createPlatform(),
+      locals: createLocals()
     } as Parameters<typeof GET>[0]);
 
     expect(response.status).toBe(200);
@@ -87,7 +94,8 @@ describe('/mcp route auth behavior', () => {
           params: {}
         })
       }),
-      platform: createPlatform()
+      platform: createPlatform(),
+      locals: createLocals()
     } as Parameters<typeof POST>[0]);
 
     expect(response.status).toBe(401);
@@ -118,7 +126,8 @@ describe('/mcp route auth behavior', () => {
           }
         })
       }),
-      platform: createPlatform()
+      platform: createPlatform(),
+      locals: createLocals()
     } as Parameters<typeof POST>[0]);
 
     expect(initializeResponse.status).toBe(200);
@@ -143,7 +152,8 @@ describe('/mcp route auth behavior', () => {
           params: {}
         })
       }),
-      platform: createPlatform()
+      platform: createPlatform(),
+      locals: createLocals()
     } as Parameters<typeof POST>[0]);
 
     expect(response.status).toBe(200);
@@ -173,7 +183,8 @@ describe('/mcp route auth behavior', () => {
           params: {}
         })
       }),
-      platform: createPlatform()
+      platform: createPlatform(),
+      locals: createLocals()
     } as Parameters<typeof POST>[0]);
 
     expect(listResponse.status).toBe(200);
@@ -202,7 +213,8 @@ describe('/mcp route auth behavior', () => {
           }
         })
       }),
-      platform: createPlatform()
+      platform: createPlatform(),
+      locals: createLocals()
     } as Parameters<typeof POST>[0]);
 
     expect(readResponse.status).toBe(200);
@@ -233,7 +245,8 @@ describe('/mcp route auth behavior', () => {
           params: {}
         })
       }),
-      platform: createPlatform()
+      platform: createPlatform(),
+      locals: createLocals()
     } as Parameters<typeof POST>[0]);
 
     expect(response.status).toBe(200);

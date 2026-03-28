@@ -30,7 +30,7 @@ describe('deterministic tagging pipeline', () => {
       ])
       .mockResolvedValueOnce([{ tagId: 'tag-new', source: 'system', confidence: 0.9 }]);
 
-    const result = await applyDeterministicTagDecisions({} as D1Database, 'article-1', [
+    const result = await applyDeterministicTagDecisions({} as any, 'article-1', [
       { tagId: 'tag-manual', score: 1, confidence: 1, features: ['title_phrase'] },
       { tagId: 'tag-new', score: 0.9, confidence: 0.9, features: ['url_phrase'] }
     ]);
@@ -53,7 +53,7 @@ describe('deterministic tagging pipeline', () => {
       .mockResolvedValueOnce([{ tagId: 'tag-ai', source: 'system', confidence: 0.875 }])
       .mockResolvedValueOnce([{ tagId: 'tag-ai', source: 'system', confidence: 0.875 }]);
 
-    const result = await applyDeterministicTagDecisions({} as D1Database, 'article-1', [
+    const result = await applyDeterministicTagDecisions({} as any, 'article-1', [
       { tagId: 'tag-ai', score: 0.875, confidence: 0.875, features: ['title_phrase'] }
     ]);
 

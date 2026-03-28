@@ -81,14 +81,14 @@ describe('orphan cleanup helpers', () => {
   });
 
   it('counts and lists orphan articles in deterministic order with limit', async () => {
-    const count = await countOrphanArticles({} as D1Database);
-    const ids = await listOrphanArticleIds({} as D1Database, 2);
+    const count = await countOrphanArticles({} as any);
+    const ids = await listOrphanArticleIds({} as any, 2);
     expect(count).toBe(3);
     expect(ids).toEqual(['art-03', 'art-01']);
   });
 
   it('returns dry run stats without deleting rows', async () => {
-    const result = await deleteOrphanArticlesBatch({} as D1Database, 2, { dryRun: true });
+    const result = await deleteOrphanArticlesBatch({} as any, 2, { dryRun: true });
     expect(result).toMatchObject({
       orphan_count_before: 3,
       targeted: 2,
@@ -104,7 +104,7 @@ describe('orphan cleanup helpers', () => {
   });
 
   it('deletes orphan batch and dependent rows', async () => {
-    const result = await deleteOrphanArticlesBatch({} as D1Database, 2, { dryRun: false });
+    const result = await deleteOrphanArticlesBatch({} as any, 2, { dryRun: false });
     expect(result).toMatchObject({
       orphan_count_before: 3,
       targeted: 2,

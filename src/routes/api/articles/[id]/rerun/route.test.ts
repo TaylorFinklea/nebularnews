@@ -22,10 +22,13 @@ const createEvent = (body: Record<string, unknown>) =>
       body: JSON.stringify(body)
     }),
     platform: {
-      env: {
-        DB: {} as D1Database
-      }
-    } as App.Platform
+      env: {}
+    } as App.Platform,
+    locals: {
+      db: {} as any,
+      requestId: 'req-test',
+      user: null
+    }
   }) as Parameters<typeof POST>[0];
 
 describe('/api/articles/[id]/rerun POST', () => {
@@ -49,7 +52,7 @@ describe('/api/articles/[id]/rerun POST', () => {
 
     expect(response.status).toBe(200);
     expect(payload).toEqual({ ok: true, executed: ['summarize'], queued: ['score'] });
-    expect(runArticleJobImmediatelyMock).toHaveBeenCalledWith(expect.objectContaining({ DB: expect.anything() }), 'summarize', 'article-1');
+    expect(runArticleJobImmediatelyMock).toHaveBeenCalledWith(expect.anything(), expect.anything(), 'summarize', 'article-1');
     expect(enqueueArticleJobMock).toHaveBeenCalledTimes(1);
     expect(enqueueArticleJobMock).toHaveBeenCalledWith(expect.anything(), 'score', 'article-1');
   });

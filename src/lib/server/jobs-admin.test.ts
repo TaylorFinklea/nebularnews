@@ -50,7 +50,7 @@ describe('queueMissingRecentArticleJobs', () => {
 
   it('queues score, auto-tag, image backfill, and key_points jobs for the recent window', async () => {
     const referenceAt = Date.UTC(2026, 2, 3, 12, 0, 0);
-    const queued = await queueMissingRecentArticleJobs({} as D1Database, {
+    const queued = await queueMissingRecentArticleJobs({} as any, {
       referenceAt,
       lookbackHours: 72
     });
@@ -82,7 +82,7 @@ describe('queueMissingRecentArticleJobs', () => {
   it('defaults the recent lookback to 72 hours', async () => {
     const referenceAt = Date.UTC(2026, 2, 3, 12, 0, 0);
 
-    await queueMissingRecentArticleJobs({} as D1Database, { referenceAt });
+    await queueMissingRecentArticleJobs({} as any, { referenceAt });
 
     const params = dbRunMock.mock.calls[0]?.[2] as unknown[];
     expect(params[3]).toBe(referenceAt - 72 * 60 * 60 * 1000);

@@ -53,12 +53,8 @@ const createEvent = (body: Record<string, unknown>) =>
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body)
     }),
-    platform: {
-      env: {
-        DB: {} as D1Database
-      }
-    } as App.Platform,
-    locals: { requestId: 'req-test', user: { id: 'admin', role: 'admin' } }
+    platform: {} as App.Platform,
+    locals: { db: {} as any, requestId: 'req-test', user: { id: 'admin', role: 'admin' } }
   }) as unknown as Parameters<typeof POST>[0];
 
 describe('/api/articles/[id]/reaction POST', () => {

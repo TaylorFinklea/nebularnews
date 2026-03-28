@@ -56,11 +56,12 @@ describe('/api/events GET', () => {
 
     const controller = new AbortController();
     const response = await GET({
-      platform: {
-        env: {
-          DB: {} as D1Database
-        }
-      } as App.Platform,
+      platform: {} as App.Platform,
+      locals: {
+        db: {} as any,
+        requestId: 'req-test',
+        user: null
+      },
       request: new Request('https://example.com/api/events', {
         signal: controller.signal
       })

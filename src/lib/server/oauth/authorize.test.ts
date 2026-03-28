@@ -49,7 +49,7 @@ describe('oauth authorize helpers', () => {
     url.searchParams.set('code_challenge', 'challenge');
     url.searchParams.set('code_challenge_method', 'S256');
 
-    const result = await parseAuthorizeRequest(url, {} as D1Database, env);
+    const result = await parseAuthorizeRequest(url, {} as any, env);
 
     expect(result.request.clientId).toBe('client-123');
     expect(result.request.scope).toBe('mcp:read');
@@ -64,7 +64,7 @@ describe('oauth authorize helpers', () => {
     url.searchParams.set('code_challenge', 'challenge');
     url.searchParams.set('code_challenge_method', 'S256');
 
-    await expect(parseAuthorizeRequest(url, {} as D1Database, env)).rejects.toMatchObject({ status: 400 });
+    await expect(parseAuthorizeRequest(url, {} as any, env)).rejects.toMatchObject({ status: 400 });
   });
 
   it('auto-approves when active consent already exists', async () => {
@@ -72,7 +72,7 @@ describe('oauth authorize helpers', () => {
     hasActiveConsentMock.mockResolvedValue(true);
 
     const approved = await shouldAutoApproveConsent(
-      {} as D1Database,
+      {} as any,
       {
         clientId: 'client-123',
         redirectUri: 'https://chat.openai.com/callback',
@@ -94,7 +94,7 @@ describe('oauth authorize helpers', () => {
     const { approveAuthorizeRequest } = await import('./authorize');
 
     const destination = await approveAuthorizeRequest(
-      {} as D1Database,
+      {} as any,
       env,
       {
         clientId: 'client-123',

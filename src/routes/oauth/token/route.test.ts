@@ -18,7 +18,6 @@ import { OPTIONS, POST } from './+server';
 const createPlatform = (): App.Platform =>
   ({
     env: {
-      DB: {} as D1Database,
       MCP_PUBLIC_ENABLED: 'true',
       MCP_PUBLIC_BASE_URL: 'https://mcp.example.com',
       MCP_PUBLIC_ALLOWED_ORIGINS: 'https://chatgpt.com'
@@ -35,6 +34,7 @@ const createEvent = (request: Request) =>
     request,
     platform: createPlatform(),
     locals: {
+      db: {} as any,
       requestId: 'req-1',
       user: null
     }

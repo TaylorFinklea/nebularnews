@@ -30,7 +30,7 @@ describe('scoring learning', () => {
     dbAllMock.mockResolvedValue([{ signal_name: 'topic_affinity', normalized_value: 1 }]);
     dbGetMock.mockResolvedValue({ weight: 1, sample_count: 0 });
 
-    await updateWeightsFromReaction({} as D1Database, 'article-1', 1);
+    await updateWeightsFromReaction({} as any, 'article-1', 1);
 
     expect(getScoringLearningRateMock).toHaveBeenCalledWith(expect.anything());
     expect(dbRunMock).toHaveBeenCalledWith(
@@ -47,7 +47,7 @@ describe('scoring learning', () => {
     ]);
     dbGetMock.mockResolvedValue({ weight: 1, sample_count: 0 });
 
-    await updateWeightsFromReaction({} as D1Database, 'article-1', 1, 0.2, ['up_interest_match']);
+    await updateWeightsFromReaction({} as any, 'article-1', 1, 0.2, ['up_interest_match']);
 
     expect(dbRunMock).toHaveBeenNthCalledWith(
       1,
@@ -66,7 +66,7 @@ describe('scoring learning', () => {
   it('uses the configured learning rate for a new topic affinity entry', async () => {
     dbGetMock.mockResolvedValue(null);
 
-    await updateTopicAffinity({} as D1Database, 'ai', -1);
+    await updateTopicAffinity({} as any, 'ai', -1);
 
     expect(getScoringLearningRateMock).toHaveBeenCalledWith(expect.anything());
     expect(dbRunMock).toHaveBeenCalledWith(
@@ -99,7 +99,7 @@ describe('scoring learning', () => {
       return null;
     });
 
-    await processReactionLearning({} as D1Database, 'article-1', 1, []);
+    await processReactionLearning({} as any, 'article-1', 1, []);
 
     expect(dbRunMock).toHaveBeenCalledWith(
       expect.anything(),
@@ -116,7 +116,7 @@ describe('scoring learning', () => {
   it('skips topic and author affinity updates for source-only reasons', async () => {
     dbAllMock.mockResolvedValue([]);
 
-    await processReactionLearning({} as D1Database, 'article-1', 1, ['up_source_trust']);
+    await processReactionLearning({} as any, 'article-1', 1, ['up_source_trust']);
 
     expect(dbRunMock).not.toHaveBeenCalledWith(
       expect.anything(),
@@ -142,7 +142,7 @@ describe('scoring learning', () => {
       return null;
     });
 
-    await processReactionLearning({} as D1Database, 'article-1', 1, ['up_author_like']);
+    await processReactionLearning({} as any, 'article-1', 1, ['up_author_like']);
 
     expect(dbRunMock).toHaveBeenCalledWith(
       expect.anything(),

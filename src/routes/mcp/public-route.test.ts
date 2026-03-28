@@ -15,7 +15,6 @@ vi.mock('$lib/server/mcp/auth', async (importOriginal) => {
 const createPlatform = (overrides?: Partial<App.Platform['env']>): App.Platform =>
   ({
     env: {
-      DB: {} as D1Database,
       ADMIN_PASSWORD_HASH: 'hash',
       SESSION_SECRET: 'secret',
       ENCRYPTION_KEY: 'enc',
@@ -33,6 +32,12 @@ const createPlatform = (overrides?: Partial<App.Platform['env']>): App.Platform 
       }
     } as unknown as ExecutionContext
   }) as App.Platform;
+
+const createLocals = () => ({
+  db: {} as any,
+  requestId: 'req-test',
+  user: null
+});
 
 const parseMcpPayload = async (response: Response) => {
   const contentType = response.headers.get('content-type') ?? '';
@@ -71,7 +76,8 @@ describe('/mcp public audience behavior', () => {
 
     const response = await GET({
       request: new Request('https://mcp.example.com/mcp'),
-      platform: createPlatform()
+      platform: createPlatform(),
+      locals: createLocals()
     } as Parameters<typeof GET>[0]);
 
     expect(response.status).toBe(401);
@@ -107,7 +113,8 @@ describe('/mcp public audience behavior', () => {
           params: {}
         })
       }),
-      platform: createPlatform()
+      platform: createPlatform(),
+      locals: createLocals()
     } as Parameters<typeof POST>[0]);
 
     expect(response.status).toBe(200);

@@ -113,7 +113,7 @@ describe('dashboard and scheduler settings', () => {
       dashboard_top_rated_cutoff: 4
     });
 
-    const config = await getDashboardQueueConfig({} as D1Database);
+    const config = await getDashboardQueueConfig({} as any);
     expect(config).toEqual({
       windowDays: DEFAULT_DASHBOARD_QUEUE_WINDOW_DAYS,
       limit: 9,
@@ -130,7 +130,7 @@ describe('dashboard and scheduler settings', () => {
       dashboard_top_rated_cutoff: 1
     });
 
-    const config = await getDashboardQueueConfig({} as D1Database);
+    const config = await getDashboardQueueConfig({} as any);
     expect(config).toEqual({
       windowDays: 14,
       limit: 12,
@@ -159,7 +159,7 @@ describe('dashboard and scheduler settings', () => {
       news_brief_score_cutoff: 4
     });
 
-    await expect(getNewsBriefConfig({} as D1Database)).resolves.toEqual({
+    await expect(getNewsBriefConfig({} as any)).resolves.toEqual({
       enabled: true,
       timezone: 'America/New_York',
       morningTime: '08:15',
@@ -177,7 +177,7 @@ describe('dashboard and scheduler settings', () => {
       news_brief_score_cutoff: 'oops'
     });
 
-    await expect(getNewsBriefConfig({} as D1Database)).resolves.toEqual({
+    await expect(getNewsBriefConfig({} as any)).resolves.toEqual({
       enabled: false,
       timezone: 'America/Chicago',
       morningTime: '08:00',
@@ -246,7 +246,7 @@ describe('dashboard and scheduler settings', () => {
       auto_tagging_enabled: 1
     });
 
-    await expect(getTaggingMethod({} as D1Database)).resolves.toBe('hybrid');
+    await expect(getTaggingMethod({} as any)).resolves.toBe('hybrid');
   });
 
   it('prefers explicit tagging_method over the legacy auto-tagging flag', async () => {
@@ -255,7 +255,7 @@ describe('dashboard and scheduler settings', () => {
       auto_tagging_enabled: 1
     });
 
-    await expect(getTaggingMethod({} as D1Database)).resolves.toBe('algorithmic');
+    await expect(getTaggingMethod({} as any)).resolves.toBe('algorithmic');
   });
 
   it('parses scheduler booleans and cron values', () => {

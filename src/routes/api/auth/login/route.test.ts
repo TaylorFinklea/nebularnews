@@ -29,7 +29,6 @@ vi.mock('$lib/server/audit', () => ({
 const createPlatform = (): App.Platform =>
   ({
     env: {
-      DB: {} as D1Database,
       ADMIN_PASSWORD_HASH: 'pbkdf2$1000$AQIDBA==$BQYHCA==',
       SESSION_SECRET: 'test-session-secret-with-minimum-length-123456',
       ENCRYPTION_KEY: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
@@ -46,7 +45,7 @@ const createEvent = (request: Request) =>
   ({
     request,
     platform: createPlatform(),
-    locals: { requestId: 'req-test' },
+    locals: { db: {} as any, requestId: 'req-test' },
     url: new URL(request.url)
   }) as Parameters<typeof POST>[0];
 

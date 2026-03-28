@@ -66,7 +66,7 @@ describe('dashboard queries', () => {
       ])
     );
 
-    const result = await getDashboardUnreadQueue({} as D1Database, 'admin', {
+    const result = await getDashboardUnreadQueue({} as any, 'admin', {
       windowDays: 7,
       scoreCutoff: 3,
       limit: 6,
@@ -98,7 +98,7 @@ describe('dashboard queries', () => {
     const referenceAt = Date.UTC(2026, 1, 27, 12, 0, 0);
     dbAllMock.mockResolvedValue([]);
 
-    await getDashboardUnreadQueue({} as D1Database, 'admin', {
+    await getDashboardUnreadQueue({} as any, 'admin', {
       windowDays: 0,
       scoreCutoff: 99,
       limit: 0,
@@ -118,7 +118,7 @@ describe('dashboard queries', () => {
       high_fit_unread_7d: 6
     });
 
-    const result = await getDashboardReadingMomentum({} as D1Database, 'admin', {
+    const result = await getDashboardReadingMomentum({} as any, 'admin', {
       scoreCutoff: 4,
       referenceAt
     });
@@ -141,13 +141,13 @@ describe('dashboard queries', () => {
   it('returns feed status with hasFeeds convenience flag', async () => {
     dbGetMock.mockResolvedValue({ feed_count: 2 });
 
-    await expect(getDashboardFeedStatus({} as D1Database)).resolves.toEqual({
+    await expect(getDashboardFeedStatus({} as any)).resolves.toEqual({
       feedCount: 2,
       hasFeeds: true
     });
 
     dbGetMock.mockResolvedValue({ feed_count: 0 });
-    await expect(getDashboardFeedStatus({} as D1Database)).resolves.toEqual({
+    await expect(getDashboardFeedStatus({} as any)).resolves.toEqual({
       feedCount: 0,
       hasFeeds: false
     });

@@ -34,7 +34,7 @@ describe('registerDynamicClient', () => {
 
   it('registers a valid public client', async () => {
     const { registerDynamicClient } = await import('./register');
-    const result = await registerDynamicClient({} as D1Database, createEnv(), {
+    const result = await registerDynamicClient({} as any, createEnv(), {
       client_name: 'ChatGPT',
       redirect_uris: ['https://chat.openai.com/callback']
     });
@@ -55,7 +55,7 @@ describe('registerDynamicClient', () => {
   it('rejects unsupported token endpoint auth methods', async () => {
     const { registerDynamicClient } = await import('./register');
     await expect(
-      registerDynamicClient({} as D1Database, createEnv(), {
+      registerDynamicClient({} as any, createEnv(), {
         client_name: 'ChatGPT',
         redirect_uris: ['https://chat.openai.com/callback'],
         token_endpoint_auth_method: 'client_secret_post'
@@ -66,7 +66,7 @@ describe('registerDynamicClient', () => {
   it('rejects non-https redirect URIs in production', async () => {
     const { registerDynamicClient } = await import('./register');
     await expect(
-      registerDynamicClient({} as D1Database, createEnv({ APP_ENV: 'production' }), {
+      registerDynamicClient({} as any, createEnv({ APP_ENV: 'production' }), {
         client_name: 'Local client',
         redirect_uris: ['http://localhost:3000/callback']
       })

@@ -48,7 +48,7 @@ describe('getScoringObservabilitySummary', () => {
       };
     });
 
-    const summary = await getScoringObservabilitySummary({} as D1Database, Date.UTC(2026, 2, 2));
+    const summary = await getScoringObservabilitySummary({} as any, Date.UTC(2026, 2, 2));
 
     expect(summary).toEqual({
       scoreStatusCounts: {

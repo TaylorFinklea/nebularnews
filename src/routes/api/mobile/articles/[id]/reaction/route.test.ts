@@ -43,10 +43,13 @@ const createEvent = (body: Record<string, unknown>) =>
       body: JSON.stringify(body)
     }),
     platform: {
-      env: {
-        DB: {} as D1Database
-      }
-    } as App.Platform
+      env: {}
+    } as App.Platform,
+    locals: {
+      db: {} as any,
+      requestId: 'req-test',
+      user: null
+    }
   }) as Parameters<typeof POST>[0];
 
 describe('/api/mobile/articles/[id]/reaction POST', () => {

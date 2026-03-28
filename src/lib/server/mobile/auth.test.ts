@@ -18,7 +18,7 @@ vi.mock('$lib/server/auth', () => ({
 import { requireMobileAccess } from './auth';
 
 const env = {} as App.Platform['env'];
-const db = {} as D1Database;
+const db = {} as any;
 
 describe('requireMobileAccess', () => {
   it('rejects requests without a bearer token', async () => {

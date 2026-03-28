@@ -42,7 +42,7 @@ describe('extractSignals', () => {
       ])
     );
 
-    const signals = await extractSignals({} as D1Database, {
+    const signals = await extractSignals({} as any, {
       id: 'article-1',
       title: 'Story',
       author: null,
@@ -61,7 +61,7 @@ describe('extractSignals', () => {
     dbAllMock.mockResolvedValue([]);
     getFeedReputationsMock.mockResolvedValue(new Map());
 
-    const signals = await extractSignals({} as D1Database, {
+    const signals = await extractSignals({} as any, {
       id: 'article-1',
       title: 'Story',
       author: null,
@@ -87,7 +87,7 @@ describe('extractSignals', () => {
     });
     getFeedReputationsMock.mockResolvedValue(new Map());
 
-    const signals = await extractSignals({} as D1Database, {
+    const signals = await extractSignals({} as any, {
       id: 'article-1',
       title: 'Story',
       author: null,
@@ -122,7 +122,7 @@ describe('extractSignals', () => {
     });
     getFeedReputationsMock.mockResolvedValue(new Map());
 
-    const signals = await extractSignals({} as D1Database, {
+    const signals = await extractSignals({} as any, {
       id: 'article-1',
       title: 'Story',
       author: null,
@@ -157,7 +157,7 @@ describe('extractSignals', () => {
     });
     getFeedReputationsMock.mockResolvedValue(new Map());
 
-    const signals = await extractSignals({} as D1Database, {
+    const signals = await extractSignals({} as any, {
       id: 'article-1',
       title: 'Story',
       author: null,
@@ -188,7 +188,7 @@ describe('extractSignals', () => {
     });
     getFeedReputationsMock.mockResolvedValue(new Map());
 
-    const signals = await extractSignals({} as D1Database, {
+    const signals = await extractSignals({} as any, {
       id: 'article-1',
       title: 'Story',
       author: null,

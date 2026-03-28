@@ -3,7 +3,6 @@ import { inspectRuntimeConfig } from './runtime-config';
 
 const createEnv = (overrides: Partial<App.Platform['env']> = {}): App.Platform['env'] =>
   ({
-    DB: {} as D1Database,
     ADMIN_PASSWORD_HASH: 'pbkdf2$100000$AQIDBA==$BQYHCAk=',
     SESSION_SECRET: 'test-session-secret-with-minimum-length-123456',
     ENCRYPTION_KEY: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',

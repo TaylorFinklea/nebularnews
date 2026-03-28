@@ -87,7 +87,7 @@ describe('getManualPullState', () => {
       updated_at: harness.nowMs - 3_600_000
     };
 
-    const state = await getManualPullState({} as D1Database);
+    const state = await getManualPullState({} as any);
 
     expect(state.runId).toBe('pull-1');
     expect(state.status).toBe('running');
@@ -111,7 +111,7 @@ describe('getManualPullState', () => {
       updated_at: harness.nowMs - 60_000
     };
 
-    const state = await getManualPullState({} as D1Database);
+    const state = await getManualPullState({} as any);
 
     expect(state.runId).toBe('pull-2');
     expect(state.status).toBe('running');

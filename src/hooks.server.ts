@@ -74,7 +74,15 @@ let schemaAssertedAt = 0;
 export const handle: Handle = async ({ event, resolve }) => {
   const { pathname } = event.url;
   event.locals.requestId = createRequestId();
-  event.locals.db = createDb(event.platform.env.SUPABASE_DB_URL);
+  // Lazy db creation — only connects when first accessed
+  let _db: ReturnType<typeof createDb> | undefined;
+  Object.defineProperty(event.locals, 'db', {
+    get() {
+      if (!_db) _db = createDb(event.platform.env.SUPABASE_DB_URL);
+      return _db;
+    },
+    configurable: true
+  });
   let runtimeReport: ReturnType<typeof assertRuntimeConfig>;
   try {
     runtimeReport = assertRuntimeConfig(event.platform.env);

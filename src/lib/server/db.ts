@@ -10,7 +10,10 @@ function pgify(sql: string): string {
   return sql.replace(/\?/g, () => `$${++i}`);
 }
 
-export function createDb(connectionString: string): Db {
+export function createDb(connectionString: string | undefined): Db {
+  if (!connectionString) {
+    throw new Error('SUPABASE_DB_URL is not configured');
+  }
   return postgres(connectionString, {
     max: 1,
     fetch_types: false,

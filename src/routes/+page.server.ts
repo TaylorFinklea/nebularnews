@@ -1,10 +1,12 @@
 import { dev } from '$app/environment';
+import { redirect } from '@sveltejs/kit';
 import {
   getDashboardFeedStatus,
   getDashboardReadingMomentum,
   getDashboardUnreadQueue
 } from '$lib/server/dashboard';
 import { getDashboardQueueConfig } from '$lib/server/settings';
+import { dbGet } from '$lib/server/db';
 import { getDashboardNewsBrief } from '$lib/server/news-brief';
 import { logInfo, logWarn } from '$lib/server/log';
 
@@ -71,6 +73,11 @@ export const load = async ({ platform, request, depends, setHeaders, locals }) =
       return null;
     })
   ]);
+
+  const userSubCount = await dbGet<{ cnt: number }>(db, 'SELECT COUNT(*) as cnt FROM user_feed_subscriptions WHERE user_id = ?', [userId]);
+  if ((userSubCount?.cnt ?? 0) === 0) {
+    throw redirect(303, '/onboarding');
+  }
 
   let readingQueue = [];
   let momentum = { ...EMPTY_MOMENTUM };

@@ -28,9 +28,9 @@ const createEvent = (url: string, appEnv = 'development') =>
   ({
     request: new Request(url),
     url: new URL(url),
+    locals: { db: {} },
     platform: {
       env: {
-        DB: {} as D1Database,
         APP_ENV: appEnv
       }
     } as App.Platform
@@ -66,6 +66,7 @@ describe('/cdn-cgi/handler/scheduled GET', () => {
 
     expect(response.status).toBe(200);
     expect(runScheduledTasks).toHaveBeenCalledWith(
+      expect.anything(),
       expect.objectContaining({ APP_ENV: 'development' }),
       {
         cron: null,
@@ -91,6 +92,7 @@ describe('/cdn-cgi/handler/scheduled GET', () => {
 
     expect(response.status).toBe(200);
     expect(runScheduledTasks).toHaveBeenCalledWith(
+      expect.anything(),
       expect.objectContaining({ APP_ENV: 'development' }),
       {
         cron: '*/5 * * * *',

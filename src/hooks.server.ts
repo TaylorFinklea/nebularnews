@@ -14,6 +14,7 @@ import {
   readCsrfCookieFromRequest,
   validateCsrf
 } from '$lib/server/security';
+import { createDb } from '$lib/server/db';
 
 const publicPaths = [
   '/login',
@@ -73,6 +74,7 @@ let schemaAssertedAt = 0;
 export const handle: Handle = async ({ event, resolve }) => {
   const { pathname } = event.url;
   event.locals.requestId = createRequestId();
+  event.locals.db = createDb(event.platform.env.SUPABASE_DB_URL);
   let runtimeReport: ReturnType<typeof assertRuntimeConfig>;
   try {
     runtimeReport = assertRuntimeConfig(event.platform.env);
@@ -134,7 +136,7 @@ export const handle: Handle = async ({ event, resolve }) => {
   const adminSession = await getSessionFromRequest(event.request, event.platform.env.SESSION_SECRET);
   const supabaseSession = adminSession
     ? null
-    : await getSupabaseSessionFromRequest(event.request, event.platform.env.DB, event.platform.env);
+    : await getSupabaseSessionFromRequest(event.request, event.locals.db, event.platform.env);
   event.locals.user = adminSession ?? supabaseSession;
   const shouldSetCsrfCookie = Boolean(event.locals.user) && !readCsrfCookieFromRequest(event.request);
   const finalizeWithCsrf = (response: Response) => {
@@ -163,7 +165,7 @@ export const handle: Handle = async ({ event, resolve }) => {
     try {
       const nowTs = Date.now();
       if (!schemaAssertedAt || nowTs - schemaAssertedAt > SCHEMA_ASSERT_CACHE_MS) {
-        await assertSchemaVersion(event.platform.env.DB);
+        await assertSchemaVersion(event.locals.db);
         schemaAssertedAt = nowTs;
       }
     } catch (error) {
@@ -185,7 +187,8 @@ export const handle: Handle = async ({ event, resolve }) => {
 };
 
 export const scheduled: ExportedHandlerScheduledHandler = async (event, env, ctx) => {
-  ctx.waitUntil(runScheduledTasks(env, { cron: event.cron }));
+  const db = createDb(env.SUPABASE_DB_URL);
+  ctx.waitUntil(runScheduledTasks(db, env, { cron: event.cron }));
 };
 
 export const handleError: HandleServerError = ({ error, event, status, message }) => {

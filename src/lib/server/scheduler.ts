@@ -16,6 +16,7 @@ import {
   getSchedulerRuntimeConfig,
   intervalMinutesToCronExpression
 } from './settings';
+import type { Db } from './db';
 
 export const RETENTION_CRON = '30 3 * * *';
 export const LEGACY_JOBS_CRON = '*/5 * * * *';
@@ -53,12 +54,13 @@ export type ScheduledRunSummary = {
 };
 
 const runJobsTick = async (
+  db: Db,
   env: App.Platform['env'],
   scheduler: SchedulerRuntimeConfig,
   cron: string | null
 ): Promise<ScheduledJobsSummary> => {
   const startedAt = Date.now();
-  await recoverStalePullRuns(env.DB);
+  await recoverStalePullRuns(db);
   const pull = await processPullRuns(env, {
     maxSlices: scheduler.pullSlicesPerTick,
     timeBudgetMs: scheduler.pullSliceBudgetMs
@@ -67,18 +69,18 @@ const runJobsTick = async (
   const pullRunning = latestPullSlice?.status === 'running';
   let queuedRecent = null;
   if (!pullRunning && scheduler.autoQueueTodayMissing) {
-    queuedRecent = await queueMissingRecentArticleJobs(env.DB, { lookbackHours: 72 });
+    queuedRecent = await queueMissingRecentArticleJobs(db, { lookbackHours: 72 });
   }
   await processJobs(env, {
     timeBudgetMs: pullRunning ? scheduler.jobBudgetWhilePullMs : scheduler.jobBudgetIdleMs
   });
-  const newsBrief = await runNewsBriefSchedulerTick(env.DB, env);
-  await runNotificationDigest(env.DB, env);
+  const newsBrief = await runNewsBriefSchedulerTick(db, env);
+  await runNotificationDigest(db, env);
 
   let orphanCleanup = null;
   if (!pullRunning) {
     const orphanCleanupStartedAt = Date.now();
-    orphanCleanup = await deleteOrphanArticlesBatch(env.DB, DEFAULT_SCHEDULED_ORPHAN_CLEANUP_LIMIT, {
+    orphanCleanup = await deleteOrphanArticlesBatch(db, DEFAULT_SCHEDULED_ORPHAN_CLEANUP_LIMIT, {
       dryRun: false
     });
     logInfo('scheduled.orphans.cleanup', {
@@ -144,6 +146,7 @@ const runPollTick = async (
 };
 
 export async function runScheduledTasks(
+  db: Db,
   env: App.Platform['env'],
   options: {
     cron?: string | null;
@@ -185,8 +188,8 @@ export async function runScheduledTasks(
     };
   }
 
-  await ensureSchema(env.DB);
-  const scheduler = await getSchedulerRuntimeConfig(env.DB);
+  await ensureSchema(db);
+  const scheduler = await getSchedulerRuntimeConfig(db);
   const jobsCron = intervalMinutesToCronExpression(scheduler.jobsIntervalMinutes);
   const pollCron = intervalMinutesToCronExpression(scheduler.pollIntervalMinutes);
   const runJobs = options.runJobs ?? (cron === jobsCron || cron === LEGACY_JOBS_CRON);
@@ -204,7 +207,7 @@ export async function runScheduledTasks(
   };
 
   if (runJobs) {
-    summary.jobs = await runJobsTick(env, scheduler, cron);
+    summary.jobs = await runJobsTick(db, env, scheduler, cron);
   }
 
   if (runRetention) {

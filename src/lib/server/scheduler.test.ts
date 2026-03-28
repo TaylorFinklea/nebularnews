@@ -112,9 +112,8 @@ describe('runScheduledTasks', () => {
 
   it('queues recent missing jobs with the fixed 72 hour backstop', async () => {
     const summary = await runScheduledTasks(
-      {
-        DB: {} as D1Database
-      } as App.Platform['env'],
+      {} as any,
+      {} as App.Platform['env'],
       { runJobs: true, runPoll: false, runRetention: false }
     );
 
@@ -137,9 +136,8 @@ describe('runScheduledTasks', () => {
     });
 
     const summary = await runScheduledTasks(
-      {
-        DB: {} as D1Database
-      } as App.Platform['env'],
+      {} as any,
+      {} as App.Platform['env'],
       { runJobs: true, runPoll: false, runRetention: false }
     );
 

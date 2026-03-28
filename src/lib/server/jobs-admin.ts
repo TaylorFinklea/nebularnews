@@ -121,18 +121,18 @@ export async function getJobStatus(db: Db, jobId: string) {
   return row?.status ?? null;
 }
 
-export async function runQueueCycles(env: App.Platform['env'], cycles: number, options?: { forceDue?: boolean }) {
+export async function runQueueCycles(db: Db, env: App.Platform['env'], cycles: number, options?: { forceDue?: boolean }) {
   const runCount = clampQueueCycles(cycles);
   if (options?.forceDue) {
-    await dbRun(env.DB, "UPDATE jobs SET run_after = ?, updated_at = ? WHERE status = 'pending'", [now(), now()]);
+    await dbRun(db, "UPDATE jobs SET run_after = ?, updated_at = ? WHERE status = 'pending'", [now(), now()]);
   }
   const cycleMetrics = [];
   for (let i = 0; i < runCount; i += 1) {
-    cycleMetrics.push(await processJobs(env));
+    cycleMetrics.push(await processJobs(db, env));
   }
   return {
     cycles: runCount,
-    counts: await getJobCounts(env.DB),
+    counts: await getJobCounts(db),
     metrics: cycleMetrics
   };
 }

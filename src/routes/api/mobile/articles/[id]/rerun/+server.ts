@@ -8,8 +8,8 @@ export const POST = async ({ params, request, platform, locals }) => {
   const articleId = params.id;
 
   try {
-    await runArticleJobImmediately(platform.env, 'summarize', articleId);
-    await runArticleJobImmediately(platform.env, 'key_points', articleId);
+    await runArticleJobImmediately(locals.db, platform.env, 'summarize', articleId);
+    await runArticleJobImmediately(locals.db, platform.env, 'key_points', articleId);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to generate summary';
     const status = message === 'Job is currently running' ? 409 : 500;

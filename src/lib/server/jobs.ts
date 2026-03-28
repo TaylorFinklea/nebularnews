@@ -67,12 +67,12 @@ const computeRetryDelayMs = (attempts: number) => {
 const createPendingTimestamp = () => now();
 
 export async function processJobs(
+  db: Db,
   env: App.Platform['env'],
   options: {
     timeBudgetMs?: number;
   } = {}
 ) {
-  const db = env.DB;
   const processorId = nanoid();
   const timestamp = now();
   const startedWallClock = Date.now();
@@ -307,11 +307,11 @@ export async function processJobs(
 }
 
 export async function runArticleJobImmediately(
+  db: Db,
   env: App.Platform['env'],
   type: 'summarize' | 'score' | 'key_points' | 'auto_tag' | 'image_backfill' | 'browser_scrape',
   articleId: string
 ): Promise<JobRunMetadata> {
-  const db = env.DB;
   const existingJob = await dbGet<{ id: string; status: string; attempts: number | null }>(
     db,
     'SELECT id, status, attempts FROM jobs WHERE type = ? AND article_id = ? LIMIT 1',

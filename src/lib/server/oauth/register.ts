@@ -1,3 +1,4 @@
+import type { Db } from '../db';
 import { OAUTH_SCOPE_READ, registerOAuthClient } from './storage';
 
 const isHttps = (url: URL) => url.protocol === 'https:';
@@ -89,7 +90,7 @@ const normalizeResponseTypes = (value: unknown) => {
 };
 
 export const registerDynamicClient = async (
-  db: D1Database,
+  db: Db,
   env: App.Platform['env'],
   body: unknown
 ) => {

@@ -1,4 +1,5 @@
 import { error } from '@sveltejs/kit';
+import type { Db } from '../db';
 import { ensureMobileOAuthClient } from '$lib/server/mobile/oauth-client';
 import {
   getOauthResourceForAudience,
@@ -38,7 +39,7 @@ const assertRegisteredRedirectUri = (client: OAuthClient, redirectUri: string) =
 
 export const parseAuthorizeRequest = async (
   url: URL,
-  db: D1Database,
+  db: Db,
   env: App.Platform['env']
 ): Promise<{ request: OAuthAuthorizeRequest; client: OAuthClient }> => {
   const audience = resolvePublicOauthAudience(url, env);
@@ -159,13 +160,13 @@ export const buildLoginRedirectForAuthorize = (url: URL) => {
 };
 
 export const shouldAutoApproveConsent = async (
-  db: D1Database,
+  db: Db,
   request: OAuthAuthorizeRequest,
   userId: string
 ) => request.prompt !== 'consent' && (await hasActiveConsent(db, request.clientId, userId, request.scope));
 
 export const approveAuthorizeRequest = async (
-  db: D1Database,
+  db: Db,
   env: App.Platform['env'],
   request: OAuthAuthorizeRequest,
   userId: string

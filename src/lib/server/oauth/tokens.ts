@@ -1,4 +1,5 @@
 import { error } from '@sveltejs/kit';
+import type { Db } from '../db';
 import { verifyPkceS256 } from './crypto';
 import { getOauthResourceForAudience, hasRequiredScope, type PublicOauthAudience } from './audience';
 import {
@@ -23,7 +24,7 @@ const readRequiredFormValue = (form: URLSearchParams, key: string) => {
 
 const readOptionalFormValue = (form: URLSearchParams, key: string) => form.get(key)?.trim() ?? '';
 
-const validateClientRedirectUri = async (clientId: string, redirectUri: string, db: D1Database) => {
+const validateClientRedirectUri = async (clientId: string, redirectUri: string, db: Db) => {
   const client = await getOAuthClient(db, clientId);
   if (!client) {
     throw error(400, 'OAuth client is not registered.');
@@ -35,7 +36,7 @@ const validateClientRedirectUri = async (clientId: string, redirectUri: string, 
 };
 
 export const exchangeAuthorizationCodeGrant = async (
-  db: D1Database,
+  db: Db,
   env: App.Platform['env'],
   audience: PublicOauthAudience,
   form: URLSearchParams
@@ -102,7 +103,7 @@ export const exchangeAuthorizationCodeGrant = async (
 };
 
 export const exchangeRefreshTokenGrant = async (
-  db: D1Database,
+  db: Db,
   env: App.Platform['env'],
   audience: PublicOauthAudience,
   form: URLSearchParams
@@ -157,7 +158,7 @@ export const exchangeRefreshTokenGrant = async (
 };
 
 export const authenticatePublicAccessToken = async (
-  db: D1Database,
+  db: Db,
   env: App.Platform['env'],
   audience: PublicOauthAudience,
   rawToken: string | null

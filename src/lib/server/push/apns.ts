@@ -1,5 +1,5 @@
 import { SignJWT, importPKCS8 } from 'jose';
-import { dbAll, dbRun } from '../db';
+import { dbAll, dbRun, type Db } from '../db';
 import { logInfo, logWarn } from '../log';
 
 type ApnsConfig = {
@@ -96,7 +96,7 @@ export const sendPushNotification = async (
 };
 
 export const notifyUserDevices = async (
-  db: D1Database,
+  db: Db,
   env: App.Platform['env'],
   userId: string,
   payload: ApnsPayload
@@ -148,7 +148,7 @@ export const notifyUserDevices = async (
 };
 
 export const notifyAllDevices = async (
-  db: D1Database,
+  db: Db,
   env: App.Platform['env'],
   payload: ApnsPayload
 ): Promise<{ sent: number; failed: number; removed: number }> => {

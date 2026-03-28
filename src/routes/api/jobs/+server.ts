@@ -65,7 +65,7 @@ export const POST = async (event) => {
   if (action === 'run_queue') {
     const cycles = clampQueueCycles(body?.cycles ?? 1);
     const forceDue = body?.forceDue !== false;
-    const result = await runQueueCycles(platform.env, cycles, { forceDue });
+    const result = await runQueueCycles(locals.db, platform.env, cycles, { forceDue });
     logInfo('jobs.admin.action', {
       request_id: event.locals.requestId,
       action,

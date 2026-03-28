@@ -61,7 +61,7 @@ const runJobsTick = async (
 ): Promise<ScheduledJobsSummary> => {
   const startedAt = Date.now();
   await recoverStalePullRuns(db);
-  const pull = await processPullRuns(env, {
+  const pull = await processPullRuns(db, env, {
     maxSlices: scheduler.pullSlicesPerTick,
     timeBudgetMs: scheduler.pullSliceBudgetMs
   });
@@ -71,7 +71,7 @@ const runJobsTick = async (
   if (!pullRunning && scheduler.autoQueueTodayMissing) {
     queuedRecent = await queueMissingRecentArticleJobs(db, { lookbackHours: 72 });
   }
-  await processJobs(env, {
+  await processJobs(db, env, {
     timeBudgetMs: pullRunning ? scheduler.jobBudgetWhilePullMs : scheduler.jobBudgetIdleMs
   });
   const newsBrief = await runNewsBriefSchedulerTick(db, env);
@@ -118,9 +118,9 @@ const runJobsTick = async (
   return summary;
 };
 
-const runRetentionTick = async (env: App.Platform['env'], cron: string | null) => {
+const runRetentionTick = async (db: Db, env: App.Platform['env'], cron: string | null) => {
   const startedAt = Date.now();
-  const stats = await runRetentionCleanup(env);
+  const stats = await runRetentionCleanup(db, env);
   logInfo('scheduled.retention.completed', {
     cron,
     duration_ms: Date.now() - startedAt,
@@ -130,12 +130,13 @@ const runRetentionTick = async (env: App.Platform['env'], cron: string | null) =
 };
 
 const runPollTick = async (
+  db: Db,
   env: App.Platform['env'],
   scheduler: SchedulerRuntimeConfig,
   cron: string | null
 ) => {
   const startedAt = Date.now();
-  const poll = await pollFeeds(env);
+  const poll = await pollFeeds(db, env);
   logInfo('scheduled.poll.completed', {
     cron,
     duration_ms: Date.now() - startedAt,
@@ -211,11 +212,11 @@ export async function runScheduledTasks(
   }
 
   if (runRetention) {
-    summary.retention = await runRetentionTick(env, cron);
+    summary.retention = await runRetentionTick(db, env, cron);
   }
 
   if (runPoll) {
-    summary.poll = await runPollTick(env, scheduler, cron);
+    summary.poll = await runPollTick(db, env, scheduler, cron);
   }
 
   return summary;

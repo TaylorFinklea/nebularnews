@@ -99,10 +99,10 @@ export function shouldIngestItemForInitialLookback(
 }
 
 export async function pollFeeds(
+  db: Db,
   env: App.Platform['env'],
   options: PollFeedsOptions = {}
 ): Promise<FeedPollSummary> {
-  const db = env.DB;
   const pollStartedAt = now();
   const configuredMaxFeeds = await getMaxFeedsPerPoll(db, env);
   const configuredMaxItemsTotal = await getMaxItemsPerPoll(db, env);
@@ -330,12 +330,12 @@ export async function ingestFeedItem(
 
     const result = await dbRun(
       db,
-      `INSERT OR IGNORE INTO articles (
+      `INSERT INTO articles (
          id, canonical_url, guid, title, author, published_at, fetched_at,
          content_html, content_text, excerpt, word_count, content_hash,
          image_url, image_status, image_checked_at,
          extraction_method, extraction_quality, status
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING`,
       [
         articleId,
         url,
@@ -415,7 +415,7 @@ export async function ingestFeedItem(
 
   await dbRun(
     db,
-    'INSERT OR IGNORE INTO article_sources (id, article_id, feed_id, item_guid, original_url, published_at) VALUES (?, ?, ?, ?, ?, ?)',
+    'INSERT INTO article_sources (id, article_id, feed_id, item_guid, original_url, published_at) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING',
     [nanoid(), articleId, feedId, guid, url, normalizedPublishedAt]
   );
 

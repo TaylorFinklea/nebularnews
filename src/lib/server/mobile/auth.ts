@@ -1,4 +1,5 @@
 import { error } from '@sveltejs/kit';
+import type { Db } from '$lib/server/db';
 import { authenticatePublicAccessToken } from '$lib/server/oauth/tokens';
 import { hasMobileScope, type MOBILE_SUPPORTED_SCOPES } from './context';
 import { ensureSchema } from '$lib/server/migrations';
@@ -7,7 +8,7 @@ import { getUserById } from '$lib/server/auth';
 export const requireMobileAccess = async (
   request: Request,
   env: App.Platform['env'],
-  db: D1Database,
+  db: Db,
   requiredScope: (typeof MOBILE_SUPPORTED_SCOPES)[number] = 'app:read'
 ) => {
   await ensureSchema(db);

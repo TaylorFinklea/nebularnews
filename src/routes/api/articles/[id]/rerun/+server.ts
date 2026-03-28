@@ -17,7 +17,7 @@ export const POST = async ({ params, request, platform, locals }) => {
 
   if (filtered.includes('summarize')) {
     try {
-      await runArticleJobImmediately(platform.env, 'summarize', articleId);
+      await runArticleJobImmediately(locals.db, platform.env, 'summarize', articleId);
       executed.push('summarize');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to generate summary';

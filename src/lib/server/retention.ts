@@ -1,4 +1,4 @@
-import { dbRun, now } from './db';
+import { dbRun, now, type Db } from './db';
 import { getRetentionConfig } from './settings';
 import { logInfo } from './log';
 
@@ -23,8 +23,8 @@ export type RetentionCleanupStats = {
   search_rows_cleared: number;
 };
 
-export async function runRetentionCleanup(env: App.Platform['env']): Promise<RetentionCleanupStats> {
-  const config = await getRetentionConfig(env.DB);
+export async function runRetentionCleanup(db: Db, env: App.Platform['env']): Promise<RetentionCleanupStats> {
+  const config = await getRetentionConfig(db);
   const { archiveDays, deleteDays } = config;
 
   if (archiveDays <= 0 && deleteDays <= 0) {
@@ -49,7 +49,7 @@ export async function runRetentionCleanup(env: App.Platform['env']): Promise<Ret
   // Phase 1: Archive — strip body text for old unsaved articles
   if (archiveCutoff !== null) {
     const archiveResult = await dbRun(
-      env.DB,
+      db,
       `UPDATE articles
        SET content_html = NULL, content_text = NULL
        WHERE ${AGE_FILTER}
@@ -60,7 +60,7 @@ export async function runRetentionCleanup(env: App.Platform['env']): Promise<Ret
     articlesArchived = Number(archiveResult.meta?.changes ?? 0);
 
     const clearSearch = await dbRun(
-      env.DB,
+      db,
       `UPDATE article_search
        SET content_text = ''
        WHERE article_id IN (
@@ -75,7 +75,7 @@ export async function runRetentionCleanup(env: App.Platform['env']): Promise<Ret
   // Phase 2: Delete — remove old unsaved article records entirely
   if (deleteCutoff !== null) {
     const deleteSearch = await dbRun(
-      env.DB,
+      db,
       `DELETE FROM article_search
        WHERE article_id IN (
          SELECT id FROM articles
@@ -86,7 +86,7 @@ export async function runRetentionCleanup(env: App.Platform['env']): Promise<Ret
     searchRowsCleared += Number(deleteSearch.meta?.changes ?? 0);
 
     const deleteResult = await dbRun(
-      env.DB,
+      db,
       `DELETE FROM articles
        WHERE ${AGE_FILTER} ${SAVED_EXCLUSION}`,
       [deleteCutoff]

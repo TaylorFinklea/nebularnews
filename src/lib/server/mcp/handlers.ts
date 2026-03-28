@@ -804,7 +804,7 @@ export function createMcpHandlers(input: {
         metadata: { cycles }
       });
 
-      const runPromise = runPullRun(env, started.runId).catch((error) => {
+      const runPromise = runPullRun(db, env, started.runId).catch((error) => {
         console.error('[mcp] refresh_feeds failed', error instanceof Error ? error.message : String(error));
       });
       context.waitUntil(runPromise);

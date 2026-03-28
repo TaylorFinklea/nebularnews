@@ -1,4 +1,5 @@
 import { getSessionFromRequest } from '$lib/server/auth';
+import type { Db } from '$lib/server/db';
 import { getProtectedResourceMetadataUrl } from './context';
 import { authenticatePublicAccessToken } from '$lib/server/oauth/tokens';
 
@@ -56,7 +57,7 @@ export async function resolveInternalMcpAuth(request: Request, env: App.Platform
 export async function resolvePublicMcpAuth(
   request: Request,
   env: App.Platform['env'],
-  db: D1Database
+  db: Db
 ): Promise<PublicMcpAuthResult> {
   const providedToken = parseBearerToken(request.headers.get('authorization'));
   if (!providedToken) {

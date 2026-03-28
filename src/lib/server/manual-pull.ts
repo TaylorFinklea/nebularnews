@@ -347,8 +347,7 @@ export type PullRunSliceResult = {
   error?: string | null;
 };
 
-const processSinglePullRunSlice = async (env: App.Platform['env']): Promise<PullRunSliceResult> => {
-  const db = env.DB;
+const processSinglePullRunSlice = async (db: Db, env: App.Platform['env']): Promise<PullRunSliceResult> => {
   const startedAt = Date.now();
   const activeRun = await getActivePullRun(db);
   if (!activeRun) {
@@ -392,7 +391,7 @@ const processSinglePullRunSlice = async (env: App.Platform['env']): Promise<Pull
   }
 
   try {
-    const poll = await pollFeeds(env, {
+    const poll = await pollFeeds(db, env, {
       onFeedSettled: () => touchPullRun(db, run.id)
     });
     const nextProcessedCycles = processedCycles + 1;
@@ -461,6 +460,7 @@ const processSinglePullRunSlice = async (env: App.Platform['env']): Promise<Pull
 };
 
 export async function processPullRuns(
+  db: Db,
   env: App.Platform['env'],
   options: {
     timeBudgetMs?: number;
@@ -473,7 +473,7 @@ export async function processPullRuns(
   const slices: PullRunSliceResult[] = [];
 
   while (slices.length < maxSlices && Date.now() - startedAt < timeBudgetMs) {
-    const slice = await processSinglePullRunSlice(env);
+    const slice = await processSinglePullRunSlice(db, env);
     if (!slice.processed) break;
     slices.push(slice);
     if (slice.status === 'running' || slice.status === 'failed') break;
@@ -499,8 +499,7 @@ export async function processPullRuns(
   };
 }
 
-export async function runPullRun(env: App.Platform['env'], runId: string): Promise<PullStats> {
-  const db = env.DB;
+export async function runPullRun(db: Db, env: App.Platform['env'], runId: string): Promise<PullStats> {
   const run = await getPullRun(db, runId);
   if (!run) throw new Error('Pull run not found');
 
@@ -510,14 +509,14 @@ export async function runPullRun(env: App.Platform['env'], runId: string): Promi
   let runError: string | null = null;
   let stats: PullStats | null = null;
   try {
-    await dbRun(env.DB, 'UPDATE feeds SET next_poll_at = ? WHERE disabled = 0', [now()]);
+    await dbRun(db, 'UPDATE feeds SET next_poll_at = ? WHERE disabled = 0', [now()]);
     let dueFeeds = 0;
     let itemsSeen = 0;
     let itemsProcessed = 0;
     const recentErrors: { url: string; message: string }[] = [];
 
     for (let i = 0; i < run.cycles; i += 1) {
-      const poll = await pollFeeds(env, {
+      const poll = await pollFeeds(db, env, {
         onFeedSettled: () => touchPullRun(db, runId)
       });
       dueFeeds += poll.dueFeeds;
@@ -528,7 +527,7 @@ export async function runPullRun(env: App.Platform['env'], runId: string): Promi
         recentErrors.push({ url: err.url, message: err.message });
       }
       await touchPullRun(db, runId);
-      await processJobs(env);
+      await processJobs(db, env);
       await touchPullRun(db, runId);
     }
 
@@ -560,11 +559,12 @@ export async function runPullRun(env: App.Platform['env'], runId: string): Promi
 }
 
 export async function runManualPull(
+  db: Db,
   env: App.Platform['env'],
   cycles: number,
   input?: { trigger?: string; requestId?: string | null }
 ) {
-  const started = await startManualPull(env.DB, {
+  const started = await startManualPull(db, {
     cycles,
     trigger: input?.trigger ?? 'manual',
     requestId: input?.requestId
@@ -573,6 +573,6 @@ export async function runManualPull(
     throw new Error('Manual pull already in progress');
   }
 
-  const stats = await runPullRun(env, started.runId);
+  const stats = await runPullRun(db, env, started.runId);
   return { runId: started.runId, stats };
 }

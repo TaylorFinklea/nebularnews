@@ -1,14 +1,17 @@
 /// <reference types="@cloudflare/workers-types" />
 
+import type { Db } from '$lib/server/db';
+
 declare namespace App {
   interface Locals {
     user: { id: string; role: 'admin' | 'member' } | null;
     requestId: string;
+    db: Db;
   }
 
   interface Platform {
     env: {
-      DB: D1Database;
+      SUPABASE_DB_URL: string;
       ADMIN_PASSWORD_HASH?: string;
       SESSION_SECRET: string;
       ENCRYPTION_KEY: string;

@@ -140,7 +140,7 @@ const applyV1 = async (db: Db) => {
   await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_tags_updated ON tags(updated_at)');
   await runSafe(
     db,
-    `INSERT OR IGNORE INTO article_score_overrides (article_id, score, comment, created_at, updated_at)
+    `INSERT INTO article_score_overrides (article_id, score, comment, created_at, updated_at)
      SELECT af.article_id, af.rating, af.comment, af.created_at, af.created_at
      FROM article_feedback af
      JOIN (
@@ -150,7 +150,7 @@ const applyV1 = async (db: Db) => {
      ) latest
        ON latest.article_id = af.article_id
       AND latest.max_created_at = af.created_at
-     WHERE af.rating BETWEEN 1 AND 5`
+     WHERE af.rating BETWEEN 1 AND 5 ON CONFLICT DO NOTHING`
   );
   const futureCutoff = Date.now() + MAX_PUBLISHED_FUTURE_MS;
   await runSafe(
@@ -177,7 +177,7 @@ const applyV1 = async (db: Db) => {
   );
   await runSafe(
     db,
-    `INSERT OR IGNORE INTO article_reactions (id, article_id, feed_id, value, created_at)
+    `INSERT INTO article_reactions (id, article_id, feed_id, value, created_at)
      SELECT lower(hex(randomblob(16))), af.article_id, af.feed_id,
        CASE
          WHEN af.rating >= 4 THEN 1
@@ -194,7 +194,7 @@ const applyV1 = async (db: Db) => {
        ON latest.article_id = af.article_id
       AND latest.max_created_at = af.created_at
      WHERE af.feed_id IS NOT NULL
-       AND (af.rating >= 4 OR af.rating <= 2)`
+       AND (af.rating >= 4 OR af.rating <= 2) ON CONFLICT DO NOTHING`
   );
 };
 
@@ -415,7 +415,7 @@ const applyV6 = async (db: Db) => {
   for (const [name, weight] of defaultWeights) {
     await runSafe(
       db,
-      'INSERT OR IGNORE INTO signal_weights (signal_name, weight, sample_count, updated_at) VALUES (?, ?, 0, ?)',
+      'INSERT INTO signal_weights (signal_name, weight, sample_count, updated_at) VALUES (?, ?, 0, ?) ON CONFLICT DO NOTHING',
       [name, weight, ts]
     );
   }
@@ -531,8 +531,8 @@ const applyV11 = async (db: Db) => {
   for (const tag of STARTER_CANONICAL_TAGS) {
     await runSafe(
       db,
-      `INSERT OR IGNORE INTO tags (id, name, name_normalized, slug, color, description, created_at, updated_at)
-       VALUES (?, ?, ?, ?, NULL, NULL, ?, ?)`,
+      `INSERT INTO tags (id, name, name_normalized, slug, color, description, created_at, updated_at)
+       VALUES (?, ?, ?, ?, NULL, NULL, ?, ?) ON CONFLICT DO NOTHING`,
       [tag.id, tag.name, tag.name.toLowerCase(), tag.slug, timestamp, timestamp]
     );
   }
@@ -726,8 +726,8 @@ const applyV16 = async (db: Db) => {
   const timestamp = Date.now();
   await runSafe(
     db,
-    `INSERT OR IGNORE INTO users (id, email, display_name, auth_provider, role, created_at, updated_at)
-     VALUES ('admin', NULL, 'Admin', 'local', 'admin', ?, ?)`,
+    `INSERT INTO users (id, email, display_name, auth_provider, role, created_at, updated_at)
+     VALUES ('admin', NULL, 'Admin', 'local', 'admin', ?, ?) ON CONFLICT DO NOTHING`,
     [timestamp, timestamp]
   );
 };
@@ -771,9 +771,9 @@ const applyV17 = async (db: Db) => {
   await runSafe(db, 'CREATE INDEX IF NOT EXISTS idx_ufs_feed ON user_feed_subscriptions(feed_id)');
   await runSafe(
     db,
-    `INSERT OR IGNORE INTO user_feed_subscriptions (id, user_id, feed_id, created_at)
+    `INSERT INTO user_feed_subscriptions (id, user_id, feed_id, created_at)
      SELECT ('ufs-' || id), 'admin', id, COALESCE(last_polled_at, ?)
-     FROM feeds`,
+     FROM feeds ON CONFLICT DO NOTHING`,
     [timestamp]
   );
 
@@ -793,8 +793,8 @@ const applyV17 = async (db: Db) => {
   );
   await runSafe(
     db,
-    `INSERT OR IGNORE INTO article_read_state_v2 (user_id, article_id, is_read, updated_at, saved_at)
-     SELECT 'admin', article_id, is_read, updated_at, saved_at FROM article_read_state`
+    `INSERT INTO article_read_state_v2 (user_id, article_id, is_read, updated_at, saved_at)
+     SELECT 'admin', article_id, is_read, updated_at, saved_at FROM article_read_state ON CONFLICT DO NOTHING`
   );
   await runSafe(db, 'DROP TABLE IF EXISTS article_read_state');
   await runSafe(db, 'ALTER TABLE article_read_state_v2 RENAME TO article_read_state');
@@ -820,8 +820,8 @@ const applyV17 = async (db: Db) => {
   );
   await runSafe(
     db,
-    `INSERT OR IGNORE INTO article_reactions_v2 (id, user_id, article_id, feed_id, value, created_at)
-     SELECT id, 'admin', article_id, feed_id, value, created_at FROM article_reactions`
+    `INSERT INTO article_reactions_v2 (id, user_id, article_id, feed_id, value, created_at)
+     SELECT id, 'admin', article_id, feed_id, value, created_at FROM article_reactions ON CONFLICT DO NOTHING`
   );
   await runSafe(db, 'DROP TABLE IF EXISTS article_reactions');
   await runSafe(db, 'ALTER TABLE article_reactions_v2 RENAME TO article_reactions');
@@ -843,8 +843,8 @@ const applyV17 = async (db: Db) => {
   );
   await runSafe(
     db,
-    `INSERT OR IGNORE INTO article_reaction_reasons_v2 (user_id, article_id, reason_code, created_at)
-     SELECT 'admin', article_id, reason_code, created_at FROM article_reaction_reasons`
+    `INSERT INTO article_reaction_reasons_v2 (user_id, article_id, reason_code, created_at)
+     SELECT 'admin', article_id, reason_code, created_at FROM article_reaction_reasons ON CONFLICT DO NOTHING`
   );
   await runSafe(db, 'DROP TABLE IF EXISTS article_reaction_reasons');
   await runSafe(db, 'ALTER TABLE article_reaction_reasons_v2 RENAME TO article_reaction_reasons');
@@ -870,8 +870,8 @@ const applyV17 = async (db: Db) => {
   );
   await runSafe(
     db,
-    `INSERT OR IGNORE INTO article_tags_v2 (id, user_id, article_id, tag_id, source, confidence, created_at, updated_at)
-     SELECT id, 'admin', article_id, tag_id, source, confidence, created_at, updated_at FROM article_tags`
+    `INSERT INTO article_tags_v2 (id, user_id, article_id, tag_id, source, confidence, created_at, updated_at)
+     SELECT id, 'admin', article_id, tag_id, source, confidence, created_at, updated_at FROM article_tags ON CONFLICT DO NOTHING`
   );
   await runSafe(db, 'DROP TABLE IF EXISTS article_tags');
   await runSafe(db, 'ALTER TABLE article_tags_v2 RENAME TO article_tags');
@@ -895,8 +895,8 @@ const applyV17 = async (db: Db) => {
   );
   await runSafe(
     db,
-    `INSERT OR IGNORE INTO article_tag_suggestion_dismissals_v2 (user_id, article_id, name_normalized, created_at)
-     SELECT 'admin', article_id, name_normalized, created_at FROM article_tag_suggestion_dismissals`
+    `INSERT INTO article_tag_suggestion_dismissals_v2 (user_id, article_id, name_normalized, created_at)
+     SELECT 'admin', article_id, name_normalized, created_at FROM article_tag_suggestion_dismissals ON CONFLICT DO NOTHING`
   );
   await runSafe(db, 'DROP TABLE IF EXISTS article_tag_suggestion_dismissals');
   await runSafe(db, 'ALTER TABLE article_tag_suggestion_dismissals_v2 RENAME TO article_tag_suggestion_dismissals');
@@ -919,8 +919,8 @@ const applyV17 = async (db: Db) => {
   );
   await runSafe(
     db,
-    `INSERT OR IGNORE INTO article_score_overrides_v2 (user_id, article_id, score, comment, created_at, updated_at)
-     SELECT 'admin', article_id, score, comment, created_at, updated_at FROM article_score_overrides`
+    `INSERT INTO article_score_overrides_v2 (user_id, article_id, score, comment, created_at, updated_at)
+     SELECT 'admin', article_id, score, comment, created_at, updated_at FROM article_score_overrides ON CONFLICT DO NOTHING`
   );
   await runSafe(db, 'DROP TABLE IF EXISTS article_score_overrides');
   await runSafe(db, 'ALTER TABLE article_score_overrides_v2 RENAME TO article_score_overrides');
@@ -939,8 +939,8 @@ const applyV17 = async (db: Db) => {
   );
   await runSafe(
     db,
-    `INSERT OR IGNORE INTO settings_v2 (id, user_id, key, value, updated_at)
-     SELECT id, 'admin', key, value, updated_at FROM settings`
+    `INSERT INTO settings_v2 (id, user_id, key, value, updated_at)
+     SELECT id, 'admin', key, value, updated_at FROM settings ON CONFLICT DO NOTHING`
   );
   await runSafe(db, 'DROP TABLE IF EXISTS settings');
   await runSafe(db, 'ALTER TABLE settings_v2 RENAME TO settings');
@@ -973,10 +973,10 @@ const applyV17 = async (db: Db) => {
   await runSafe(
     db,
     chatThreadsHasUpdatedAt
-      ? `INSERT OR IGNORE INTO chat_threads_v2 (id, user_id, article_id, title, created_at, updated_at)
-         SELECT id, 'admin', article_id, title, created_at, updated_at FROM chat_threads`
-      : `INSERT OR IGNORE INTO chat_threads_v2 (id, user_id, article_id, title, created_at, updated_at)
-         SELECT id, 'admin', article_id, title, created_at, created_at FROM chat_threads`
+      ? `INSERT INTO chat_threads_v2 (id, user_id, article_id, title, created_at, updated_at)
+         SELECT id, 'admin', article_id, title, created_at, updated_at FROM chat_threads ON CONFLICT DO NOTHING`
+      : `INSERT INTO chat_threads_v2 (id, user_id, article_id, title, created_at, updated_at)
+         SELECT id, 'admin', article_id, title, created_at, created_at FROM chat_threads ON CONFLICT DO NOTHING`
   );
   await runSafe(db, 'DROP TABLE IF EXISTS chat_threads');
   await runSafe(db, 'ALTER TABLE chat_threads_v2 RENAME TO chat_threads');

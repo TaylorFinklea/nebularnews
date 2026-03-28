@@ -40,7 +40,7 @@ export const POST = async ({ request, platform, locals }) => {
     const timestamp = now();
     await dbRun(
       locals.db,
-      'INSERT OR IGNORE INTO feeds (id, url, last_polled_at, next_poll_at) VALUES (?, ?, ?, ?)',
+      'INSERT INTO feeds (id, url, last_polled_at, next_poll_at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING',
       [feedId, url, null, timestamp]
     );
     const existing = await dbGet<{ id: string }>(
@@ -51,8 +51,8 @@ export const POST = async ({ request, platform, locals }) => {
     if (existing) {
       await dbRun(
         locals.db,
-        `INSERT OR IGNORE INTO user_feed_subscriptions (id, user_id, feed_id, created_at)
-         VALUES (?, ?, ?, ?)`,
+        `INSERT INTO user_feed_subscriptions (id, user_id, feed_id, created_at)
+         VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING`,
         [nanoid(), user.id, existing.id, timestamp]
       );
     }

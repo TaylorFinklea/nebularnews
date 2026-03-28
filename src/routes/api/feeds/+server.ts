@@ -26,7 +26,7 @@ export const POST = async ({ request, platform, locals }) => {
   const id = nanoid();
   await dbRun(
     locals.db,
-    'INSERT OR IGNORE INTO feeds (id, url, last_polled_at, next_poll_at) VALUES (?, ?, ?, ?)',
+    'INSERT INTO feeds (id, url, last_polled_at, next_poll_at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING',
     [id, url, null, now()]
   );
 

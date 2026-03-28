@@ -35,7 +35,7 @@ export const POST = async ({ request, platform, locals }) => {
     }
     await dbRun(
       locals.db,
-      'INSERT OR IGNORE INTO feeds (id, url, last_polled_at, next_poll_at) VALUES (?, ?, ?, ?)',
+      'INSERT INTO feeds (id, url, last_polled_at, next_poll_at) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING',
       [nanoid(), url, null, now()]
     );
     added += 1;

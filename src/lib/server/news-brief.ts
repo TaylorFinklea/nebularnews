@@ -464,7 +464,7 @@ const insertEdition = async (
   const timestamp = now();
   await dbRun(
     db,
-    `INSERT OR IGNORE INTO news_brief_editions (
+    `INSERT INTO news_brief_editions (
       id,
       user_id,
       edition_key,
@@ -491,7 +491,7 @@ const insertEdition = async (
       created_at,
       updated_at
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, '[]', '[]', NULL, NULL, NULL, 0, NULL, NULL, NULL, ?, NULL, ?, ?)`,
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, '[]', '[]', NULL, NULL, NULL, 0, NULL, NULL, NULL, ?, NULL, ?, ?) ON CONFLICT DO NOTHING`,
     [
       nanoid(),
       input.userId,

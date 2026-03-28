@@ -1,29 +1,51 @@
-export type Db = D1Database;
+import postgres from 'postgres';
+
+export type Db = postgres.Sql;
 
 export const now = () => Date.now();
 
+/** Convert SQLite ? placeholders to Postgres $1, $2, ... */
+function pgify(sql: string): string {
+  let i = 0;
+  return sql.replace(/\?/g, () => `$${++i}`);
+}
+
+export function createDb(connectionString: string): Db {
+  return postgres(connectionString, {
+    max: 1,
+    fetch_types: false,
+    prepare: false,
+    idle_timeout: 0,
+    max_lifetime: 0
+  });
+}
+
 export async function dbGet<T>(db: Db, sql: string, params: unknown[] = []): Promise<T | null> {
-  const stmt = db.prepare(sql).bind(...params);
-  const result = await stmt.first<T>();
-  return result ?? null;
+  const rows = await db.unsafe(pgify(sql), params as (string | number | null | boolean)[]);
+  return (rows[0] as T) ?? null;
 }
 
 export async function dbAll<T>(db: Db, sql: string, params: unknown[] = []): Promise<T[]> {
-  const stmt = db.prepare(sql).bind(...params);
-  const result = await stmt.all<T>();
-  return result.results ?? [];
+  const rows = await db.unsafe(pgify(sql), params as (string | number | null | boolean)[]);
+  return rows as unknown as T[];
 }
 
 export async function dbRun(db: Db, sql: string, params: unknown[] = []) {
-  return db.prepare(sql).bind(...params).run();
+  const result = await db.unsafe(pgify(sql), params as (string | number | null | boolean)[]);
+  return { meta: { changes: result.count } };
 }
 
 export async function dbBatch(db: Db, statements: { sql: string; params?: unknown[] }[]) {
-  const stmts = statements.map((s) => db.prepare(s.sql).bind(...(s.params ?? [])));
-  return db.batch(stmts);
+  return db.begin(async (tx) => {
+    const results = [];
+    for (const s of statements) {
+      results.push(await tx.unsafe(pgify(s.sql), (s.params ?? []) as (string | number | null | boolean)[]));
+    }
+    return results;
+  });
 }
 
 export function getAffectedRows(result: unknown) {
-  const rowInfo = result as { meta?: { changes?: number }; changes?: number } | null;
-  return Number(rowInfo?.meta?.changes ?? rowInfo?.changes ?? 0);
+  const rowInfo = result as { meta?: { changes?: number }; count?: number; changes?: number } | null;
+  return Number(rowInfo?.meta?.changes ?? rowInfo?.count ?? rowInfo?.changes ?? 0);
 }

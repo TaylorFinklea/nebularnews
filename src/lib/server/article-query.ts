@@ -66,7 +66,7 @@ const sortOrderClause = (sort: SortValue, uid: string) => {
     return `${effectiveReadExpr(uid)} ASC, a.published_at DESC NULLS LAST, a.fetched_at DESC`;
   }
   if (sort === 'title_az') {
-    return `COALESCE(a.title, '') COLLATE NOCASE ASC, a.published_at DESC NULLS LAST, a.fetched_at DESC`;
+    return `LOWER(COALESCE(a.title, '')) ASC, a.published_at DESC NULLS LAST, a.fetched_at DESC`;
   }
   return 'a.published_at DESC NULLS LAST, a.fetched_at DESC';
 };
@@ -84,7 +84,7 @@ const buildWhere = (input: ArticleQueryInput & { userId: string }) => {
   conditions.push(subscriptionFilter(uid));
 
   if (query) {
-    conditions.push('article_search MATCH ?');
+    conditions.push("a.search_vector @@ plainto_tsquery('english', ?)");
     params.push(safeQuery || query);
   }
 
@@ -145,7 +145,7 @@ const buildWhere = (input: ArticleQueryInput & { userId: string }) => {
 
 export const listArticlesWithFilters = async (db: Db, userId: string, input: ArticleQueryInput) => {
   const clauses = buildWhere({ ...input, userId });
-  const join = clauses.query ? 'JOIN article_search ON article_search.article_id = a.id' : '';
+  const join = '';
   const orderBy = input.groupedByPublishedAt
     ? 'COALESCE(a.published_at, a.fetched_at) DESC, a.fetched_at DESC'
     : sortOrderClause(input.sort, userId);

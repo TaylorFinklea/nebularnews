@@ -93,12 +93,6 @@ export async function deleteOrphanArticlesBatch(
   const params = ids;
   const inClause = placeholders(params.length);
 
-  const deleteSearch = await dbRun(
-    db,
-    `DELETE FROM article_search
-     WHERE article_id IN (${inClause})`,
-    params
-  );
   const deleteJobs = await dbRun(
     db,
     `DELETE FROM jobs
@@ -117,7 +111,7 @@ export async function deleteOrphanArticlesBatch(
     orphan_count_before: orphanCountBefore,
     targeted,
     deleted_articles: Number(deleteArticles.meta?.changes ?? 0),
-    deleted_article_search_rows: Number(deleteSearch.meta?.changes ?? 0),
+    deleted_article_search_rows: 0,
     deleted_jobs_rows: Number(deleteJobs.meta?.changes ?? 0),
     orphan_count_after: orphanCountAfter,
     has_more: orphanCountAfter > 0,

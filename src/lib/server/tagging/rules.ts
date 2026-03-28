@@ -176,7 +176,7 @@ const listCanonicalTagCandidates = async (db: Db): Promise<CanonicalTagCandidate
      FROM tags t
      LEFT JOIN article_tags at ON at.tag_id = t.id
      GROUP BY t.id
-     ORDER BY article_count DESC, t.updated_at DESC, t.name COLLATE NOCASE ASC`
+     ORDER BY article_count DESC, t.updated_at DESC, LOWER(t.name) ASC`
   );
 
 const getFeedPriors = async (db: Db, articleId: string, feedId: string | null) => {

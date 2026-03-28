@@ -221,7 +221,7 @@ const sortOrderClause = (sort: SortValue) => {
     return `${effectiveReadExpr} ASC, a.published_at DESC NULLS LAST, a.fetched_at DESC`;
   }
   if (sort === 'title_az') {
-    return `COALESCE(a.title, '') COLLATE NOCASE ASC, a.published_at DESC NULLS LAST, a.fetched_at DESC`;
+    return `LOWER(COALESCE(a.title, '')) ASC, a.published_at DESC NULLS LAST, a.fetched_at DESC`;
   }
   return 'a.published_at DESC NULLS LAST, a.fetched_at DESC';
 };
@@ -284,7 +284,7 @@ const buildArticleSearchWhere = async (db: Db, input: SearchArticlesInput) => {
   const params: unknown[] = [];
 
   if (query) {
-    whereParts.push('article_search MATCH ?');
+    whereParts.push("a.search_vector @@ plainto_tsquery('english', ?)");
     params.push(safeQuery || query);
   }
 
@@ -508,12 +508,12 @@ async function buildContextBundle(db: Db, input: RetrieveContextBundleInput) {
 
   const matches = await dbAll<{ article_id: string; rank: number }>(
     db,
-    `SELECT article_id, bm25(article_search) as rank
-     FROM article_search
-     WHERE article_search MATCH ?
-     ORDER BY rank ASC
+    `SELECT id as article_id, ts_rank_cd(search_vector, plainto_tsquery('english', ?)) as rank
+     FROM articles
+     WHERE search_vector @@ plainto_tsquery('english', ?)
+     ORDER BY rank DESC
      LIMIT ?`,
-    [safeQuery || question, maxSources * 4]
+    [safeQuery || question, safeQuery || question, maxSources * 4]
   );
 
   if (matches.length === 0) {

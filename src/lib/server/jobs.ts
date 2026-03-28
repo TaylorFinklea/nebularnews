@@ -535,13 +535,6 @@ async function runBrowserScrapeJob(
       [extracted.contentHtml, extracted.contentText, wordCount, extracted.excerpt, quality.quality, now(), articleId]
     );
 
-    // Update search index with improved content
-    await dbRun(
-      db,
-      'UPDATE article_search SET content_text = ? WHERE article_id = ?',
-      [extracted.contentText, articleId]
-    );
-
     // Re-queue score job since content changed significantly
     await enqueueScoreJob(db, articleId);
   }
@@ -655,7 +648,6 @@ async function runSummarizeJob(
     ]
   );
 
-  await dbRun(db, 'UPDATE article_search SET summary_text = ? WHERE article_id = ?', [summary.summary, articleId]);
   return { provider, model };
 }
 

@@ -1,4 +1,4 @@
-import type { Db } from './db';
+import { dbGet, type Db } from './db';
 import { STARTER_CANONICAL_TAGS } from './tagging/taxonomy';
 
 let schemaReady = false;
@@ -12,7 +12,12 @@ const runSafe = async (db: Db, sql: string, params: unknown[] = []) => {
     await db.prepare(sql).bind(...params).run();
   } catch (err) {
     const message = String(err);
-    if (message.includes('duplicate column name') || message.includes('already exists')) {
+    if (
+      message.includes('duplicate column name') ||
+      message.includes('already exists') ||
+      message.includes('duplicate key value') ||
+      message.includes('relation') && message.includes('already exists')
+    ) {
       return;
     }
     throw err;
@@ -178,7 +183,7 @@ const applyV1 = async (db: Db) => {
   await runSafe(
     db,
     `INSERT INTO article_reactions (id, article_id, feed_id, value, created_at)
-     SELECT lower(hex(randomblob(16))), af.article_id, af.feed_id,
+     SELECT encode(gen_random_bytes(16), 'hex'), af.article_id, af.feed_id,
        CASE
          WHEN af.rating >= 4 THEN 1
          WHEN af.rating <= 2 THEN -1
@@ -1087,22 +1092,26 @@ export async function ensureSchema(db: Db) {
 
 export async function getSchemaVersion(db: Db) {
   await ensureMigrationsTable(db);
-  return getAppliedVersion(db);
+  const row = await dbGet<{ version: number }>(db, 'SELECT COALESCE(MAX(version), 0) as version FROM schema_migrations');
+  return Number(row?.version ?? 0);
 }
 
 const tableExists = async (db: Db, tableName: string) => {
-  const row = await db
-    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1")
-    .bind(tableName)
-    .first<{ name: string }>();
+  const row = await dbGet<{ name: string }>(
+    db,
+    "SELECT table_name AS name FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ? LIMIT 1",
+    [tableName]
+  );
   return Boolean(row?.name);
 };
 
 const columnExists = async (db: Db, tableName: string, columnName: string) => {
-  const rows = await db
-    .prepare(`PRAGMA table_info(${tableName})`)
-    .all<{ name: string }>();
-  return (rows.results ?? []).some((row) => row.name === columnName);
+  const row = await dbGet<{ name: string }>(
+    db,
+    "SELECT column_name AS name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = ? AND column_name = ? LIMIT 1",
+    [tableName, columnName]
+  );
+  return Boolean(row?.name);
 };
 
 const assertRequiredV2Objects = async (db: Db) => {
@@ -1159,8 +1168,8 @@ const assertRequiredV8Objects = async (db: Db) => {
 };
 
 const assertRequiredV9Objects = async (db: Db) => {
-  if (!(await tableExists(db, 'article_search'))) {
-    throw new Error('Missing required table: article_search');
+  if (!(await columnExists(db, 'articles', 'search_vector'))) {
+    throw new Error('Missing required articles column: search_vector');
   }
 };
 

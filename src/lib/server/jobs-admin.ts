@@ -151,7 +151,7 @@ export async function queueMissingRecentArticleJobs(
   const scoreResult = await dbRun(
     db,
     `INSERT INTO jobs (id, type, article_id, status, attempts, priority, run_after, last_error, provider, model, created_at, updated_at)
-     SELECT lower(hex(randomblob(16))), 'score', a.id, 'pending', 0, 100, ?, NULL, NULL, NULL, ?, ?
+     SELECT encode(gen_random_bytes(16), 'hex'), 'score', a.id, 'pending', 0, 100, ?, NULL, NULL, NULL, ?, ?
      FROM articles a
      WHERE COALESCE(a.published_at, a.fetched_at) >= ?
        AND COALESCE(a.published_at, a.fetched_at) <= ?
@@ -175,7 +175,7 @@ export async function queueMissingRecentArticleJobs(
   const autoTagResult = await dbRun(
     db,
     `INSERT INTO jobs (id, type, article_id, status, attempts, priority, run_after, last_error, provider, model, created_at, updated_at)
-     SELECT lower(hex(randomblob(16))), 'auto_tag', a.id, 'pending', 0, 100, ?, NULL, NULL, NULL, ?, ?
+     SELECT encode(gen_random_bytes(16), 'hex'), 'auto_tag', a.id, 'pending', 0, 100, ?, NULL, NULL, NULL, ?, ?
      FROM articles a
      WHERE COALESCE(a.published_at, a.fetched_at) >= ?
        AND COALESCE(a.published_at, a.fetched_at) <= ?
@@ -210,7 +210,7 @@ export async function queueMissingRecentArticleJobs(
   const imageBackfillResult = await dbRun(
     db,
     `INSERT INTO jobs (id, type, article_id, status, attempts, priority, run_after, last_error, provider, model, created_at, updated_at)
-     SELECT lower(hex(randomblob(16))), 'image_backfill', a.id, 'pending', 0, 120, ?, NULL, NULL, NULL, ?, ?
+     SELECT encode(gen_random_bytes(16), 'hex'), 'image_backfill', a.id, 'pending', 0, 120, ?, NULL, NULL, NULL, ?, ?
      FROM articles a
      WHERE COALESCE(a.published_at, a.fetched_at) >= ?
        AND COALESCE(a.published_at, a.fetched_at) <= ?
@@ -233,7 +233,7 @@ export async function queueMissingRecentArticleJobs(
   const keyPointsResult = await dbRun(
     db,
     `INSERT INTO jobs (id, type, article_id, status, attempts, priority, run_after, last_error, provider, model, created_at, updated_at)
-     SELECT lower(hex(randomblob(16))), 'key_points', a.id, 'pending', 0, 100, ?, NULL, NULL, NULL, ?, ?
+     SELECT encode(gen_random_bytes(16), 'hex'), 'key_points', a.id, 'pending', 0, 100, ?, NULL, NULL, NULL, ?, ?
      FROM articles a
      WHERE COALESCE(a.published_at, a.fetched_at) >= ?
        AND COALESCE(a.published_at, a.fetched_at) <= ?
@@ -270,7 +270,7 @@ export async function queueMissingKeyPoints(db: Db) {
   const result = await dbRun(
     db,
     `INSERT INTO jobs (id, type, article_id, status, attempts, priority, run_after, last_error, provider, model, created_at, updated_at)
-     SELECT lower(hex(randomblob(16))), 'key_points', a.id, 'pending', 0, 80, ?, NULL, NULL, NULL, ?, ?
+     SELECT encode(gen_random_bytes(16), 'hex'), 'key_points', a.id, 'pending', 0, 80, ?, NULL, NULL, NULL, ?, ?
      FROM articles a
      WHERE EXISTS (SELECT 1 FROM article_summaries s WHERE s.article_id = a.id)
        AND NOT EXISTS (SELECT 1 FROM article_key_points kp WHERE kp.article_id = a.id)
@@ -296,7 +296,7 @@ export async function queueRefetchContent(db: Db) {
   const result = await dbRun(
     db,
     `INSERT INTO jobs (id, type, article_id, status, attempts, priority, run_after, last_error, provider, model, created_at, updated_at)
-     SELECT lower(hex(randomblob(16))), 'refetch_content', a.id, 'pending', 0, 90, ?, NULL, NULL, NULL, ?, ?
+     SELECT encode(gen_random_bytes(16), 'hex'), 'refetch_content', a.id, 'pending', 0, 90, ?, NULL, NULL, NULL, ?, ?
      FROM articles a
      WHERE a.canonical_url IS NOT NULL
        AND (a.content_text IS NULL OR length(a.content_text) < 200)

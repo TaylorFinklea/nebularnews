@@ -240,7 +240,7 @@ export async function listTags(db: Db, options?: { q?: string; limit?: number })
     LEFT JOIN article_tags at ON at.tag_id = t.id
     ${where}
     GROUP BY t.id
-    ORDER BY t.name COLLATE NOCASE ASC
+    ORDER BY LOWER(t.name) ASC
     LIMIT ?`,
     [...params, limit]
   );
@@ -284,7 +284,7 @@ export async function listTagsForArticles(db: Db, userId: string, articleIds: st
     JOIN tags t ON t.id = at.tag_id
     WHERE at.article_id IN (${placeholders(deduped.length)})
       AND at.user_id = ?
-    ORDER BY t.name COLLATE NOCASE ASC`,
+    ORDER BY LOWER(t.name) ASC`,
     [...deduped, userId]
   );
 
@@ -375,7 +375,7 @@ export async function listTagSuggestionsForArticles(db: Db, userId: string, arti
     FROM article_tag_suggestions
     WHERE article_id IN (${placeholders(deduped.length)})
       AND user_id = ?
-    ORDER BY article_id ASC, confidence DESC NULLS LAST, name COLLATE NOCASE ASC`,
+    ORDER BY article_id ASC, confidence DESC NULLS LAST, LOWER(name) ASC`,
     [...deduped, userId]
   );
 
@@ -722,7 +722,7 @@ export async function mergeTags(
   await dbRun(
     db,
     `INSERT INTO article_tags (id, user_id, article_id, tag_id, source, confidence, created_at, updated_at)
-     SELECT lower(hex(randomblob(16))), user_id, article_id, ?, source, confidence, created_at, ?
+     SELECT encode(gen_random_bytes(16), 'hex'), user_id, article_id, ?, source, confidence, created_at, ?
      FROM article_tags
      WHERE tag_id = ? AND user_id = ?
      ON CONFLICT(user_id, article_id, tag_id) DO UPDATE SET

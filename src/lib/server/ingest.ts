@@ -366,11 +366,6 @@ export async function ingestFeedItem(
       if (dup) articleId = dup.id;
     } else {
       insertedArticle = true;
-      await dbRun(
-        db,
-        'INSERT INTO article_search (article_id, title, content_text, summary_text) VALUES (?, ?, ?, ?)',
-        [articleId, item.title, contentText ?? '', '']
-      );
 
       await enqueueNewArticleArtifactJobs(db, articleId, {
         queuedAt: fetchedAt,

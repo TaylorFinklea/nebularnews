@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { requireAdmin } from '$lib/server/auth';
-import { dbBatch, dbGet, dbRun } from '$lib/server/db';
+import { dbBatch, dbGet } from '$lib/server/db';
 
 const deletableArticlesCountSql = `SELECT COUNT(*) AS count
 FROM articles a
@@ -65,11 +65,6 @@ export const DELETE = async ({ params, platform, locals }) => {
 
   await dbBatch(locals.db, [
     {
-      sql: `DELETE FROM article_search
-            WHERE article_id IN (${deletableArticlesSelectionSql})`,
-      params: [id, id]
-    },
-    {
       sql: `DELETE FROM jobs
             WHERE article_id IN (${deletableArticlesSelectionSql})`,
       params: [id, id]
@@ -84,12 +79,6 @@ export const DELETE = async ({ params, platform, locals }) => {
       params: [id]
     }
   ]);
-
-  await dbRun(
-    locals.db,
-    `DELETE FROM article_search
-     WHERE article_id NOT IN (SELECT id FROM articles)`
-  );
 
   return json({
     ok: true,

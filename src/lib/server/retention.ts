@@ -58,33 +58,10 @@ export async function runRetentionCleanup(db: Db, env: App.Platform['env']): Pro
       [archiveCutoff]
     );
     articlesArchived = Number(archiveResult.meta?.changes ?? 0);
-
-    const clearSearch = await dbRun(
-      db,
-      `UPDATE article_search
-       SET content_text = ''
-       WHERE article_id IN (
-         SELECT id FROM articles
-         WHERE ${AGE_FILTER} ${SAVED_EXCLUSION}
-       ) AND content_text != ''`,
-      [archiveCutoff]
-    );
-    searchRowsCleared += Number(clearSearch.meta?.changes ?? 0);
   }
 
   // Phase 2: Delete — remove old unsaved article records entirely
   if (deleteCutoff !== null) {
-    const deleteSearch = await dbRun(
-      db,
-      `DELETE FROM article_search
-       WHERE article_id IN (
-         SELECT id FROM articles
-         WHERE ${AGE_FILTER} ${SAVED_EXCLUSION}
-       )`,
-      [deleteCutoff]
-    );
-    searchRowsCleared += Number(deleteSearch.meta?.changes ?? 0);
-
     const deleteResult = await dbRun(
       db,
       `DELETE FROM articles

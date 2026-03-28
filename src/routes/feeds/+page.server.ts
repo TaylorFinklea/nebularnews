@@ -33,7 +33,7 @@ export const load = async ({ platform, locals }) => {
     JOIN article_reactions ar ON ar.feed_id = f.id
     GROUP BY f.id, f.url, f.title
     HAVING COUNT(ar.id) > 0
-    ORDER BY reputation ASC, feedback_count DESC, COALESCE(f.title, f.url) COLLATE NOCASE ASC
+    ORDER BY reputation ASC, feedback_count DESC, LOWER(COALESCE(f.title, f.url)) ASC
     LIMIT 20`
   );
   return { feeds, lowestRatedFeeds };

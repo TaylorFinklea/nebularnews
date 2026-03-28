@@ -244,7 +244,7 @@ export const listOAuthClientSummaries = async (db: Db): Promise<OAuthClientSumma
                 AND oc.revoked_at IS NULL
             ) AS active_consent_count
      FROM oauth_clients c
-     ORDER BY COALESCE(c.last_used_at, c.updated_at) DESC, c.client_name COLLATE NOCASE ASC`,
+     ORDER BY COALESCE(c.last_used_at, c.updated_at) DESC, LOWER(c.client_name) ASC`,
     [now(), now()]
   );
 

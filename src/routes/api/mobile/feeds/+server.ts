@@ -27,7 +27,7 @@ export const GET = async ({ request, platform, locals }) => {
        SELECT 1 FROM user_feed_subscriptions ufs
        WHERE ufs.feed_id = f.id AND ufs.user_id = ?
      )
-     ORDER BY COALESCE(NULLIF(f.title, ''), f.url) COLLATE NOCASE ASC`,
+     ORDER BY LOWER(COALESCE(NULLIF(f.title, ''), f.url)) ASC`,
     [user.id]
   );
 

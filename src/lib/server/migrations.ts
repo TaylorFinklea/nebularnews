@@ -1,4 +1,4 @@
-import { dbGet, type Db } from './db';
+import { dbGet, dbRun, type Db } from './db';
 import { STARTER_CANONICAL_TAGS } from './tagging/taxonomy';
 
 let schemaReady = false;
@@ -9,7 +9,7 @@ export const EXPECTED_SCHEMA_VERSION = 17;
 
 const runSafe = async (db: Db, sql: string, params: unknown[] = []) => {
   try {
-    await db.prepare(sql).bind(...params).run();
+    await dbRun(db, sql, params);
   } catch (err) {
     const message = String(err);
     if (
@@ -37,7 +37,7 @@ const ensureMigrationsTable = async (db: Db) => {
 
 const getAppliedVersion = async (db: Db) => {
   try {
-    const row = await db.prepare('SELECT COALESCE(MAX(version), 0) as version FROM schema_migrations').first<{ version: number }>();
+    const row = await dbGet<{ version: number }>(db, 'SELECT COALESCE(MAX(version), 0) as version FROM schema_migrations');
     return Number(row?.version ?? 0);
   } catch {
     return 0;
@@ -45,16 +45,14 @@ const getAppliedVersion = async (db: Db) => {
 };
 
 const markVersionApplied = async (db: Db, version: number, name: string) => {
-  await db
-    .prepare(
-      `INSERT INTO schema_migrations (version, name, applied_at)
-       VALUES (?, ?, ?)
-       ON CONFLICT(version) DO UPDATE SET
-         name = excluded.name,
-         applied_at = excluded.applied_at`
-    )
-    .bind(version, name, Date.now())
-    .run();
+  await dbRun(db,
+    `INSERT INTO schema_migrations (version, name, applied_at)
+     VALUES (?, ?, ?)
+     ON CONFLICT(version) DO UPDATE SET
+       name = excluded.name,
+       applied_at = excluded.applied_at`,
+    [version, name, Date.now()]
+  );
 };
 
 const applyV1 = async (db: Db) => {

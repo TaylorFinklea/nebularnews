@@ -15,6 +15,42 @@ type MockDb = {
 let activeMockDb: MockDb | null = null;
 
 vi.mock('./db', () => ({
+  dbRun: vi.fn(async (_db: any, sql: string, params: unknown[] = []) => {
+    const state: MockDbState | undefined = _db?.__state ?? activeMockDb?.__state;
+    if (!state) return { meta: { changes: 0 } };
+
+    // markVersionApplied
+    if (sql.includes('INSERT INTO schema_migrations')) {
+      const version = Number(params[0]);
+      const name = String(params[1]);
+      const appliedAt = Number(params[2]);
+      state.schemaVersions.set(version, { name, appliedAt });
+    }
+
+    // runSafe CREATE TABLE — track new tables
+    const createMatch = sql.match(/CREATE TABLE IF NOT EXISTS (\w+)/i);
+    if (createMatch) {
+      const tableName = createMatch[1];
+      if (!state.tables.has(tableName)) state.tables.set(tableName, []);
+    }
+
+    // runSafe ALTER TABLE ADD COLUMN
+    const alterMatch = sql.match(/ALTER TABLE (\w+) ADD COLUMN (\w+)/i);
+    if (alterMatch) {
+      const [, tableName, colName] = alterMatch;
+      const cols = state.tables.get(tableName) ?? [];
+      if (!cols.includes(colName)) cols.push(colName);
+      state.tables.set(tableName, cols);
+    }
+
+    // Tag seeding — capture name_normalized (params[2]) for test assertions
+    if (sql.includes('INSERT INTO tags') && sql.includes('ON CONFLICT DO NOTHING')) {
+      const nameNormalized = String(params[2] ?? '');
+      if (nameNormalized) state.tagKeys.add(nameNormalized);
+    }
+
+    return { meta: { changes: 1 } };
+  }),
   dbGet: vi.fn(async (db: any, sql: string, params: unknown[] = []) => {
     const state: MockDbState | undefined = db?.__state ?? activeMockDb?.__state;
     if (!state) return null;

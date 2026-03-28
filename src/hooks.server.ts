@@ -74,6 +74,13 @@ let schemaAssertedAt = 0;
 export const handle: Handle = async ({ event, resolve }) => {
   const { pathname } = event.url;
   event.locals.requestId = createRequestId();
+
+  // Forward magic link tokens to /auth/callback (Supabase may redirect to root)
+  if (event.url.searchParams.has('token_hash') && !pathname.startsWith('/auth/callback')) {
+    const callbackUrl = new URL('/auth/callback', event.url.origin);
+    callbackUrl.search = event.url.search;
+    throw redirect(303, callbackUrl.pathname + callbackUrl.search);
+  }
   // Lazy db creation — only connects when first accessed
   let _db: ReturnType<typeof createDb> | undefined;
   Object.defineProperty(event.locals, 'db', {

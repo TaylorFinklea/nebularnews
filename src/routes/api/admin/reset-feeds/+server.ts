@@ -5,7 +5,7 @@ import { dbRun, getAffectedRows } from '$lib/server/db';
 export const POST = async ({ platform, locals }) => {
   requireAdmin(locals.user);
   const result = await dbRun(
-    platform.env.DB,
+    locals.db,
     'UPDATE feeds SET next_poll_at = NULL, error_count = 0 WHERE disabled = 0'
   );
   const count = getAffectedRows(result);

@@ -13,8 +13,8 @@ import { replaceReactionReasonCodes } from '$lib/server/reactions';
 import { getPreferredSourceForArticle, isFeedLinkedToArticle } from '$lib/server/sources';
 import { processReactionLearning } from '$lib/server/scoring/learning';
 
-export const POST = async ({ params, request, platform }) => {
-  const { user } = await requireMobileAccess(request, platform.env, platform.env.DB, 'app:write');
+export const POST = async ({ params, request, platform, locals }) => {
+  const { user } = await requireMobileAccess(request, platform.env, locals.db, 'app:write');
 
   const articleId = params.id;
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
@@ -46,10 +46,10 @@ export const POST = async ({ params, request, platform }) => {
   const reasonCodes = canonicalizeReasonCodesForReaction(value, typedReasonCodes);
 
   let feedId: string | null = null;
-  if (feedIdInput && (await isFeedLinkedToArticle(platform.env.DB, articleId, feedIdInput))) {
+  if (feedIdInput && (await isFeedLinkedToArticle(locals.db, articleId, feedIdInput))) {
     feedId = feedIdInput;
   } else {
-    feedId = (await getPreferredSourceForArticle(platform.env.DB, articleId))?.feedId ?? null;
+    feedId = (await getPreferredSourceForArticle(locals.db, articleId))?.feedId ?? null;
   }
 
   if (!feedId) {
@@ -57,7 +57,7 @@ export const POST = async ({ params, request, platform }) => {
   }
 
   const existingReaction = await dbGet<{ value: number | null }>(
-    platform.env.DB,
+    locals.db,
     'SELECT value FROM article_reactions WHERE article_id = ? AND user_id = ? LIMIT 1',
     [articleId, user.id]
   );
@@ -66,7 +66,7 @@ export const POST = async ({ params, request, platform }) => {
   const timestamp = now();
 
   await dbRun(
-    platform.env.DB,
+    locals.db,
     `INSERT INTO article_reactions (id, user_id, article_id, feed_id, value, created_at)
      VALUES (?, ?, ?, ?, ?, ?)
      ON CONFLICT(user_id, article_id) DO UPDATE SET
@@ -75,10 +75,10 @@ export const POST = async ({ params, request, platform }) => {
        created_at = excluded.created_at`,
     [nanoid(), user.id, articleId, feedId, value, timestamp]
   );
-  await replaceReactionReasonCodes(platform.env.DB, user.id, articleId, reasonCodes, timestamp);
+  await replaceReactionReasonCodes(locals.db, user.id, articleId, reasonCodes, timestamp);
 
   if (shouldApplyLearning) {
-    processReactionLearning(platform.env.DB, articleId, value as 1 | -1, reasonCodes).catch(() => {});
+    processReactionLearning(locals.db, articleId, value as 1 | -1, reasonCodes).catch(() => {});
   }
 
   return json({

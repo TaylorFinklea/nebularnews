@@ -38,8 +38,8 @@ const normalizeSort = (value: string | null): SortValue => {
   return SORT_VALUES.includes(normalized as SortValue) ? (normalized as SortValue) : 'newest';
 };
 
-export const GET = async ({ request, url, platform }) => {
-  const { user } = await requireMobileAccess(request, platform.env, platform.env.DB, 'app:read');
+export const GET = async ({ request, url, platform, locals }) => {
+  const { user } = await requireMobileAccess(request, platform.env, locals.db, 'app:read');
 
   const startedAt = Date.now();
   const limit = Math.max(1, Math.min(50, Number(url.searchParams.get('limit') ?? 20)));
@@ -74,11 +74,11 @@ export const GET = async ({ request, url, platform }) => {
         .filter(Boolean)
     )
   ];
-  const selectedTags = await resolveTagsByTokens(platform.env.DB, requestedTagTokens);
+  const selectedTags = await resolveTagsByTokens(locals.db, requestedTagTokens);
   const selectedTagIds = selectedTags.map((tag) => tag.id);
   const savedOnly = url.searchParams.get('saved') === 'true';
 
-  const result = await listArticlesWithFilters(platform.env.DB, user.id, {
+  const result = await listArticlesWithFilters(locals.db, user.id, {
     query,
     limit,
     offset,

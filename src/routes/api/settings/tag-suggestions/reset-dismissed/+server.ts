@@ -5,8 +5,8 @@ import { clearAllDismissedTagSuggestions } from '$lib/server/tags';
 export const POST = async (event) => {
   const { platform, locals } = event;
   try {
-    await clearAllDismissedTagSuggestions(platform.env.DB);
-    await recordAuditEvent(platform.env.DB, {
+    await clearAllDismissedTagSuggestions(locals.db);
+    await recordAuditEvent(locals.db, {
       actor: 'admin',
       action: 'settings.tag_suggestions.reset_dismissed',
       requestId: locals.requestId

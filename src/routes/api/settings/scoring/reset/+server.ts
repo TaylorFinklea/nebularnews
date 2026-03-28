@@ -4,7 +4,7 @@ import { loadSignalWeights } from '$lib/server/scoring/engine';
 import { recordAuditEvent } from '$lib/server/audit';
 
 export const POST = async ({ platform, locals }) => {
-  const db = platform.env.DB;
+  const db = locals.db;
 
   await resetSignalWeights(db);
   await resetAffinities(db);

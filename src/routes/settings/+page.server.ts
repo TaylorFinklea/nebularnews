@@ -116,7 +116,7 @@ import {
 
 export const load = async ({ platform, locals }) => {
   const userId = locals.user?.id ?? 'admin';
-  const db = platform.env.DB;
+  const db = locals.db;
   const featureLanes = await getFeatureModelLanes(db);
   const modelA = await getConfiguredModelA(db, platform.env);
   const modelB = await getConfiguredModelB(db, platform.env);

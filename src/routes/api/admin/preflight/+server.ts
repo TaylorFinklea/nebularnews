@@ -17,11 +17,11 @@ const REQUIRED_SETTINGS = [
 
 export const GET = async (event) => {
   requireAdmin(event.locals.user);
-  const schemaVersion = await getSchemaVersion(event.platform.env.DB);
+  const schemaVersion = await getSchemaVersion(event.locals.db);
   const runtime = inspectRuntimeConfig(event.platform.env);
-  const ops = await getOpsSummary(event.platform.env.DB);
+  const ops = await getOpsSummary(event.locals.db);
   const settingRows = await dbAll<{ key: string }>(
-    event.platform.env.DB,
+    event.locals.db,
     `SELECT key
      FROM settings
      WHERE key IN (${REQUIRED_SETTINGS.map(() => '?').join(', ')})`,

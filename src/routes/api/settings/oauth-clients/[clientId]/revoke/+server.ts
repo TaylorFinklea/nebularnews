@@ -8,8 +8,8 @@ export const POST = async ({ params, platform, locals }) => {
     return json({ error: { message: 'clientId is required.' } }, { status: 400 });
   }
 
-  await revokeClientAccess(platform.env.DB, clientId);
-  await recordAuditEvent(platform.env.DB, {
+  await revokeClientAccess(locals.db, clientId);
+  await recordAuditEvent(locals.db, {
     actor: locals.user ? 'admin' : 'system',
     action: 'oauth.client.revoked',
     target: clientId,

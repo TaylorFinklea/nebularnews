@@ -12,8 +12,8 @@ export const POST = async ({ request, platform, locals }) => {
     return json({ error: 'Invalid provider' }, { status: 400 });
   }
 
-  const rotated = await rotateProviderKeyEncryption(platform.env.DB, platform.env, provider);
-  await recordAuditEvent(platform.env.DB, {
+  const rotated = await rotateProviderKeyEncryption(locals.db, platform.env, provider);
+  await recordAuditEvent(locals.db, {
     actor: 'admin',
     action: 'keys.rotate',
     target: provider ?? 'all',

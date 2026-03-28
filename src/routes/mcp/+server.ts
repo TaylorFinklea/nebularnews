@@ -96,12 +96,12 @@ const isLikelyMcpJsonRpc = async (request: Request) => {
 export const OPTIONS = async ({ request, platform }) =>
   withCors(new Response(null, { status: 204 }), request, platform.env, resolveMcpAudience(new URL(request.url), platform.env));
 
-export const GET = async ({ request, platform }) => {
+export const GET = async ({ request, platform, locals }) => {
   const startedAt = Date.now();
   const audience = resolveMcpAudience(new URL(request.url), platform.env);
   const auth =
     audience === 'public'
-      ? await resolvePublicMcpAuth(request, platform.env, platform.env.DB)
+      ? await resolvePublicMcpAuth(request, platform.env, locals.db)
       : await resolveInternalMcpAuth(request, platform.env);
   if (!auth.ok) {
     logInfo('mcp.get.unauthorized', { duration_ms: Date.now() - startedAt, reason: auth.reason, audience });
@@ -136,7 +136,7 @@ export const POST = async ({ request, platform, locals }) => {
   const audience = resolveMcpAudience(new URL(request.url), platform.env);
   const auth =
     audience === 'public'
-      ? await resolvePublicMcpAuth(request, platform.env, platform.env.DB)
+      ? await resolvePublicMcpAuth(request, platform.env, locals.db)
       : await resolveInternalMcpAuth(request, platform.env);
   if (!auth.ok) {
     if (await isLikelyMcpJsonRpc(request)) {
@@ -179,7 +179,7 @@ export const POST = async ({ request, platform, locals }) => {
   }
 
   const handlers = createMcpHandlers({
-    db: platform.env.DB,
+    db: locals.db,
     env: platform.env,
     context: platform.context
   });

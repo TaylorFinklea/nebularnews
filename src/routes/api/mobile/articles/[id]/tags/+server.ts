@@ -30,18 +30,18 @@ const normalizeTokenList = (value: unknown) =>
     ? value.map((entry) => String(entry ?? '').trim()).filter(Boolean)
     : [];
 
-export const GET = async ({ params, request, platform }) => {
-  const { user } = await requireMobileAccess(request, platform.env, platform.env.DB, 'app:read');
-  const article = await dbGet<{ id: string }>(platform.env.DB, 'SELECT id FROM articles WHERE id = ? LIMIT 1', [params.id]);
+export const GET = async ({ params, request, platform, locals }) => {
+  const { user } = await requireMobileAccess(request, platform.env, locals.db, 'app:read');
+  const article = await dbGet<{ id: string }>(locals.db, 'SELECT id FROM articles WHERE id = ? LIMIT 1', [params.id]);
   if (!article) return json({ error: 'Article not found' }, { status: 404 });
-  const tags = await listTagsForArticle(platform.env.DB, user.id, params.id);
+  const tags = await listTagsForArticle(locals.db, user.id, params.id);
   return json({ tags });
 };
 
-export const POST = async ({ params, request, platform }) => {
-  const { user } = await requireMobileAccess(request, platform.env, platform.env.DB, 'app:write');
+export const POST = async ({ params, request, platform, locals }) => {
+  const { user } = await requireMobileAccess(request, platform.env, locals.db, 'app:write');
 
-  const article = await dbGet<{ id: string }>(platform.env.DB, 'SELECT id FROM articles WHERE id = ? LIMIT 1', [params.id]);
+  const article = await dbGet<{ id: string }>(locals.db, 'SELECT id FROM articles WHERE id = ? LIMIT 1', [params.id]);
   if (!article) return json({ error: 'Article not found' }, { status: 404 });
 
   const body = await request.json().catch(() => ({}));
@@ -52,29 +52,29 @@ export const POST = async ({ params, request, platform }) => {
   const removeTagIds = normalizeTokenList(body?.removeTagIds ?? body?.remove_tag_ids);
   const replace = (body?.replace === true);
 
-  const addByIdRows = await resolveTagsByTokens(platform.env.DB, addTagIds);
+  const addByIdRows = await resolveTagsByTokens(locals.db, addTagIds);
   const addIds = new Set(addByIdRows.map((row) => row.id));
 
   for (const name of addTagNames) {
-    const tag = await ensureTagByName(platform.env.DB, name);
+    const tag = await ensureTagByName(locals.db, name);
     addIds.add(tag.id);
   }
 
-  const removeRows = await resolveTagsByTokens(platform.env.DB, removeTagIds);
+  const removeRows = await resolveTagsByTokens(locals.db, removeTagIds);
   const removeIds = new Set(removeRows.map((row) => row.id));
-  const beforeState = serializeArticleTagLinkState(await listTagLinksForArticle(platform.env.DB, user.id, params.id));
+  const beforeState = serializeArticleTagLinkState(await listTagLinksForArticle(locals.db, user.id, params.id));
 
   if (replace) {
-    const current = await listTagsForArticle(platform.env.DB, user.id, params.id);
+    const current = await listTagsForArticle(locals.db, user.id, params.id);
     for (const tag of current) {
       if (!addIds.has(tag.id)) {
-        await detachTagFromArticle(platform.env.DB, user.id, params.id, tag.id);
+        await detachTagFromArticle(locals.db, user.id, params.id, tag.id);
       }
     }
   }
 
   for (const tagId of addIds) {
-    await attachTagToArticle(platform.env.DB, user.id, {
+    await attachTagToArticle(locals.db, user.id, {
       articleId: params.id,
       tagId,
       source,
@@ -83,15 +83,15 @@ export const POST = async ({ params, request, platform }) => {
   }
 
   for (const tagId of removeIds) {
-    await detachTagFromArticle(platform.env.DB, user.id, params.id, tagId);
+    await detachTagFromArticle(locals.db, user.id, params.id, tagId);
   }
 
-  const afterState = serializeArticleTagLinkState(await listTagLinksForArticle(platform.env.DB, user.id, params.id));
+  const afterState = serializeArticleTagLinkState(await listTagLinksForArticle(locals.db, user.id, params.id));
   if (beforeState !== afterState) {
-    await enqueueScoreJob(platform.env.DB, params.id);
+    await enqueueScoreJob(locals.db, params.id);
   }
 
-  const tags = await listTagsForArticle(platform.env.DB, user.id, params.id);
+  const tags = await listTagsForArticle(locals.db, user.id, params.id);
   return json({
     article_id: params.id,
     tags,

@@ -13,7 +13,7 @@ export const GET = async ({ params, platform, locals }) => {
     created_at: number;
     updated_at: number;
     last_login_at: number | null;
-  }>(platform.env.DB, 'SELECT * FROM users WHERE id = ?', [params.id]);
+  }>(locals.db, 'SELECT * FROM users WHERE id = ?', [params.id]);
 
   if (!user) return json({ error: 'User not found' }, { status: 404 });
   return json({ user });
@@ -49,12 +49,12 @@ export const PATCH = async ({ params, request, platform, locals }) => {
   values.push(params.id);
 
   await dbRun(
-    platform.env.DB,
+    locals.db,
     `UPDATE users SET ${updates.join(', ')} WHERE id = ?`,
     values
   );
 
-  const user = await dbGet(platform.env.DB, 'SELECT * FROM users WHERE id = ?', [params.id]);
+  const user = await dbGet(locals.db, 'SELECT * FROM users WHERE id = ?', [params.id]);
   return json({ user });
 };
 
@@ -72,6 +72,6 @@ export const DELETE = async ({ params, platform, locals }) => {
   }
 
   // Delete user — CASCADE will clean up subscriptions, read state, reactions, etc.
-  await dbRun(platform.env.DB, 'DELETE FROM users WHERE id = ?', [params.id]);
+  await dbRun(locals.db, 'DELETE FROM users WHERE id = ?', [params.id]);
   return json({ ok: true });
 };

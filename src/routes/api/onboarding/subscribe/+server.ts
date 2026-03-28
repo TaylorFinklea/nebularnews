@@ -8,7 +8,7 @@ export const POST = async ({ request, platform, locals }) => {
   if (!locals.user) return json({ error: 'Unauthorized' }, { status: 401 });
 
   try {
-    const db = platform.env.DB;
+    const db = locals.db;
 
     const body = await request.json().catch(() => ({}));
     const feedUrls: string[] = body?.feedUrls ?? body?.feed_urls ?? [];

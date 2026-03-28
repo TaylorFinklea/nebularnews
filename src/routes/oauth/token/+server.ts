@@ -57,9 +57,9 @@ export const POST = async ({ request, platform, locals }) => {
   try {
     const payload =
       grantType === 'authorization_code'
-        ? await exchangeAuthorizationCodeGrant(platform.env.DB, platform.env, audience, form)
+        ? await exchangeAuthorizationCodeGrant(locals.db, platform.env, audience, form)
         : grantType === 'refresh_token'
-          ? await exchangeRefreshTokenGrant(platform.env.DB, platform.env, audience, form)
+          ? await exchangeRefreshTokenGrant(locals.db, platform.env, audience, form)
           : null;
     if (!payload) {
       return withAudienceOauthCors(
@@ -72,7 +72,7 @@ export const POST = async ({ request, platform, locals }) => {
       );
     }
 
-    await recordAuditEvent(platform.env.DB, {
+    await recordAuditEvent(locals.db, {
       actor: locals.user ? 'admin' : 'system',
       action: `oauth.token.${grantType || 'unknown'}.issued`,
       target: form.get('client_id')?.trim() || null,
@@ -87,7 +87,7 @@ export const POST = async ({ request, platform, locals }) => {
       : err instanceof Error
         ? err.message
         : 'Token request failed.';
-    await recordAuditEvent(platform.env.DB, {
+    await recordAuditEvent(locals.db, {
       actor: locals.user ? 'admin' : 'system',
       action: 'oauth.token.failed',
       target: form.get('client_id')?.trim() || null,

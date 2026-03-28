@@ -6,7 +6,7 @@ import { recordAuditEvent } from '$lib/server/audit';
 import { logInfo, logWarn } from '$lib/server/log';
 import { ensureSchema } from '$lib/server/migrations';
 
-export const GET = async ({ url, platform, cookies }) => {
+export const GET = async ({ url, platform, locals, cookies }) => {
   // OAuth error (user cancelled or Apple returned an error)
   const oauthError = url.searchParams.get('error');
   if (oauthError) {
@@ -15,7 +15,7 @@ export const GET = async ({ url, platform, cookies }) => {
     throw redirect(303, `/login?error=${encodeURIComponent(desc)}`);
   }
 
-  await ensureSchema(platform.env.DB);
+  await ensureSchema(locals.db);
 
   const code = url.searchParams.get('code');
   const tokenHash = url.searchParams.get('token_hash') ?? '';
@@ -56,7 +56,7 @@ export const GET = async ({ url, platform, cookies }) => {
   }
 
   // Create or find the local user
-  const user = await getOrCreateLocalUser(platform.env.DB, {
+  const user = await getOrCreateLocalUser(locals.db, {
     externalId: authUser.id,
     email: authUser.email,
     authProvider
@@ -80,7 +80,7 @@ export const GET = async ({ url, platform, cookies }) => {
     maxAge: 60 * 60 * 24 * 14
   });
 
-  await recordAuditEvent(platform.env.DB, {
+  await recordAuditEvent(locals.db, {
     actor: user.role === 'admin' ? 'admin' : 'system',
     action: `auth.${authProvider}.login.success`,
     target: authUser.email

@@ -15,13 +15,13 @@ import { assertPublicOauthRequest } from '$lib/server/oauth/http';
 export const load = async ({ url, platform, locals }) => {
   assertPublicOauthRequest(url, platform.env);
 
-  const { client, request } = await parseAuthorizeRequest(url, platform.env.DB, platform.env);
+  const { client, request } = await parseAuthorizeRequest(url, locals.db, platform.env);
   if (!locals.user) {
     throw redirect(303, buildLoginRedirectForAuthorize(url));
   }
 
-  if (await shouldAutoApproveConsent(platform.env.DB, request, locals.user.id)) {
-    const destination = await approveAuthorizeRequest(platform.env.DB, platform.env, request, locals.user.id);
+  if (await shouldAutoApproveConsent(locals.db, request, locals.user.id)) {
+    const destination = await approveAuthorizeRequest(locals.db, platform.env, request, locals.user.id);
     throw redirect(303, destination);
   }
 
@@ -68,14 +68,14 @@ export const actions = {
 
     const authorizeUrl = new URL(url);
     authorizeUrl.search = params.toString();
-    const { request: authorizeRequest } = await parseAuthorizeRequest(authorizeUrl, platform.env.DB, platform.env);
+    const { request: authorizeRequest } = await parseAuthorizeRequest(authorizeUrl, locals.db, platform.env);
     const decision = String(formData.get('decision') ?? '').trim().toLowerCase();
     if (!decision) {
       throw error(400, 'OAuth consent decision is required.');
     }
 
     if (decision === 'deny') {
-      await recordAuditEvent(platform.env.DB, {
+      await recordAuditEvent(locals.db, {
         actor: 'admin',
         action: 'oauth.authorize.denied',
         target: authorizeRequest.clientId,
@@ -98,8 +98,8 @@ export const actions = {
       throw error(400, 'OAuth consent decision is invalid.');
     }
 
-    const destination = await approveAuthorizeRequest(platform.env.DB, platform.env, authorizeRequest, locals.user.id);
-    await recordAuditEvent(platform.env.DB, {
+    const destination = await approveAuthorizeRequest(locals.db, platform.env, authorizeRequest, locals.user.id);
+    await recordAuditEvent(locals.db, {
       actor: 'admin',
       action: 'oauth.authorize.approved',
       target: authorizeRequest.clientId,

@@ -7,7 +7,7 @@ import {
 } from '$lib/server/news-brief';
 
 export const POST = async ({ platform, locals }) => {
-  const db = platform.env.DB;
+  const db = locals.db;
   const userId = locals.user?.id ?? 'admin';
   const generationContext = await resolveNewsBriefGenerationContext(db, platform.env, userId);
 

@@ -48,10 +48,10 @@ export const POST = async (event) => {
   const reasonCodes = canonicalizeReasonCodesForReaction(value, typedReasonCodes);
 
   let feedId: string | null = null;
-  if (feedIdInput && (await isFeedLinkedToArticle(platform.env.DB, articleId, feedIdInput))) {
+  if (feedIdInput && (await isFeedLinkedToArticle(locals.db, articleId, feedIdInput))) {
     feedId = feedIdInput;
   } else {
-    feedId = (await getPreferredSourceForArticle(platform.env.DB, articleId))?.feedId ?? null;
+    feedId = (await getPreferredSourceForArticle(locals.db, articleId))?.feedId ?? null;
   }
 
   if (!feedId) {
@@ -59,7 +59,7 @@ export const POST = async (event) => {
   }
 
   const existingReaction = await dbGet<{ value: number | null }>(
-    platform.env.DB,
+    locals.db,
     'SELECT value FROM article_reactions WHERE article_id = ? LIMIT 1',
     [articleId]
   );
@@ -67,7 +67,7 @@ export const POST = async (event) => {
   const shouldApplyLearning = ![1, -1].includes(previousValue) || previousValue !== value;
   const timestamp = now();
   await dbRun(
-    platform.env.DB,
+    locals.db,
     `INSERT INTO article_reactions (id, article_id, feed_id, value, created_at)
      VALUES (?, ?, ?, ?, ?)
      ON CONFLICT(article_id) DO UPDATE SET
@@ -76,11 +76,11 @@ export const POST = async (event) => {
        created_at = excluded.created_at`,
     [nanoid(), articleId, feedId, value, timestamp]
   );
-  await replaceReactionReasonCodes(platform.env.DB, userId, articleId, reasonCodes, timestamp);
+  await replaceReactionReasonCodes(locals.db, userId, articleId, reasonCodes, timestamp);
 
   if (shouldApplyLearning) {
     // Update scoring weights and affinities based on reaction changes.
-    processReactionLearning(platform.env.DB, articleId, value as 1 | -1, reasonCodes).catch(() => {
+    processReactionLearning(locals.db, articleId, value as 1 | -1, reasonCodes).catch(() => {
       // Learning updates are non-critical — don't block the response
     });
   }

@@ -8,8 +8,8 @@ export const GET = async (event) => {
     if (!runtime.ok && runtime.stage === 'production') {
       return apiError(event, 503, 'schema_not_ready', `Runtime config invalid: ${runtime.errors.join(' ')}`);
     }
-    const version = await assertSchemaVersion(event.platform.env.DB);
-    await event.platform.env.DB.prepare('SELECT 1 as ok').first();
+    const version = await assertSchemaVersion(event.locals.db);
+    await event.locals.db.prepare('SELECT 1 as ok').first();
     return apiOk(event, {
       status: 'ready',
       schema_version: version,

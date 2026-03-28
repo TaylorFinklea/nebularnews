@@ -2,7 +2,7 @@ import { json } from '@sveltejs/kit';
 import { enqueueArticleJob } from '$lib/server/job-queue';
 import { runArticleJobImmediately } from '$lib/server/jobs';
 
-export const POST = async ({ params, request, platform }) => {
+export const POST = async ({ params, request, platform, locals }) => {
   const body = await request.json().catch(() => ({}));
   const types = Array.isArray(body?.types) ? body.types : ['summarize', 'score'];
   const articleId = params.id;
@@ -26,15 +26,15 @@ export const POST = async ({ params, request, platform }) => {
     }
   }
   if (filtered.includes('score')) {
-    await enqueueArticleJob(platform.env.DB, 'score', articleId);
+    await enqueueArticleJob(locals.db, 'score', articleId);
     queued.push('score');
   }
   if (filtered.includes('key_points')) {
-    await enqueueArticleJob(platform.env.DB, 'key_points', articleId);
+    await enqueueArticleJob(locals.db, 'key_points', articleId);
     queued.push('key_points');
   }
   if (filtered.includes('auto_tag')) {
-    await enqueueArticleJob(platform.env.DB, 'auto_tag', articleId);
+    await enqueueArticleJob(locals.db, 'auto_tag', articleId);
     queued.push('auto_tag');
   }
 

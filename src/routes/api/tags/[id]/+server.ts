@@ -13,7 +13,7 @@ const normalizeColor = (value: unknown) => {
 export const PATCH = async ({ params, request, platform, locals }) => {
   requireAdmin(locals.user);
   const body = await request.json().catch(() => ({}));
-  const existing = await getTagById(platform.env.DB, params.id);
+  const existing = await getTagById(locals.db, params.id);
   if (!existing) return json({ error: 'Tag not found' }, { status: 404 });
 
   const color = normalizeColor(body?.color);
@@ -22,7 +22,7 @@ export const PATCH = async ({ params, request, platform, locals }) => {
   }
 
   try {
-    const updated = await updateTag(platform.env.DB, params.id, {
+    const updated = await updateTag(locals.db, params.id, {
       name: typeof body?.name === 'string' ? body.name : undefined,
       color,
       description: typeof body?.description === 'string' ? body.description.trim() || null : undefined
@@ -39,8 +39,8 @@ export const PATCH = async ({ params, request, platform, locals }) => {
 
 export const DELETE = async ({ params, platform, locals }) => {
   requireAdmin(locals.user);
-  const existing = await getTagById(platform.env.DB, params.id);
+  const existing = await getTagById(locals.db, params.id);
   if (!existing) return json({ error: 'Tag not found' }, { status: 404 });
-  await deleteTag(platform.env.DB, params.id);
+  await deleteTag(locals.db, params.id);
   return json({ ok: true });
 };

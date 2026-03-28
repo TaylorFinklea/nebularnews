@@ -61,7 +61,7 @@ export const load = async ({ platform, request, depends, setHeaders, locals }) =
   const startedAt = Date.now();
   depends('app:dashboard');
 
-  const db = platform.env.DB;
+  const db = locals.db;
   const [queueConfig, feedStatus, newsBrief] = await Promise.all([
     getDashboardQueueConfig(db),
     getDashboardFeedStatus(db),

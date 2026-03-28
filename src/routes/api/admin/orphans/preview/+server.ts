@@ -9,7 +9,7 @@ import {
 
 export const GET = async (event) => {
   requireAdmin(event.locals.user);
-  const db = event.platform.env.DB;
+  const db = event.locals.db;
   const [orphanCount, sampleArticleIds] = await Promise.all([
     countOrphanArticles(db),
     listOrphanArticleIds(db, ORPHAN_PREVIEW_SAMPLE_SIZE)

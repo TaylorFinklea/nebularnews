@@ -18,7 +18,7 @@ export const POST = async ({ request, platform, locals, url }) => {
   });
 
   try {
-    const delayMs = await getThrottleRemainingMs(platform.env.DB, identifier);
+    const delayMs = await getThrottleRemainingMs(locals.db, identifier);
     if (delayMs > 0) {
       logWarn('auth.login.throttled', {
         request_id: requestId,
@@ -40,8 +40,8 @@ export const POST = async ({ request, platform, locals, url }) => {
 
     const valid = await verifyPassword(password, platform.env.ADMIN_PASSWORD_HASH);
     if (!valid) {
-      const throttled = await registerFailedLogin(platform.env.DB, identifier);
-      await recordAuditEvent(platform.env.DB, {
+      const throttled = await registerFailedLogin(locals.db, identifier);
+      await recordAuditEvent(locals.db, {
         actor: 'system',
         action: 'auth.login.failed',
         target: identifier,
@@ -64,8 +64,8 @@ export const POST = async ({ request, platform, locals, url }) => {
       return json({ error: 'Invalid password' }, { status: 401 });
     }
 
-    await clearLoginAttempts(platform.env.DB, identifier);
-    await recordAuditEvent(platform.env.DB, {
+    await clearLoginAttempts(locals.db, identifier);
+    await recordAuditEvent(locals.db, {
       actor: 'admin',
       action: 'auth.login.success',
       target: identifier

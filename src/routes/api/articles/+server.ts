@@ -73,10 +73,10 @@ export const GET = async ({ url, platform, locals }) => {
         .filter(Boolean)
     )
   ];
-  const selectedTags = await resolveTagsByTokens(platform.env.DB, requestedTagTokens);
+  const selectedTags = await resolveTagsByTokens(locals.db, requestedTagTokens);
   const selectedTagIds = selectedTags.map((tag) => tag.id);
 
-  const result = await listArticlesWithFilters(platform.env.DB, userId, {
+  const result = await listArticlesWithFilters(locals.db, userId, {
     query,
     limit,
     offset,

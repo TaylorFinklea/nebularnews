@@ -26,8 +26,8 @@ export const POST = async ({ request, platform, locals }) => {
   }
 
   try {
-    const registered = await registerDynamicClient(platform.env.DB, platform.env, body);
-    await recordAuditEvent(platform.env.DB, {
+    const registered = await registerDynamicClient(locals.db, platform.env, body);
+    await recordAuditEvent(locals.db, {
       actor: locals.user ? 'admin' : 'system',
       action: 'oauth.client.registered',
       target: registered.client_id,

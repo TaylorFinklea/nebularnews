@@ -3,9 +3,9 @@ import { requireAdmin } from '$lib/server/auth';
 import { nanoid } from 'nanoid';
 import { dbAll, dbRun, now } from '$lib/server/db';
 
-export const GET = async ({ platform }) => {
+export const GET = async ({ platform, locals }) => {
   const feeds = await dbAll(
-    platform.env.DB,
+    locals.db,
     'SELECT id, url, title, site_url, last_polled_at, next_poll_at, error_count, disabled FROM feeds ORDER BY id ASC'
   );
   return json({ feeds });
@@ -25,7 +25,7 @@ export const POST = async ({ request, platform, locals }) => {
 
   const id = nanoid();
   await dbRun(
-    platform.env.DB,
+    locals.db,
     'INSERT OR IGNORE INTO feeds (id, url, last_polled_at, next_poll_at) VALUES (?, ?, ?, ?)',
     [id, url, null, now()]
   );

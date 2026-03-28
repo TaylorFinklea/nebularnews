@@ -4,10 +4,10 @@ import { requireMobileAccess } from '$lib/server/mobile/auth';
 import { getDashboardQueueConfig } from '$lib/server/settings';
 import { getDashboardNewsBrief } from '$lib/server/news-brief';
 
-export const GET = async ({ request, platform }) => {
-  const { user } = await requireMobileAccess(request, platform.env, platform.env.DB, 'app:read');
+export const GET = async ({ request, platform, locals }) => {
+  const { user } = await requireMobileAccess(request, platform.env, locals.db, 'app:read');
 
-  const db = platform.env.DB;
+  const db = locals.db;
   const referenceAt = Date.now();
   const queueConfig = await getDashboardQueueConfig(db);
   const [feedStatus, newsBrief, readingQueue, momentum] = await Promise.all([

@@ -9,10 +9,10 @@ const normalizeColor = (value: unknown) => {
   return /^#[0-9a-fA-F]{6}$/.test(trimmed) ? trimmed.toLowerCase() : null;
 };
 
-export const GET = async ({ url, platform }) => {
+export const GET = async ({ url, platform, locals }) => {
   const q = url.searchParams.get('q')?.trim() ?? '';
   const limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit') ?? 100)));
-  const tags = await listTags(platform.env.DB, { q, limit });
+  const tags = await listTags(locals.db, { q, limit });
   return json({ tags });
 };
 
@@ -27,6 +27,6 @@ export const POST = async ({ request, platform, locals }) => {
     return json({ error: 'Tag name is required' }, { status: 400 });
   }
 
-  const tag = await createTag(platform.env.DB, { name, color, description });
+  const tag = await createTag(locals.db, { name, color, description });
   return json({ ok: true, tag });
 };

@@ -67,8 +67,8 @@ import {
 } from '$lib/server/settings';
 import { recordAuditEvent } from '$lib/server/audit';
 
-export const GET = async ({ platform }) => {
-  const db = platform.env.DB;
+export const GET = async ({ platform, locals }) => {
+  const db = locals.db;
   const featureLanes = await getFeatureModelLanes(db);
   const modelA = await getConfiguredModelA(db, platform.env);
   const modelB = await getConfiguredModelB(db, platform.env);
@@ -315,7 +315,7 @@ export const POST = async ({ request, platform, locals }) => {
     return json({ error: { message: 'News Brief evening time must use HH:mm format.' } }, { status: 400 });
   }
   if (nextMorningTime !== null || nextEveningTime !== null) {
-    const currentNewsBrief = await getNewsBriefConfig(platform.env.DB);
+    const currentNewsBrief = await getNewsBriefConfig(locals.db);
     const morningTime = nextMorningTime ?? currentNewsBrief.morningTime;
     const eveningTime = nextEveningTime ?? currentNewsBrief.eveningTime;
     if (morningTime >= eveningTime) {
@@ -388,16 +388,16 @@ export const POST = async ({ request, platform, locals }) => {
     entries.push(['browser_scrape_api_url', body.browserScrapeApiUrl.trim()]);
   }
   if (typeof body?.browserScrapeApiKey === 'string' && body.browserScrapeApiKey.trim()) {
-    await setBrowserScrapeKey(platform.env.DB, platform.env, body.browserScrapeApiKey.trim());
+    await setBrowserScrapeKey(locals.db, platform.env, body.browserScrapeApiKey.trim());
   } else if (body?.browserScrapeApiKey === null) {
-    await deleteBrowserScrapeKey(platform.env.DB);
+    await deleteBrowserScrapeKey(locals.db);
   }
 
   for (const [key, value] of entries) {
-    await setSetting(platform.env.DB, key, value);
+    await setSetting(locals.db, key, value);
   }
 
-  await recordAuditEvent(platform.env.DB, {
+  await recordAuditEvent(locals.db, {
     actor: 'admin',
     action: 'settings.update',
     requestId: locals.requestId,

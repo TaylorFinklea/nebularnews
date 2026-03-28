@@ -1,7 +1,7 @@
 import { json } from '@sveltejs/kit';
 import { dbAll } from '$lib/server/db';
 
-export const GET = async ({ params, platform }) => {
+export const GET = async ({ params, platform, locals }) => {
   const runs = await dbAll<{
     id: string;
     attempt: number;
@@ -13,7 +13,7 @@ export const GET = async ({ params, platform }) => {
     started_at: number;
     finished_at: number | null;
   }>(
-    platform.env.DB,
+    locals.db,
     `SELECT
       id,
       attempt,

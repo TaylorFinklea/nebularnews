@@ -50,9 +50,9 @@ const loadDeletePreview = async (db: D1Database, feedId: string) => {
   };
 };
 
-export const GET = async ({ params, platform }) => {
+export const GET = async ({ params, platform, locals }) => {
   const { id } = params;
-  const preview = await loadDeletePreview(platform.env.DB, id);
+  const preview = await loadDeletePreview(locals.db, id);
   if (!preview) return json({ error: 'Feed not found' }, { status: 404 });
   return json(preview);
 };
@@ -60,10 +60,10 @@ export const GET = async ({ params, platform }) => {
 export const DELETE = async ({ params, platform, locals }) => {
   requireAdmin(locals.user);
   const { id } = params;
-  const preview = await loadDeletePreview(platform.env.DB, id);
+  const preview = await loadDeletePreview(locals.db, id);
   if (!preview) return json({ error: 'Feed not found' }, { status: 404 });
 
-  await dbBatch(platform.env.DB, [
+  await dbBatch(locals.db, [
     {
       sql: `DELETE FROM article_search
             WHERE article_id IN (${deletableArticlesSelectionSql})`,
@@ -86,7 +86,7 @@ export const DELETE = async ({ params, platform, locals }) => {
   ]);
 
   await dbRun(
-    platform.env.DB,
+    locals.db,
     `DELETE FROM article_search
      WHERE article_id NOT IN (SELECT id FROM articles)`
   );

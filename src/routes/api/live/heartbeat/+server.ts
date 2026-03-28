@@ -8,7 +8,7 @@ export const GET = async (event) => {
   const startedAt = Date.now();
   let data: LiveHeartbeatPayload;
   try {
-    data = await getLiveHeartbeat(event.platform.env.DB, event.request.headers.get('cookie'), {
+    data = await getLiveHeartbeat(event.locals.db, event.request.headers.get('cookie'), {
       requestId: event.locals.requestId,
       budgetMs: HEARTBEAT_ROUTE_BUDGET_MS,
       startedAt

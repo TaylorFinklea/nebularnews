@@ -17,7 +17,7 @@ const collectOutlines = (node: any, urls: Set<string>) => {
   }
 };
 
-export const POST = async ({ request, platform }) => {
+export const POST = async ({ request, platform, locals }) => {
   const body = await request.json();
   const opml = body?.opml;
   if (!opml) return json({ error: 'Missing opml' }, { status: 400 });
@@ -34,7 +34,7 @@ export const POST = async ({ request, platform }) => {
       continue;
     }
     await dbRun(
-      platform.env.DB,
+      locals.db,
       'INSERT OR IGNORE INTO feeds (id, url, last_polled_at, next_poll_at) VALUES (?, ?, ?, ?)',
       [nanoid(), url, null, now()]
     );

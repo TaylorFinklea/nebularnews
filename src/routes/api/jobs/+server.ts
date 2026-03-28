@@ -34,11 +34,11 @@ const validActions = new Set([
 const noStoreHeaders = { 'cache-control': 'no-store' };
 
 export const GET = async (event) => {
-  const { url, platform } = event;
+  const { url, platform, locals } = event;
   const status = normalizeJobFilter(url.searchParams.get('status'));
   const limit = Number(url.searchParams.get('limit') ?? 100);
-  const jobs = await listJobs(platform.env.DB, { status, limit });
-  const counts = await getJobCounts(platform.env.DB);
+  const jobs = await listJobs(locals.db, { status, limit });
+  const counts = await getJobCounts(locals.db);
   return apiOkWithAliases(
     event,
     {
@@ -52,7 +52,7 @@ export const GET = async (event) => {
 };
 
 export const POST = async (event) => {
-  const { request, platform } = event;
+  const { request, platform, locals } = event;
   const body = await request.json().catch(() => ({}));
   const action = typeof body?.action === 'string' ? body.action : '';
   if (!validActions.has(action)) {
@@ -60,7 +60,7 @@ export const POST = async (event) => {
   }
 
   const jobId = typeof body?.jobId === 'string' ? body.jobId.trim() : '';
-  const db = platform.env.DB;
+  const db = locals.db;
 
   if (action === 'run_queue') {
     const cycles = clampQueueCycles(body?.cycles ?? 1);

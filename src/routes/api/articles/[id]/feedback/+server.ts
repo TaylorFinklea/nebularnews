@@ -14,21 +14,21 @@ export const POST = async ({ params, request, platform, locals }) => {
   if (!rating || rating < 1 || rating > 5) return json({ error: 'Invalid rating' }, { status: 400 });
 
   let feedId: string | null = null;
-  if (feedIdInput && (await isFeedLinkedToArticle(platform.env.DB, id, feedIdInput))) {
+  if (feedIdInput && (await isFeedLinkedToArticle(locals.db, id, feedIdInput))) {
     feedId = feedIdInput;
   } else {
-    feedId = (await getPreferredSourceForArticle(platform.env.DB, id))?.feedId ?? null;
+    feedId = (await getPreferredSourceForArticle(locals.db, id))?.feedId ?? null;
   }
 
   await dbRun(
-    platform.env.DB,
+    locals.db,
     'INSERT INTO article_feedback (id, article_id, feed_id, rating, comment, created_at) VALUES (?, ?, ?, ?, ?, ?)',
     [nanoid(), id, feedId, rating, comment, now()]
   );
 
   const timestamp = now();
   await dbRun(
-    platform.env.DB,
+    locals.db,
     `INSERT INTO article_score_overrides (article_id, score, comment, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?)
      ON CONFLICT(article_id) DO UPDATE SET
@@ -39,7 +39,7 @@ export const POST = async ({ params, request, platform, locals }) => {
   );
 
   await dbRun(
-    platform.env.DB,
+    locals.db,
     `INSERT INTO jobs (id, type, article_id, status, attempts, priority, run_after, last_error, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
      ON CONFLICT(type, article_id) DO UPDATE SET
@@ -58,7 +58,7 @@ export const POST = async ({ params, request, platform, locals }) => {
   );
 
   // Update scoring weights based on feedback rating
-  processFeedbackLearning(platform.env.DB, id, rating).catch(() => {
+  processFeedbackLearning(locals.db, id, rating).catch(() => {
     // Learning updates are non-critical — don't block the response
   });
 

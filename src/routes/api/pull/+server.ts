@@ -3,9 +3,9 @@ import { recordAuditEvent } from '$lib/server/audit';
 import { apiError, apiOkWithAliases } from '$lib/server/api';
 
 export const GET = async (event) => {
-  const { platform, url } = event;
+  const { platform, url, locals } = event;
   const runId = url.searchParams.get('run_id')?.trim() || null;
-  const state = await getManualPullState(platform.env.DB, runId);
+  const state = await getManualPullState(locals.db, runId);
   const data = {
     run_id: state.runId,
     status: state.status,
@@ -37,7 +37,7 @@ export const POST = async (event) => {
     : 1;
 
   try {
-    const started = await startManualPull(platform.env.DB, {
+    const started = await startManualPull(locals.db, {
       cycles,
       trigger: 'api',
       requestId: locals.requestId
@@ -48,7 +48,7 @@ export const POST = async (event) => {
       });
     }
 
-    await recordAuditEvent(platform.env.DB, {
+    await recordAuditEvent(locals.db, {
       actor: 'admin',
       action: 'pull.trigger',
       target: started.runId,

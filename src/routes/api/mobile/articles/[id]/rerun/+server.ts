@@ -2,8 +2,8 @@ import { json } from '@sveltejs/kit';
 import { requireMobileAccess } from '$lib/server/mobile/auth';
 import { runArticleJobImmediately } from '$lib/server/jobs';
 
-export const POST = async ({ params, request, platform }) => {
-  const { user } = await requireMobileAccess(request, platform.env, platform.env.DB, 'app:write');
+export const POST = async ({ params, request, platform, locals }) => {
+  const { user } = await requireMobileAccess(request, platform.env, locals.db, 'app:write');
 
   const articleId = params.id;
 

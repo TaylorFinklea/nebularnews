@@ -2,11 +2,11 @@ import { listArticlesWithFilters, REACTION_VALUES, SCORE_VALUES } from '$lib/ser
 
 const PAGE_SIZE = 40;
 
-export const load = async ({ platform, url }) => {
+export const load = async ({ platform, locals, url }) => {
   const requestedPage = Math.max(1, Number(url.searchParams.get('page') ?? 1) || 1);
   const initialOffset = (requestedPage - 1) * PAGE_SIZE;
 
-  const firstPass = await listArticlesWithFilters(platform.env.DB, {
+  const firstPass = await listArticlesWithFilters(locals.db, {
     query: '',
     limit: PAGE_SIZE,
     offset: initialOffset,
@@ -26,7 +26,7 @@ export const load = async ({ platform, url }) => {
   const result =
     offset === initialOffset
       ? firstPass
-      : await listArticlesWithFilters(platform.env.DB, {
+      : await listArticlesWithFilters(locals.db, {
           query: '',
           limit: PAGE_SIZE,
           offset,

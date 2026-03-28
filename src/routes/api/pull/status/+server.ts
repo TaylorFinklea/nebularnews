@@ -8,7 +8,7 @@ export const GET = async ({ platform, url, locals }) => {
   const startedAt = Date.now();
   const runId = url.searchParams.get('run_id')?.trim() || null;
   try {
-    const state = await getManualPullState(platform.env.DB, runId);
+    const state = await getManualPullState(locals.db, runId);
     const durationMs = Date.now() - startedAt;
     const degraded = durationMs > PULL_STATUS_ROUTE_BUDGET_MS;
     logInfo('pull.status.completed', {

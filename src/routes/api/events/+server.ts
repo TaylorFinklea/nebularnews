@@ -13,8 +13,8 @@ const sseEvent = (event: string, data: unknown) => {
   return encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 };
 
-export const GET = async ({ platform, request }) => {
-  const db = platform.env.DB;
+export const GET = async ({ platform, locals, request }) => {
+  const db = locals.db;
   const eventsV2Enabled = isEventsV2Enabled(platform.env);
   if (!eventsV2Enabled) {
     return new Response(JSON.stringify({ error: 'Live events are disabled' }), {

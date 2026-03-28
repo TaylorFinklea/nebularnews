@@ -43,15 +43,15 @@ async function aggregateSettings(db: D1Database) {
   };
 }
 
-export const GET = async ({ request, platform }) => {
-  const { user } = await requireMobileAccess(request, platform.env, platform.env.DB, 'app:read');
+export const GET = async ({ request, platform, locals }) => {
+  const { user } = await requireMobileAccess(request, platform.env, locals.db, 'app:read');
   void user;
-  const settings = await aggregateSettings(platform.env.DB);
+  const settings = await aggregateSettings(locals.db);
   return json(settings);
 };
 
-export const PATCH = async ({ request, platform }) => {
-  const { user } = await requireMobileAccess(request, platform.env, platform.env.DB, 'app:write');
+export const PATCH = async ({ request, platform, locals }) => {
+  const { user } = await requireMobileAccess(request, platform.env, locals.db, 'app:write');
   void user;
   const body = await request.json().catch(() => ({}));
   const entries: [string, string][] = [];
@@ -115,7 +115,7 @@ export const PATCH = async ({ request, platform }) => {
     }
 
     if (nextMorningTime !== null || nextEveningTime !== null) {
-      const current = await getNewsBriefConfig(platform.env.DB);
+      const current = await getNewsBriefConfig(locals.db);
       const morningTime = nextMorningTime ?? current.morningTime;
       const eveningTime = nextEveningTime ?? current.eveningTime;
       if (morningTime >= eveningTime) {
@@ -144,9 +144,9 @@ export const PATCH = async ({ request, platform }) => {
   }
 
   for (const [key, value] of entries) {
-    await setSetting(platform.env.DB, key, value);
+    await setSetting(locals.db, key, value);
   }
 
-  const settings = await aggregateSettings(platform.env.DB);
+  const settings = await aggregateSettings(locals.db);
   return json(settings);
 };

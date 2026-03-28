@@ -12,10 +12,10 @@ import {
 
 const DAY_MS = 1000 * 60 * 60 * 24;
 
-export const GET = async ({ request, platform }) => {
-  const { user } = await requireMobileAccess(request, platform.env, platform.env.DB, 'app:read');
+export const GET = async ({ request, platform, locals }) => {
+  const { user } = await requireMobileAccess(request, platform.env, locals.db, 'app:read');
 
-  const db = platform.env.DB;
+  const db = locals.db;
   const referenceAt = Date.now();
   const queueConfig = await getDashboardQueueConfig(db);
 

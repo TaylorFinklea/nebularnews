@@ -47,7 +47,7 @@ const normalizeSort = (value: string | null): SortValue => {
 export const load = async ({ platform, url, setHeaders, locals }) => {
   const userId = locals.user?.id ?? 'admin';
   const startedAt = Date.now();
-  const defaultCardLayout = await getArticleCardLayout(platform.env.DB);
+  const defaultCardLayout = await getArticleCardLayout(locals.db);
   const query = url.searchParams.get('q')?.trim() ?? '';
   const sinceDays = (() => {
     const parsed = Number(url.searchParams.get('sinceDays') ?? '');
@@ -88,11 +88,11 @@ export const load = async ({ platform, url, setHeaders, locals }) => {
         .filter(Boolean)
     )
   ];
-  const selectedTags = await resolveTagsByTokens(platform.env.DB, requestedTagTokens);
+  const selectedTags = await resolveTagsByTokens(locals.db, requestedTagTokens);
   const selectedTagIds = selectedTags.map((tag) => tag.id);
 
   const initialOffset = (requestedPage - 1) * PAGE_SIZE;
-  const firstPass = await listArticlesWithFilters(platform.env.DB, userId, {
+  const firstPass = await listArticlesWithFilters(locals.db, userId, {
     query,
     limit: PAGE_SIZE,
     offset: initialOffset,
@@ -111,7 +111,7 @@ export const load = async ({ platform, url, setHeaders, locals }) => {
   const result =
     offset === initialOffset
       ? firstPass
-      : await listArticlesWithFilters(platform.env.DB, userId, {
+      : await listArticlesWithFilters(locals.db, userId, {
           query,
           limit: PAGE_SIZE,
           offset,
@@ -124,7 +124,7 @@ export const load = async ({ platform, url, setHeaders, locals }) => {
           groupedByPublishedAt: view === 'grouped'
         });
 
-  const availableTags = await listTags(platform.env.DB, { limit: 150 });
+  const availableTags = await listTags(locals.db, { limit: 150 });
 
   const payload = {
     articles: result.articles,

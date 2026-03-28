@@ -1,11 +1,11 @@
 import { dbAll } from '$lib/server/db';
 import { requireMobileAccess } from '$lib/server/mobile/auth';
 
-export const GET = async ({ request, platform }) => {
-  const { user } = await requireMobileAccess(request, platform.env, platform.env.DB, 'app:read');
+export const GET = async ({ request, platform, locals }) => {
+  const { user } = await requireMobileAccess(request, platform.env, locals.db, 'app:read');
 
   const feeds = await dbAll<{ title: string | null; url: string }>(
-    platform.env.DB,
+    locals.db,
     `SELECT f.title, f.url FROM feeds f
      WHERE EXISTS (
        SELECT 1 FROM user_feed_subscriptions ufs

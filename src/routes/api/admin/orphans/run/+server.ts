@@ -20,7 +20,7 @@ const parseBoolean = (value: unknown, fallback = false) => {
 
 export const POST = async (event) => {
   requireAdmin(event.locals.user);
-  const db = event.platform.env.DB;
+  const db = event.locals.db;
   try {
     const body = await event.request.json().catch(() => ({}));
     const limit = clampOrphanCleanupLimit(body?.limit, DEFAULT_MANUAL_ORPHAN_CLEANUP_LIMIT);

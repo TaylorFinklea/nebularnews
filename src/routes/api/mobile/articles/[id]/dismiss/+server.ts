@@ -2,13 +2,13 @@ import { json } from '@sveltejs/kit';
 import { dbRun, now } from '$lib/server/db';
 import { requireMobileAccess } from '$lib/server/mobile/auth';
 
-export const POST = async ({ params, request, platform }) => {
-  const { user } = await requireMobileAccess(request, platform.env, platform.env.DB, 'app:write');
+export const POST = async ({ params, request, platform, locals }) => {
+  const { user } = await requireMobileAccess(request, platform.env, locals.db, 'app:write');
 
   const mutatedAt = now();
 
   await dbRun(
-    platform.env.DB,
+    locals.db,
     `INSERT INTO article_read_state (user_id, article_id, is_read, updated_at)
      VALUES (?, ?, 1, ?)
      ON CONFLICT(user_id, article_id) DO UPDATE SET

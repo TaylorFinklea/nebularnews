@@ -19,7 +19,7 @@ const parseStringList = (value: string | null | undefined) => {
 
 export const load = async ({ params, platform, locals }) => {
   const userId = locals.user?.id ?? 'admin';
-  const db = platform.env.DB;
+  const db = locals.db;
   const safeLoad = async <T>(label: string, fallback: T, fn: () => Promise<T>) => {
     try {
       return await fn();

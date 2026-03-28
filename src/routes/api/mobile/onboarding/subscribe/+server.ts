@@ -5,10 +5,10 @@ import { startManualPull } from '$lib/server/manual-pull';
 import { dbGet, dbRun, now } from '$lib/server/db';
 import { logError, logInfo, summarizeError } from '$lib/server/log';
 
-export const POST = async ({ request, platform }) => {
+export const POST = async ({ request, platform, locals }) => {
   try {
-    const { user } = await requireMobileAccess(request, platform.env, platform.env.DB, 'app:write');
-    const db = platform.env.DB;
+    const { user } = await requireMobileAccess(request, platform.env, locals.db, 'app:write');
+    const db = locals.db;
 
     const body = await request.json().catch(() => ({}));
     const feedUrls: string[] = body?.feedUrls ?? body?.feed_urls ?? [];

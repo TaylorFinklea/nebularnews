@@ -3,7 +3,7 @@ import { dbAll } from '$lib/server/db';
 export const load = async ({ platform, locals }) => {
   const userId = locals.user?.id ?? 'admin';
   const feeds = await dbAll(
-    platform.env.DB,
+    locals.db,
     `SELECT
       f.id,
       f.url,
@@ -22,7 +22,7 @@ export const load = async ({ platform, locals }) => {
     ORDER BY COALESCE(f.title, f.url) ASC`
   );
   const lowestRatedFeeds = await dbAll(
-    platform.env.DB,
+    locals.db,
     `SELECT
       f.id,
       f.url,

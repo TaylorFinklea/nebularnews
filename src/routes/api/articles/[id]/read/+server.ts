@@ -11,7 +11,7 @@ export const POST = async (event) => {
   const mutatedAt = now();
 
   await dbRun(
-    platform.env.DB,
+    locals.db,
     `INSERT INTO article_read_state (user_id, article_id, is_read, updated_at)
      VALUES (?, ?, ?, ?)
      ON CONFLICT(user_id, article_id) DO UPDATE SET

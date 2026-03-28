@@ -2,8 +2,8 @@ import { json } from '@sveltejs/kit';
 import { startManualPull } from '$lib/server/manual-pull';
 import { requireMobileAccess } from '$lib/server/mobile/auth';
 
-export const POST = async ({ request, platform }) => {
-  const { user } = await requireMobileAccess(request, platform.env, platform.env.DB, 'app:write');
+export const POST = async ({ request, platform, locals }) => {
+  const { user } = await requireMobileAccess(request, platform.env, locals.db, 'app:write');
   void user;
 
   const body = await request.json().catch(() => ({}));
@@ -12,7 +12,7 @@ export const POST = async ({ request, platform }) => {
     ? Math.max(1, Math.min(10, Math.floor(requestedCycles)))
     : 1;
 
-  const result = await startManualPull(platform.env.DB, {
+  const result = await startManualPull(locals.db, {
     cycles,
     trigger: 'mobile',
     requestId: null

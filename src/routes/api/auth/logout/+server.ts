@@ -7,7 +7,7 @@ export const POST = async ({ request, platform, locals }) => {
   const secure = new URL(request.url).protocol === 'https:';
   const cookie = clearSessionCookie(secure);
   const csrf = clearCsrfCookie(secure);
-  await recordAuditEvent(platform.env.DB, {
+  await recordAuditEvent(locals.db, {
     actor: locals.user ? 'admin' : 'system',
     action: 'auth.logout',
     requestId: locals.requestId

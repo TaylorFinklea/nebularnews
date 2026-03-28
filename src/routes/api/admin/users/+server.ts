@@ -15,7 +15,7 @@ export const GET = async ({ platform, locals }) => {
     updated_at: number;
     last_login_at: number | null;
   }>(
-    platform.env.DB,
+    locals.db,
     `SELECT id, email, display_name, auth_provider, role, created_at, updated_at, last_login_at
      FROM users
      ORDER BY created_at DESC`

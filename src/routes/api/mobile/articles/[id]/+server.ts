@@ -5,12 +5,12 @@ import { getReactionForArticle } from '$lib/server/reactions';
 import { getPreferredSourceForArticle, listSourcesForArticle } from '$lib/server/sources';
 import { listTagSuggestionsForArticle, listTagsForArticle } from '$lib/server/tags';
 
-export const GET = async ({ params, request, platform }) => {
-  const { user } = await requireMobileAccess(request, platform.env, platform.env.DB, 'app:read');
+export const GET = async ({ params, request, platform, locals }) => {
+  const { user } = await requireMobileAccess(request, platform.env, locals.db, 'app:read');
 
   const { id } = params;
   const article = await dbGet(
-    platform.env.DB,
+    locals.db,
     `SELECT
       id,
       canonical_url,
@@ -31,17 +31,17 @@ export const GET = async ({ params, request, platform }) => {
   if (!article) return json({ error: 'Not found' }, { status: 404 });
 
   const summary = await dbGet(
-    platform.env.DB,
+    locals.db,
     'SELECT summary_text, provider, model, created_at FROM article_summaries WHERE article_id = ? ORDER BY created_at DESC LIMIT 1',
     [id]
   );
   const keyPoints = await dbGet(
-    platform.env.DB,
+    locals.db,
     'SELECT key_points_json, provider, model, created_at FROM article_key_points WHERE article_id = ? ORDER BY created_at DESC LIMIT 1',
     [id]
   );
   const scoreOverride = await dbGet<{ score: number; comment: string | null; updated_at: number }>(
-    platform.env.DB,
+    locals.db,
     'SELECT score, comment, updated_at FROM article_score_overrides WHERE article_id = ? AND user_id = ? LIMIT 1',
     [id, user.id]
   );
@@ -56,7 +56,7 @@ export const GET = async ({ params, request, platform }) => {
     preference_confidence: number | null;
     weighted_average: number | null;
   }>(
-    platform.env.DB,
+    locals.db,
     `SELECT
       score,
       label,
@@ -95,15 +95,15 @@ export const GET = async ({ params, request, platform }) => {
       : null;
 
   const feedback = await dbAll(
-    platform.env.DB,
+    locals.db,
     'SELECT rating, comment, created_at FROM article_feedback WHERE article_id = ? ORDER BY created_at DESC',
     [id]
   );
-  const reaction = await getReactionForArticle(platform.env.DB, user.id, id);
-  const preferredSource = await getPreferredSourceForArticle(platform.env.DB, id);
-  const sources = await listSourcesForArticle(platform.env.DB, id);
-  const tags = await listTagsForArticle(platform.env.DB, user.id, id);
-  const tagSuggestions = await listTagSuggestionsForArticle(platform.env.DB, user.id, id);
+  const reaction = await getReactionForArticle(locals.db, user.id, id);
+  const preferredSource = await getPreferredSourceForArticle(locals.db, id);
+  const sources = await listSourcesForArticle(locals.db, id);
+  const tags = await listTagsForArticle(locals.db, user.id, id);
+  const tagSuggestions = await listTagSuggestionsForArticle(locals.db, user.id, id);
 
   return json({
     article,

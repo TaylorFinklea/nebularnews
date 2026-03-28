@@ -7,8 +7,8 @@ export const DELETE = async ({ params, platform, locals }) => {
   requireAdmin(locals.user);
   const provider = params.provider;
   if (!['openai', 'anthropic'].includes(provider)) return json({ error: 'Invalid provider' }, { status: 400 });
-  await deleteProviderKey(platform.env.DB, provider as 'openai' | 'anthropic');
-  await recordAuditEvent(platform.env.DB, {
+  await deleteProviderKey(locals.db, provider as 'openai' | 'anthropic');
+  await recordAuditEvent(locals.db, {
     actor: 'admin',
     action: 'keys.delete',
     target: provider,

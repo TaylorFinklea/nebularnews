@@ -1,8 +1,8 @@
 import { dbAll } from '$lib/server/db';
 
-export const GET = async ({ platform }) => {
+export const GET = async ({ platform, locals }) => {
   const feeds = await dbAll<{ title: string | null; url: string }>(
-    platform.env.DB,
+    locals.db,
     'SELECT title, url FROM feeds ORDER BY title ASC'
   );
 

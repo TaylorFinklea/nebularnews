@@ -4,11 +4,11 @@ import { isEventsV2Enabled } from '$lib/server/flags';
 
 const RECENT_MISSING_LOOKBACK_HOURS = 72;
 
-export const load = async ({ platform, url, depends }) => {
+export const load = async ({ platform, locals, url, depends }) => {
   depends('app:jobs');
   const status = normalizeJobFilter(url.searchParams.get('status') ?? 'pending');
-  const jobs = await listJobs(platform.env.DB, { status, limit: 150 });
-  const counts = await getJobCounts(platform.env.DB);
+  const jobs = await listJobs(locals.db, { status, limit: 150 });
+  const counts = await getJobCounts(locals.db);
   const recentCutoff = Date.now() - RECENT_MISSING_LOOKBACK_HOURS * 60 * 60 * 1000;
   const recentMissing = await dbGet<{
     recent_articles: number | null;
@@ -16,7 +16,7 @@ export const load = async ({ platform, url, depends }) => {
     missing_auto_tags: number | null;
     missing_image_backfill: number | null;
   }>(
-    platform.env.DB,
+    locals.db,
     `WITH recent_articles AS (
        SELECT id, image_status
        FROM articles

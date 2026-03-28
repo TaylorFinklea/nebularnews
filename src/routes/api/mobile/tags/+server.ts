@@ -2,18 +2,18 @@ import { json } from '@sveltejs/kit';
 import { requireMobileAccess } from '$lib/server/mobile/auth';
 import { listTags, createTag } from '$lib/server/tags';
 
-export const GET = async ({ request, platform, url }) => {
-  const { user } = await requireMobileAccess(request, platform.env, platform.env.DB, 'app:read');
+export const GET = async ({ request, platform, locals, url }) => {
+  const { user } = await requireMobileAccess(request, platform.env, locals.db, 'app:read');
   void user;
   const q = url.searchParams.get('q') ?? undefined;
   const limitParam = url.searchParams.get('limit');
   const limit = limitParam ? Number(limitParam) : undefined;
-  const tags = await listTags(platform.env.DB, { q, limit });
+  const tags = await listTags(locals.db, { q, limit });
   return json({ tags });
 };
 
-export const POST = async ({ request, platform }) => {
-  const { user } = await requireMobileAccess(request, platform.env, platform.env.DB, 'app:write');
+export const POST = async ({ request, platform, locals }) => {
+  const { user } = await requireMobileAccess(request, platform.env, locals.db, 'app:write');
   void user;
   const body = await request.json().catch(() => ({}));
 
@@ -32,6 +32,6 @@ export const POST = async ({ request, platform }) => {
       ? String(body.description).trim() || undefined
       : undefined;
 
-  const tag = await createTag(platform.env.DB, { name, color, description });
+  const tag = await createTag(locals.db, { name, color, description });
   return json({ ok: true, tag });
 };

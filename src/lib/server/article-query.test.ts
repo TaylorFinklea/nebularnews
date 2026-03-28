@@ -51,8 +51,7 @@ describe('article-query', () => {
     });
 
     const [countSql, countParams] = [dbGetMock.mock.calls[0][1], dbGetMock.mock.calls[0][2]];
-    expect(countSql).toContain('JOIN article_search ON article_search.article_id = a.id');
-    expect(countSql).toContain('article_search MATCH ?');
+    expect(countSql).toContain("a.search_vector @@ plainto_tsquery('english', ?)");
     expect(countSql).toContain("score_status FROM article_scores");
     expect(countSql).toContain("= 'insufficient_signal'");
     expect(countParams).toEqual(['puffin']);

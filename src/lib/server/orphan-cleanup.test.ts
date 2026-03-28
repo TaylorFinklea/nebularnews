@@ -109,7 +109,7 @@ describe('orphan cleanup helpers', () => {
       orphan_count_before: 3,
       targeted: 2,
       deleted_articles: 2,
-      deleted_article_search_rows: 2,
+      deleted_article_search_rows: 0,
       deleted_jobs_rows: 2,
       orphan_count_after: 1,
       has_more: true,

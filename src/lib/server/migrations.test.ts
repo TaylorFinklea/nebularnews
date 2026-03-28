@@ -11,6 +11,38 @@ type MockDb = {
   prepare(sql: string): any;
 };
 
+/** Track the most recently created mock db so the dbGet mock can route queries to its state. */
+let activeMockDb: MockDb | null = null;
+
+vi.mock('./db', () => ({
+  dbGet: vi.fn(async (db: any, sql: string, params: unknown[] = []) => {
+    const state: MockDbState | undefined = db?.__state ?? activeMockDb?.__state;
+    if (!state) return null;
+
+    // getSchemaVersion query
+    if (sql.includes('SELECT COALESCE(MAX(version), 0) as version FROM schema_migrations')) {
+      const applied = [...state.schemaVersions.keys()];
+      return { version: applied.length ? Math.max(...applied) : 0 };
+    }
+
+    // tableExists: information_schema.tables
+    if (sql.includes('information_schema.tables') && sql.includes('table_name')) {
+      const tableName = String(params[0] ?? '');
+      return state.tables.has(tableName) ? { name: tableName } : null;
+    }
+
+    // columnExists: information_schema.columns
+    if (sql.includes('information_schema.columns') && sql.includes('column_name')) {
+      const tableName = String(params[0] ?? '');
+      const columnName = String(params[1] ?? '');
+      const columns = state.tables.get(tableName) ?? [];
+      return columns.includes(columnName) ? { name: columnName } : null;
+    }
+
+    return null;
+  })
+}));
+
 const createMockDb = ({
   version,
   includeReactionReasons,
@@ -28,7 +60,7 @@ const createMockDb = ({
   addTable('schema_migrations', ['version', 'name', 'applied_at']);
   addTable('jobs', ['id', 'type', 'article_id', 'status', 'priority', 'locked_by', 'locked_at', 'lease_expires_at', 'created_at', 'updated_at']);
   addTable('provider_keys', ['id', 'provider', 'encrypted_key', 'key_version', 'created_at', 'last_used_at', 'status']);
-  addTable('articles', ['id', 'canonical_url', 'image_url', 'image_status', 'image_checked_at']);
+  addTable('articles', ['id', 'canonical_url', 'image_url', 'image_status', 'image_checked_at', 'search_vector']);
   addTable('pull_runs', ['id']);
   addTable('job_runs', ['id', 'job_id']);
   addTable('auth_attempts', ['id', 'identifier']);
@@ -150,7 +182,7 @@ const createMockDb = ({
     tagKeys: new Set()
   };
 
-  return {
+  const db: MockDb = {
     __state: state,
     prepare(sql: string) {
       let params: unknown[] = [];
@@ -163,11 +195,6 @@ const createMockDb = ({
           if (sql.includes('SELECT COALESCE(MAX(version), 0) as version FROM schema_migrations')) {
             const applied = [...state.schemaVersions.keys()];
             return { version: applied.length ? Math.max(...applied) : 0 } as T;
-          }
-
-          if (sql.includes("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1")) {
-            const tableName = String(params[0] ?? '');
-            return (state.tables.has(tableName) ? { name: tableName } : null) as T | null;
           }
 
           return null as T | null;
@@ -246,12 +273,16 @@ const createMockDb = ({
 
       return statement;
     }
-  } as MockDb as any;
+  };
+
+  activeMockDb = db;
+  return db;
 };
 
 describe('migrations', () => {
   beforeEach(() => {
     vi.resetModules();
+    activeMockDb = null;
   });
 
   it('applies schema v13 cleanly on a v8 database', async () => {
@@ -263,13 +294,13 @@ describe('migrations', () => {
     });
     const { ensureSchema, getSchemaVersion, assertSchemaVersion } = await import('./migrations');
 
-    await ensureSchema(db);
+    await ensureSchema(db as any);
 
-    expect(await getSchemaVersion(db)).toBe(17);
+    expect(await getSchemaVersion(db as any)).toBe(17);
     expect(db.__state.tables.has('article_search')).toBe(true);
     expect(db.__state.tables.has('news_brief_editions')).toBe(true);
     expect(db.__state.tables.has('oauth_clients')).toBe(true);
-    await expect(assertSchemaVersion(db)).resolves.toBe(17);
+    await expect(assertSchemaVersion(db as any)).resolves.toBe(17);
   });
 
   it('applies schema v13 cleanly on a v7 database', async () => {
@@ -281,13 +312,13 @@ describe('migrations', () => {
     });
     const { ensureSchema, getSchemaVersion, assertSchemaVersion } = await import('./migrations');
 
-    await ensureSchema(db);
+    await ensureSchema(db as any);
 
-    expect(await getSchemaVersion(db)).toBe(17);
+    expect(await getSchemaVersion(db as any)).toBe(17);
     expect(db.__state.tables.get('article_scores')).toEqual(
       expect.arrayContaining(['score_status', 'confidence', 'preference_confidence', 'weighted_average'])
     );
-    await expect(assertSchemaVersion(db)).resolves.toBe(17);
+    await expect(assertSchemaVersion(db as any)).resolves.toBe(17);
   });
 
   it('keeps reaction-reason migration compatible from v6', async () => {
@@ -299,11 +330,11 @@ describe('migrations', () => {
     });
     const { ensureSchema, getSchemaVersion, assertSchemaVersion } = await import('./migrations');
 
-    await ensureSchema(db);
+    await ensureSchema(db as any);
 
-    expect(await getSchemaVersion(db)).toBe(17);
+    expect(await getSchemaVersion(db as any)).toBe(17);
     expect(db.__state.tables.has('article_reaction_reasons')).toBe(true);
-    await expect(assertSchemaVersion(db)).resolves.toBe(17);
+    await expect(assertSchemaVersion(db as any)).resolves.toBe(17);
   });
 
   it('seeds the starter tag taxonomy exactly once', async () => {
@@ -315,8 +346,8 @@ describe('migrations', () => {
     });
     const { ensureSchema } = await import('./migrations');
 
-    await ensureSchema(db);
-    await ensureSchema(db);
+    await ensureSchema(db as any);
+    await ensureSchema(db as any);
 
     expect(db.__state.tagKeys.size).toBe(24);
     expect(db.__state.tagKeys.has('kubernetes')).toBe(true);
@@ -332,7 +363,7 @@ describe('migrations', () => {
     });
     const { assertSchemaVersion } = await import('./migrations');
 
-    await expect(assertSchemaVersion(db, 12)).rejects.toThrow('Missing required table: article_reaction_reasons');
+    await expect(assertSchemaVersion(db as any, 12)).rejects.toThrow('Missing required table: article_reaction_reasons');
   });
 
   it('fails schema assertion when score status columns are missing at v12', async () => {
@@ -349,20 +380,25 @@ describe('migrations', () => {
     );
     const { assertSchemaVersion } = await import('./migrations');
 
-    await expect(assertSchemaVersion(db, 12)).rejects.toThrow('Missing required article_scores column: score_status');
+    await expect(assertSchemaVersion(db as any, 12)).rejects.toThrow('Missing required article_scores column: score_status');
   });
 
-  it('fails schema assertion when article_search is missing at v12', async () => {
+  it('fails schema assertion when search_vector column is missing at v12', async () => {
     const db = createMockDb({
       version: 12,
       includeReactionReasons: true,
       includeNewsBriefEditions: true,
       includeOAuthTables: true
     });
-    db.__state.tables.delete('article_search');
+    // Remove search_vector from articles columns (the V9 assertion now checks for this column)
+    const articlesColumns = db.__state.tables.get('articles') ?? [];
+    db.__state.tables.set(
+      'articles',
+      articlesColumns.filter((name) => name !== 'search_vector')
+    );
     const { assertSchemaVersion } = await import('./migrations');
 
-    await expect(assertSchemaVersion(db, 12)).rejects.toThrow('Missing required table: article_search');
+    await expect(assertSchemaVersion(db as any, 12)).rejects.toThrow('Missing required articles column: search_vector');
   });
 
   it('fails schema assertion when news_brief_editions is missing at v12', async () => {
@@ -374,7 +410,7 @@ describe('migrations', () => {
     });
     const { assertSchemaVersion } = await import('./migrations');
 
-    await expect(assertSchemaVersion(db, 12)).rejects.toThrow('Missing required table: news_brief_editions');
+    await expect(assertSchemaVersion(db as any, 12)).rejects.toThrow('Missing required table: news_brief_editions');
   });
 
   it('fails schema assertion when oauth_clients is missing at v12', async () => {
@@ -387,6 +423,6 @@ describe('migrations', () => {
     db.__state.tables.delete('oauth_clients');
     const { assertSchemaVersion } = await import('./migrations');
 
-    await expect(assertSchemaVersion(db, 12)).rejects.toThrow('Missing required table: oauth_clients');
+    await expect(assertSchemaVersion(db as any, 12)).rejects.toThrow('Missing required table: oauth_clients');
   });
 });

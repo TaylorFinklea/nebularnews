@@ -15,7 +15,13 @@ export const GET = async ({ url, platform, locals, cookies }) => {
     throw redirect(303, `/login?error=${encodeURIComponent(desc)}`);
   }
 
-  await ensureSchema(locals.db);
+  try {
+    await ensureSchema(locals.db);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logWarn('auth.callback.schema_check_failed', { error: msg });
+    // Don't block auth on schema check failure — continue
+  }
 
   const code = url.searchParams.get('code');
   const tokenHash = url.searchParams.get('token_hash') ?? '';

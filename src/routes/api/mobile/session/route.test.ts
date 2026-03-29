@@ -15,16 +15,14 @@ const createEvent = () =>
         authorization: 'Bearer access-token'
       }
     }),
-    platform: {
+    locals: {
+      db: {} as any,
+      requestId: 'req-test',
+      user: null,
       env: {
         MOBILE_PUBLIC_BASE_URL: 'https://api.example.com',
         MOBILE_PUBLIC_ENABLED: 'true'
       }
-    } as App.Platform,
-    locals: {
-      db: {} as any,
-      requestId: 'req-test',
-      user: null
     }
   }) as Parameters<typeof GET>[0];
 

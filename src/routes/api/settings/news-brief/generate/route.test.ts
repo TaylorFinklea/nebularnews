@@ -19,13 +19,11 @@ import { POST } from './+server';
 
 const createEvent = () =>
   ({
-    platform: {
-      env: {}
-    } as App.Platform,
     locals: {
       db: {} as any,
       requestId: 'req-1',
-      user: { id: 'admin' }
+      user: { id: 'admin' },
+      env: {}
     }
   }) as Parameters<typeof POST>[0];
 

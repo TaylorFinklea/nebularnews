@@ -15,28 +15,18 @@ vi.mock('$lib/server/audit', () => ({
 
 import { OPTIONS, POST } from './+server';
 
-const createPlatform = (): App.Platform =>
-  ({
-    env: {
-      MCP_PUBLIC_ENABLED: 'true',
-      MCP_PUBLIC_BASE_URL: 'https://mcp.example.com',
-      MCP_PUBLIC_ALLOWED_ORIGINS: 'https://chatgpt.com'
-    },
-    context: {
-      waitUntil() {
-        // no-op
-      }
-    } as unknown as ExecutionContext
-  }) as App.Platform;
-
 const createEvent = (request: Request) =>
   ({
     request,
-    platform: createPlatform(),
     locals: {
       db: {} as any,
       requestId: 'req-1',
-      user: null
+      user: null,
+      env: {
+        MCP_PUBLIC_ENABLED: 'true',
+        MCP_PUBLIC_BASE_URL: 'https://mcp.example.com',
+        MCP_PUBLIC_ALLOWED_ORIGINS: 'https://chatgpt.com'
+      }
     }
   }) as Parameters<typeof POST>[0];
 

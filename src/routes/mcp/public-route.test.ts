@@ -12,31 +12,22 @@ vi.mock('$lib/server/mcp/auth', async (importOriginal) => {
   };
 });
 
-const createPlatform = (overrides?: Partial<App.Platform['env']>): App.Platform =>
-  ({
-    env: {
-      ADMIN_PASSWORD_HASH: 'hash',
-      SESSION_SECRET: 'secret',
-      ENCRYPTION_KEY: 'enc',
-      MCP_BEARER_TOKEN: 'mcp-token',
-      MCP_SERVER_NAME: 'Nebular News MCP',
-      MCP_SERVER_VERSION: '0.1.0',
-      MCP_PUBLIC_ENABLED: 'true',
-      MCP_PUBLIC_BASE_URL: 'https://mcp.example.com',
-      MCP_PUBLIC_ALLOWED_ORIGINS: 'https://chatgpt.com',
-      ...overrides
-    },
-    context: {
-      waitUntil() {
-        // no-op
-      }
-    } as unknown as ExecutionContext
-  }) as App.Platform;
-
-const createLocals = () => ({
+const createLocals = (overrides?: Record<string, string>) => ({
   db: {} as any,
   requestId: 'req-test',
-  user: null
+  user: null,
+  env: {
+    ADMIN_PASSWORD_HASH: 'hash',
+    SESSION_SECRET: 'secret',
+    ENCRYPTION_KEY: 'enc',
+    MCP_BEARER_TOKEN: 'mcp-token',
+    MCP_SERVER_NAME: 'Nebular News MCP',
+    MCP_SERVER_VERSION: '0.1.0',
+    MCP_PUBLIC_ENABLED: 'true',
+    MCP_PUBLIC_BASE_URL: 'https://mcp.example.com',
+    MCP_PUBLIC_ALLOWED_ORIGINS: 'https://chatgpt.com',
+    ...overrides
+  }
 });
 
 const parseMcpPayload = async (response: Response) => {
@@ -76,7 +67,6 @@ describe('/mcp public audience behavior', () => {
 
     const response = await GET({
       request: new Request('https://mcp.example.com/mcp'),
-      platform: createPlatform(),
       locals: createLocals()
     } as Parameters<typeof GET>[0]);
 
@@ -113,7 +103,6 @@ describe('/mcp public audience behavior', () => {
           params: {}
         })
       }),
-      platform: createPlatform(),
       locals: createLocals()
     } as Parameters<typeof POST>[0]);
 

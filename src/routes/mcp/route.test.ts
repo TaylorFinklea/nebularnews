@@ -1,28 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { GET, POST } from './+server';
 
-const createPlatform = (overrides?: Partial<App.Platform['env']>): App.Platform =>
-  ({
-    env: {
-      ADMIN_PASSWORD_HASH: 'hash',
-      SESSION_SECRET: 'secret',
-      ENCRYPTION_KEY: 'enc',
-      MCP_BEARER_TOKEN: 'mcp-token',
-      MCP_SERVER_NAME: 'Nebular News MCP',
-      MCP_SERVER_VERSION: '0.1.0',
-      ...overrides
-    },
-    context: {
-      waitUntil() {
-        // no-op
-      }
-    } as unknown as ExecutionContext
-  }) as App.Platform;
-
-const createLocals = () => ({
+const createLocals = (overrides?: Record<string, string>) => ({
   db: {} as any,
   requestId: 'req-test',
-  user: null
+  user: null,
+  env: {
+    ADMIN_PASSWORD_HASH: 'hash',
+    SESSION_SECRET: 'secret',
+    ENCRYPTION_KEY: 'enc',
+    MCP_BEARER_TOKEN: 'mcp-token',
+    MCP_SERVER_NAME: 'Nebular News MCP',
+    MCP_SERVER_VERSION: '0.1.0',
+    ...overrides
+  }
 });
 
 const parseMcpPayload = async (response: Response) => {
@@ -54,7 +45,6 @@ describe('/mcp route auth behavior', () => {
   it('returns 401 json on GET without auth', async () => {
     const response = await GET({
       request: new Request('http://localhost/mcp'),
-      platform: createPlatform(),
       locals: createLocals()
     } as Parameters<typeof GET>[0]);
 
@@ -70,7 +60,6 @@ describe('/mcp route auth behavior', () => {
           authorization: 'Bearer mcp-token'
         }
       }),
-      platform: createPlatform(),
       locals: createLocals()
     } as Parameters<typeof GET>[0]);
 
@@ -94,7 +83,6 @@ describe('/mcp route auth behavior', () => {
           params: {}
         })
       }),
-      platform: createPlatform(),
       locals: createLocals()
     } as Parameters<typeof POST>[0]);
 
@@ -126,7 +114,6 @@ describe('/mcp route auth behavior', () => {
           }
         })
       }),
-      platform: createPlatform(),
       locals: createLocals()
     } as Parameters<typeof POST>[0]);
 
@@ -152,7 +139,6 @@ describe('/mcp route auth behavior', () => {
           params: {}
         })
       }),
-      platform: createPlatform(),
       locals: createLocals()
     } as Parameters<typeof POST>[0]);
 
@@ -183,7 +169,6 @@ describe('/mcp route auth behavior', () => {
           params: {}
         })
       }),
-      platform: createPlatform(),
       locals: createLocals()
     } as Parameters<typeof POST>[0]);
 
@@ -213,7 +198,6 @@ describe('/mcp route auth behavior', () => {
           }
         })
       }),
-      platform: createPlatform(),
       locals: createLocals()
     } as Parameters<typeof POST>[0]);
 
@@ -245,7 +229,6 @@ describe('/mcp route auth behavior', () => {
           params: {}
         })
       }),
-      platform: createPlatform(),
       locals: createLocals()
     } as Parameters<typeof POST>[0]);
 

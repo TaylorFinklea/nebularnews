@@ -26,26 +26,19 @@ vi.mock('$lib/server/audit', () => ({
   recordAuditEvent: vi.fn(async () => undefined)
 }));
 
-const createPlatform = (): App.Platform =>
-  ({
-    env: {
-      ADMIN_PASSWORD_HASH: 'pbkdf2$1000$AQIDBA==$BQYHCA==',
-      SESSION_SECRET: 'test-session-secret-with-minimum-length-123456',
-      ENCRYPTION_KEY: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
-      APP_ENV: 'production'
-    },
-    context: {
-      waitUntil() {
-        // no-op
-      }
-    } as unknown as ExecutionContext
-  }) as App.Platform;
-
 const createEvent = (request: Request) =>
   ({
     request,
-    platform: createPlatform(),
-    locals: { db: {} as any, requestId: 'req-test' },
+    locals: {
+      db: {} as any,
+      requestId: 'req-test',
+      env: {
+        ADMIN_PASSWORD_HASH: 'pbkdf2$1000$AQIDBA==$BQYHCA==',
+        SESSION_SECRET: 'test-session-secret-with-minimum-length-123456',
+        ENCRYPTION_KEY: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+        APP_ENV: 'production'
+      }
+    },
     url: new URL(request.url)
   }) as Parameters<typeof POST>[0];
 

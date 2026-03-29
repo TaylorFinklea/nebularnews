@@ -42,13 +42,11 @@ const createEvent = (body: Record<string, unknown>) =>
       headers: { 'content-type': 'application/json', authorization: 'Bearer mobile-token' },
       body: JSON.stringify(body)
     }),
-    platform: {
-      env: {}
-    } as App.Platform,
     locals: {
       db: {} as any,
       requestId: 'req-test',
-      user: null
+      user: null,
+      env: {}
     }
   }) as Parameters<typeof POST>[0];
 

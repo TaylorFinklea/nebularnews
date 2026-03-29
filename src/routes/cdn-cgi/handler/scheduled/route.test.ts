@@ -28,12 +28,12 @@ const createEvent = (url: string, appEnv = 'development') =>
   ({
     request: new Request(url),
     url: new URL(url),
-    locals: { db: {} },
-    platform: {
+    locals: {
+      db: {},
       env: {
         APP_ENV: appEnv
       }
-    } as App.Platform
+    }
   }) as Parameters<typeof GET>[0];
 
 describe('/cdn-cgi/handler/scheduled GET', () => {

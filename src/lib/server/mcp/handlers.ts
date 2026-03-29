@@ -587,7 +587,7 @@ export type McpHandlers = ReturnType<typeof createMcpHandlers>;
 export function createMcpHandlers(input: {
   db: Db;
   env: Env;
-  context: App.Platform['context'];
+  context?: { waitUntil(promise: Promise<unknown>): void };
 }) {
   const { db, env, context } = input;
 
@@ -808,7 +808,9 @@ export function createMcpHandlers(input: {
       const runPromise = runPullRun(db, env, started.runId).catch((error) => {
         console.error('[mcp] refresh_feeds failed', error instanceof Error ? error.message : String(error));
       });
-      context.waitUntil(runPromise);
+      if (context?.waitUntil) {
+        context.waitUntil(runPromise);
+      }
 
       return {
         ok: true,

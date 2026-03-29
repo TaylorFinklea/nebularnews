@@ -131,7 +131,7 @@ export const GET = async ({ request, locals }) => {
   return response;
 };
 
-export const POST = async ({ request, platform, locals }) => {
+export const POST = async ({ request, locals }) => {
   const startedAt = Date.now();
   const requestId = locals?.requestId ?? null;
   const audience = resolveMcpAudience(new URL(request.url), locals.env);
@@ -182,7 +182,7 @@ export const POST = async ({ request, platform, locals }) => {
   const handlers = createMcpHandlers({
     db: locals.db,
     env: locals.env,
-    context: platform?.context
+    context: undefined
   });
   const server =
     audience === 'public'

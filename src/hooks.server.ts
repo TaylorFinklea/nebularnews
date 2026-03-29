@@ -22,6 +22,7 @@ const publicPaths = [
   '/api/auth/logout',
   '/api/health',
   '/api/ready',
+  '/api/db-test',
   '/favicon',
   '/robots.txt',
   '/mcp',

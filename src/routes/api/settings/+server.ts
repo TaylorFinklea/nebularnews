@@ -67,11 +67,11 @@ import {
 } from '$lib/server/settings';
 import { recordAuditEvent } from '$lib/server/audit';
 
-export const GET = async ({ platform, locals }) => {
+export const GET = async ({ locals }) => {
   const db = locals.db;
   const featureLanes = await getFeatureModelLanes(db);
-  const modelA = await getConfiguredModelA(db, platform.env);
-  const modelB = await getConfiguredModelB(db, platform.env);
+  const modelA = await getConfiguredModelA(db, locals.env);
+  const modelB = await getConfiguredModelB(db, locals.env);
   const scorePrompt = await getScorePromptConfig(db);
   const dashboardQueue = await getDashboardQueueConfig(db);
   const newsBrief = await getNewsBriefConfig(db);
@@ -97,10 +97,10 @@ export const GET = async ({ platform, locals }) => {
     summaryLength: (await getSetting(db, 'summary_length')) ?? 'short',
     pollInterval: String(await getSchedulerPollIntervalMinutes(db)),
     initialFeedLookbackDays: await getInitialFeedLookbackDays(db),
-    maxFeedsPerPoll: await getMaxFeedsPerPoll(db, platform.env),
-    maxItemsPerPoll: await getMaxItemsPerPoll(db, platform.env),
-    eventsPollMs: await getEventsPollMs(db, platform.env),
-    dashboardRefreshMinMs: await getDashboardRefreshMinMs(db, platform.env),
+    maxFeedsPerPoll: await getMaxFeedsPerPoll(db, locals.env),
+    maxItemsPerPoll: await getMaxItemsPerPoll(db, locals.env),
+    eventsPollMs: await getEventsPollMs(db, locals.env),
+    dashboardRefreshMinMs: await getDashboardRefreshMinMs(db, locals.env),
     retentionDays: retention.days,
     retentionMode: retention.mode,
     retentionArchiveDays: retention.archiveDays,
@@ -109,7 +109,7 @@ export const GET = async ({ platform, locals }) => {
     taggingMethod,
     autoTaggingEnabled: taggingMethod === 'hybrid',
     autoTagMaxPerArticle: await getAutoTagMaxPerArticle(db),
-    jobProcessorBatchSize: await getJobProcessorBatchSize(db, platform.env),
+    jobProcessorBatchSize: await getJobProcessorBatchSize(db, locals.env),
     jobsIntervalMinutes: await getSchedulerJobsIntervalMinutes(db),
     pollIntervalMinutes: await getSchedulerPollIntervalMinutes(db),
     pullSlicesPerTick: await getSchedulerPullSlicesPerTick(db),
@@ -151,7 +151,7 @@ export const GET = async ({ platform, locals }) => {
   });
 };
 
-export const POST = async ({ request, platform, locals }) => {
+export const POST = async ({ request, locals }) => {
   requireAdmin(locals.user);
   const body = await request.json();
   const entries: [string, string][] = [];
@@ -388,7 +388,7 @@ export const POST = async ({ request, platform, locals }) => {
     entries.push(['browser_scrape_api_url', body.browserScrapeApiUrl.trim()]);
   }
   if (typeof body?.browserScrapeApiKey === 'string' && body.browserScrapeApiKey.trim()) {
-    await setBrowserScrapeKey(locals.db, platform.env, body.browserScrapeApiKey.trim());
+    await setBrowserScrapeKey(locals.db, locals.env, body.browserScrapeApiKey.trim());
   } else if (body?.browserScrapeApiKey === null) {
     await deleteBrowserScrapeKey(locals.db);
   }

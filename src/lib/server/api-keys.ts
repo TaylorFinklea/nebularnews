@@ -1,5 +1,6 @@
 import { nanoid } from 'nanoid';
 import { dbAll, dbRun, getAffectedRows, now, type Db } from './db';
+import type { Env } from './env';
 import { createOpaqueToken, sha256Base64Url } from './oauth/crypto';
 import { getPublicMobileResource } from './mobile/context';
 import { MOBILE_DEFAULT_SCOPE } from './mobile/context';
@@ -16,7 +17,7 @@ export type ApiKeyInfo = {
 
 export async function generateApiKey(
   db: Db,
-  env: App.Platform['env'],
+  env: Env,
   name?: string
 ): Promise<{ id: string; token: string; name: string; createdAt: number }> {
   const resource = getPublicMobileResource(env);

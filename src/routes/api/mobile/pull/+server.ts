@@ -2,8 +2,8 @@ import { json } from '@sveltejs/kit';
 import { startManualPull } from '$lib/server/manual-pull';
 import { requireMobileAccess } from '$lib/server/mobile/auth';
 
-export const POST = async ({ request, platform, locals }) => {
-  const { user } = await requireMobileAccess(request, platform.env, locals.db, 'app:write');
+export const POST = async ({ request, locals }) => {
+  const { user } = await requireMobileAccess(request, locals.env, locals.db, 'app:write');
   void user;
 
   const body = await request.json().catch(() => ({}));

@@ -2,7 +2,7 @@ import { json } from '@sveltejs/kit';
 import { dbGet } from '$lib/server/db';
 import { getOrCreateThreadForArticle, sendChatMessage } from '$lib/server/chat';
 
-export const GET = async ({ params, platform, locals }) => {
+export const GET = async ({ params, locals }) => {
   const userId = locals.user?.id ?? 'admin';
   const articleId = params.id;
   const article = await dbGet<{ id: string }>(locals.db, 'SELECT id FROM articles WHERE id = ?', [articleId]);
@@ -12,7 +12,7 @@ export const GET = async ({ params, platform, locals }) => {
   return json(result);
 };
 
-export const POST = async ({ params, request, platform, locals }) => {
+export const POST = async ({ params, request, locals }) => {
   const userId = locals.user?.id ?? 'admin';
   const articleId = params.id;
   const article = await dbGet<{ id: string }>(locals.db, 'SELECT id FROM articles WHERE id = ?', [articleId]);
@@ -25,7 +25,7 @@ export const POST = async ({ params, request, platform, locals }) => {
   if (content.length > 4000) return json({ error: 'Message too long (max 4000 characters)' }, { status: 400 });
 
   try {
-    const result = await sendChatMessage(locals.db, userId, platform.env, articleId, content);
+    const result = await sendChatMessage(locals.db, userId, locals.env, articleId, content);
     return json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Chat failed';

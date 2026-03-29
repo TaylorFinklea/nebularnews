@@ -1,5 +1,6 @@
 import { getSessionFromRequest } from '$lib/server/auth';
 import type { Db } from '$lib/server/db';
+import type { Env } from '../env';
 import { getProtectedResourceMetadataUrl } from './context';
 import { authenticatePublicAccessToken } from '$lib/server/oauth/tokens';
 
@@ -38,7 +39,7 @@ export function isMcpBearerTokenValid(provided: string | null, expected: string 
   return constantTimeEquals(provided, trimmedExpected);
 }
 
-export async function resolveInternalMcpAuth(request: Request, env: App.Platform['env']): Promise<McpAuthResult> {
+export async function resolveInternalMcpAuth(request: Request, env: Env): Promise<McpAuthResult> {
   const expectedToken = env.MCP_BEARER_TOKEN?.trim();
   const providedToken = parseBearerToken(request.headers.get('authorization'));
   const bearerValid = isMcpBearerTokenValid(providedToken, expectedToken);
@@ -56,7 +57,7 @@ export async function resolveInternalMcpAuth(request: Request, env: App.Platform
 
 export async function resolvePublicMcpAuth(
   request: Request,
-  env: App.Platform['env'],
+  env: Env,
   db: Db
 ): Promise<PublicMcpAuthResult> {
   const providedToken = parseBearerToken(request.headers.get('authorization'));
@@ -78,11 +79,11 @@ export async function resolvePublicMcpAuth(
   };
 }
 
-export async function resolveMcpAuth(request: Request, env: App.Platform['env']): Promise<McpAuthResult> {
+export async function resolveMcpAuth(request: Request, env: Env): Promise<McpAuthResult> {
   return resolveInternalMcpAuth(request, env);
 }
 
-export function buildPublicMcpAuthenticateHeader(env: App.Platform['env']) {
+export function buildPublicMcpAuthenticateHeader(env: Env) {
   const resourceMetadata = getProtectedResourceMetadataUrl(env);
   if (!resourceMetadata) {
     return 'Bearer realm="nebular-mcp"';

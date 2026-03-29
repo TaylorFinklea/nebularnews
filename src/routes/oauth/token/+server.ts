@@ -35,11 +35,11 @@ const parseTokenRequest = async (request: Request) => {
   return new URLSearchParams(body);
 };
 
-export const OPTIONS = async ({ request, platform }) =>
-  withAudienceOauthCors(new Response(null, { status: 204 }), request, platform.env, null);
+export const OPTIONS = async ({ request, locals }) =>
+  withAudienceOauthCors(new Response(null, { status: 204 }), request, locals.env, null);
 
-export const POST = async ({ request, platform, locals }) => {
-  const audience = assertPublicOauthRequest(new URL(request.url), platform.env);
+export const POST = async ({ request, locals }) => {
+  const audience = assertPublicOauthRequest(new URL(request.url), locals.env);
 
   let form: URLSearchParams;
   try {
@@ -48,7 +48,7 @@ export const POST = async ({ request, platform, locals }) => {
     return withAudienceOauthCors(
       json(oauthError('invalid_request', 'Token request body is invalid.'), { status: 400 }),
       request,
-      platform.env,
+      locals.env,
       audience
     );
   }
@@ -57,9 +57,9 @@ export const POST = async ({ request, platform, locals }) => {
   try {
     const payload =
       grantType === 'authorization_code'
-        ? await exchangeAuthorizationCodeGrant(locals.db, platform.env, audience, form)
+        ? await exchangeAuthorizationCodeGrant(locals.db, locals.env, audience, form)
         : grantType === 'refresh_token'
-          ? await exchangeRefreshTokenGrant(locals.db, platform.env, audience, form)
+          ? await exchangeRefreshTokenGrant(locals.db, locals.env, audience, form)
           : null;
     if (!payload) {
       return withAudienceOauthCors(
@@ -67,7 +67,7 @@ export const POST = async ({ request, platform, locals }) => {
           status: 400
         }),
         request,
-        platform.env,
+        locals.env,
         audience
       );
     }
@@ -79,7 +79,7 @@ export const POST = async ({ request, platform, locals }) => {
       requestId: locals.requestId
     });
 
-    return withAudienceOauthCors(json(payload), request, platform.env, audience);
+    return withAudienceOauthCors(json(payload), request, locals.env, audience);
   } catch (err) {
     const status = err && typeof err === 'object' && 'status' in err ? Number((err as { status?: number }).status ?? 400) : 400;
     const message = err && typeof err === 'object' && 'body' in err
@@ -101,7 +101,7 @@ export const POST = async ({ request, platform, locals }) => {
     return withAudienceOauthCors(
       json(oauthError(status === 400 ? 'invalid_grant' : 'server_error', message), { status }),
       request,
-      platform.env,
+      locals.env,
       audience
     );
   }

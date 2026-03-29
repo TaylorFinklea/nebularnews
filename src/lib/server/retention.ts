@@ -1,4 +1,5 @@
 import { dbRun, now, type Db } from './db';
+import type { Env } from './env';
 import { getRetentionConfig } from './settings';
 import { logInfo } from './log';
 
@@ -23,7 +24,7 @@ export type RetentionCleanupStats = {
   search_rows_cleared: number;
 };
 
-export async function runRetentionCleanup(db: Db, env: App.Platform['env']): Promise<RetentionCleanupStats> {
+export async function runRetentionCleanup(db: Db, env: Env): Promise<RetentionCleanupStats> {
   const config = await getRetentionConfig(db);
   const { archiveDays, deleteDays } = config;
 

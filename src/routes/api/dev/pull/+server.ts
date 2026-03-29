@@ -2,7 +2,7 @@ import { dev } from '$app/environment';
 import { json } from '@sveltejs/kit';
 import { runManualPull } from '$lib/server/manual-pull';
 
-export const POST = async ({ request, platform, locals }) => {
+export const POST = async ({ request, locals }) => {
   if (!dev) {
     return json({ error: 'Manual pull endpoint is only available in dev mode' }, { status: 403 });
   }
@@ -14,7 +14,7 @@ export const POST = async ({ request, platform, locals }) => {
     : 3;
 
   try {
-    const result = await runManualPull(locals.db, platform.env, cycles, { trigger: 'api-dev' });
+    const result = await runManualPull(locals.db, locals.env, cycles, { trigger: 'api-dev' });
     return json({ ok: true, cycles, run_id: result.runId, stats: result.stats });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Manual pull failed';

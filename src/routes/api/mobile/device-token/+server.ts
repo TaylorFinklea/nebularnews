@@ -3,8 +3,8 @@ import { nanoid } from 'nanoid';
 import { dbRun, dbGet, now } from '$lib/server/db';
 import { requireMobileAccess } from '$lib/server/mobile/auth';
 
-export const POST = async ({ request, platform, locals }) => {
-  const { user } = await requireMobileAccess(request, platform.env, locals.db, 'app:write');
+export const POST = async ({ request, locals }) => {
+  const { user } = await requireMobileAccess(request, locals.env, locals.db, 'app:write');
 
   const body = await request.json().catch(() => ({}));
   const token = typeof body?.token === 'string' ? body.token.trim() : '';
@@ -31,8 +31,8 @@ export const POST = async ({ request, platform, locals }) => {
   return json({ ok: true });
 };
 
-export const DELETE = async ({ request, platform, locals }) => {
-  const { user } = await requireMobileAccess(request, platform.env, locals.db, 'app:write');
+export const DELETE = async ({ request, locals }) => {
+  const { user } = await requireMobileAccess(request, locals.env, locals.db, 'app:write');
 
   const body = await request.json().catch(() => ({}));
   const token = typeof body?.token === 'string' ? body.token.trim() : '';

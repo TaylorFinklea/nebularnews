@@ -13,9 +13,9 @@ const sseEvent = (event: string, data: unknown) => {
   return encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 };
 
-export const GET = async ({ platform, locals, request }) => {
+export const GET = async ({ locals, request }) => {
   const db = locals.db;
-  const eventsV2Enabled = isEventsV2Enabled(platform.env);
+  const eventsV2Enabled = isEventsV2Enabled(locals.env);
   if (!eventsV2Enabled) {
     return new Response(JSON.stringify({ error: 'Live events are disabled' }), {
       status: 503,
@@ -25,7 +25,7 @@ export const GET = async ({ platform, locals, request }) => {
       }
     });
   }
-  const pollMs = Math.max(5000, await getEventsPollMs(db, platform.env).catch(() => DEFAULT_POLL_MS));
+  const pollMs = Math.max(5000, await getEventsPollMs(db, locals.env).catch(() => DEFAULT_POLL_MS));
   const throttled = pollMs > 5000;
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {

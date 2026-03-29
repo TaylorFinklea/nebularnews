@@ -1,3 +1,4 @@
+import type { Env } from './env';
 import { pollFeeds, type FeedPollSummary } from './ingest';
 import { processJobs } from './jobs';
 import { processPullRuns, recoverStalePullRuns } from './manual-pull';
@@ -55,7 +56,7 @@ export type ScheduledRunSummary = {
 
 const runJobsTick = async (
   db: Db,
-  env: App.Platform['env'],
+  env: Env,
   scheduler: SchedulerRuntimeConfig,
   cron: string | null
 ): Promise<ScheduledJobsSummary> => {
@@ -118,7 +119,7 @@ const runJobsTick = async (
   return summary;
 };
 
-const runRetentionTick = async (db: Db, env: App.Platform['env'], cron: string | null) => {
+const runRetentionTick = async (db: Db, env: Env, cron: string | null) => {
   const startedAt = Date.now();
   const stats = await runRetentionCleanup(db, env);
   logInfo('scheduled.retention.completed', {
@@ -131,7 +132,7 @@ const runRetentionTick = async (db: Db, env: App.Platform['env'], cron: string |
 
 const runPollTick = async (
   db: Db,
-  env: App.Platform['env'],
+  env: Env,
   scheduler: SchedulerRuntimeConfig,
   cron: string | null
 ) => {
@@ -148,7 +149,7 @@ const runPollTick = async (
 
 export async function runScheduledTasks(
   db: Db,
-  env: App.Platform['env'],
+  env: Env,
   options: {
     cron?: string | null;
     runJobs?: boolean;

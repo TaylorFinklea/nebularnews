@@ -1,5 +1,6 @@
 import { error } from '@sveltejs/kit';
 import type { Db } from '../db';
+import type { Env } from '../env';
 import { ensureMobileOAuthClient } from '$lib/server/mobile/oauth-client';
 import {
   getOauthResourceForAudience,
@@ -40,7 +41,7 @@ const assertRegisteredRedirectUri = (client: OAuthClient, redirectUri: string) =
 export const parseAuthorizeRequest = async (
   url: URL,
   db: Db,
-  env: App.Platform['env']
+  env: Env
 ): Promise<{ request: OAuthAuthorizeRequest; client: OAuthClient }> => {
   const audience = resolvePublicOauthAudience(url, env);
   if (!audience) {
@@ -126,7 +127,7 @@ const appendAuthParams = (redirectUri: string, values: Record<string, string | n
 };
 
 export const buildOAuthErrorRedirect = (
-  env: App.Platform['env'],
+  env: Env,
   redirectUri: string,
   errorCode: string,
   state: string | null,
@@ -141,7 +142,7 @@ export const buildOAuthErrorRedirect = (
   });
 
 export const buildOAuthSuccessRedirect = (
-  env: App.Platform['env'],
+  env: Env,
   redirectUri: string,
   code: string,
   state: string | null,
@@ -167,7 +168,7 @@ export const shouldAutoApproveConsent = async (
 
 export const approveAuthorizeRequest = async (
   db: Db,
-  env: App.Platform['env'],
+  env: Env,
   request: OAuthAuthorizeRequest,
   userId: string
 ) => {

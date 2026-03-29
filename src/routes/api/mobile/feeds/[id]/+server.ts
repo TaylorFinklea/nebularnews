@@ -2,8 +2,8 @@ import { json } from '@sveltejs/kit';
 import { dbGet, dbRun } from '$lib/server/db';
 import { requireMobileAccess } from '$lib/server/mobile/auth';
 
-export const DELETE = async ({ request, params, platform, locals }) => {
-  const { user } = await requireMobileAccess(request, platform.env, locals.db, 'app:write');
+export const DELETE = async ({ request, params, locals }) => {
+  const { user } = await requireMobileAccess(request, locals.env, locals.db, 'app:write');
 
   const { id } = params;
   const feed = await dbGet<{ id: string }>(

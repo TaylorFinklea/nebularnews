@@ -114,12 +114,12 @@ import {
   DEFAULT_MANUAL_ORPHAN_CLEANUP_LIMIT
 } from '$lib/server/orphan-cleanup';
 
-export const load = async ({ platform, locals }) => {
+export const load = async ({ locals }) => {
   const userId = locals.user?.id ?? 'admin';
   const db = locals.db;
   const featureLanes = await getFeatureModelLanes(db);
-  const modelA = await getConfiguredModelA(db, platform.env);
-  const modelB = await getConfiguredModelB(db, platform.env);
+  const modelA = await getConfiguredModelA(db, locals.env);
+  const modelB = await getConfiguredModelB(db, locals.env);
   const scorePrompt = await getScorePromptConfig(db);
   const dashboardQueue = await getDashboardQueueConfig(db);
   const newsBrief = await getNewsBriefConfig(db);
@@ -144,10 +144,10 @@ export const load = async ({ platform, locals }) => {
     summaryStyle: (await getSetting(db, 'summary_style')) ?? 'concise',
     summaryLength: (await getSetting(db, 'summary_length')) ?? 'short',
     initialFeedLookbackDays: await getInitialFeedLookbackDays(db),
-    maxFeedsPerPoll: await getMaxFeedsPerPoll(db, platform.env),
-    maxItemsPerPoll: await getMaxItemsPerPoll(db, platform.env),
-    eventsPollMs: await getEventsPollMs(db, platform.env),
-    dashboardRefreshMinMs: await getDashboardRefreshMinMs(db, platform.env),
+    maxFeedsPerPoll: await getMaxFeedsPerPoll(db, locals.env),
+    maxItemsPerPoll: await getMaxItemsPerPoll(db, locals.env),
+    eventsPollMs: await getEventsPollMs(db, locals.env),
+    dashboardRefreshMinMs: await getDashboardRefreshMinMs(db, locals.env),
     retentionDays: retention.days,
     retentionMode: retention.mode,
     retentionArchiveDays: retention.archiveDays,
@@ -156,7 +156,7 @@ export const load = async ({ platform, locals }) => {
     taggingMethod,
     autoTaggingEnabled: taggingMethod === 'hybrid',
     autoTagMaxPerArticle: await getAutoTagMaxPerArticle(db),
-    jobProcessorBatchSize: await getJobProcessorBatchSize(db, platform.env),
+    jobProcessorBatchSize: await getJobProcessorBatchSize(db, locals.env),
     jobsIntervalMinutes: await getSchedulerJobsIntervalMinutes(db),
     pollIntervalMinutes: await getSchedulerPollIntervalMinutes(db),
     pullSlicesPerTick: await getSchedulerPullSlicesPerTick(db),

@@ -3,6 +3,7 @@ import { serialize } from 'cookie';
 import { nanoid } from 'nanoid';
 import { hmacSign, hmacVerify, pbkdf2Verify } from './crypto';
 import { getCookieValue } from './cookies';
+import type { Env } from './env';
 import { dbGet, dbRun, now, type Db } from './db';
 
 export const SESSION_COOKIE = 'nn_session';
@@ -135,7 +136,7 @@ export async function getOrCreateLocalUser(
 export async function getSupabaseSessionFromRequest(
   request: Request,
   db: Db,
-  env: App.Platform['env']
+  env: Env
 ): Promise<AuthUser | null> {
   const jwtSecret = env.SUPABASE_JWT_SECRET;
   if (!jwtSecret) return null;

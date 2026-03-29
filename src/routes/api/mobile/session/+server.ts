@@ -2,8 +2,8 @@ import { json } from '@sveltejs/kit';
 import { requireMobileAccess } from '$lib/server/mobile/auth';
 import { getConfiguredPublicMobileOrigin, getPublicMobileResource } from '$lib/server/mobile/context';
 
-export const GET = async ({ request, platform, locals }) => {
-  const { token, user } = await requireMobileAccess(request, platform.env, locals.db, 'app:read');
+export const GET = async ({ request, locals }) => {
+  const { token, user } = await requireMobileAccess(request, locals.env, locals.db, 'app:read');
 
   return json({
     session: {
@@ -15,8 +15,8 @@ export const GET = async ({ request, platform, locals }) => {
       scopes: token.scope.split(/\s+/).filter(Boolean)
     },
     server: {
-      origin: getConfiguredPublicMobileOrigin(platform.env),
-      resource: getPublicMobileResource(platform.env)
+      origin: getConfiguredPublicMobileOrigin(locals.env),
+      resource: getPublicMobileResource(locals.env)
     },
     features: {
       dashboard: true,

@@ -13,8 +13,8 @@ import { replaceReactionReasonCodes } from '$lib/server/reactions';
 import { getPreferredSourceForArticle, isFeedLinkedToArticle } from '$lib/server/sources';
 import { processReactionLearning } from '$lib/server/scoring/learning';
 
-export const POST = async ({ params, request, platform, locals }) => {
-  const { user } = await requireMobileAccess(request, platform.env, locals.db, 'app:write');
+export const POST = async ({ params, request, locals }) => {
+  const { user } = await requireMobileAccess(request, locals.env, locals.db, 'app:write');
 
   const articleId = params.id;
   const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;

@@ -2,8 +2,8 @@ import { redirect } from '@sveltejs/kit';
 import { buildOAuthAuthorizeUrl, isSupabaseConfigured } from '$lib/server/supabase-auth';
 import { createOpaqueToken, sha256Base64Url } from '$lib/server/oauth/crypto';
 
-export const GET = async ({ url, platform, cookies }) => {
-  if (!isSupabaseConfigured(platform.env)) {
+export const GET = async ({ url, locals, cookies }) => {
+  if (!isSupabaseConfigured(locals.env)) {
     throw redirect(303, '/login?error=apple_not_configured');
   }
 
@@ -31,5 +31,5 @@ export const GET = async ({ url, platform, cookies }) => {
   }
 
   const callbackUrl = `${url.origin}/auth/callback`;
-  throw redirect(303, buildOAuthAuthorizeUrl(platform.env, 'apple', callbackUrl, codeChallenge));
+  throw redirect(303, buildOAuthAuthorizeUrl(locals.env, 'apple', callbackUrl, codeChallenge));
 };

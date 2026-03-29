@@ -30,16 +30,16 @@ const normalizeTokenList = (value: unknown) =>
     ? value.map((entry) => String(entry ?? '').trim()).filter(Boolean)
     : [];
 
-export const GET = async ({ params, request, platform, locals }) => {
-  const { user } = await requireMobileAccess(request, platform.env, locals.db, 'app:read');
+export const GET = async ({ params, request, locals }) => {
+  const { user } = await requireMobileAccess(request, locals.env, locals.db, 'app:read');
   const article = await dbGet<{ id: string }>(locals.db, 'SELECT id FROM articles WHERE id = ? LIMIT 1', [params.id]);
   if (!article) return json({ error: 'Article not found' }, { status: 404 });
   const tags = await listTagsForArticle(locals.db, user.id, params.id);
   return json({ tags });
 };
 
-export const POST = async ({ params, request, platform, locals }) => {
-  const { user } = await requireMobileAccess(request, platform.env, locals.db, 'app:write');
+export const POST = async ({ params, request, locals }) => {
+  const { user } = await requireMobileAccess(request, locals.env, locals.db, 'app:write');
 
   const article = await dbGet<{ id: string }>(locals.db, 'SELECT id FROM articles WHERE id = ? LIMIT 1', [params.id]);
   if (!article) return json({ error: 'Article not found' }, { status: 404 });

@@ -1,5 +1,6 @@
 import { nanoid } from 'nanoid';
 import { dbAll, dbGet, dbRun, now, type Db } from '$lib/server/db';
+import type { Env } from '../env';
 import { getManualPullState, runPullRun, startManualPull } from '$lib/server/manual-pull';
 import { getPreferredSourceForArticle, getPreferredSourcesForArticles, listSourcesForArticle } from '$lib/server/sources';
 import { listTagsForArticle, resolveTagsByTokens } from '$lib/server/tags';
@@ -585,7 +586,7 @@ export type McpHandlers = ReturnType<typeof createMcpHandlers>;
 
 export function createMcpHandlers(input: {
   db: Db;
-  env: App.Platform['env'];
+  env: Env;
   context: App.Platform['context'];
 }) {
   const { db, env, context } = input;

@@ -6,10 +6,10 @@ import {
   resolveNewsBriefGenerationContext
 } from '$lib/server/news-brief';
 
-export const POST = async ({ platform, locals }) => {
+export const POST = async ({ locals }) => {
   const db = locals.db;
   const userId = locals.user?.id ?? 'admin';
-  const generationContext = await resolveNewsBriefGenerationContext(db, platform.env, userId);
+  const generationContext = await resolveNewsBriefGenerationContext(db, locals.env, userId);
 
   if (!generationContext.apiKey) {
     return json(
@@ -24,7 +24,7 @@ export const POST = async ({ platform, locals }) => {
   }
 
   try {
-    const edition = await processNewsBriefEditionById(db, platform.env, editionId, { skipClaim: true });
+    const edition = await processNewsBriefEditionById(db, locals.env, editionId, { skipClaim: true });
 
     await recordAuditEvent(db, {
       actor: userId,

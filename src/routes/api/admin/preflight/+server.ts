@@ -18,7 +18,7 @@ const REQUIRED_SETTINGS = [
 export const GET = async (event) => {
   requireAdmin(event.locals.user);
   const schemaVersion = await getSchemaVersion(event.locals.db);
-  const runtime = inspectRuntimeConfig(event.platform.env);
+  const runtime = inspectRuntimeConfig(event.locals.env);
   const ops = await getOpsSummary(event.locals.db);
   const settingRows = await dbAll<{ key: string }>(
     event.locals.db,

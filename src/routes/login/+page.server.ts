@@ -6,28 +6,28 @@ import { recordAuditEvent } from '$lib/server/audit';
 import { logError, logInfo, logWarn, summarizeError } from '$lib/server/log';
 import { isSupabaseConfigured, sendMagicLink } from '$lib/server/supabase-auth';
 
-export const load = async ({ platform, url }) => {
+export const load = async ({ locals, url }) => {
   return {
-    hasPassword: Boolean(platform.env.ADMIN_PASSWORD_HASH?.trim()),
-    hasSupabase: isSupabaseConfigured(platform.env),
+    hasPassword: Boolean(locals.env.ADMIN_PASSWORD_HASH?.trim()),
+    hasSupabase: isSupabaseConfigured(locals.env),
     error: url.searchParams.get('error') ?? null
   };
 };
 
 export const actions = {
-  magiclink: async ({ request, platform, url }) => {
+  magiclink: async ({ request, locals, url }) => {
     const data = await request.formData();
     const email = String(data.get('email') ?? '').trim().toLowerCase();
     if (!email || !email.includes('@')) {
       return fail(400, { magicLinkError: 'Valid email required', magicLinkSent: false });
     }
 
-    if (!isSupabaseConfigured(platform.env)) {
+    if (!isSupabaseConfigured(locals.env)) {
       return fail(503, { magicLinkError: 'Email login is not configured', magicLinkSent: false });
     }
 
     const callbackUrl = `${url.origin}/auth/callback`;
-    const result = await sendMagicLink(platform.env, email, callbackUrl);
+    const result = await sendMagicLink(locals.env, email, callbackUrl);
     if (!result.ok) {
       return fail(500, { magicLinkError: result.error ?? 'Failed to send', magicLinkSent: false });
     }
@@ -35,9 +35,9 @@ export const actions = {
     return { magicLinkSent: true, magicLinkEmail: email };
   },
 
-  password: async ({ request, platform, cookies, locals, url }) => {
+  password: async ({ request, cookies, locals, url }) => {
     const requestId = locals.requestId ?? null;
-    const stage = platform.env.APP_ENV ?? 'development';
+    const stage = locals.env.APP_ENV ?? 'development';
     const route = '/login';
     const identifier = getAuthIdentifier(request);
 
@@ -63,7 +63,7 @@ export const actions = {
       const password = String(data.get('password') ?? '');
       if (!password) return fail(400, { error: 'Password required' });
 
-      const valid = await verifyPassword(password, platform.env.ADMIN_PASSWORD_HASH);
+      const valid = await verifyPassword(password, locals.env.ADMIN_PASSWORD_HASH);
       if (!valid) {
         const throttled = await registerFailedLogin(locals.db, identifier);
         await recordAuditEvent(locals.db, {
@@ -97,7 +97,7 @@ export const actions = {
       });
 
       const secure = url.protocol === 'https:';
-      const value = await createSessionValue(platform.env.SESSION_SECRET);
+      const value = await createSessionValue(locals.env.SESSION_SECRET);
       cookies.set(SESSION_COOKIE, value, {
         httpOnly: true,
         secure,

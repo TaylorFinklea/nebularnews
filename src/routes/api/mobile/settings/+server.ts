@@ -43,15 +43,15 @@ async function aggregateSettings(db: D1Database) {
   };
 }
 
-export const GET = async ({ request, platform, locals }) => {
-  const { user } = await requireMobileAccess(request, platform.env, locals.db, 'app:read');
+export const GET = async ({ request, locals }) => {
+  const { user } = await requireMobileAccess(request, locals.env, locals.db, 'app:read');
   void user;
   const settings = await aggregateSettings(locals.db);
   return json(settings);
 };
 
-export const PATCH = async ({ request, platform, locals }) => {
-  const { user } = await requireMobileAccess(request, platform.env, locals.db, 'app:write');
+export const PATCH = async ({ request, locals }) => {
+  const { user } = await requireMobileAccess(request, locals.env, locals.db, 'app:write');
   void user;
   const body = await request.json().catch(() => ({}));
   const entries: [string, string][] = [];

@@ -1,4 +1,5 @@
 import { error } from '@sveltejs/kit';
+import type { Env } from '../env';
 import { isPublicMcpHost } from '$lib/server/mcp/context';
 import { isPublicMobileHost, resolveMobileAllowedOrigins } from '$lib/server/mobile/context';
 import { assertPublicOauthAudience, type PublicOauthAudience } from './audience';
@@ -10,19 +11,19 @@ const OAUTH_CORS_HEADERS = {
   'access-control-max-age': '600'
 } as const;
 
-export const assertPublicMcpRequest = (url: URL, env: App.Platform['env']) => {
+export const assertPublicMcpRequest = (url: URL, env: Env) => {
   if (!isPublicMcpHost(url, env)) {
     throw error(404, 'Not found');
   }
 };
 
-export const assertPublicMobileRequest = (url: URL, env: App.Platform['env']) => {
+export const assertPublicMobileRequest = (url: URL, env: Env) => {
   if (!isPublicMobileHost(url, env)) {
     throw error(404, 'Not found');
   }
 };
 
-export const assertPublicOauthRequest = (url: URL, env: App.Platform['env']) => assertPublicOauthAudience(url, env);
+export const assertPublicOauthRequest = (url: URL, env: Env) => assertPublicOauthAudience(url, env);
 
 const resolvePublicCorsOrigin = (request: Request) => request.headers.get('origin')?.trim() || '*';
 
@@ -30,14 +31,14 @@ const resolveAllowedHeaders = (request: Request) =>
   request.headers.get('access-control-request-headers')?.trim() ||
   'authorization, content-type, accept, cache-control, pragma, x-requested-with';
 
-export const withPublicOauthCors = (response: Response, request: Request, _env: App.Platform['env']) => {
+export const withPublicOauthCors = (response: Response, request: Request, _env: Env) => {
   return withAudienceOauthCors(response, request, _env, null);
 };
 
 export const withAudienceOauthCors = (
   response: Response,
   request: Request,
-  env: App.Platform['env'],
+  env: Env,
   audience: PublicOauthAudience | null
 ) => {
   const headers = new Headers(response.headers);

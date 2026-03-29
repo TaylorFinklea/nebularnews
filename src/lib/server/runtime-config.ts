@@ -1,3 +1,5 @@
+import type { Env } from './env';
+
 type RuntimeStage = 'development' | 'staging' | 'production';
 
 type SecretChecks = {
@@ -28,7 +30,7 @@ let cacheKey = '';
 const trim = (value: string | undefined) => value?.trim() ?? '';
 const parseBoolean = (value: string | undefined) => ['1', 'true', 'yes', 'on'].includes(trim(value).toLowerCase());
 
-const detectStage = (env: App.Platform['env']): RuntimeStage => {
+const detectStage = (env: Env): RuntimeStage => {
   const raw = trim(env.APP_ENV).toLowerCase();
   if (raw === 'production') return 'production';
   if (raw === 'staging') return 'staging';
@@ -60,7 +62,7 @@ const isValidPbkdf2Hash = (value: string) => {
   }
 };
 
-const buildCacheKey = (env: App.Platform['env']) =>
+const buildCacheKey = (env: Env) =>
   JSON.stringify({
     appEnv: trim(env.APP_ENV),
     adminPasswordHash: trim(env.ADMIN_PASSWORD_HASH),
@@ -117,7 +119,7 @@ const isValidAbsoluteRedirectUriList = (raw: string) => {
   });
 };
 
-export const inspectRuntimeConfig = (env: App.Platform['env']): RuntimeConfigReport => {
+export const inspectRuntimeConfig = (env: Env): RuntimeConfigReport => {
   const key = buildCacheKey(env);
   if (cachedReport && cacheKey === key) return cachedReport;
 
@@ -231,7 +233,7 @@ export const inspectRuntimeConfig = (env: App.Platform['env']): RuntimeConfigRep
   return cachedReport;
 };
 
-export const assertRuntimeConfig = (env: App.Platform['env']) => {
+export const assertRuntimeConfig = (env: Env) => {
   const report = inspectRuntimeConfig(env);
   if (report.stage === 'production' && !report.ok) {
     throw new Error(`Invalid runtime configuration: ${report.errors.join(' ')}`);

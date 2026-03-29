@@ -2,8 +2,8 @@ import { json } from '@sveltejs/kit';
 import { requireMobileAccess } from '$lib/server/mobile/auth';
 import { listTags, createTag } from '$lib/server/tags';
 
-export const GET = async ({ request, platform, locals, url }) => {
-  const { user } = await requireMobileAccess(request, platform.env, locals.db, 'app:read');
+export const GET = async ({ request, locals, url }) => {
+  const { user } = await requireMobileAccess(request, locals.env, locals.db, 'app:read');
   void user;
   const q = url.searchParams.get('q') ?? undefined;
   const limitParam = url.searchParams.get('limit');
@@ -12,8 +12,8 @@ export const GET = async ({ request, platform, locals, url }) => {
   return json({ tags });
 };
 
-export const POST = async ({ request, platform, locals }) => {
-  const { user } = await requireMobileAccess(request, platform.env, locals.db, 'app:write');
+export const POST = async ({ request, locals }) => {
+  const { user } = await requireMobileAccess(request, locals.env, locals.db, 'app:write');
   void user;
   const body = await request.json().catch(() => ({}));
 

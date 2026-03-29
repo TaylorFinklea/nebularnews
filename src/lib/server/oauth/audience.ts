@@ -1,4 +1,5 @@
 import { error } from '@sveltejs/kit';
+import type { Env } from '../env';
 import {
   MOBILE_DEFAULT_SCOPE,
   MOBILE_SCOPE_READ,
@@ -17,13 +18,13 @@ export type PublicOauthAudience = 'mcp' | 'mobile';
 
 export const OAUTH_SCOPE_READ = 'mcp:read';
 
-export const resolvePublicOauthAudience = (url: URL, env: App.Platform['env']): PublicOauthAudience | null => {
+export const resolvePublicOauthAudience = (url: URL, env: Env): PublicOauthAudience | null => {
   if (isPublicMcpHost(url, env)) return 'mcp';
   if (isPublicMobileHost(url, env)) return 'mobile';
   return null;
 };
 
-export const assertPublicOauthAudience = (url: URL, env: App.Platform['env']): PublicOauthAudience => {
+export const assertPublicOauthAudience = (url: URL, env: Env): PublicOauthAudience => {
   const audience = resolvePublicOauthAudience(url, env);
   if (!audience) {
     throw error(404, 'Not found');
@@ -31,13 +32,13 @@ export const assertPublicOauthAudience = (url: URL, env: App.Platform['env']): P
   return audience;
 };
 
-export const getOauthIssuerForAudience = (env: App.Platform['env'], audience: PublicOauthAudience) =>
+export const getOauthIssuerForAudience = (env: Env, audience: PublicOauthAudience) =>
   audience === 'mcp' ? getConfiguredPublicMcpOrigin(env) : getConfiguredPublicMobileOrigin(env);
 
-export const getOauthResourceForAudience = (env: App.Platform['env'], audience: PublicOauthAudience) =>
+export const getOauthResourceForAudience = (env: Env, audience: PublicOauthAudience) =>
   audience === 'mcp' ? getPublicMcpResource(env) : getPublicMobileResource(env);
 
-export const getProtectedResourceMetadataUrlForAudience = (env: App.Platform['env'], audience: PublicOauthAudience) => {
+export const getProtectedResourceMetadataUrlForAudience = (env: Env, audience: PublicOauthAudience) => {
   if (audience === 'mcp') return getProtectedResourceMetadataUrl(env);
   const origin = getConfiguredPublicMobileOrigin(env);
   return origin ? `${origin}/.well-known/oauth-protected-resource` : null;

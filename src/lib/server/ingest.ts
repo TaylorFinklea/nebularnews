@@ -1,5 +1,6 @@
 import { nanoid } from 'nanoid';
 import { dbAll, dbGet, dbRun, getAffectedRows, now, type Db } from './db';
+import type { Env } from './env';
 import { fetchAndParseFeed, type FeedItem } from './feeds';
 import { extractMainContent, computeWordCount, BROWSER_USER_AGENT, BROWSER_ACCEPT } from './text';
 import { logWarn } from './log';
@@ -100,7 +101,7 @@ export function shouldIngestItemForInitialLookback(
 
 export async function pollFeeds(
   db: Db,
-  env: App.Platform['env'],
+  env: Env,
   options: PollFeedsOptions = {}
 ): Promise<FeedPollSummary> {
   const pollStartedAt = now();

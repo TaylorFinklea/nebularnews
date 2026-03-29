@@ -1,10 +1,11 @@
 /**
- * Supabase Auth REST API client for CF Workers.
+ * Supabase Auth REST API client.
  * No SDK dependency — just HTTP calls to the GoTrue API.
  */
+import type { Env } from './env';
 
 export function buildOAuthAuthorizeUrl(
-  env: App.Platform['env'],
+  env: Env,
   provider: string,
   redirectTo: string,
   codeChallenge: string
@@ -19,7 +20,7 @@ export function buildOAuthAuthorizeUrl(
 }
 
 export async function exchangeOAuthCode(
-  env: App.Platform['env'],
+  env: Env,
   authCode: string,
   codeVerifier: string
 ): Promise<{
@@ -57,7 +58,7 @@ export async function exchangeOAuthCode(
   };
 }
 
-export function isSupabaseConfigured(env: App.Platform['env']): boolean {
+export function isSupabaseConfigured(env: Env): boolean {
   return Boolean(env.SUPABASE_URL?.trim() && env.SUPABASE_ANON_KEY?.trim());
 }
 
@@ -66,7 +67,7 @@ export function isSupabaseConfigured(env: App.Platform['env']): boolean {
  * Calls POST /auth/v1/otp on the Supabase GoTrue API.
  */
 export async function sendMagicLink(
-  env: App.Platform['env'],
+  env: Env,
   email: string,
   redirectTo?: string
 ): Promise<{ ok: boolean; error?: string }> {
@@ -102,7 +103,7 @@ export async function sendMagicLink(
  * Returns the Supabase access token (JWT) and user info on success.
  */
 export async function verifyOtpTokenHash(
-  env: App.Platform['env'],
+  env: Env,
   tokenHash: string,
   type = 'email'
 ): Promise<{

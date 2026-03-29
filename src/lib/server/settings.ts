@@ -1,6 +1,7 @@
 import { nanoid } from 'nanoid';
 import { IANAZone } from 'luxon';
 import { dbAll, dbGet, dbRun, type Db } from './db';
+import type { Env } from './env';
 import { decryptString, encryptString } from './crypto';
 import {
   DEFAULT_SCORE_SYSTEM_PROMPT,
@@ -542,11 +543,11 @@ export async function setSetting(db: Db, key: string, value: string) {
   return setUserSetting(db, 'admin', key, value);
 }
 
-export async function getProviderModel(db: Db, env: App.Platform['env']) {
+export async function getProviderModel(db: Db, env: Env) {
   return getIngestProviderModel(db, env);
 }
 
-async function resolveModelAProviderModel(db: Db, env: App.Platform['env']): Promise<ProviderModelConfig> {
+async function resolveModelAProviderModel(db: Db, env: Env): Promise<ProviderModelConfig> {
   const provider = toProvider(
     (await getFirstSetting(db, ['ingest_provider', 'default_provider'])) ??
       env.DEFAULT_MODEL_A_PROVIDER ??
@@ -568,7 +569,7 @@ async function resolveModelAProviderModel(db: Db, env: App.Platform['env']): Pro
   return { provider, model, reasoningEffort };
 }
 
-async function resolveModelBProviderModel(db: Db, env: App.Platform['env']): Promise<ProviderModelConfig> {
+async function resolveModelBProviderModel(db: Db, env: Env): Promise<ProviderModelConfig> {
   const provider = toProvider(
     (await getFirstSetting(db, ['chat_provider', 'default_provider'])) ??
       env.DEFAULT_MODEL_B_PROVIDER ??
@@ -590,11 +591,11 @@ async function resolveModelBProviderModel(db: Db, env: App.Platform['env']): Pro
   return { provider, model, reasoningEffort };
 }
 
-export async function getConfiguredModelA(db: Db, env: App.Platform['env']): Promise<ProviderModelConfig> {
+export async function getConfiguredModelA(db: Db, env: Env): Promise<ProviderModelConfig> {
   return resolveModelAProviderModel(db, env);
 }
 
-export async function getConfiguredModelB(db: Db, env: App.Platform['env']): Promise<ProviderModelConfig> {
+export async function getConfiguredModelB(db: Db, env: Env): Promise<ProviderModelConfig> {
   return resolveModelBProviderModel(db, env);
 }
 
@@ -623,7 +624,7 @@ export async function setFeatureModelLane(db: Db, feature: AiFeature, lane: AiMo
 
 export async function getFeatureProviderModel(
   db: Db,
-  env: App.Platform['env'],
+  env: Env,
   feature: AiFeature
 ): Promise<ProviderModelConfig> {
   const lane = await getFeatureModelLane(db, feature);
@@ -631,11 +632,11 @@ export async function getFeatureProviderModel(
   return resolveModelAProviderModel(db, env);
 }
 
-export async function getIngestProviderModel(db: Db, env: App.Platform['env']): Promise<ProviderModelConfig> {
+export async function getIngestProviderModel(db: Db, env: Env): Promise<ProviderModelConfig> {
   return resolveModelAProviderModel(db, env);
 }
 
-export async function getModelBProviderModel(db: Db, env: App.Platform['env']): Promise<ProviderModelConfig> {
+export async function getModelBProviderModel(db: Db, env: Env): Promise<ProviderModelConfig> {
   return resolveModelBProviderModel(db, env);
 }
 
@@ -726,22 +727,22 @@ export async function getInitialFeedLookbackDays(db: Db) {
   return clampInitialFeedLookbackDays(raw);
 }
 
-export async function getMaxFeedsPerPoll(db: Db, env?: App.Platform['env']) {
+export async function getMaxFeedsPerPoll(db: Db, env?: Env) {
   const raw = (await getSetting(db, 'max_feeds_per_poll')) ?? env?.MAX_FEEDS_PER_POLL ?? null;
   return clampMaxFeedsPerPoll(raw);
 }
 
-export async function getMaxItemsPerPoll(db: Db, env?: App.Platform['env']) {
+export async function getMaxItemsPerPoll(db: Db, env?: Env) {
   const raw = (await getSetting(db, 'max_items_per_poll')) ?? env?.MAX_ITEMS_PER_POLL ?? null;
   return clampMaxItemsPerPoll(raw);
 }
 
-export async function getEventsPollMs(db: Db, env?: App.Platform['env']) {
+export async function getEventsPollMs(db: Db, env?: Env) {
   const raw = (await getSetting(db, 'events_poll_ms')) ?? env?.EVENTS_POLL_MS ?? null;
   return clampEventsPollMs(raw);
 }
 
-export async function getDashboardRefreshMinMs(db: Db, env?: App.Platform['env']) {
+export async function getDashboardRefreshMinMs(db: Db, env?: Env) {
   const raw = (await getSetting(db, 'dashboard_refresh_min_ms')) ?? env?.DASHBOARD_REFRESH_MIN_MS ?? null;
   return clampDashboardRefreshMinMs(raw);
 }
@@ -753,7 +754,7 @@ export async function getRetentionConfig(db: Db) {
   return { archiveDays, deleteDays, mode, days: archiveDays };
 }
 
-export async function getJobProcessorBatchSize(db: Db, env?: App.Platform['env']) {
+export async function getJobProcessorBatchSize(db: Db, env?: Env) {
   const raw = (await getSetting(db, 'job_processor_batch_size')) ?? env?.JOB_PROCESSOR_BATCH_SIZE ?? null;
   return clampJobProcessorBatchSize(raw);
 }
@@ -915,7 +916,7 @@ export async function getArticleCardLayout(db: Db): Promise<ArticleCardLayout> {
   return toArticleCardLayout(await getSetting(db, 'article_card_layout'));
 }
 
-export async function getProviderKey(db: Db, env: App.Platform['env'], provider: Provider) {
+export async function getProviderKey(db: Db, env: Env, provider: Provider) {
   const row = await dbGet<{ encrypted_key: string }>(db, 'SELECT encrypted_key FROM provider_keys WHERE provider = ?', [
     provider
   ]);
@@ -923,7 +924,7 @@ export async function getProviderKey(db: Db, env: App.Platform['env'], provider:
   return decryptString(row.encrypted_key, env.ENCRYPTION_KEY);
 }
 
-export async function setProviderKey(db: Db, env: App.Platform['env'], provider: Provider, apiKey: string) {
+export async function setProviderKey(db: Db, env: Env, provider: Provider, apiKey: string) {
   const encrypted = await encryptString(apiKey, env.ENCRYPTION_KEY);
   const existing = await dbGet<{ id: string }>(db, 'SELECT id FROM provider_keys WHERE provider = ?', [provider]);
   if (existing) {
@@ -945,7 +946,7 @@ export async function deleteProviderKey(db: Db, provider: Provider) {
   await dbRun(db, 'DELETE FROM provider_keys WHERE provider = ?', [provider]);
 }
 
-export async function rotateProviderKeyEncryption(db: Db, env: App.Platform['env'], provider?: Provider) {
+export async function rotateProviderKeyEncryption(db: Db, env: Env, provider?: Provider) {
   const where = provider ? 'WHERE provider = ?' : '';
   const params = provider ? [provider] : [];
   const rows = await dbAll<{ provider: Provider; encrypted_key: string }>(
@@ -1003,7 +1004,7 @@ export async function getBrowserScrapeProvider(db: Db): Promise<BrowserScrapePro
 
 export async function getBrowserScrapeConfig(
   db: Db,
-  env: App.Platform['env']
+  env: Env
 ): Promise<BrowserScrapeConfig | null> {
   const enabled = await getBrowserScrapingEnabled(db);
   if (!enabled) return null;
@@ -1027,7 +1028,7 @@ export async function getBrowserScrapeConfig(
   };
 }
 
-export async function setBrowserScrapeKey(db: Db, env: App.Platform['env'], apiKey: string) {
+export async function setBrowserScrapeKey(db: Db, env: Env, apiKey: string) {
   const encrypted = await encryptString(apiKey, env.ENCRYPTION_KEY);
   const existing = await dbGet<{ id: string }>(
     db,

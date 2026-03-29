@@ -4,7 +4,7 @@ import { isEventsV2Enabled } from '$lib/server/flags';
 
 const RECENT_MISSING_LOOKBACK_HOURS = 72;
 
-export const load = async ({ platform, locals, url, depends }) => {
+export const load = async ({ locals, url, depends }) => {
   depends('app:jobs');
   const status = normalizeJobFilter(url.searchParams.get('status') ?? 'pending');
   const jobs = await listJobs(locals.db, { status, limit: 150 });
@@ -64,7 +64,7 @@ export const load = async ({ platform, locals, url, depends }) => {
     jobs,
     counts,
     status,
-    liveEventsEnabled: isEventsV2Enabled(platform.env),
+    liveEventsEnabled: isEventsV2Enabled(locals.env),
     recent: {
       lookbackHours: RECENT_MISSING_LOOKBACK_HOURS,
       articleCount: recentMissing?.recent_articles ?? 0,

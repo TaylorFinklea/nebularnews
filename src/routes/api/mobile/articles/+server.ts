@@ -38,8 +38,8 @@ const normalizeSort = (value: string | null): SortValue => {
   return SORT_VALUES.includes(normalized as SortValue) ? (normalized as SortValue) : 'newest';
 };
 
-export const GET = async ({ request, url, platform, locals }) => {
-  const { user } = await requireMobileAccess(request, platform.env, locals.db, 'app:read');
+export const GET = async ({ request, url, locals }) => {
+  const { user } = await requireMobileAccess(request, locals.env, locals.db, 'app:read');
 
   const startedAt = Date.now();
   const limit = Math.max(1, Math.min(50, Number(url.searchParams.get('limit') ?? 20)));

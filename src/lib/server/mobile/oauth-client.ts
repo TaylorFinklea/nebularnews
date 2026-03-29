@@ -1,9 +1,10 @@
 import { error } from '@sveltejs/kit';
 import type { Db } from '$lib/server/db';
+import type { Env } from '../env';
 import { MOBILE_DEFAULT_SCOPE, getConfiguredMobileOauthClient } from './context';
 import { getOAuthClient, upsertOAuthClient, type OAuthClient } from '$lib/server/oauth/storage';
 
-export const ensureMobileOAuthClient = async (db: Db, env: App.Platform['env']): Promise<OAuthClient> => {
+export const ensureMobileOAuthClient = async (db: Db, env: Env): Promise<OAuthClient> => {
   const configured = getConfiguredMobileOauthClient(env);
   if (!configured) {
     throw error(503, 'Mobile OAuth client is not configured.');

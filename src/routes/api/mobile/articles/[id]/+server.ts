@@ -5,8 +5,8 @@ import { getReactionForArticle } from '$lib/server/reactions';
 import { getPreferredSourceForArticle, listSourcesForArticle } from '$lib/server/sources';
 import { listTagSuggestionsForArticle, listTagsForArticle } from '$lib/server/tags';
 
-export const GET = async ({ params, request, platform, locals }) => {
-  const { user } = await requireMobileAccess(request, platform.env, locals.db, 'app:read');
+export const GET = async ({ params, request, locals }) => {
+  const { user } = await requireMobileAccess(request, locals.env, locals.db, 'app:read');
 
   const { id } = params;
   const article = await dbGet(

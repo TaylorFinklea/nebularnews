@@ -4,7 +4,7 @@ import { inspectRuntimeConfig } from '$lib/server/runtime-config';
 
 export const GET = async (event) => {
   try {
-    const runtime = inspectRuntimeConfig(event.platform.env);
+    const runtime = inspectRuntimeConfig(event.locals.env);
     if (!runtime.ok && runtime.stage === 'production') {
       return apiError(event, 503, 'schema_not_ready', `Runtime config invalid: ${runtime.errors.join(' ')}`);
     }

@@ -8,11 +8,11 @@ const asOAuthError = (message: string) => ({
   error_description: message
 });
 
-export const OPTIONS = async ({ request, platform }) =>
-  withPublicOauthCors(new Response(null, { status: 204 }), request, platform.env);
+export const OPTIONS = async ({ request, locals }) =>
+  withPublicOauthCors(new Response(null, { status: 204 }), request, locals.env);
 
-export const POST = async ({ request, platform, locals }) => {
-  assertPublicMcpRequest(new URL(request.url), platform.env);
+export const POST = async ({ request, locals }) => {
+  assertPublicMcpRequest(new URL(request.url), locals.env);
 
   let body: unknown;
   try {
@@ -21,12 +21,12 @@ export const POST = async ({ request, platform, locals }) => {
     return withPublicOauthCors(
       json(asOAuthError('Request body must be valid JSON.'), { status: 400 }),
       request,
-      platform.env
+      locals.env
     );
   }
 
   try {
-    const registered = await registerDynamicClient(locals.db, platform.env, body);
+    const registered = await registerDynamicClient(locals.db, locals.env, body);
     await recordAuditEvent(locals.db, {
       actor: locals.user ? 'admin' : 'system',
       action: 'oauth.client.registered',
@@ -37,9 +37,9 @@ export const POST = async ({ request, platform, locals }) => {
         redirect_uris: registered.redirect_uris
       }
     });
-    return withPublicOauthCors(json(registered, { status: 201 }), request, platform.env);
+    return withPublicOauthCors(json(registered, { status: 201 }), request, locals.env);
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Client registration failed.';
-    return withPublicOauthCors(json(asOAuthError(message), { status: 400 }), request, platform.env);
+    return withPublicOauthCors(json(asOAuthError(message), { status: 400 }), request, locals.env);
   }
 };

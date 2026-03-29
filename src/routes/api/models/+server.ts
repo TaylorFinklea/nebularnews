@@ -5,13 +5,13 @@ import type { Provider } from '$lib/server/llm';
 
 const isProvider = (value: string): value is Provider => value === 'openai' || value === 'anthropic';
 
-export const GET = async ({ url, platform, locals }) => {
+export const GET = async ({ url, locals }) => {
   const providerParam = url.searchParams.get('provider') ?? '';
   if (!isProvider(providerParam)) {
     return json({ error: 'Invalid provider' }, { status: 400 });
   }
 
-  const apiKey = await getProviderKey(locals.db, platform.env, providerParam);
+  const apiKey = await getProviderKey(locals.db, locals.env, providerParam);
   if (!apiKey) {
     return json({ error: `No ${providerParam} API key saved` }, { status: 400 });
   }

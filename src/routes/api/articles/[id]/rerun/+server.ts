@@ -2,7 +2,7 @@ import { json } from '@sveltejs/kit';
 import { enqueueArticleJob } from '$lib/server/job-queue';
 import { runArticleJobImmediately } from '$lib/server/jobs';
 
-export const POST = async ({ params, request, platform, locals }) => {
+export const POST = async ({ params, request, locals }) => {
   const body = await request.json().catch(() => ({}));
   const types = Array.isArray(body?.types) ? body.types : ['summarize', 'score'];
   const articleId = params.id;
@@ -17,7 +17,7 @@ export const POST = async ({ params, request, platform, locals }) => {
 
   if (filtered.includes('summarize')) {
     try {
-      await runArticleJobImmediately(locals.db, platform.env, 'summarize', articleId);
+      await runArticleJobImmediately(locals.db, locals.env, 'summarize', articleId);
       executed.push('summarize');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to generate summary';

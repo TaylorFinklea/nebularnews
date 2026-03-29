@@ -3,7 +3,7 @@ import { requireAdmin } from '$lib/server/auth';
 import { rotateProviderKeyEncryption } from '$lib/server/settings';
 import { recordAuditEvent } from '$lib/server/audit';
 
-export const POST = async ({ request, platform, locals }) => {
+export const POST = async ({ request, locals }) => {
   requireAdmin(locals.user);
   const body = await request.json().catch(() => ({}));
   const providerRaw = typeof body?.provider === 'string' ? body.provider.trim().toLowerCase() : '';
@@ -12,7 +12,7 @@ export const POST = async ({ request, platform, locals }) => {
     return json({ error: 'Invalid provider' }, { status: 400 });
   }
 
-  const rotated = await rotateProviderKeyEncryption(locals.db, platform.env, provider);
+  const rotated = await rotateProviderKeyEncryption(locals.db, locals.env, provider);
   await recordAuditEvent(locals.db, {
     actor: 'admin',
     action: 'keys.rotate',

@@ -5,9 +5,9 @@ import { clearLoginAttempts, getAuthIdentifier, getThrottleRemainingMs, register
 import { recordAuditEvent } from '$lib/server/audit';
 import { logError, logInfo, logWarn, summarizeError } from '$lib/server/log';
 
-export const POST = async ({ request, platform, locals, url }) => {
+export const POST = async ({ request, locals, url }) => {
   const requestId = locals.requestId ?? null;
-  const stage = platform.env.APP_ENV ?? 'development';
+  const stage = locals.env.APP_ENV ?? 'development';
   const route = '/api/auth/login';
   const identifier = getAuthIdentifier(request);
 
@@ -38,7 +38,7 @@ export const POST = async ({ request, platform, locals, url }) => {
     const password = typeof body.password === 'string' ? body.password : '';
     if (!password) return json({ error: 'Missing password' }, { status: 400 });
 
-    const valid = await verifyPassword(password, platform.env.ADMIN_PASSWORD_HASH);
+    const valid = await verifyPassword(password, locals.env.ADMIN_PASSWORD_HASH);
     if (!valid) {
       const throttled = await registerFailedLogin(locals.db, identifier);
       await recordAuditEvent(locals.db, {
@@ -72,7 +72,7 @@ export const POST = async ({ request, platform, locals, url }) => {
     });
 
     const secure = url.protocol === 'https:';
-    const cookie = await createSessionCookie(platform.env.SESSION_SECRET, secure);
+    const cookie = await createSessionCookie(locals.env.SESSION_SECRET, secure);
     const csrfCookie = buildCsrfCookie(createCsrfToken(), secure);
     const headers = new Headers();
     headers.append('set-cookie', cookie);

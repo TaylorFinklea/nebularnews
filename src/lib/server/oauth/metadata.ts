@@ -1,3 +1,4 @@
+import type { Env } from '../env';
 import {
   getOauthIssuerForAudience,
   getOauthResourceForAudience,
@@ -5,10 +6,10 @@ import {
   type PublicOauthAudience
 } from './audience';
 
-export const getAuthorizationServerIssuer = (env: App.Platform['env'], audience: PublicOauthAudience) =>
+export const getAuthorizationServerIssuer = (env: Env, audience: PublicOauthAudience) =>
   getOauthIssuerForAudience(env, audience);
 
-export const buildProtectedResourceMetadata = (env: App.Platform['env'], audience: PublicOauthAudience) => {
+export const buildProtectedResourceMetadata = (env: Env, audience: PublicOauthAudience) => {
   const resource = getOauthResourceForAudience(env, audience);
   const issuer = getAuthorizationServerIssuer(env, audience);
   if (!resource || !issuer) {
@@ -21,7 +22,7 @@ export const buildProtectedResourceMetadata = (env: App.Platform['env'], audienc
   };
 };
 
-export const buildAuthorizationServerMetadata = (env: App.Platform['env'], audience: PublicOauthAudience) => {
+export const buildAuthorizationServerMetadata = (env: Env, audience: PublicOauthAudience) => {
   const issuer = getAuthorizationServerIssuer(env, audience);
   const resource = getOauthResourceForAudience(env, audience);
   if (!issuer || !resource) {

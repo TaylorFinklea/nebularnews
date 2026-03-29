@@ -1,5 +1,6 @@
 import { nanoid } from 'nanoid';
 import { dbAll, dbGet, dbRun, now, type Db } from './db';
+import type { Env } from './env';
 import {
   enhanceScore,
   generateArticleTagDecisions,
@@ -68,7 +69,7 @@ const createPendingTimestamp = () => now();
 
 export async function processJobs(
   db: Db,
-  env: App.Platform['env'],
+  env: Env,
   options: {
     timeBudgetMs?: number;
   } = {}
@@ -308,7 +309,7 @@ export async function processJobs(
 
 export async function runArticleJobImmediately(
   db: Db,
-  env: App.Platform['env'],
+  env: Env,
   type: 'summarize' | 'score' | 'key_points' | 'auto_tag' | 'image_backfill' | 'browser_scrape',
   articleId: string
 ): Promise<JobRunMetadata> {
@@ -497,7 +498,7 @@ async function runRefetchContentJob(db: Db, articleId: string): Promise<JobRunMe
 
 async function runBrowserScrapeJob(
   db: Db,
-  env: App.Platform['env'],
+  env: Env,
   articleId: string
 ): Promise<JobRunMetadata> {
   const article = await dbGet<{
@@ -602,7 +603,7 @@ async function runImageBackfillJob(db: Db, articleId: string): Promise<JobRunMet
 
 async function runSummarizeJob(
   db: Db,
-  env: App.Platform['env'],
+  env: Env,
   articleId: string
 ): Promise<{ provider: string; model: string }> {
   const article = await dbGet<{
@@ -651,7 +652,7 @@ async function runSummarizeJob(
   return { provider, model };
 }
 
-async function runKeyPointsJob(db: Db, env: App.Platform['env'], articleId: string): Promise<{ provider: string; model: string }> {
+async function runKeyPointsJob(db: Db, env: Env, articleId: string): Promise<{ provider: string; model: string }> {
   const article = await dbGet<{
     title: string | null;
     canonical_url: string | null;
@@ -696,7 +697,7 @@ async function runKeyPointsJob(db: Db, env: App.Platform['env'], articleId: stri
   return { provider, model };
 }
 
-export async function runAutoTagJob(db: Db, _env: App.Platform['env'], articleId: string): Promise<JobRunMetadata> {
+export async function runAutoTagJob(db: Db, _env: Env, articleId: string): Promise<JobRunMetadata> {
   const taggingMethod = await getTaggingMethod(db);
   const article = await dbGet<{
     title: string | null;
@@ -860,7 +861,7 @@ export async function runAutoTagJob(db: Db, _env: App.Platform['env'], articleId
 }
 
 
-export async function runScoreJob(db: Db, env: App.Platform['env'], articleId: string): Promise<{ provider: string; model: string }> {
+export async function runScoreJob(db: Db, env: Env, articleId: string): Promise<{ provider: string; model: string }> {
   const scoringMethod: ScoringMethod = await getScoringMethod(db);
 
   // ── AI-only path (legacy behavior) ──────────────────────────────
@@ -964,7 +965,7 @@ export async function runScoreJob(db: Db, env: App.Platform['env'], articleId: s
 }
 
 /** Legacy AI-only scoring path */
-async function runScoreJobAiOnly(db: Db, env: App.Platform['env'], articleId: string): Promise<{ provider: string; model: string }> {
+async function runScoreJobAiOnly(db: Db, env: Env, articleId: string): Promise<{ provider: string; model: string }> {
   const article = await dbGet<{
     title: string | null;
     canonical_url: string | null;
@@ -1022,7 +1023,7 @@ async function runScoreJobAiOnly(db: Db, env: App.Platform['env'], articleId: st
   return { provider, model };
 }
 
-async function runRefreshProfile(db: Db, env: App.Platform['env']): Promise<{ provider: string; model: string } | null> {
+async function runRefreshProfile(db: Db, env: Env): Promise<{ provider: string; model: string } | null> {
   const profile = await ensurePreferenceProfile(db);
   const feedback = await dbAll<{ rating: number; comment: string | null; title: string | null }>(
     db,

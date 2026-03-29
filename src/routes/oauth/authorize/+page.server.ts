@@ -12,16 +12,16 @@ import {
 } from '$lib/server/oauth/authorize';
 import { assertPublicOauthRequest } from '$lib/server/oauth/http';
 
-export const load = async ({ url, platform, locals }) => {
-  assertPublicOauthRequest(url, platform.env);
+export const load = async ({ url, locals }) => {
+  assertPublicOauthRequest(url, locals.env);
 
-  const { client, request } = await parseAuthorizeRequest(url, locals.db, platform.env);
+  const { client, request } = await parseAuthorizeRequest(url, locals.db, locals.env);
   if (!locals.user) {
     throw redirect(303, buildLoginRedirectForAuthorize(url));
   }
 
   if (await shouldAutoApproveConsent(locals.db, request, locals.user.id)) {
-    const destination = await approveAuthorizeRequest(locals.db, platform.env, request, locals.user.id);
+    const destination = await approveAuthorizeRequest(locals.db, locals.env, request, locals.user.id);
     throw redirect(303, destination);
   }
 
@@ -40,8 +40,8 @@ export const load = async ({ url, platform, locals }) => {
 };
 
 export const actions = {
-  default: async ({ request, url, platform, locals }) => {
-    assertPublicOauthRequest(url, platform.env);
+  default: async ({ request, url, locals }) => {
+    assertPublicOauthRequest(url, locals.env);
 
     if (!locals.user) {
       throw redirect(303, buildLoginRedirectForAuthorize(url));
@@ -68,7 +68,7 @@ export const actions = {
 
     const authorizeUrl = new URL(url);
     authorizeUrl.search = params.toString();
-    const { request: authorizeRequest } = await parseAuthorizeRequest(authorizeUrl, locals.db, platform.env);
+    const { request: authorizeRequest } = await parseAuthorizeRequest(authorizeUrl, locals.db, locals.env);
     const decision = String(formData.get('decision') ?? '').trim().toLowerCase();
     if (!decision) {
       throw error(400, 'OAuth consent decision is required.');
@@ -84,7 +84,7 @@ export const actions = {
       throw redirect(
         303,
         buildOAuthErrorRedirect(
-          platform.env,
+          locals.env,
           authorizeRequest.redirectUri,
           'access_denied',
           authorizeRequest.state,
@@ -98,7 +98,7 @@ export const actions = {
       throw error(400, 'OAuth consent decision is invalid.');
     }
 
-    const destination = await approveAuthorizeRequest(locals.db, platform.env, authorizeRequest, locals.user.id);
+    const destination = await approveAuthorizeRequest(locals.db, locals.env, authorizeRequest, locals.user.id);
     await recordAuditEvent(locals.db, {
       actor: 'admin',
       action: 'oauth.authorize.approved',

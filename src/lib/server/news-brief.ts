@@ -1,6 +1,7 @@
 import { nanoid } from 'nanoid';
 import { DateTime } from 'luxon';
 import { dbAll, dbGet, dbRun, now, type Db } from './db';
+import type { Env } from './env';
 import { generateNewsBrief as generateNewsBriefLlm } from './llm';
 import { logInfo } from './log';
 import {
@@ -309,7 +310,7 @@ export const getNextScheduledNewsBriefAt = (config: NewsBriefConfig, referenceAt
 
 export async function resolveNewsBriefGenerationContext(
   db: Db,
-  env: App.Platform['env'],
+  env: Env,
   userId?: string
 ): Promise<NewsBriefGenerationContext> {
   const config = userId
@@ -535,7 +536,7 @@ export async function createManualNewsBriefEdition(db: Db, config: NewsBriefConf
 
 export async function queueDueNewsBriefEditionsForUser(
   db: Db,
-  env: App.Platform['env'],
+  env: Env,
   userId: string,
   referenceAt = now()
 ) {
@@ -584,7 +585,7 @@ export async function queueDueNewsBriefEditionsForUser(
 
 export async function queueDueNewsBriefEditions(
   db: Db,
-  env: App.Platform['env'],
+  env: Env,
   referenceAt = now()
 ) {
   const userIds = await getNewsBriefEnabledUserIds(db);
@@ -831,7 +832,7 @@ async function processEdition(
 
 export async function processNewsBriefEditionById(
   db: Db,
-  env: App.Platform['env'],
+  env: Env,
   editionId: string,
   options: { skipClaim?: boolean } = {}
 ) {
@@ -882,7 +883,7 @@ export async function processNewsBriefEditionById(
 
 export async function processPendingNewsBriefEditions(
   db: Db,
-  env: App.Platform['env'],
+  env: Env,
   options: { limit?: number } = {}
 ): Promise<NewsBriefQueueSummary> {
   await reclaimExpiredEditions(db);
@@ -992,7 +993,7 @@ export async function getLatestNewsBriefEditionSummary(db: Db, userId?: string):
 
 export async function getDashboardNewsBrief(
   db: Db,
-  env: App.Platform['env'],
+  env: Env,
   referenceAt = Date.now(),
   userId?: string
 ): Promise<DashboardNewsBriefState | null> {
@@ -1127,7 +1128,7 @@ export async function getDashboardNewsBrief(
 
 export async function runNewsBriefSchedulerTick(
   db: Db,
-  env: App.Platform['env'],
+  env: Env,
   referenceAt = now()
 ): Promise<NewsBriefQueueSummary> {
   const queued = await queueDueNewsBriefEditions(db, env, referenceAt);

@@ -1,8 +1,8 @@
 import { dbAll } from '$lib/server/db';
 import { requireMobileAccess } from '$lib/server/mobile/auth';
 
-export const GET = async ({ request, platform, locals }) => {
-  const { user } = await requireMobileAccess(request, platform.env, locals.db, 'app:read');
+export const GET = async ({ request, locals }) => {
+  const { user } = await requireMobileAccess(request, locals.env, locals.db, 'app:read');
 
   const feeds = await dbAll<{ title: string | null; url: string }>(
     locals.db,

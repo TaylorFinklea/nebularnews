@@ -1,11 +1,12 @@
 import type { Db } from '../db';
+import type { Env } from '../env';
 import { OAUTH_SCOPE_READ, registerOAuthClient } from './storage';
 
 const isHttps = (url: URL) => url.protocol === 'https:';
 const isLoopbackHttp = (url: URL) =>
   url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname.toLowerCase());
 
-const normalizeRedirectUris = (value: unknown, env: App.Platform['env']) => {
+const normalizeRedirectUris = (value: unknown, env: Env) => {
   if (!Array.isArray(value) || value.length === 0) {
     throw new Error('redirect_uris must be a non-empty array');
   }
@@ -91,7 +92,7 @@ const normalizeResponseTypes = (value: unknown) => {
 
 export const registerDynamicClient = async (
   db: Db,
-  env: App.Platform['env'],
+  env: Env,
   body: unknown
 ) => {
   const payload = typeof body === 'object' && body && !Array.isArray(body) ? (body as Record<string, unknown>) : null;

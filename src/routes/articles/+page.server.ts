@@ -44,7 +44,7 @@ const normalizeSort = (value: string | null): SortValue => {
   return SORT_VALUES.includes(normalized as SortValue) ? (normalized as SortValue) : 'newest';
 };
 
-export const load = async ({ platform, url, setHeaders, locals }) => {
+export const load = async ({ url, setHeaders, locals }) => {
   const userId = locals.user?.id ?? 'admin';
   const startedAt = Date.now();
   const defaultCardLayout = await getArticleCardLayout(locals.db);
@@ -136,7 +136,7 @@ export const load = async ({ platform, url, setHeaders, locals }) => {
     view,
     layout,
     selectedReactions,
-    optimisticMutationsEnabled: isOptimisticMutationsEnabled(platform.env),
+    optimisticMutationsEnabled: isOptimisticMutationsEnabled(locals.env),
     availableTags,
     selectedTagIds,
     pagination: {

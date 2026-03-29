@@ -12,15 +12,15 @@ import {
 
 const DAY_MS = 1000 * 60 * 60 * 24;
 
-export const GET = async ({ request, platform, locals }) => {
-  const { user } = await requireMobileAccess(request, platform.env, locals.db, 'app:read');
+export const GET = async ({ request, locals }) => {
+  const { user } = await requireMobileAccess(request, locals.env, locals.db, 'app:read');
 
   const db = locals.db;
   const referenceAt = Date.now();
   const queueConfig = await getDashboardQueueConfig(db);
 
   const [newsBrief, momentum, topUnread] = await Promise.all([
-    getDashboardNewsBrief(db, platform.env, referenceAt, user.id),
+    getDashboardNewsBrief(db, locals.env, referenceAt, user.id),
     getDashboardReadingMomentum(db, user.id, {
       scoreCutoff: queueConfig.scoreCutoff,
       referenceAt

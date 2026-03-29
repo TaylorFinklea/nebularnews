@@ -1,5 +1,6 @@
 import { error } from '@sveltejs/kit';
 import type { Db } from '../db';
+import type { Env } from '../env';
 import { verifyPkceS256 } from './crypto';
 import { getOauthResourceForAudience, hasRequiredScope, type PublicOauthAudience } from './audience';
 import {
@@ -37,7 +38,7 @@ const validateClientRedirectUri = async (clientId: string, redirectUri: string, 
 
 export const exchangeAuthorizationCodeGrant = async (
   db: Db,
-  env: App.Platform['env'],
+  env: Env,
   audience: PublicOauthAudience,
   form: URLSearchParams
 ) => {
@@ -104,7 +105,7 @@ export const exchangeAuthorizationCodeGrant = async (
 
 export const exchangeRefreshTokenGrant = async (
   db: Db,
-  env: App.Platform['env'],
+  env: Env,
   audience: PublicOauthAudience,
   form: URLSearchParams
 ) => {
@@ -159,7 +160,7 @@ export const exchangeRefreshTokenGrant = async (
 
 export const authenticatePublicAccessToken = async (
   db: Db,
-  env: App.Platform['env'],
+  env: Env,
   audience: PublicOauthAudience,
   rawToken: string | null
 ) => {

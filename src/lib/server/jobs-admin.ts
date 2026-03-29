@@ -1,4 +1,5 @@
 import { dbAll, dbGet, dbRun, getAffectedRows, now, type Db } from './db';
+import type { Env } from './env';
 import { processJobs } from './jobs';
 
 const JOB_FILTERS = ['all', 'pending', 'running', 'failed', 'done', 'cancelled'] as const;
@@ -121,7 +122,7 @@ export async function getJobStatus(db: Db, jobId: string) {
   return row?.status ?? null;
 }
 
-export async function runQueueCycles(db: Db, env: App.Platform['env'], cycles: number, options?: { forceDue?: boolean }) {
+export async function runQueueCycles(db: Db, env: Env, cycles: number, options?: { forceDue?: boolean }) {
   const runCount = clampQueueCycles(cycles);
   if (options?.forceDue) {
     await dbRun(db, "UPDATE jobs SET run_after = ?, updated_at = ? WHERE status = 'pending'", [now(), now()]);

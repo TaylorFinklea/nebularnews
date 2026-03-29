@@ -6,7 +6,7 @@ import { recordAuditEvent } from '$lib/server/audit';
 import { logInfo, logWarn } from '$lib/server/log';
 import { ensureSchema } from '$lib/server/migrations';
 
-export const GET = async ({ url, platform, locals, cookies }) => {
+export const GET = async ({ url, locals, cookies }) => {
   // OAuth error (user cancelled or Apple returned an error)
   const oauthError = url.searchParams.get('error');
   if (oauthError) {
@@ -39,7 +39,7 @@ export const GET = async ({ url, platform, locals, cookies }) => {
       throw redirect(303, '/login?error=missing_verifier');
     }
 
-    const result = await exchangeOAuthCode(platform.env, code, codeVerifier);
+    const result = await exchangeOAuthCode(locals.env, code, codeVerifier);
     if (!result.ok || !result.user) {
       logWarn('auth.oauth.callback.failed', { error: result.error });
       throw redirect(303, `/login?error=${encodeURIComponent(result.error ?? 'oauth_failed')}`);
@@ -49,7 +49,7 @@ export const GET = async ({ url, platform, locals, cookies }) => {
     authProvider = 'apple';
   } else if (tokenHash) {
     // Magic link OTP flow
-    const result = await verifyOtpTokenHash(platform.env, tokenHash, type);
+    const result = await verifyOtpTokenHash(locals.env, tokenHash, type);
     if (!result.ok || !result.user) {
       logWarn('auth.supabase.callback.failed', { error: result.error });
       throw redirect(303, `/login?error=${encodeURIComponent(result.error ?? 'verification_failed')}`);
@@ -70,7 +70,7 @@ export const GET = async ({ url, platform, locals, cookies }) => {
 
   // Create session
   const secure = url.protocol === 'https:';
-  const sessionValue = await createSessionValue(platform.env.SESSION_SECRET, user.id);
+  const sessionValue = await createSessionValue(locals.env.SESSION_SECRET, user.id);
   cookies.set(SESSION_COOKIE, sessionValue, {
     httpOnly: true,
     secure,

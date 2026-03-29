@@ -1,5 +1,6 @@
 import { SignJWT, importPKCS8 } from 'jose';
 import { dbAll, dbRun, type Db } from '../db';
+import type { Env } from '../env';
 import { logInfo, logWarn } from '../log';
 
 type ApnsConfig = {
@@ -22,7 +23,7 @@ type ApnsPayload = {
 
 let cachedJwt: { token: string; expiresAt: number } | null = null;
 
-const getApnsConfig = (env: App.Platform['env']): ApnsConfig | null => {
+const getApnsConfig = (env: Env): ApnsConfig | null => {
   const keyP8 = env.APNS_KEY_P8;
   const keyId = env.APNS_KEY_ID;
   const teamId = env.APNS_TEAM_ID;
@@ -97,7 +98,7 @@ export const sendPushNotification = async (
 
 export const notifyUserDevices = async (
   db: Db,
-  env: App.Platform['env'],
+  env: Env,
   userId: string,
   payload: ApnsPayload
 ): Promise<{ sent: number; failed: number; removed: number }> => {
@@ -149,7 +150,7 @@ export const notifyUserDevices = async (
 
 export const notifyAllDevices = async (
   db: Db,
-  env: App.Platform['env'],
+  env: Env,
   payload: ApnsPayload
 ): Promise<{ sent: number; failed: number; removed: number }> => {
   const config = getApnsConfig(env);

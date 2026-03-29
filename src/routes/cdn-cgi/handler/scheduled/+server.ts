@@ -3,8 +3,8 @@ import { runScheduledTasks } from '$lib/server/scheduler';
 
 const VALID_MODES = new Set(['all', 'jobs', 'poll', 'retention']);
 
-export const GET = async ({ platform, url, locals }) => {
-  if (platform.env.APP_ENV !== 'development') {
+export const GET = async ({ url, locals }) => {
+  if (locals.env.APP_ENV !== 'development') {
     return json({ error: 'Dev scheduled handler is only available in development' }, { status: 403 });
   }
 
@@ -19,7 +19,7 @@ export const GET = async ({ platform, url, locals }) => {
     return json({ error: 'Invalid mode. Use all, jobs, poll, or retention.' }, { status: 400 });
   }
 
-  const summary = await runScheduledTasks(locals.db, platform.env, {
+  const summary = await runScheduledTasks(locals.db, locals.env, {
     cron,
     runJobs: cron ? undefined : mode === 'all' || mode === 'jobs',
     runPoll: cron ? undefined : mode === 'all' || mode === 'poll',

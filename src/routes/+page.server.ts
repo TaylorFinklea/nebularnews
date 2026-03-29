@@ -56,7 +56,7 @@ const queueArticleHref = (articleId: string, fromPath: string) => {
   return `/articles/${articleId}?from=${encodeURIComponent(fromPath)}`;
 };
 
-export const load = async ({ platform, request, depends, setHeaders, locals }) => {
+export const load = async ({ request, depends, setHeaders, locals }) => {
   const userId = locals.user?.id ?? 'admin';
   const startedAt = Date.now();
   depends('app:dashboard');
@@ -65,7 +65,7 @@ export const load = async ({ platform, request, depends, setHeaders, locals }) =
   const [queueConfig, feedStatus, newsBrief] = await Promise.all([
     getDashboardQueueConfig(db),
     getDashboardFeedStatus(db),
-    getDashboardNewsBrief(db, platform.env, startedAt, userId).catch((error) => {
+    getDashboardNewsBrief(db, locals.env, startedAt, userId).catch((error) => {
       logWarn('dashboard.load.news_brief_failed', {
         request_id: locals.requestId ?? null,
         error: error instanceof Error ? error.message : String(error)

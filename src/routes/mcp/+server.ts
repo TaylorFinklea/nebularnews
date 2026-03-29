@@ -10,6 +10,7 @@ import {
 import { resolveMcpAllowedOrigins, resolveMcpAudience, type McpAudience } from '$lib/server/mcp/context';
 import { createMcpHandlers } from '$lib/server/mcp/handlers';
 import { createInternalNebularMcpServer, createPublicNebularMcpServer } from '$lib/server/mcp/tools';
+import type { Env } from '$lib/server/env';
 import { logError, logInfo } from '$lib/server/log';
 
 const DEFAULT_SERVER_NAME = 'Nebular News MCP';
@@ -22,7 +23,7 @@ const MCP_CORS_HEADERS = {
   'cache-control': 'no-store'
 };
 
-const resolveCorsOrigin = (request: Request, env: App.Platform['env'], audience: McpAudience) => {
+const resolveCorsOrigin = (request: Request, env: Env, audience: McpAudience) => {
   const allowedOrigins = resolveMcpAllowedOrigins(env, audience);
   if (allowedOrigins.length === 0) return '*';
   const origin = request.headers.get('origin')?.trim() ?? '';
@@ -31,7 +32,7 @@ const resolveCorsOrigin = (request: Request, env: App.Platform['env'], audience:
   return '__BLOCKED__';
 };
 
-const withCors = (response: Response, request: Request, env: App.Platform['env'], audience: McpAudience) => {
+const withCors = (response: Response, request: Request, env: Env, audience: McpAudience) => {
   const resolvedOrigin = resolveCorsOrigin(request, env, audience);
   if (resolvedOrigin === '__BLOCKED__') {
     return new Response(
@@ -61,7 +62,7 @@ const withCors = (response: Response, request: Request, env: App.Platform['env']
   });
 };
 
-const unauthorizedResponse = (request: Request, env: App.Platform['env'], audience: McpAudience) => {
+const unauthorizedResponse = (request: Request, env: Env, audience: McpAudience) => {
   const headers =
     audience === 'public'
       ? {
@@ -93,19 +94,19 @@ const isLikelyMcpJsonRpc = async (request: Request) => {
   }
 };
 
-export const OPTIONS = async ({ request, platform }) =>
-  withCors(new Response(null, { status: 204 }), request, platform.env, resolveMcpAudience(new URL(request.url), platform.env));
+export const OPTIONS = async ({ request, locals }) =>
+  withCors(new Response(null, { status: 204 }), request, locals.env, resolveMcpAudience(new URL(request.url), locals.env));
 
-export const GET = async ({ request, platform, locals }) => {
+export const GET = async ({ request, locals }) => {
   const startedAt = Date.now();
-  const audience = resolveMcpAudience(new URL(request.url), platform.env);
+  const audience = resolveMcpAudience(new URL(request.url), locals.env);
   const auth =
     audience === 'public'
-      ? await resolvePublicMcpAuth(request, platform.env, locals.db)
-      : await resolveInternalMcpAuth(request, platform.env);
+      ? await resolvePublicMcpAuth(request, locals.env, locals.db)
+      : await resolveInternalMcpAuth(request, locals.env);
   if (!auth.ok) {
     logInfo('mcp.get.unauthorized', { duration_ms: Date.now() - startedAt, reason: auth.reason, audience });
-    return unauthorizedResponse(request, platform.env, audience);
+    return unauthorizedResponse(request, locals.env, audience);
   }
 
   const response = withCors(
@@ -113,8 +114,8 @@ export const GET = async ({ request, platform, locals }) => {
       ok: true,
       endpoint: '/mcp',
       protocol: 'streamable-http',
-      name: platform.env.MCP_SERVER_NAME ?? DEFAULT_SERVER_NAME,
-      version: platform.env.MCP_SERVER_VERSION ?? DEFAULT_SERVER_VERSION,
+      name: locals.env.MCP_SERVER_NAME ?? DEFAULT_SERVER_NAME,
+      version: locals.env.MCP_SERVER_VERSION ?? DEFAULT_SERVER_VERSION,
       auth: auth.method,
       hints: {
         transport: 'POST /mcp',
@@ -123,7 +124,7 @@ export const GET = async ({ request, platform, locals }) => {
       }
     }),
     request,
-    platform.env,
+    locals.env,
     audience
   );
   logInfo('mcp.get.ok', { duration_ms: Date.now() - startedAt, auth: auth.method, audience });
@@ -133,11 +134,11 @@ export const GET = async ({ request, platform, locals }) => {
 export const POST = async ({ request, platform, locals }) => {
   const startedAt = Date.now();
   const requestId = locals?.requestId ?? null;
-  const audience = resolveMcpAudience(new URL(request.url), platform.env);
+  const audience = resolveMcpAudience(new URL(request.url), locals.env);
   const auth =
     audience === 'public'
-      ? await resolvePublicMcpAuth(request, platform.env, locals.db)
-      : await resolveInternalMcpAuth(request, platform.env);
+      ? await resolvePublicMcpAuth(request, locals.env, locals.db)
+      : await resolveInternalMcpAuth(request, locals.env);
   if (!auth.ok) {
     if (await isLikelyMcpJsonRpc(request)) {
       const id = await readJsonRpcId(request);
@@ -155,7 +156,7 @@ export const POST = async ({ request, platform, locals }) => {
       });
       const headers = new Headers(baseResponse.headers);
       if (audience === 'public') {
-        headers.set('www-authenticate', buildPublicMcpAuthenticateHeader(platform.env));
+        headers.set('www-authenticate', buildPublicMcpAuthenticateHeader(locals.env));
       }
       return withCors(
         new Response(baseResponse.body, {
@@ -164,7 +165,7 @@ export const POST = async ({ request, platform, locals }) => {
           headers
         }),
         request,
-        platform.env,
+        locals.env,
         audience
       );
     }
@@ -175,24 +176,24 @@ export const POST = async ({ request, platform, locals }) => {
       jsonrpc: false,
       audience
     });
-    return unauthorizedResponse(request, platform.env, audience);
+    return unauthorizedResponse(request, locals.env, audience);
   }
 
   const handlers = createMcpHandlers({
     db: locals.db,
-    env: platform.env,
-    context: platform.context
+    env: locals.env,
+    context: platform?.context
   });
   const server =
     audience === 'public'
       ? createPublicNebularMcpServer({
-          name: platform.env.MCP_SERVER_NAME ?? DEFAULT_SERVER_NAME,
-          version: platform.env.MCP_SERVER_VERSION ?? DEFAULT_SERVER_VERSION,
+          name: locals.env.MCP_SERVER_NAME ?? DEFAULT_SERVER_NAME,
+          version: locals.env.MCP_SERVER_VERSION ?? DEFAULT_SERVER_VERSION,
           handlers
         })
       : createInternalNebularMcpServer({
-          name: platform.env.MCP_SERVER_NAME ?? DEFAULT_SERVER_NAME,
-          version: platform.env.MCP_SERVER_VERSION ?? DEFAULT_SERVER_VERSION,
+          name: locals.env.MCP_SERVER_NAME ?? DEFAULT_SERVER_NAME,
+          version: locals.env.MCP_SERVER_VERSION ?? DEFAULT_SERVER_VERSION,
           handlers
         });
   const transport = new WebStandardStreamableHTTPServerTransport({
@@ -208,7 +209,7 @@ export const POST = async ({ request, platform, locals }) => {
       auth: auth.method,
       audience
     });
-    return withCors(response, request, platform.env, audience);
+    return withCors(response, request, locals.env, audience);
   } catch (error) {
     const id = await readJsonRpcId(request);
     const message = error instanceof Error ? error.message : 'Internal server error';
@@ -225,7 +226,7 @@ export const POST = async ({ request, platform, locals }) => {
         status: 500
       }),
       request,
-      platform.env,
+      locals.env,
       audience
     );
   }

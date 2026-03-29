@@ -3,8 +3,8 @@ import { requireMobileAccess } from '$lib/server/mobile/auth';
 import { getOrCreateThreadForArticle, sendChatMessage } from '$lib/server/chat';
 import { dbGet } from '$lib/server/db';
 
-export const GET = async ({ params, request, platform, locals }) => {
-  const { user } = await requireMobileAccess(request, platform.env, locals.db, 'app:read');
+export const GET = async ({ params, request, locals }) => {
+  const { user } = await requireMobileAccess(request, locals.env, locals.db, 'app:read');
   const articleId = params.id;
 
   const article = await dbGet<{ id: string }>(locals.db, 'SELECT id FROM articles WHERE id = ?', [articleId]);
@@ -16,8 +16,8 @@ export const GET = async ({ params, request, platform, locals }) => {
   return json(result);
 };
 
-export const POST = async ({ params, request, platform, locals }) => {
-  const { user } = await requireMobileAccess(request, platform.env, locals.db, 'app:write');
+export const POST = async ({ params, request, locals }) => {
+  const { user } = await requireMobileAccess(request, locals.env, locals.db, 'app:write');
   const articleId = params.id;
 
   const article = await dbGet<{ id: string }>(locals.db, 'SELECT id FROM articles WHERE id = ?', [articleId]);
@@ -36,7 +36,7 @@ export const POST = async ({ params, request, platform, locals }) => {
   }
 
   try {
-    const result = await sendChatMessage(locals.db, user.id, platform.env, articleId, content);
+    const result = await sendChatMessage(locals.db, user.id, locals.env, articleId, content);
     return json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Chat failed';

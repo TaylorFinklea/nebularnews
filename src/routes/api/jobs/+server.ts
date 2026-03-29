@@ -34,7 +34,7 @@ const validActions = new Set([
 const noStoreHeaders = { 'cache-control': 'no-store' };
 
 export const GET = async (event) => {
-  const { url, platform, locals } = event;
+  const { url, locals } = event;
   const status = normalizeJobFilter(url.searchParams.get('status'));
   const limit = Number(url.searchParams.get('limit') ?? 100);
   const jobs = await listJobs(locals.db, { status, limit });
@@ -52,7 +52,7 @@ export const GET = async (event) => {
 };
 
 export const POST = async (event) => {
-  const { request, platform, locals } = event;
+  const { request, locals } = event;
   const body = await request.json().catch(() => ({}));
   const action = typeof body?.action === 'string' ? body.action : '';
   if (!validActions.has(action)) {
@@ -65,7 +65,7 @@ export const POST = async (event) => {
   if (action === 'run_queue') {
     const cycles = clampQueueCycles(body?.cycles ?? 1);
     const forceDue = body?.forceDue !== false;
-    const result = await runQueueCycles(locals.db, platform.env, cycles, { forceDue });
+    const result = await runQueueCycles(locals.db, locals.env, cycles, { forceDue });
     logInfo('jobs.admin.action', {
       request_id: event.locals.requestId,
       action,

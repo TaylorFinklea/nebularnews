@@ -1,4 +1,5 @@
 import { dbAll, dbGet, now, type Db } from '../db';
+import type { Env } from '../env';
 import { getNewsBriefConfigForUser, getUserSetting, setUserSetting } from '../settings';
 import { notifyUserDevices } from './apns';
 import { logInfo } from '../log';
@@ -8,7 +9,7 @@ const DIGEST_WINDOW_MS = 12 * 60 * 60 * 1000; // 12 hours
 const DIGEST_COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6 hours between digests
 const DIGEST_SLOT_TOLERANCE_MS = 10 * 60 * 1000; // 10 minute window around scheduled time
 
-async function runNotificationDigestForUser(db: Db, env: App.Platform['env'], userId: string) {
+async function runNotificationDigestForUser(db: Db, env: Env, userId: string) {
   const config = await getNewsBriefConfigForUser(db, userId);
   if (!config.enabled) return;
 
@@ -82,7 +83,7 @@ async function runNotificationDigestForUser(db: Db, env: App.Platform['env'], us
   logInfo('push.digest.sent', { userId, slot: slotName, count, sent: result.sent, failed: result.failed });
 }
 
-export async function runNotificationDigest(db: Db, env: App.Platform['env']) {
+export async function runNotificationDigest(db: Db, env: Env) {
   // Find all users who have device tokens registered
   const userRows = await dbAll<{ user_id: string }>(
     db,

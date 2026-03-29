@@ -1,3 +1,5 @@
+import type { Env } from '../env';
+
 export const MOBILE_SCOPE_READ = 'app:read';
 export const MOBILE_SCOPE_WRITE = 'app:write';
 export const MOBILE_SUPPORTED_SCOPES = [MOBILE_SCOPE_READ, MOBILE_SCOPE_WRITE] as const;
@@ -22,35 +24,35 @@ const parseRedirectUris = (raw: string | undefined) =>
     .map((entry) => entry.trim())
     .filter(Boolean);
 
-export const isPublicMobileEnabled = (env: App.Platform['env']) => parseBoolean(env.MOBILE_PUBLIC_ENABLED);
+export const isPublicMobileEnabled = (env: Env) => parseBoolean(env.MOBILE_PUBLIC_ENABLED);
 
-export const getConfiguredPublicMobileUrl = (env: App.Platform['env']) => parseUrl(env.MOBILE_PUBLIC_BASE_URL);
+export const getConfiguredPublicMobileUrl = (env: Env) => parseUrl(env.MOBILE_PUBLIC_BASE_URL);
 
-export const getConfiguredPublicMobileOrigin = (env: App.Platform['env']) =>
+export const getConfiguredPublicMobileOrigin = (env: Env) =>
   getConfiguredPublicMobileUrl(env)?.origin ?? null;
 
-export const getConfiguredPublicMobileHost = (env: App.Platform['env']) => getConfiguredPublicMobileUrl(env)?.host ?? null;
+export const getConfiguredPublicMobileHost = (env: Env) => getConfiguredPublicMobileUrl(env)?.host ?? null;
 
-export const isConfiguredPublicMobileHost = (url: URL, env: App.Platform['env']) => {
+export const isConfiguredPublicMobileHost = (url: URL, env: Env) => {
   const expected = getConfiguredPublicMobileHost(env);
   return Boolean(expected) && url.host === expected;
 };
 
-export const isPublicMobileHost = (url: URL, env: App.Platform['env']) =>
+export const isPublicMobileHost = (url: URL, env: Env) =>
   isPublicMobileEnabled(env) && isConfiguredPublicMobileHost(url, env);
 
-export const getPublicMobileResource = (env: App.Platform['env']) => {
+export const getPublicMobileResource = (env: Env) => {
   const origin = getConfiguredPublicMobileOrigin(env);
   return origin ? `${origin}/api/mobile` : null;
 };
 
-export const resolveMobileAllowedOrigins = (env: App.Platform['env']) =>
+export const resolveMobileAllowedOrigins = (env: Env) =>
   trim(env.MOBILE_PUBLIC_ALLOWED_ORIGINS)
     .split(',')
     .map((value) => value.trim())
     .filter(Boolean);
 
-export const getConfiguredMobileOauthClient = (env: App.Platform['env']) => {
+export const getConfiguredMobileOauthClient = (env: Env) => {
   const clientId = trim(env.MOBILE_OAUTH_CLIENT_ID);
   const redirectUris = parseRedirectUris(env.MOBILE_OAUTH_REDIRECT_URIS);
   if (!clientId || redirectUris.length === 0) return null;

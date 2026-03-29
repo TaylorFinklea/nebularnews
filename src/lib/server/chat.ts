@@ -1,5 +1,6 @@
 import { nanoid } from 'nanoid';
 import { dbAll, dbGet, dbRun, now, type Db } from './db';
+import type { Env } from './env';
 import { runChat, type ChatMessage } from './llm';
 import { getConfiguredModelB, getProviderKey } from './settings';
 
@@ -52,7 +53,7 @@ export async function getOrCreateThreadForArticle(
 export async function sendChatMessage(
   db: Db,
   userId: string,
-  env: App.Platform['env'],
+  env: Env,
   articleId: string,
   userContent: string
 ): Promise<{ thread: ChatThreadRow; messages: ChatMessageRow[] }> {

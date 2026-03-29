@@ -1,5 +1,6 @@
 import { nanoid } from 'nanoid';
 import { dbGet, dbRun, now, type Db } from './db';
+import type { Env } from './env';
 import { pollFeeds } from './ingest';
 import { processJobs } from './jobs';
 import { logError, logInfo, logWarn } from './log';
@@ -347,7 +348,7 @@ export type PullRunSliceResult = {
   error?: string | null;
 };
 
-const processSinglePullRunSlice = async (db: Db, env: App.Platform['env']): Promise<PullRunSliceResult> => {
+const processSinglePullRunSlice = async (db: Db, env: Env): Promise<PullRunSliceResult> => {
   const startedAt = Date.now();
   const activeRun = await getActivePullRun(db);
   if (!activeRun) {
@@ -461,7 +462,7 @@ const processSinglePullRunSlice = async (db: Db, env: App.Platform['env']): Prom
 
 export async function processPullRuns(
   db: Db,
-  env: App.Platform['env'],
+  env: Env,
   options: {
     timeBudgetMs?: number;
     maxSlices?: number;
@@ -499,7 +500,7 @@ export async function processPullRuns(
   };
 }
 
-export async function runPullRun(db: Db, env: App.Platform['env'], runId: string): Promise<PullStats> {
+export async function runPullRun(db: Db, env: Env, runId: string): Promise<PullStats> {
   const run = await getPullRun(db, runId);
   if (!run) throw new Error('Pull run not found');
 
@@ -560,7 +561,7 @@ export async function runPullRun(db: Db, env: App.Platform['env'], runId: string
 
 export async function runManualPull(
   db: Db,
-  env: App.Platform['env'],
+  env: Env,
   cycles: number,
   input?: { trigger?: string; requestId?: string | null }
 ) {

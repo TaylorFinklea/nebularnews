@@ -7,8 +7,19 @@ export const GET = async ({ url, locals, cookies }) => {
     throw redirect(303, '/login?error=apple_not_configured');
   }
 
-  const codeVerifier = createOpaqueToken(32);
-  const codeChallenge = await sha256Base64Url(codeVerifier);
+  let codeVerifier: string;
+  let codeChallenge: string;
+  try {
+    codeVerifier = createOpaqueToken(32);
+    codeChallenge = await sha256Base64Url(codeVerifier);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return new Response(JSON.stringify({ error: 'crypto_failed', detail: msg }), {
+      status: 500,
+      headers: { 'content-type': 'application/json' }
+    });
+  }
+
   const secure = url.protocol === 'https:';
 
   cookies.set('nn_pkce_verifier', codeVerifier, {
@@ -31,5 +42,6 @@ export const GET = async ({ url, locals, cookies }) => {
   }
 
   const callbackUrl = `${url.origin}/auth/callback`;
-  throw redirect(303, buildOAuthAuthorizeUrl(locals.env, 'apple', callbackUrl, codeChallenge));
+  const authUrl = buildOAuthAuthorizeUrl(locals.env, 'apple', callbackUrl, codeChallenge);
+  throw redirect(303, authUrl);
 };

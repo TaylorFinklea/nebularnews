@@ -200,7 +200,15 @@ export const handle: Handle = async ({ event, resolve }) => {
     return finalizeWithCsrf(json({ error: csrf.message }, { status: csrf.status }));
   }
 
-  return finalizeWithCsrf(await resolve(event));
+  try {
+    return finalizeWithCsrf(await resolve(event));
+  } catch (err) {
+    // Re-throw SvelteKit redirects/errors as-is
+    if (err && typeof err === 'object' && ('status' in err || 'location' in err)) throw err;
+    const msg = err instanceof Error ? err.message : String(err);
+    logError('hooks.resolve.error', { path: pathname, error: msg });
+    return finalizeWithCsrf(json({ error: msg }, { status: 500 }));
+  }
 };
 
 export const handleError: HandleServerError = ({ error, event, status, message }) => {

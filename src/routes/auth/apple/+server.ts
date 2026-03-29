@@ -43,5 +43,9 @@ export const GET = async ({ url, locals, cookies }) => {
 
   const callbackUrl = `${url.origin}/auth/callback`;
   const authUrl = buildOAuthAuthorizeUrl(locals.env, 'apple', callbackUrl, codeChallenge);
-  throw redirect(303, authUrl);
+
+  // Temporary debug: return the URL instead of redirecting
+  return new Response(JSON.stringify({ debug: true, authUrl, callbackUrl }), {
+    headers: { 'content-type': 'application/json' }
+  });
 };

@@ -13,6 +13,7 @@ import {
 const DAY_MS = 1000 * 60 * 60 * 24;
 
 export const GET = async ({ request, locals }) => {
+  try {
   const { user } = await requireMobileAccess(request, locals.env, locals.db, 'app:read');
 
   const db = locals.db;
@@ -68,4 +69,9 @@ export const GET = async ({ request, locals }) => {
     },
     newsBrief
   });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const stack = err instanceof Error ? err.stack?.split('\n').slice(0, 5) : undefined;
+    return json({ error: msg, stack }, { status: 500 });
+  }
 };

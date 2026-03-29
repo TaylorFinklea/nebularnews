@@ -4,7 +4,6 @@ import { assertSchemaVersion } from '$lib/server/migrations';
 import { createRequestId } from '$lib/server/api';
 import { assertRuntimeConfig } from '$lib/server/runtime-config';
 import { logError, logWarn, summarizeError } from '$lib/server/log';
-import { runScheduledTasks } from '$lib/server/scheduler';
 import { getConfiguredPublicMcpHost, isPublicMcpEnabled, isPublicMcpHost } from '$lib/server/mcp/context';
 import { getConfiguredPublicMobileHost, isPublicMobileEnabled, isPublicMobileHost } from '$lib/server/mobile/context';
 import {
@@ -15,6 +14,7 @@ import {
   validateCsrf
 } from '$lib/server/security';
 import { createDb } from '$lib/server/db';
+import { getEnv } from '$lib/server/env';
 
 const publicPaths = [
   '/login',
@@ -74,7 +74,9 @@ let schemaAssertedAt = 0;
 
 export const handle: Handle = async ({ event, resolve }) => {
   const { pathname } = event.url;
+  const env = getEnv();
   event.locals.requestId = createRequestId();
+  event.locals.env = env;
 
   // Forward magic link tokens to /auth/callback (Supabase may redirect to root)
   if (event.url.searchParams.has('token_hash') && !pathname.startsWith('/auth/callback')) {
@@ -82,18 +84,20 @@ export const handle: Handle = async ({ event, resolve }) => {
     callbackUrl.search = event.url.search;
     throw redirect(303, callbackUrl.pathname + callbackUrl.search);
   }
+
   // Lazy db creation — only connects when first accessed
   let _db: ReturnType<typeof createDb> | undefined;
   Object.defineProperty(event.locals, 'db', {
     get() {
-      if (!_db) _db = createDb(event.platform.env.SUPABASE_DB_URL);
+      if (!_db) _db = createDb(env.SUPABASE_DB_URL);
       return _db;
     },
     configurable: true
   });
+
   let runtimeReport: ReturnType<typeof assertRuntimeConfig>;
   try {
-    runtimeReport = assertRuntimeConfig(event.platform.env);
+    runtimeReport = assertRuntimeConfig(env);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Runtime configuration invalid';
     const headers = new Headers({
@@ -112,12 +116,12 @@ export const handle: Handle = async ({ event, resolve }) => {
     });
     runtimeWarningLogged = true;
   }
-  const isPublicMcpRequest = isPublicMcpHost(event.url, event.platform.env);
-  const isPublicMobileRequest = isPublicMobileHost(event.url, event.platform.env);
-  const configuredPublicMcpHost = getConfiguredPublicMcpHost(event.platform.env);
-  const configuredPublicMobileHost = getConfiguredPublicMobileHost(event.platform.env);
+  const isPublicMcpRequest = isPublicMcpHost(event.url, env);
+  const isPublicMobileRequest = isPublicMobileHost(event.url, env);
+  const configuredPublicMcpHost = getConfiguredPublicMcpHost(env);
+  const configuredPublicMobileHost = getConfiguredPublicMobileHost(env);
   if (configuredPublicMcpHost && event.url.host === configuredPublicMcpHost) {
-    if (!isPublicMcpEnabled(event.platform.env)) {
+    if (!isPublicMcpEnabled(env)) {
       return applySecurityHeaders(new Response('Not found', { status: 404 }));
     }
     const allowedOnPublicHost =
@@ -128,7 +132,7 @@ export const handle: Handle = async ({ event, resolve }) => {
     }
   }
   if (configuredPublicMobileHost && event.url.host === configuredPublicMobileHost) {
-    if (!isPublicMobileEnabled(event.platform.env)) {
+    if (!isPublicMobileEnabled(env)) {
       return applySecurityHeaders(new Response('Not found', { status: 404 }));
     }
     const allowedOnPublicHost =
@@ -138,21 +142,18 @@ export const handle: Handle = async ({ event, resolve }) => {
       return applySecurityHeaders(new Response('Not found', { status: 404 }));
     }
   }
-  const isDevScheduledHandlerPath =
-    pathname === '/cdn-cgi/handler/scheduled' && runtimeReport.stage === 'development';
   const isPublic =
     publicPaths.some((path) => pathname.startsWith(path)) ||
-    isDevScheduledHandlerPath ||
     isPublicMcpRequest ||
     isPublicMobileRequest ||
     pathname.startsWith('/_app');
   const secureCookie = event.url.protocol === 'https:';
 
   // Try admin-password session first, then Supabase JWT
-  const adminSession = await getSessionFromRequest(event.request, event.platform.env.SESSION_SECRET);
+  const adminSession = await getSessionFromRequest(event.request, env.SESSION_SECRET);
   const supabaseSession = adminSession
     ? null
-    : await getSupabaseSessionFromRequest(event.request, event.locals.db, event.platform.env);
+    : await getSupabaseSessionFromRequest(event.request, event.locals.db, env);
   event.locals.user = adminSession ?? supabaseSession;
   const shouldSetCsrfCookie = Boolean(event.locals.user) && !readCsrfCookieFromRequest(event.request);
   const finalizeWithCsrf = (response: Response) => {
@@ -202,15 +203,10 @@ export const handle: Handle = async ({ event, resolve }) => {
   return finalizeWithCsrf(await resolve(event));
 };
 
-export const scheduled: ExportedHandlerScheduledHandler = async (event, env, ctx) => {
-  const db = createDb(env.SUPABASE_DB_URL);
-  ctx.waitUntil(runScheduledTasks(db, env, { cron: event.cron }));
-};
-
 export const handleError: HandleServerError = ({ error, event, status, message }) => {
   logError('request.unhandled_exception', {
     request_id: event.locals.requestId ?? null,
-    stage: event.platform?.env?.APP_ENV ?? 'development',
+    stage: getEnv().APP_ENV ?? 'development',
     path: event.url.pathname,
     method: event.request.method,
     status,

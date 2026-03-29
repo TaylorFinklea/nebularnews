@@ -23,6 +23,7 @@ const publicPaths = [
   '/api/health',
   '/api/ready',
   '/api/db-test',
+  '/api/db-test/settings',
   '/favicon',
   '/robots.txt',
   '/mcp',

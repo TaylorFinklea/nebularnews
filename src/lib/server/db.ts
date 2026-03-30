@@ -1,10 +1,6 @@
-import { Pool, neonConfig } from '@neondatabase/serverless';
+import { Client } from '@neondatabase/serverless';
 
-// Hyperdrive provides a local TCP proxy — disable WebSocket mode
-neonConfig.webSocketConstructor = undefined as any;
-neonConfig.useSecureWebSocket = false;
-
-export type Db = Pool;
+export type Db = Client;
 
 export const now = () => Date.now();
 
@@ -18,39 +14,47 @@ export function createDb(connectionString: string | undefined): Db {
   if (!connectionString) {
     throw new Error('SUPABASE_DB_URL is not configured');
   }
-  return new Pool({ connectionString });
+  return new Client(connectionString);
+}
+
+async function ensureConnected(db: Db) {
+  if (!(db as any)._connected) {
+    await db.connect();
+    (db as any)._connected = true;
+  }
 }
 
 export async function dbGet<T>(db: Db, sql: string, params: unknown[] = []): Promise<T | null> {
+  await ensureConnected(db);
   const result = await db.query(pgify(sql), params);
   return (result.rows[0] as T) ?? null;
 }
 
 export async function dbAll<T>(db: Db, sql: string, params: unknown[] = []): Promise<T[]> {
+  await ensureConnected(db);
   const result = await db.query(pgify(sql), params);
   return result.rows as T[];
 }
 
 export async function dbRun(db: Db, sql: string, params: unknown[] = []) {
+  await ensureConnected(db);
   const result = await db.query(pgify(sql), params);
   return { meta: { changes: result.rowCount ?? 0 } };
 }
 
 export async function dbBatch(db: Db, statements: { sql: string; params?: unknown[] }[]) {
-  const client = await db.connect();
+  await ensureConnected(db);
+  await db.query('BEGIN');
   try {
-    await client.query('BEGIN');
     const results = [];
     for (const s of statements) {
-      results.push(await client.query(pgify(s.sql), s.params ?? []));
+      results.push(await db.query(pgify(s.sql), s.params ?? []));
     }
-    await client.query('COMMIT');
+    await db.query('COMMIT');
     return results;
   } catch (err) {
-    await client.query('ROLLBACK');
+    await db.query('ROLLBACK');
     throw err;
-  } finally {
-    client.release();
   }
 }
 

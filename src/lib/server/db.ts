@@ -10,6 +10,9 @@ function pgify(sql: string): string {
   return sql.replace(/\?/g, () => `$${++i}`);
 }
 
+// Postgres OID for BIGINT (int8) — parse as JS number instead of string
+const BIGINT_OID = 20;
+
 export function createDb(connectionString: string | undefined): Db {
   if (!connectionString) {
     throw new Error('SUPABASE_DB_URL is not configured');
@@ -17,7 +20,18 @@ export function createDb(connectionString: string | undefined): Db {
   return postgres(connectionString, {
     max: 5,
     fetch_types: false,
-    prepare: true
+    prepare: true,
+    types: {
+      [BIGINT_OID]: {
+        to: BIGINT_OID,
+        from: [BIGINT_OID],
+        serialize: (x: unknown) => String(x),
+        parse: (x: string) => {
+          const n = Number(x);
+          return Number.isSafeInteger(n) ? n : x;
+        }
+      }
+    }
   });
 }
 

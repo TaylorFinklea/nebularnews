@@ -1,8 +1,10 @@
-import pg from 'pg';
+import { Pool, neonConfig } from '@neondatabase/serverless';
 
-const { Pool } = pg;
+// Hyperdrive provides a local TCP proxy — disable WebSocket mode
+neonConfig.webSocketConstructor = undefined as any;
+neonConfig.useSecureWebSocket = false;
 
-export type Db = pg.Pool;
+export type Db = Pool;
 
 export const now = () => Date.now();
 
@@ -16,14 +18,7 @@ export function createDb(connectionString: string | undefined): Db {
   if (!connectionString) {
     throw new Error('SUPABASE_DB_URL is not configured');
   }
-  const isHyperdrive = connectionString.includes('.hyperdrive.local');
-  return new Pool({
-    connectionString,
-    max: 1,
-    idleTimeoutMillis: 0,
-    connectionTimeoutMillis: 10000,
-    ssl: isHyperdrive ? false : { rejectUnauthorized: false }
-  });
+  return new Pool({ connectionString });
 }
 
 export async function dbGet<T>(db: Db, sql: string, params: unknown[] = []): Promise<T | null> {

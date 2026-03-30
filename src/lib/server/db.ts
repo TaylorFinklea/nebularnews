@@ -14,13 +14,15 @@ export function createDb(connectionString: string | undefined): Db {
   if (!connectionString) {
     throw new Error('SUPABASE_DB_URL is not configured');
   }
+  const isHyperdrive = connectionString.includes('.hyperdrive.local');
   return postgres(connectionString, {
     max: 1,
     fetch_types: false,
     prepare: false,
     idle_timeout: 0,
     max_lifetime: 0,
-    connect_timeout: 10
+    connect_timeout: 10,
+    ssl: isHyperdrive ? false : 'require'
   });
 }
 

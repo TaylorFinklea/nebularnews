@@ -1,6 +1,6 @@
-import { Client } from '@neondatabase/serverless';
+import postgres from 'postgres';
 
-export type Db = Client;
+export type Db = postgres.Sql;
 
 export const now = () => Date.now();
 
@@ -14,51 +14,39 @@ export function createDb(connectionString: string | undefined): Db {
   if (!connectionString) {
     throw new Error('SUPABASE_DB_URL is not configured');
   }
-  return new Client(connectionString);
-}
-
-async function ensureConnected(db: Db) {
-  if (!(db as any)._connected) {
-    await db.connect();
-    (db as any)._connected = true;
-  }
+  return postgres(connectionString, {
+    max: 5,
+    fetch_types: false,
+    prepare: true
+  });
 }
 
 export async function dbGet<T>(db: Db, sql: string, params: unknown[] = []): Promise<T | null> {
-  await ensureConnected(db);
-  const result = await db.query(pgify(sql), params);
-  return (result.rows[0] as T) ?? null;
+  const rows = await db.unsafe(pgify(sql), params as (string | number | null | boolean)[]);
+  return (rows[0] as T) ?? null;
 }
 
 export async function dbAll<T>(db: Db, sql: string, params: unknown[] = []): Promise<T[]> {
-  await ensureConnected(db);
-  const result = await db.query(pgify(sql), params);
-  return result.rows as T[];
+  const rows = await db.unsafe(pgify(sql), params as (string | number | null | boolean)[]);
+  return rows as unknown as T[];
 }
 
 export async function dbRun(db: Db, sql: string, params: unknown[] = []) {
-  await ensureConnected(db);
-  const result = await db.query(pgify(sql), params);
-  return { meta: { changes: result.rowCount ?? 0 } };
+  const result = await db.unsafe(pgify(sql), params as (string | number | null | boolean)[]);
+  return { meta: { changes: result.count } };
 }
 
 export async function dbBatch(db: Db, statements: { sql: string; params?: unknown[] }[]) {
-  await ensureConnected(db);
-  await db.query('BEGIN');
-  try {
+  return db.begin(async (tx) => {
     const results = [];
     for (const s of statements) {
-      results.push(await db.query(pgify(s.sql), s.params ?? []));
+      results.push(await tx.unsafe(pgify(s.sql), (s.params ?? []) as (string | number | null | boolean)[]));
     }
-    await db.query('COMMIT');
     return results;
-  } catch (err) {
-    await db.query('ROLLBACK');
-    throw err;
-  }
+  });
 }
 
 export function getAffectedRows(result: unknown) {
-  const rowInfo = result as { meta?: { changes?: number }; rowCount?: number; count?: number; changes?: number } | null;
-  return Number(rowInfo?.meta?.changes ?? rowInfo?.rowCount ?? rowInfo?.count ?? rowInfo?.changes ?? 0);
+  const rowInfo = result as { meta?: { changes?: number }; count?: number; changes?: number } | null;
+  return Number(rowInfo?.meta?.changes ?? rowInfo?.count ?? rowInfo?.changes ?? 0);
 }

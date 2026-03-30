@@ -10,6 +10,10 @@ binding = "ASSETS"
 [triggers]
 crons = ["*/5 * * * *", "0 * * * *", "30 3 * * *"]
 
+[[hyperdrive]]
+binding = "HYPERDRIVE"
+id = "cb35645567194fdd9515952bc3da2c01"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "__DEV_D1_DATABASE_NAME__"

@@ -9,7 +9,7 @@
     "check:first-party-config": "node scripts/check-no-first-party-config.mjs",
     "check:ssr-render-inner": "node scripts/check-ssr-render-inner.mjs",
     "check:worker-scheduled": "node scripts/check-scheduled-export.mjs",
-    "build": "npm run check:guardrails && vite build",
+    "build": "npm run check:guardrails && vite build && npm run check:ssr-render-inner && node scripts/patch-cloudflare-worker.mjs && npm run check:worker-scheduled",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run",
@@ -27,7 +27,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@mozilla/readability": "0.5.0",
-    "@sveltejs/adapter-vercel": "^5.10.3",
+    "@sveltejs/adapter-cloudflare": "^7.2.8",
     "@sveltejs/kit": "2.12.2",
     "@tabler/icons-svelte": "^3.36.1",
     "cookie": "0.6.0",
@@ -41,6 +41,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260329.1",
     "@playwright/test": "^1.58.2",
     "@sveltejs/vite-plugin-svelte": "4.0.3",
     "@testing-library/svelte": "^5.3.1",

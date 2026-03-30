@@ -1,7 +1,6 @@
 /**
  * Server environment variables.
- * On Vercel these come from process.env.
- * Provides the same typed interface as the old Cloudflare Platform.env.
+ * On Cloudflare Workers these come from platform.env.
  */
 export interface Env {
   SUPABASE_DB_URL: string;
@@ -49,6 +48,6 @@ export interface Env {
   SUPABASE_JWT_SECRET?: string;
 }
 
-export function getEnv(): Env {
-  return process.env as unknown as Env;
+export function getEnv(platformEnv: Record<string, string | undefined>): Env {
+  return platformEnv as unknown as Env;
 }

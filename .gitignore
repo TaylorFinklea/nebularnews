@@ -10,3 +10,4 @@ output/
 wrangler.generated.toml
 .claude/worktrees/
 .dev/worktree/
+.env*.local

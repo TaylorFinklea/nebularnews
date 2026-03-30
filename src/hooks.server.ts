@@ -14,7 +14,8 @@ import {
   validateCsrf
 } from '$lib/server/security';
 import { createDb } from '$lib/server/db';
-import { getEnv } from '$lib/server/env';
+import { getEnv, type Env } from '$lib/server/env';
+import { runScheduledTasks } from '$lib/server/scheduler';
 
 const publicPaths = [
   '/login',
@@ -75,7 +76,7 @@ let schemaAssertedAt = 0;
 
 export const handle: Handle = async ({ event, resolve }) => {
   const { pathname } = event.url;
-  const env = getEnv();
+  const env = getEnv(event.platform.env);
   event.locals.requestId = createRequestId();
   event.locals.env = env;
 
@@ -90,7 +91,10 @@ export const handle: Handle = async ({ event, resolve }) => {
   let _db: ReturnType<typeof createDb> | undefined;
   Object.defineProperty(event.locals, 'db', {
     get() {
-      if (!_db) _db = createDb(env.SUPABASE_DB_URL);
+      if (!_db) {
+        const connStr = (event.platform?.env as any)?.HYPERDRIVE?.connectionString ?? env.SUPABASE_DB_URL;
+        _db = createDb(connStr);
+      }
       return _db;
     },
     configurable: true
@@ -212,10 +216,15 @@ export const handle: Handle = async ({ event, resolve }) => {
   }
 };
 
+export const scheduled: ExportedHandlerScheduledHandler = async (event, env, ctx) => {
+  const db = createDb(env.SUPABASE_DB_URL);
+  ctx.waitUntil(runScheduledTasks(db, env as unknown as Env, { cron: event.cron }));
+};
+
 export const handleError: HandleServerError = ({ error, event, status, message }) => {
   logError('request.unhandled_exception', {
     request_id: event.locals.requestId ?? null,
-    stage: getEnv().APP_ENV ?? 'development',
+    stage: event.platform?.env?.APP_ENV ?? 'development',
     path: event.url.pathname,
     method: event.request.method,
     status,

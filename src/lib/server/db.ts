@@ -20,8 +20,7 @@ export function createDb(connectionString: string | undefined): Db {
     prepare: false,
     idle_timeout: 0,
     max_lifetime: 0,
-    connect_timeout: 10,
-    ssl: 'require'
+    connect_timeout: 10
   });
 }
 

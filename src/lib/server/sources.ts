@@ -107,7 +107,7 @@ async function getSourceCandidates(db: Db, articleIds: string[]) {
     FROM article_sources src
     JOIN feeds f ON f.id = src.feed_id
     WHERE src.article_id IN (${placeholders(articleIds.length)})
-    GROUP BY src.article_id, src.feed_id`,
+    GROUP BY src.article_id, src.feed_id, f.title, f.site_url, f.url`,
     articleIds
   );
 }

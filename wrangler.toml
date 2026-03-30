@@ -12,7 +12,7 @@ crons = ["*/5 * * * *", "0 * * * *", "30 3 * * *"]
 
 [[hyperdrive]]
 binding = "HYPERDRIVE"
-id = "cb35645567194fdd9515952bc3da2c01"
+id = "1becfd1ac424429c886144310283d781"
 
 [[d1_databases]]
 binding = "DB"
@@ -109,7 +109,7 @@ crons = ["*/5 * * * *", "0 * * * *", "30 3 * * *"]
 
 [[env.production.hyperdrive]]
 binding = "HYPERDRIVE"
-id = "cb35645567194fdd9515952bc3da2c01"
+id = "1becfd1ac424429c886144310283d781"
 
 [[env.production.d1_databases]]
 binding = "DB"

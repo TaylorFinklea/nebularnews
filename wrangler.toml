@@ -107,6 +107,10 @@ routes = [
 [env.production.triggers]
 crons = ["*/5 * * * *", "0 * * * *", "30 3 * * *"]
 
+[[env.production.hyperdrive]]
+binding = "HYPERDRIVE"
+id = "cb35645567194fdd9515952bc3da2c01"
+
 [[env.production.d1_databases]]
 binding = "DB"
 database_name = "__PRODUCTION_D1_DATABASE_NAME__"

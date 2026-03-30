@@ -3,7 +3,7 @@ import { json } from '@sveltejs/kit';
 export const GET = async ({ locals }) => {
   try {
     const { listArticlesWithFilters, SCORE_VALUES, REACTION_VALUES } = await import('$lib/server/article-query');
-    const result = await listArticlesWithFilters(locals.db, 'admin', {
+    const result = await listArticlesWithFilters(locals.db, 'fdza0l143AQyRzy_WbIMW', {
       limit: 5,
       offset: 0,
       selectedScores: [...SCORE_VALUES],

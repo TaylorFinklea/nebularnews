@@ -36,6 +36,7 @@
     "linkedom": "0.16.11",
     "luxon": "^3.7.2",
     "nanoid": "5.0.7",
+    "pg": "^8.20.0",
     "postgres": "^3.4.8",
     "svelte": "5.53.5",
     "zod": "^4.3.6"
@@ -47,6 +48,7 @@
     "@testing-library/svelte": "^5.3.1",
     "@types/cookie": "0.6.0",
     "@types/node": "^25.5.0",
+    "@types/pg": "^8.20.0",
     "jsdom": "^28.0.0",
     "svelte-check": "3.8.6",
     "typescript": "5.6.3",

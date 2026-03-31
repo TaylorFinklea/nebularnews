@@ -184,22 +184,33 @@ export const load = async ({ locals }) => {
     browserScrapeApiUrl: (await getSetting(db, 'browser_scrape_api_url', cache)) ?? ''
   };
 
-  const keys = await dbAll<{ provider: string }>(db, 'SELECT provider FROM provider_keys');
-  const keyMap: Record<string, boolean> = { openai: false, anthropic: false, browser_scrape: false };
-  for (const key of keys) {
-    if (key.provider in keyMap) keyMap[key.provider] = true;
-  }
-
-  const profile = await ensurePreferenceProfile(db);
-  const signalWeights = await loadSignalWeights(db);
-  const scoringObservability = await getScoringObservabilitySummary(db);
-  const [orphanCount, orphanSampleIds, newsBriefLatestEdition, newsBriefTimezoneExplicit, connectedApps] = await Promise.all([
+  const [
+    keys,
+    profile,
+    signalWeights,
+    scoringObservability,
+    orphanCount,
+    orphanSampleIds,
+    newsBriefLatestEdition,
+    newsBriefTimezoneExplicit,
+    connectedApps,
+    apiKeys
+  ] = await Promise.all([
+    dbAll<{ provider: string }>(db, 'SELECT provider FROM provider_keys'),
+    ensurePreferenceProfile(db),
+    loadSignalWeights(db),
+    getScoringObservabilitySummary(db),
     countOrphanArticles(db),
     listOrphanArticleIds(db, ORPHAN_PREVIEW_SAMPLE_SIZE),
     getLatestNewsBriefEditionSummary(db, userId),
     getSetting(db, 'news_brief_timezone', cache),
-    listOAuthClientSummaries(db)
+    listOAuthClientSummaries(db),
+    listApiKeys(db)
   ]);
+  const keyMap: Record<string, boolean> = { openai: false, anthropic: false, browser_scrape: false };
+  for (const key of keys) {
+    if (key.provider in keyMap) keyMap[key.provider] = true;
+  }
 
   const scorePromptDefaults = {
     scoreSystemPrompt: DEFAULT_SCORE_SYSTEM_PROMPT,
@@ -346,6 +357,6 @@ export const load = async ({ locals }) => {
       }
     },
     scoringObservability,
-    apiKeys: await listApiKeys(db)
+    apiKeys
   };
 };

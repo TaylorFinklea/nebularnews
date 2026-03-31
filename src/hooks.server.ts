@@ -73,7 +73,7 @@ const publicMobileHostAllowedPaths = [
   '/nebularnews-logo'
 ];
 let runtimeWarningLogged = false;
-const SCHEMA_ASSERT_CACHE_MS = 1000 * 60 * 5;
+const SCHEMA_ASSERT_CACHE_MS = 1000 * 60 * 30;
 let schemaAssertedAt = 0;
 
 export const handle: Handle = async ({ event, resolve }) => {

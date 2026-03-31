@@ -218,10 +218,12 @@ export const listArticlesWithFilters = async (db: Db, userId: string, input: Art
   );
 
   const articleIds = rows.map((row) => row.id);
-  const sourceByArticle = await getPreferredSourcesForArticles(db, articleIds);
-  const tagsByArticle = await listTagsForArticles(db, userId, articleIds);
-  const suggestionsByArticle = await listTagSuggestionsForArticles(db, userId, articleIds);
-  const reactionReasonsByArticle = await listReactionReasonCodesForArticles(db, userId, articleIds);
+  const [sourceByArticle, tagsByArticle, suggestionsByArticle, reactionReasonsByArticle] = await Promise.all([
+    getPreferredSourcesForArticles(db, articleIds),
+    listTagsForArticles(db, userId, articleIds),
+    listTagSuggestionsForArticles(db, userId, articleIds),
+    listReactionReasonCodesForArticles(db, userId, articleIds)
+  ]);
 
   const articles = rows.map((row) => {
     const source = sourceByArticle.get(row.id);

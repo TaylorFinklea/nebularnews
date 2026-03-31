@@ -61,13 +61,13 @@ vi.mock('./db', () => ({
       return { version: applied.length ? Math.max(...applied) : 0 };
     }
 
-    // tableExists: information_schema.tables
+    // tableExists: information_schema.tables (single-row lookup still used by migration apply functions)
     if (sql.includes('information_schema.tables') && sql.includes('table_name')) {
       const tableName = String(params[0] ?? '');
       return state.tables.has(tableName) ? { name: tableName } : null;
     }
 
-    // columnExists: information_schema.columns
+    // columnExists: information_schema.columns (single-row lookup still used by migration apply functions)
     if (sql.includes('information_schema.columns') && sql.includes('column_name')) {
       const tableName = String(params[0] ?? '');
       const columnName = String(params[1] ?? '');
@@ -76,6 +76,28 @@ vi.mock('./db', () => ({
     }
 
     return null;
+  }),
+  dbAll: vi.fn(async (db: any, sql: string) => {
+    const state: MockDbState | undefined = db?.__state ?? activeMockDb?.__state;
+    if (!state) return [];
+
+    // getExistingTables: bulk table query
+    if (sql.includes('information_schema.tables') && sql.includes('table_name') && !sql.includes('?')) {
+      return [...state.tables.keys()].map(name => ({ table_name: name }));
+    }
+
+    // getExistingColumns: bulk column query
+    if (sql.includes('information_schema.columns') && sql.includes('column_name') && !sql.includes('?')) {
+      const result: { table_name: string; column_name: string }[] = [];
+      for (const [tableName, columns] of state.tables.entries()) {
+        for (const col of columns) {
+          result.push({ table_name: tableName, column_name: col });
+        }
+      }
+      return result;
+    }
+
+    return [];
   })
 }));
 
@@ -416,7 +438,7 @@ describe('migrations', () => {
     );
     const { assertSchemaVersion } = await import('./migrations');
 
-    await expect(assertSchemaVersion(db as any, 12)).rejects.toThrow('Missing required article_scores column: score_status');
+    await expect(assertSchemaVersion(db as any, 12)).rejects.toThrow('Missing required column: article_scores.score_status');
   });
 
   it('fails schema assertion when search_vector column is missing at v12', async () => {
@@ -434,7 +456,7 @@ describe('migrations', () => {
     );
     const { assertSchemaVersion } = await import('./migrations');
 
-    await expect(assertSchemaVersion(db as any, 12)).rejects.toThrow('Missing required articles column: search_vector');
+    await expect(assertSchemaVersion(db as any, 12)).rejects.toThrow('Missing required column: articles.search_vector');
   });
 
   it('fails schema assertion when news_brief_editions is missing at v12', async () => {

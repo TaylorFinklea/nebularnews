@@ -1,4 +1,4 @@
-import { dbGet, dbRun, type Db } from './db';
+import { dbAll, dbGet, dbRun, type Db } from './db';
 import { STARTER_CANONICAL_TAGS } from './tagging/taxonomy';
 
 let schemaReady = false;
@@ -1112,100 +1112,21 @@ const columnExists = async (db: Db, tableName: string, columnName: string) => {
   return Boolean(row?.name);
 };
 
-const assertRequiredV2Objects = async (db: Db) => {
-  const requiredTables = ['pull_runs', 'job_runs', 'auth_attempts', 'audit_log'];
-  for (const tableName of requiredTables) {
-    if (!(await tableExists(db, tableName))) {
-      throw new Error(`Missing required table: ${tableName}`);
-    }
-  }
+async function getExistingTables(db: Db): Promise<Set<string>> {
+  const rows = await dbAll<{ table_name: string }>(
+    db,
+    "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"
+  );
+  return new Set(rows.map(r => r.table_name));
+}
 
-  const requiredJobColumns = ['priority', 'locked_by', 'locked_at', 'lease_expires_at', 'created_at', 'updated_at'];
-  for (const columnName of requiredJobColumns) {
-    if (!(await columnExists(db, 'jobs', columnName))) {
-      throw new Error(`Missing required jobs column: ${columnName}`);
-    }
-  }
-
-  if (!(await columnExists(db, 'provider_keys', 'key_version'))) {
-    throw new Error('Missing required provider_keys column: key_version');
-  }
-};
-
-const assertRequiredV4Objects = async (db: Db) => {
-  const requiredArticleColumns = ['image_status', 'image_checked_at'];
-  for (const columnName of requiredArticleColumns) {
-    if (!(await columnExists(db, 'articles', columnName))) {
-      throw new Error(`Missing required articles column: ${columnName}`);
-    }
-  }
-};
-
-const assertRequiredV5Objects = async (db: Db) => {
-  const requiredTables = ['article_tag_suggestions', 'article_tag_suggestion_dismissals'];
-  for (const tableName of requiredTables) {
-    if (!(await tableExists(db, tableName))) {
-      throw new Error(`Missing required table: ${tableName}`);
-    }
-  }
-};
-
-const assertRequiredV7Objects = async (db: Db) => {
-  if (!(await tableExists(db, 'article_reaction_reasons'))) {
-    throw new Error('Missing required table: article_reaction_reasons');
-  }
-};
-
-const assertRequiredV8Objects = async (db: Db) => {
-  const requiredScoreColumns = ['score_status', 'confidence', 'preference_confidence', 'weighted_average'];
-  for (const columnName of requiredScoreColumns) {
-    if (!(await columnExists(db, 'article_scores', columnName))) {
-      throw new Error(`Missing required article_scores column: ${columnName}`);
-    }
-  }
-};
-
-const assertRequiredV9Objects = async (db: Db) => {
-  if (!(await columnExists(db, 'articles', 'search_vector'))) {
-    throw new Error('Missing required articles column: search_vector');
-  }
-};
-
-const assertRequiredV10Objects = async (db: Db) => {
-  if (!(await tableExists(db, 'news_brief_editions'))) {
-    throw new Error('Missing required table: news_brief_editions');
-  }
-};
-
-const assertRequiredV12Objects = async (db: Db) => {
-  const requiredTables = [
-    'oauth_clients',
-    'oauth_consents',
-    'oauth_authorization_codes',
-    'oauth_access_tokens',
-    'oauth_refresh_tokens'
-  ];
-  for (const tableName of requiredTables) {
-    if (!(await tableExists(db, tableName))) {
-      throw new Error(`Missing required table: ${tableName}`);
-    }
-  }
-};
-
-const assertRequiredV14Objects = async (db: Db) => {
-  const requiredArticleColumns = ['extraction_method', 'extraction_quality'];
-  for (const columnName of requiredArticleColumns) {
-    if (!(await columnExists(db, 'articles', columnName))) {
-      throw new Error(`Missing required articles column: ${columnName}`);
-    }
-  }
-  const requiredFeedColumns = ['extraction_success_count', 'extraction_fail_count', 'browser_scrape_enabled'];
-  for (const columnName of requiredFeedColumns) {
-    if (!(await columnExists(db, 'feeds', columnName))) {
-      throw new Error(`Missing required feeds column: ${columnName}`);
-    }
-  }
-};
+async function getExistingColumns(db: Db): Promise<Set<string>> {
+  const rows = await dbAll<{ table_name: string; column_name: string }>(
+    db,
+    "SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'public'"
+  );
+  return new Set(rows.map(r => `${r.table_name}.${r.column_name}`));
+}
 
 export async function assertSchemaVersion(db: Db, expected = EXPECTED_SCHEMA_VERSION) {
   const version = await getSchemaVersion(db);
@@ -1214,61 +1135,81 @@ export async function assertSchemaVersion(db: Db, expected = EXPECTED_SCHEMA_VER
       `Database schema version ${version} is behind expected version ${expected}. Run migrations before starting the app.`
     );
   }
+
+  const [tables, columns] = await Promise.all([
+    getExistingTables(db),
+    getExistingColumns(db)
+  ]);
+
+  const requireTable = (name: string) => {
+    if (!tables.has(name)) throw new Error(`Missing required table: ${name}`);
+  };
+  const requireColumn = (table: string, col: string) => {
+    if (!columns.has(`${table}.${col}`)) throw new Error(`Missing required column: ${table}.${col}`);
+  };
+
+  // V2: tables and columns
   if (expected >= 2) {
-    await assertRequiredV2Objects(db);
+    for (const t of ['pull_runs', 'job_runs', 'auth_attempts', 'audit_log']) requireTable(t);
+    for (const c of ['priority', 'locked_by', 'locked_at', 'lease_expires_at', 'created_at', 'updated_at']) requireColumn('jobs', c);
+    requireColumn('provider_keys', 'key_version');
   }
+
+  // V4: articles image columns
   if (expected >= 4) {
-    await assertRequiredV4Objects(db);
+    for (const c of ['image_status', 'image_checked_at']) requireColumn('articles', c);
   }
+
+  // V5: tag suggestion tables
   if (expected >= 5) {
-    await assertRequiredV5Objects(db);
+    for (const t of ['article_tag_suggestions', 'article_tag_suggestion_dismissals']) requireTable(t);
   }
+
+  // V7: reaction reasons table
   if (expected >= 7) {
-    await assertRequiredV7Objects(db);
+    requireTable('article_reaction_reasons');
   }
+
+  // V8: article_scores columns
   if (expected >= 8) {
-    await assertRequiredV8Objects(db);
+    for (const c of ['score_status', 'confidence', 'preference_confidence', 'weighted_average']) requireColumn('article_scores', c);
   }
+
+  // V9: articles search_vector
   if (expected >= 9) {
-    await assertRequiredV9Objects(db);
+    requireColumn('articles', 'search_vector');
   }
+
+  // V10: news brief editions table
   if (expected >= 10) {
-    await assertRequiredV10Objects(db);
+    requireTable('news_brief_editions');
   }
+
+  // V12: OAuth tables
   if (expected >= 12) {
-    await assertRequiredV12Objects(db);
+    for (const t of ['oauth_clients', 'oauth_consents', 'oauth_authorization_codes', 'oauth_access_tokens', 'oauth_refresh_tokens']) requireTable(t);
   }
+
+  // V14: extraction columns on articles and feeds
   if (expected >= 14) {
-    await assertRequiredV14Objects(db);
+    for (const c of ['extraction_method', 'extraction_quality']) requireColumn('articles', c);
+    for (const c of ['extraction_success_count', 'extraction_fail_count', 'browser_scrape_enabled']) requireColumn('feeds', c);
   }
+
+  // V15: chat tables
   if (expected >= 15) {
-    await assertRequiredV15Objects(db);
+    for (const t of ['chat_threads', 'chat_messages']) requireTable(t);
   }
+
+  // V16: users table
   if (expected >= 16) {
-    await assertRequiredV16Objects(db);
+    requireTable('users');
   }
+
+  // V17: user_feed_subscriptions table
   if (expected >= 17) {
-    await assertRequiredV17Objects(db);
+    requireTable('user_feed_subscriptions');
   }
+
   return version;
 }
-
-const assertRequiredV15Objects = async (db: Db) => {
-  for (const tableName of ['chat_threads', 'chat_messages']) {
-    if (!(await tableExists(db, tableName))) {
-      throw new Error(`Missing required table: ${tableName}`);
-    }
-  }
-};
-
-const assertRequiredV16Objects = async (db: Db) => {
-  if (!(await tableExists(db, 'users'))) {
-    throw new Error('Missing required table: users');
-  }
-};
-
-const assertRequiredV17Objects = async (db: Db) => {
-  if (!(await tableExists(db, 'user_feed_subscriptions'))) {
-    throw new Error('Missing required table: user_feed_subscriptions');
-  }
-};

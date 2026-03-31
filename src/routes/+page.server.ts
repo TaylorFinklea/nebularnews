@@ -62,8 +62,9 @@ export const load = async ({ request, depends, setHeaders, locals }) => {
   depends('app:dashboard');
 
   const db = locals.db;
+  const cache = locals.settingsCache;
   const [queueConfig, feedStatus, newsBrief] = await Promise.all([
-    getDashboardQueueConfig(db),
+    getDashboardQueueConfig(db, cache),
     getDashboardFeedStatus(db),
     getDashboardNewsBrief(db, locals.env, startedAt, userId).catch((error) => {
       logWarn('dashboard.load.news_brief_failed', {

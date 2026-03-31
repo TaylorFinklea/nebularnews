@@ -16,6 +16,7 @@ import {
 import { createDb } from '$lib/server/db';
 import { getEnv, type Env } from '$lib/server/env';
 import { runScheduledTasks } from '$lib/server/scheduler';
+import { loadSettingsCache } from '$lib/server/settings';
 
 const publicPaths = [
   '/login',
@@ -199,6 +200,11 @@ export const handle: Handle = async ({ event, resolve }) => {
       }
       return finalizeWithCsrf(new Response(message, { status: 503 }));
     }
+  }
+
+  // Load settings cache once per request — eliminates dozens of individual queries
+  if (event.locals.user && !isPublic) {
+    event.locals.settingsCache = await loadSettingsCache(event.locals.db);
   }
 
   const csrf = validateCsrf(event);

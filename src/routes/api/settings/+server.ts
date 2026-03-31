@@ -69,14 +69,15 @@ import { recordAuditEvent } from '$lib/server/audit';
 
 export const GET = async ({ locals }) => {
   const db = locals.db;
-  const featureLanes = await getFeatureModelLanes(db);
-  const modelA = await getConfiguredModelA(db, locals.env);
-  const modelB = await getConfiguredModelB(db, locals.env);
-  const scorePrompt = await getScorePromptConfig(db);
-  const dashboardQueue = await getDashboardQueueConfig(db);
-  const newsBrief = await getNewsBriefConfig(db);
-  const retention = await getRetentionConfig(db);
-  const taggingMethod = await getTaggingMethod(db);
+  const cache = locals.settingsCache;
+  const featureLanes = await getFeatureModelLanes(db, cache);
+  const modelA = await getConfiguredModelA(db, locals.env, cache);
+  const modelB = await getConfiguredModelB(db, locals.env, cache);
+  const scorePrompt = await getScorePromptConfig(db, cache);
+  const dashboardQueue = await getDashboardQueueConfig(db, cache);
+  const newsBrief = await getNewsBriefConfig(db, cache);
+  const retention = await getRetentionConfig(db, cache);
+  const taggingMethod = await getTaggingMethod(db, cache);
   const settings = {
     featureLanes: {
       summaries: featureLanes.summaries,
@@ -93,31 +94,31 @@ export const GET = async ({ locals }) => {
     modelBReasoningEffort: modelB.reasoningEffort,
     scoreSystemPrompt: scorePrompt.systemPrompt,
     scoreUserPromptTemplate: scorePrompt.userPromptTemplate,
-    summaryStyle: (await getSetting(db, 'summary_style')) ?? 'concise',
-    summaryLength: (await getSetting(db, 'summary_length')) ?? 'short',
-    pollInterval: String(await getSchedulerPollIntervalMinutes(db)),
-    initialFeedLookbackDays: await getInitialFeedLookbackDays(db),
-    maxFeedsPerPoll: await getMaxFeedsPerPoll(db, locals.env),
-    maxItemsPerPoll: await getMaxItemsPerPoll(db, locals.env),
-    eventsPollMs: await getEventsPollMs(db, locals.env),
-    dashboardRefreshMinMs: await getDashboardRefreshMinMs(db, locals.env),
+    summaryStyle: (await getSetting(db, 'summary_style', cache)) ?? 'concise',
+    summaryLength: (await getSetting(db, 'summary_length', cache)) ?? 'short',
+    pollInterval: String(await getSchedulerPollIntervalMinutes(db, cache)),
+    initialFeedLookbackDays: await getInitialFeedLookbackDays(db, cache),
+    maxFeedsPerPoll: await getMaxFeedsPerPoll(db, locals.env, cache),
+    maxItemsPerPoll: await getMaxItemsPerPoll(db, locals.env, cache),
+    eventsPollMs: await getEventsPollMs(db, locals.env, cache),
+    dashboardRefreshMinMs: await getDashboardRefreshMinMs(db, locals.env, cache),
     retentionDays: retention.days,
     retentionMode: retention.mode,
     retentionArchiveDays: retention.archiveDays,
     retentionDeleteDays: retention.deleteDays,
-    autoReadDelayMs: await getAutoReadDelayMs(db),
+    autoReadDelayMs: await getAutoReadDelayMs(db, cache),
     taggingMethod,
     autoTaggingEnabled: taggingMethod === 'hybrid',
-    autoTagMaxPerArticle: await getAutoTagMaxPerArticle(db),
-    jobProcessorBatchSize: await getJobProcessorBatchSize(db, locals.env),
-    jobsIntervalMinutes: await getSchedulerJobsIntervalMinutes(db),
-    pollIntervalMinutes: await getSchedulerPollIntervalMinutes(db),
-    pullSlicesPerTick: await getSchedulerPullSlicesPerTick(db),
-    pullSliceBudgetMs: await getSchedulerPullSliceBudgetMs(db),
-    jobBudgetIdleMs: await getSchedulerJobBudgetIdleMs(db),
-    jobBudgetWhilePullMs: await getSchedulerJobBudgetWhilePullMs(db),
-    autoQueueTodayMissing: await getSchedulerAutoQueueTodayMissing(db),
-    articleCardLayout: await getArticleCardLayout(db),
+    autoTagMaxPerArticle: await getAutoTagMaxPerArticle(db, cache),
+    jobProcessorBatchSize: await getJobProcessorBatchSize(db, locals.env, cache),
+    jobsIntervalMinutes: await getSchedulerJobsIntervalMinutes(db, cache),
+    pollIntervalMinutes: await getSchedulerPollIntervalMinutes(db, cache),
+    pullSlicesPerTick: await getSchedulerPullSlicesPerTick(db, cache),
+    pullSliceBudgetMs: await getSchedulerPullSliceBudgetMs(db, cache),
+    jobBudgetIdleMs: await getSchedulerJobBudgetIdleMs(db, cache),
+    jobBudgetWhilePullMs: await getSchedulerJobBudgetWhilePullMs(db, cache),
+    autoQueueTodayMissing: await getSchedulerAutoQueueTodayMissing(db, cache),
+    articleCardLayout: await getArticleCardLayout(db, cache),
     dashboardQueueWindowDays: dashboardQueue.windowDays,
     dashboardQueueLimit: dashboardQueue.limit,
     dashboardQueueScoreCutoff: dashboardQueue.scoreCutoff,
@@ -127,12 +128,12 @@ export const GET = async ({ locals }) => {
     newsBriefEveningTime: newsBrief.eveningTime,
     newsBriefLookbackHours: newsBrief.lookbackHours,
     newsBriefScoreCutoff: newsBrief.scoreCutoff,
-    scoringMethod: await getScoringMethod(db),
-    scoringAiEnhancementThreshold: await getScoringAiEnhancementThreshold(db),
-    scoringLearningRate: await getScoringLearningRate(db),
-    browserScrapingEnabled: await getBrowserScrapingEnabled(db),
-    browserScrapeProvider: await getBrowserScrapeProvider(db),
-    browserScrapeApiUrl: (await getSetting(db, 'browser_scrape_api_url')) ?? ''
+    scoringMethod: await getScoringMethod(db, cache),
+    scoringAiEnhancementThreshold: await getScoringAiEnhancementThreshold(db, cache),
+    scoringLearningRate: await getScoringLearningRate(db, cache),
+    browserScrapingEnabled: await getBrowserScrapingEnabled(db, cache),
+    browserScrapeProvider: await getBrowserScrapeProvider(db, cache),
+    browserScrapeApiUrl: (await getSetting(db, 'browser_scrape_api_url', cache)) ?? ''
   };
 
   const keys = await dbAll<{ provider: string }>(db, 'SELECT provider FROM provider_keys');

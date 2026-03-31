@@ -47,7 +47,7 @@ const normalizeSort = (value: string | null): SortValue => {
 export const load = async ({ url, setHeaders, locals }) => {
   const userId = locals.user?.id ?? 'admin';
   const startedAt = Date.now();
-  const defaultCardLayout = await getArticleCardLayout(locals.db);
+  const defaultCardLayout = await getArticleCardLayout(locals.db, locals.settingsCache);
   const query = url.searchParams.get('q')?.trim() ?? '';
   const sinceDays = (() => {
     const parsed = Number(url.searchParams.get('sinceDays') ?? '');

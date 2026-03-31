@@ -11,6 +11,37 @@ import {
 } from './llm';
 import { now } from './db';
 
+// ─── Settings Cache ─────────────────────────────────────────────────
+// Pre-loads all settings rows into memory so that per-request reads
+// can be served without individual DB queries.
+
+export class SettingsCache {
+  private cache: Map<string, string>;
+
+  constructor(rows: Array<{ user_id: string; key: string; value: string }>) {
+    this.cache = new Map();
+    for (const row of rows) {
+      this.cache.set(`${row.user_id}:${row.key}`, row.value);
+    }
+  }
+
+  getUserSetting(userId: string, key: string): string | null {
+    return this.cache.get(`${userId}:${key}`) ?? null;
+  }
+
+  getSetting(key: string): string | null {
+    return this.getUserSetting('__system__', key) ?? this.getUserSetting('admin', key) ?? null;
+  }
+}
+
+export async function loadSettingsCache(db: Db): Promise<SettingsCache> {
+  const rows = await dbAll<{ user_id: string; key: string; value: string }>(
+    db,
+    'SELECT user_id, key, value FROM settings'
+  );
+  return new SettingsCache(rows);
+}
+
 export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
 export type SummaryStyle = 'concise' | 'detailed' | 'bullet';
 export type SummaryLength = 'short' | 'medium' | 'long';
@@ -485,7 +516,14 @@ export const intervalMinutesToCronExpression = (minutes: number) => {
   return `*/${value} * * * *`;
 };
 
-const getFirstSetting = async (db: Db, keys: string[]) => {
+const getFirstSetting = async (db: Db, keys: string[], cache?: SettingsCache) => {
+  if (cache) {
+    for (const key of keys) {
+      const value = cache.getSetting(key);
+      if (value) return value;
+    }
+    return null;
+  }
   for (const key of keys) {
     const value = await getSetting(db, key);
     if (value) return value;
@@ -494,7 +532,8 @@ const getFirstSetting = async (db: Db, keys: string[]) => {
 };
 
 // User-scoped settings
-export async function getUserSetting(db: Db, userId: string, key: string) {
+export async function getUserSetting(db: Db, userId: string, key: string, cache?: SettingsCache) {
+  if (cache) return cache.getUserSetting(userId, key);
   const row = await dbGet<{ value: string }>(
     db,
     'SELECT value FROM settings WHERE user_id = ? AND key = ?',
@@ -521,8 +560,8 @@ export async function setUserSetting(db: Db, userId: string, key: string, value:
 }
 
 // System-wide settings (scheduler, retention, global config)
-export async function getSystemSetting(db: Db, key: string) {
-  return getUserSetting(db, '__system__', key);
+export async function getSystemSetting(db: Db, key: string, cache?: SettingsCache) {
+  return getUserSetting(db, '__system__', key, cache);
 }
 
 export async function setSystemSetting(db: Db, key: string, value: string) {
@@ -531,7 +570,8 @@ export async function setSystemSetting(db: Db, key: string, value: string) {
 
 // Backward-compatible wrappers — these read/write as 'admin' user
 // TODO(multi-user): Replace all callers with getUserSetting/setUserSetting + explicit userId
-export async function getSetting(db: Db, key: string) {
+export async function getSetting(db: Db, key: string, cache?: SettingsCache) {
+  if (cache) return cache.getSetting(key);
   // Try system settings first, then admin user settings (backward compat)
   const system = await getUserSetting(db, '__system__', key);
   if (system !== null) return system;
@@ -543,24 +583,24 @@ export async function setSetting(db: Db, key: string, value: string) {
   return setUserSetting(db, 'admin', key, value);
 }
 
-export async function getProviderModel(db: Db, env: Env) {
-  return getIngestProviderModel(db, env);
+export async function getProviderModel(db: Db, env: Env, cache?: SettingsCache) {
+  return getIngestProviderModel(db, env, cache);
 }
 
-async function resolveModelAProviderModel(db: Db, env: Env): Promise<ProviderModelConfig> {
+async function resolveModelAProviderModel(db: Db, env: Env, cache?: SettingsCache): Promise<ProviderModelConfig> {
   const provider = toProvider(
-    (await getFirstSetting(db, ['ingest_provider', 'default_provider'])) ??
+    (await getFirstSetting(db, ['ingest_provider', 'default_provider'], cache)) ??
       env.DEFAULT_MODEL_A_PROVIDER ??
       env.DEFAULT_PROVIDER ??
       null
   );
   const model =
-    (await getFirstSetting(db, ['ingest_model', 'default_model'])) ??
+    (await getFirstSetting(db, ['ingest_model', 'default_model'], cache)) ??
     env.DEFAULT_MODEL_A ??
     env.DEFAULT_MODEL ??
     DEFAULT_MODEL;
   const reasoningEffort = toReasoningEffort(
-    (await getFirstSetting(db, ['ingest_reasoning_effort', 'reasoning_effort'])) ??
+    (await getFirstSetting(db, ['ingest_reasoning_effort', 'reasoning_effort'], cache)) ??
       env.DEFAULT_MODEL_A_REASONING_EFFORT ??
       env.DEFAULT_REASONING_EFFORT ??
       null
@@ -569,20 +609,20 @@ async function resolveModelAProviderModel(db: Db, env: Env): Promise<ProviderMod
   return { provider, model, reasoningEffort };
 }
 
-async function resolveModelBProviderModel(db: Db, env: Env): Promise<ProviderModelConfig> {
+async function resolveModelBProviderModel(db: Db, env: Env, cache?: SettingsCache): Promise<ProviderModelConfig> {
   const provider = toProvider(
-    (await getFirstSetting(db, ['chat_provider', 'default_provider'])) ??
+    (await getFirstSetting(db, ['chat_provider', 'default_provider'], cache)) ??
       env.DEFAULT_MODEL_B_PROVIDER ??
       env.DEFAULT_PROVIDER ??
       null
   );
   const model =
-    (await getFirstSetting(db, ['chat_model', 'default_model'])) ??
+    (await getFirstSetting(db, ['chat_model', 'default_model'], cache)) ??
     env.DEFAULT_MODEL_B ??
     env.DEFAULT_MODEL ??
     DEFAULT_MODEL;
   const reasoningEffort = toReasoningEffort(
-    (await getFirstSetting(db, ['chat_reasoning_effort', 'reasoning_effort'])) ??
+    (await getFirstSetting(db, ['chat_reasoning_effort', 'reasoning_effort'], cache)) ??
       env.DEFAULT_MODEL_B_REASONING_EFFORT ??
       env.DEFAULT_REASONING_EFFORT ??
       null
@@ -591,30 +631,30 @@ async function resolveModelBProviderModel(db: Db, env: Env): Promise<ProviderMod
   return { provider, model, reasoningEffort };
 }
 
-export async function getConfiguredModelA(db: Db, env: Env): Promise<ProviderModelConfig> {
-  return resolveModelAProviderModel(db, env);
+export async function getConfiguredModelA(db: Db, env: Env, cache?: SettingsCache): Promise<ProviderModelConfig> {
+  return resolveModelAProviderModel(db, env, cache);
 }
 
-export async function getConfiguredModelB(db: Db, env: Env): Promise<ProviderModelConfig> {
-  return resolveModelBProviderModel(db, env);
+export async function getConfiguredModelB(db: Db, env: Env, cache?: SettingsCache): Promise<ProviderModelConfig> {
+  return resolveModelBProviderModel(db, env, cache);
 }
 
-export async function getFeatureModelLane(db: Db, feature: AiFeature): Promise<AiModelLane> {
+export async function getFeatureModelLane(db: Db, feature: AiFeature, cache?: SettingsCache): Promise<AiModelLane> {
   const key = FEATURE_LANE_KEYS[feature];
-  const raw = await getSetting(db, key);
+  const raw = await getSetting(db, key, cache);
   if (raw) return toAiModelLane(raw);
-  const legacyGlobalLane = await getSetting(db, 'ai_model_lane');
+  const legacyGlobalLane = await getSetting(db, 'ai_model_lane', cache);
   if (legacyGlobalLane) return toAiModelLane(legacyGlobalLane);
   return FEATURE_LANE_DEFAULTS[feature];
 }
 
-export async function getFeatureModelLanes(db: Db): Promise<Record<AiFeature, AiModelLane>> {
+export async function getFeatureModelLanes(db: Db, cache?: SettingsCache): Promise<Record<AiFeature, AiModelLane>> {
   return {
-    summaries: await getFeatureModelLane(db, 'summaries'),
-    scoring: await getFeatureModelLane(db, 'scoring'),
-    profile_refresh: await getFeatureModelLane(db, 'profile_refresh'),
-    key_points: await getFeatureModelLane(db, 'key_points'),
-    auto_tagging: await getFeatureModelLane(db, 'auto_tagging')
+    summaries: await getFeatureModelLane(db, 'summaries', cache),
+    scoring: await getFeatureModelLane(db, 'scoring', cache),
+    profile_refresh: await getFeatureModelLane(db, 'profile_refresh', cache),
+    key_points: await getFeatureModelLane(db, 'key_points', cache),
+    auto_tagging: await getFeatureModelLane(db, 'auto_tagging', cache)
   };
 }
 
@@ -625,52 +665,53 @@ export async function setFeatureModelLane(db: Db, feature: AiFeature, lane: AiMo
 export async function getFeatureProviderModel(
   db: Db,
   env: Env,
-  feature: AiFeature
+  feature: AiFeature,
+  cache?: SettingsCache
 ): Promise<ProviderModelConfig> {
-  const lane = await getFeatureModelLane(db, feature);
-  if (lane === 'model_b') return resolveModelBProviderModel(db, env);
-  return resolveModelAProviderModel(db, env);
+  const lane = await getFeatureModelLane(db, feature, cache);
+  if (lane === 'model_b') return resolveModelBProviderModel(db, env, cache);
+  return resolveModelAProviderModel(db, env, cache);
 }
 
-export async function getIngestProviderModel(db: Db, env: Env): Promise<ProviderModelConfig> {
-  return resolveModelAProviderModel(db, env);
+export async function getIngestProviderModel(db: Db, env: Env, cache?: SettingsCache): Promise<ProviderModelConfig> {
+  return resolveModelAProviderModel(db, env, cache);
 }
 
-export async function getModelBProviderModel(db: Db, env: Env): Promise<ProviderModelConfig> {
-  return resolveModelBProviderModel(db, env);
+export async function getModelBProviderModel(db: Db, env: Env, cache?: SettingsCache): Promise<ProviderModelConfig> {
+  return resolveModelBProviderModel(db, env, cache);
 }
 
-export async function getScorePromptConfig(db: Db): Promise<ScorePromptConfig> {
-  const systemPrompt = (await getSetting(db, 'score_system_prompt')) ?? DEFAULT_SCORE_SYSTEM_PROMPT;
-  const userPromptTemplate = (await getSetting(db, 'score_user_prompt_template')) ?? DEFAULT_SCORE_USER_PROMPT_TEMPLATE;
+export async function getScorePromptConfig(db: Db, cache?: SettingsCache): Promise<ScorePromptConfig> {
+  const systemPrompt = (await getSetting(db, 'score_system_prompt', cache)) ?? DEFAULT_SCORE_SYSTEM_PROMPT;
+  const userPromptTemplate = (await getSetting(db, 'score_user_prompt_template', cache)) ?? DEFAULT_SCORE_USER_PROMPT_TEMPLATE;
   return { systemPrompt, userPromptTemplate };
 }
 
-export async function getSummaryConfig(db: Db): Promise<{ style: SummaryStyle; length: SummaryLength }> {
+export async function getSummaryConfig(db: Db, cache?: SettingsCache): Promise<{ style: SummaryStyle; length: SummaryLength }> {
   return {
-    style: toSummaryStyle(await getSetting(db, 'summary_style')),
-    length: toSummaryLength(await getSetting(db, 'summary_length'))
+    style: toSummaryStyle(await getSetting(db, 'summary_style', cache)),
+    length: toSummaryLength(await getSetting(db, 'summary_length', cache))
   };
 }
 
-export async function getAutoReadDelayMs(db: Db) {
-  const raw = await getSetting(db, 'auto_read_delay_ms');
+export async function getAutoReadDelayMs(db: Db, cache?: SettingsCache) {
+  const raw = await getSetting(db, 'auto_read_delay_ms', cache);
   return clampAutoReadDelayMs(raw);
 }
 
-export async function getDashboardTopRatedConfig(db: Db) {
-  const cutoff = clampDashboardTopRatedCutoff(await getSetting(db, 'dashboard_top_rated_cutoff'));
-  const limit = clampDashboardTopRatedLimit(await getSetting(db, 'dashboard_top_rated_limit'));
+export async function getDashboardTopRatedConfig(db: Db, cache?: SettingsCache) {
+  const cutoff = clampDashboardTopRatedCutoff(await getSetting(db, 'dashboard_top_rated_cutoff', cache));
+  const limit = clampDashboardTopRatedLimit(await getSetting(db, 'dashboard_top_rated_limit', cache));
   return { cutoff, limit };
 }
 
-export async function getDashboardQueueConfig(db: Db) {
+export async function getDashboardQueueConfig(db: Db, cache?: SettingsCache) {
   const [windowDaysRaw, queueLimitRaw, queueCutoffRaw, legacyLimitRaw, legacyCutoffRaw] = await Promise.all([
-    getSetting(db, 'dashboard_queue_window_days'),
-    getSetting(db, 'dashboard_queue_limit'),
-    getSetting(db, 'dashboard_queue_score_cutoff'),
-    getSetting(db, 'dashboard_top_rated_limit'),
-    getSetting(db, 'dashboard_top_rated_cutoff')
+    getSetting(db, 'dashboard_queue_window_days', cache),
+    getSetting(db, 'dashboard_queue_limit', cache),
+    getSetting(db, 'dashboard_queue_score_cutoff', cache),
+    getSetting(db, 'dashboard_top_rated_limit', cache),
+    getSetting(db, 'dashboard_top_rated_cutoff', cache)
   ]);
 
   return {
@@ -680,15 +721,15 @@ export async function getDashboardQueueConfig(db: Db) {
   };
 }
 
-export async function getNewsBriefConfig(db: Db): Promise<NewsBriefConfig> {
+export async function getNewsBriefConfig(db: Db, cache?: SettingsCache): Promise<NewsBriefConfig> {
   const [enabledRaw, timezoneRaw, morningTimeRaw, eveningTimeRaw, lookbackHoursRaw, scoreCutoffRaw] =
     await Promise.all([
-      getSetting(db, 'news_brief_enabled'),
-      getSetting(db, 'news_brief_timezone'),
-      getSetting(db, 'news_brief_morning_time'),
-      getSetting(db, 'news_brief_evening_time'),
-      getSetting(db, 'news_brief_lookback_hours'),
-      getSetting(db, 'news_brief_score_cutoff')
+      getSetting(db, 'news_brief_enabled', cache),
+      getSetting(db, 'news_brief_timezone', cache),
+      getSetting(db, 'news_brief_morning_time', cache),
+      getSetting(db, 'news_brief_evening_time', cache),
+      getSetting(db, 'news_brief_lookback_hours', cache),
+      getSetting(db, 'news_brief_score_cutoff', cache)
     ]);
 
   return {
@@ -701,15 +742,15 @@ export async function getNewsBriefConfig(db: Db): Promise<NewsBriefConfig> {
   };
 }
 
-export async function getNewsBriefConfigForUser(db: Db, userId: string): Promise<NewsBriefConfig> {
+export async function getNewsBriefConfigForUser(db: Db, userId: string, cache?: SettingsCache): Promise<NewsBriefConfig> {
   const [enabledRaw, timezoneRaw, morningTimeRaw, eveningTimeRaw, lookbackHoursRaw, scoreCutoffRaw] =
     await Promise.all([
-      getUserSetting(db, userId, 'news_brief_enabled'),
-      getUserSetting(db, userId, 'news_brief_timezone'),
-      getUserSetting(db, userId, 'news_brief_morning_time'),
-      getUserSetting(db, userId, 'news_brief_evening_time'),
-      getUserSetting(db, userId, 'news_brief_lookback_hours'),
-      getUserSetting(db, userId, 'news_brief_score_cutoff')
+      getUserSetting(db, userId, 'news_brief_enabled', cache),
+      getUserSetting(db, userId, 'news_brief_timezone', cache),
+      getUserSetting(db, userId, 'news_brief_morning_time', cache),
+      getUserSetting(db, userId, 'news_brief_evening_time', cache),
+      getUserSetting(db, userId, 'news_brief_lookback_hours', cache),
+      getUserSetting(db, userId, 'news_brief_score_cutoff', cache)
     ]);
 
   return {
@@ -722,54 +763,54 @@ export async function getNewsBriefConfigForUser(db: Db, userId: string): Promise
   };
 }
 
-export async function getInitialFeedLookbackDays(db: Db) {
-  const raw = await getSetting(db, 'initial_feed_lookback_days');
+export async function getInitialFeedLookbackDays(db: Db, cache?: SettingsCache) {
+  const raw = await getSetting(db, 'initial_feed_lookback_days', cache);
   return clampInitialFeedLookbackDays(raw);
 }
 
-export async function getMaxFeedsPerPoll(db: Db, env?: Env) {
-  const raw = (await getSetting(db, 'max_feeds_per_poll')) ?? env?.MAX_FEEDS_PER_POLL ?? null;
+export async function getMaxFeedsPerPoll(db: Db, env?: Env, cache?: SettingsCache) {
+  const raw = (await getSetting(db, 'max_feeds_per_poll', cache)) ?? env?.MAX_FEEDS_PER_POLL ?? null;
   return clampMaxFeedsPerPoll(raw);
 }
 
-export async function getMaxItemsPerPoll(db: Db, env?: Env) {
-  const raw = (await getSetting(db, 'max_items_per_poll')) ?? env?.MAX_ITEMS_PER_POLL ?? null;
+export async function getMaxItemsPerPoll(db: Db, env?: Env, cache?: SettingsCache) {
+  const raw = (await getSetting(db, 'max_items_per_poll', cache)) ?? env?.MAX_ITEMS_PER_POLL ?? null;
   return clampMaxItemsPerPoll(raw);
 }
 
-export async function getEventsPollMs(db: Db, env?: Env) {
-  const raw = (await getSetting(db, 'events_poll_ms')) ?? env?.EVENTS_POLL_MS ?? null;
+export async function getEventsPollMs(db: Db, env?: Env, cache?: SettingsCache) {
+  const raw = (await getSetting(db, 'events_poll_ms', cache)) ?? env?.EVENTS_POLL_MS ?? null;
   return clampEventsPollMs(raw);
 }
 
-export async function getDashboardRefreshMinMs(db: Db, env?: Env) {
-  const raw = (await getSetting(db, 'dashboard_refresh_min_ms')) ?? env?.DASHBOARD_REFRESH_MIN_MS ?? null;
+export async function getDashboardRefreshMinMs(db: Db, env?: Env, cache?: SettingsCache) {
+  const raw = (await getSetting(db, 'dashboard_refresh_min_ms', cache)) ?? env?.DASHBOARD_REFRESH_MIN_MS ?? null;
   return clampDashboardRefreshMinMs(raw);
 }
 
-export async function getRetentionConfig(db: Db) {
-  const archiveDays = clampRetentionArchiveDays(await getSetting(db, 'retention_days'));
-  const deleteDays = clampRetentionDeleteDays(await getSetting(db, 'retention_delete_days'));
-  const mode = toRetentionMode(await getSetting(db, 'retention_mode'));
+export async function getRetentionConfig(db: Db, cache?: SettingsCache) {
+  const archiveDays = clampRetentionArchiveDays(await getSetting(db, 'retention_days', cache));
+  const deleteDays = clampRetentionDeleteDays(await getSetting(db, 'retention_delete_days', cache));
+  const mode = toRetentionMode(await getSetting(db, 'retention_mode', cache));
   return { archiveDays, deleteDays, mode, days: archiveDays };
 }
 
-export async function getJobProcessorBatchSize(db: Db, env?: Env) {
-  const raw = (await getSetting(db, 'job_processor_batch_size')) ?? env?.JOB_PROCESSOR_BATCH_SIZE ?? null;
+export async function getJobProcessorBatchSize(db: Db, env?: Env, cache?: SettingsCache) {
+  const raw = (await getSetting(db, 'job_processor_batch_size', cache)) ?? env?.JOB_PROCESSOR_BATCH_SIZE ?? null;
   return clampJobProcessorBatchSize(raw);
 }
 
-export async function getAutoTaggingEnabled(db: Db) {
-  const raw = await getSetting(db, 'auto_tagging_enabled');
+export async function getAutoTaggingEnabled(db: Db, cache?: SettingsCache) {
+  const raw = await getSetting(db, 'auto_tagging_enabled', cache);
   return parseBooleanSetting(raw, DEFAULT_AUTO_TAGGING_ENABLED);
 }
 
-export async function getTaggingMethod(db: Db): Promise<TaggingMethod> {
-  const explicit = await getSetting(db, 'tagging_method');
+export async function getTaggingMethod(db: Db, cache?: SettingsCache): Promise<TaggingMethod> {
+  const explicit = await getSetting(db, 'tagging_method', cache);
   if (explicit) {
     return toTaggingMethod(explicit);
   }
-  return (await getAutoTaggingEnabled(db)) ? 'hybrid' : 'algorithmic';
+  return (await getAutoTaggingEnabled(db, cache)) ? 'hybrid' : 'algorithmic';
 }
 
 export async function setTaggingMethod(db: Db, method: TaggingMethod) {
@@ -777,38 +818,38 @@ export async function setTaggingMethod(db: Db, method: TaggingMethod) {
   await setSetting(db, 'auto_tagging_enabled', method === 'hybrid' ? '1' : '0');
 }
 
-export async function getAutoTagMaxPerArticle(db: Db) {
-  const raw = await getSetting(db, 'auto_tag_max_per_article');
+export async function getAutoTagMaxPerArticle(db: Db, cache?: SettingsCache) {
+  const raw = await getSetting(db, 'auto_tag_max_per_article', cache);
   return clampAutoTagMaxPerArticle(raw);
 }
 
-export async function getSchedulerJobsIntervalMinutes(db: Db) {
-  const raw = await getSetting(db, 'scheduler_jobs_interval_min');
+export async function getSchedulerJobsIntervalMinutes(db: Db, cache?: SettingsCache) {
+  const raw = await getSetting(db, 'scheduler_jobs_interval_min', cache);
   return clampSchedulerJobsIntervalMinutes(raw);
 }
 
-export async function getSchedulerPollIntervalMinutes(db: Db) {
-  const raw = await getSetting(db, 'scheduler_poll_interval_min');
+export async function getSchedulerPollIntervalMinutes(db: Db, cache?: SettingsCache) {
+  const raw = await getSetting(db, 'scheduler_poll_interval_min', cache);
   return clampSchedulerPollIntervalMinutes(raw);
 }
 
-export async function getSchedulerPullSlicesPerTick(db: Db) {
-  const raw = await getSetting(db, 'scheduler_pull_slices_per_tick');
+export async function getSchedulerPullSlicesPerTick(db: Db, cache?: SettingsCache) {
+  const raw = await getSetting(db, 'scheduler_pull_slices_per_tick', cache);
   return clampSchedulerPullSlicesPerTick(raw);
 }
 
-export async function getSchedulerPullSliceBudgetMs(db: Db) {
-  const raw = await getSetting(db, 'scheduler_pull_slice_budget_ms');
+export async function getSchedulerPullSliceBudgetMs(db: Db, cache?: SettingsCache) {
+  const raw = await getSetting(db, 'scheduler_pull_slice_budget_ms', cache);
   return clampSchedulerPullSliceBudgetMs(raw);
 }
 
-export async function getSchedulerJobBudgetIdleMs(db: Db) {
-  const raw = await getSetting(db, 'scheduler_job_budget_idle_ms');
+export async function getSchedulerJobBudgetIdleMs(db: Db, cache?: SettingsCache) {
+  const raw = await getSetting(db, 'scheduler_job_budget_idle_ms', cache);
   return clampSchedulerJobBudgetIdleMs(raw);
 }
 
-export async function getSchedulerJobBudgetWhilePullMs(db: Db) {
-  const raw = await getSetting(db, 'scheduler_job_budget_while_pull_ms');
+export async function getSchedulerJobBudgetWhilePullMs(db: Db, cache?: SettingsCache) {
+  const raw = await getSetting(db, 'scheduler_job_budget_while_pull_ms', cache);
   return clampSchedulerJobBudgetWhilePullMs(raw);
 }
 
@@ -836,16 +877,16 @@ export const clampScoringAiEnhancementThreshold = (value: unknown) => {
   );
 };
 
-export async function getScoringMethod(db: Db): Promise<ScoringMethod> {
-  return toScoringMethod(await getSetting(db, 'scoring_method'));
+export async function getScoringMethod(db: Db, cache?: SettingsCache): Promise<ScoringMethod> {
+  return toScoringMethod(await getSetting(db, 'scoring_method', cache));
 }
 
 export async function setScoringMethod(db: Db, method: ScoringMethod) {
   await setSetting(db, 'scoring_method', method);
 }
 
-export async function getScoringAiEnhancementThreshold(db: Db): Promise<number> {
-  const raw = await getSetting(db, 'scoring_ai_enhancement_threshold');
+export async function getScoringAiEnhancementThreshold(db: Db, cache?: SettingsCache): Promise<number> {
+  const raw = await getSetting(db, 'scoring_ai_enhancement_threshold', cache);
   return clampScoringAiEnhancementThreshold(raw);
 }
 
@@ -853,8 +894,8 @@ export async function setScoringAiEnhancementThreshold(db: Db, threshold: number
   await setSetting(db, 'scoring_ai_enhancement_threshold', String(clampScoringAiEnhancementThreshold(threshold)));
 }
 
-export async function getScoringLearningRate(db: Db): Promise<number> {
-  const raw = await getSetting(db, 'scoring_learning_rate');
+export async function getScoringLearningRate(db: Db, cache?: SettingsCache): Promise<number> {
+  const raw = await getSetting(db, 'scoring_learning_rate', cache);
   const parsed = Number(raw);
   if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 1) return DEFAULT_SCORING_LEARNING_RATE;
   return parsed;
@@ -873,12 +914,12 @@ export {
 
 // ─────────────────────────────────────────────────────────────────────
 
-export async function getSchedulerAutoQueueTodayMissing(db: Db) {
-  const raw = await getSetting(db, 'scheduler_auto_queue_today_missing');
+export async function getSchedulerAutoQueueTodayMissing(db: Db, cache?: SettingsCache) {
+  const raw = await getSetting(db, 'scheduler_auto_queue_today_missing', cache);
   return parseBooleanSetting(raw, DEFAULT_SCHEDULER_AUTO_QUEUE_TODAY_MISSING);
 }
 
-export async function getSchedulerRuntimeConfig(db: Db) {
+export async function getSchedulerRuntimeConfig(db: Db, cache?: SettingsCache) {
   const [
     jobsIntervalMinutes,
     pollIntervalMinutes,
@@ -888,13 +929,13 @@ export async function getSchedulerRuntimeConfig(db: Db) {
     jobBudgetWhilePullMs,
     autoQueueTodayMissing
   ] = await Promise.all([
-    getSchedulerJobsIntervalMinutes(db),
-    getSchedulerPollIntervalMinutes(db),
-    getSchedulerPullSlicesPerTick(db),
-    getSchedulerPullSliceBudgetMs(db),
-    getSchedulerJobBudgetIdleMs(db),
-    getSchedulerJobBudgetWhilePullMs(db),
-    getSchedulerAutoQueueTodayMissing(db)
+    getSchedulerJobsIntervalMinutes(db, cache),
+    getSchedulerPollIntervalMinutes(db, cache),
+    getSchedulerPullSlicesPerTick(db, cache),
+    getSchedulerPullSliceBudgetMs(db, cache),
+    getSchedulerJobBudgetIdleMs(db, cache),
+    getSchedulerJobBudgetWhilePullMs(db, cache),
+    getSchedulerAutoQueueTodayMissing(db, cache)
   ]);
 
   return {
@@ -908,12 +949,12 @@ export async function getSchedulerRuntimeConfig(db: Db) {
   };
 }
 
-export async function getDashboardTopRatedLayout(db: Db): Promise<DashboardTopRatedLayout> {
-  return toDashboardTopRatedLayout(await getSetting(db, 'dashboard_top_rated_layout'));
+export async function getDashboardTopRatedLayout(db: Db, cache?: SettingsCache): Promise<DashboardTopRatedLayout> {
+  return toDashboardTopRatedLayout(await getSetting(db, 'dashboard_top_rated_layout', cache));
 }
 
-export async function getArticleCardLayout(db: Db): Promise<ArticleCardLayout> {
-  return toArticleCardLayout(await getSetting(db, 'article_card_layout'));
+export async function getArticleCardLayout(db: Db, cache?: SettingsCache): Promise<ArticleCardLayout> {
+  return toArticleCardLayout(await getSetting(db, 'article_card_layout', cache));
 }
 
 export async function getProviderKey(db: Db, env: Env, provider: Provider) {
@@ -989,13 +1030,13 @@ const DEFAULT_PROVIDER_URLS: Record<BrowserScrapeProvider, string> = {
   generic: ''
 };
 
-export async function getBrowserScrapingEnabled(db: Db): Promise<boolean> {
-  const value = await getSetting(db, 'browser_scraping_enabled');
+export async function getBrowserScrapingEnabled(db: Db, cache?: SettingsCache): Promise<boolean> {
+  const value = await getSetting(db, 'browser_scraping_enabled', cache);
   return value === '1' || value === 'true';
 }
 
-export async function getBrowserScrapeProvider(db: Db): Promise<BrowserScrapeProvider> {
-  const raw = await getSetting(db, 'browser_scrape_provider');
+export async function getBrowserScrapeProvider(db: Db, cache?: SettingsCache): Promise<BrowserScrapeProvider> {
+  const raw = await getSetting(db, 'browser_scrape_provider', cache);
   if (raw && VALID_BROWSER_SCRAPE_PROVIDERS.has(raw as BrowserScrapeProvider)) {
     return raw as BrowserScrapeProvider;
   }
@@ -1004,13 +1045,14 @@ export async function getBrowserScrapeProvider(db: Db): Promise<BrowserScrapePro
 
 export async function getBrowserScrapeConfig(
   db: Db,
-  env: Env
+  env: Env,
+  cache?: SettingsCache
 ): Promise<BrowserScrapeConfig | null> {
-  const enabled = await getBrowserScrapingEnabled(db);
+  const enabled = await getBrowserScrapingEnabled(db, cache);
   if (!enabled) return null;
 
-  const provider = await getBrowserScrapeProvider(db);
-  const customUrl = await getSetting(db, 'browser_scrape_api_url');
+  const provider = await getBrowserScrapeProvider(db, cache);
+  const customUrl = await getSetting(db, 'browser_scrape_api_url', cache);
 
   // All providers require an API key from provider_keys table
   const row = await dbGet<{ encrypted_key: string }>(

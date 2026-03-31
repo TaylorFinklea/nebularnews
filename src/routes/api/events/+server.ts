@@ -25,7 +25,7 @@ export const GET = async ({ locals, request }) => {
       }
     });
   }
-  const pollMs = Math.max(5000, await getEventsPollMs(db, locals.env).catch(() => DEFAULT_POLL_MS));
+  const pollMs = Math.max(5000, await getEventsPollMs(db, locals.env, locals.settingsCache).catch(() => DEFAULT_POLL_MS));
   const throttled = pollMs > 5000;
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {

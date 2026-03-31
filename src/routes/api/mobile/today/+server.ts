@@ -17,8 +17,9 @@ export const GET = async ({ request, locals }) => {
   const { user } = await requireMobileAccess(request, locals.env, locals.db, 'app:read');
 
   const db = locals.db;
+  const cache = locals.settingsCache;
   const referenceAt = Date.now();
-  const queueConfig = await getDashboardQueueConfig(db);
+  const queueConfig = await getDashboardQueueConfig(db, cache);
 
   const [newsBrief, momentum, topUnread] = await Promise.all([
     getDashboardNewsBrief(db, locals.env, referenceAt, user.id),

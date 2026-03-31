@@ -188,7 +188,7 @@ export const load = async ({ params, platform, locals }) => {
   const tagSuggestions = await safeLoad('tag_suggestions', [], () => listTagSuggestionsForArticle(db, userId, params.id));
   const availableTags = await safeLoad('available_tags', [], () => listTags(db, { limit: 200 }));
 
-  const autoReadDelayMs = await getAutoReadDelayMs(db);
+  const autoReadDelayMs = await getAutoReadDelayMs(db, locals.settingsCache);
 
   return {
     article,

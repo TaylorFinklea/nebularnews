@@ -8,6 +8,7 @@ declare namespace App {
     requestId: string;
     db: Db;
     env: Env;
+    settingsCache?: import('$lib/server/settings').SettingsCache;
   }
   interface Platform {
     env: Env & Record<string, string | undefined>;

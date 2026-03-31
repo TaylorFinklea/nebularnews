@@ -16,21 +16,22 @@ import {
   getRetentionConfig,
   parseBooleanSetting,
   validateNewsBriefTimezone,
-  validateNewsBriefTime
+  validateNewsBriefTime,
+  type SettingsCache
 } from '$lib/server/settings';
 
 const validSummaryStyles = new Set(['concise', 'detailed', 'bullet']);
 const validScoringMethods = new Set(['ai', 'algorithmic', 'hybrid']);
 
-async function aggregateSettings(db: D1Database) {
+async function aggregateSettings(db: D1Database, cache?: SettingsCache) {
   const [pollIntervalMinutes, summaryStyle, scoringMethod, newsBriefConfig, queueConfig, retention] =
     await Promise.all([
-      getSchedulerPollIntervalMinutes(db),
-      getSetting(db, 'summary_style').then((v) => v ?? 'concise'),
-      getScoringMethod(db),
-      getNewsBriefConfig(db),
-      getDashboardQueueConfig(db),
-      getRetentionConfig(db)
+      getSchedulerPollIntervalMinutes(db, cache),
+      getSetting(db, 'summary_style', cache).then((v) => v ?? 'concise'),
+      getScoringMethod(db, cache),
+      getNewsBriefConfig(db, cache),
+      getDashboardQueueConfig(db, cache),
+      getRetentionConfig(db, cache)
     ]);
   return {
     pollIntervalMinutes,
@@ -46,7 +47,7 @@ async function aggregateSettings(db: D1Database) {
 export const GET = async ({ request, locals }) => {
   const { user } = await requireMobileAccess(request, locals.env, locals.db, 'app:read');
   void user;
-  const settings = await aggregateSettings(locals.db);
+  const settings = await aggregateSettings(locals.db, locals.settingsCache);
   return json(settings);
 };
 

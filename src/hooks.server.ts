@@ -27,6 +27,7 @@ const publicPaths = [
   '/api/db-test',
   '/api/db-test/settings',
   '/api/db-test/articles',
+  '/api/db-test/today',
   '/favicon',
   '/robots.txt',
   '/mcp',

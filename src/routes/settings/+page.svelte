@@ -1925,6 +1925,13 @@
       </p>
     </div>
   {/if}
+
+  <div class="settings-section-title">Account</div>
+  <div class="settings-block">
+    <a href="/api/auth/logout" class="action-btn" style="display: inline-block; text-align: center; text-decoration: none;">
+      Sign out
+    </a>
+  </div>
 </div>
 
 <datalist id="openai-model-options">

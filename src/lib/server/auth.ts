@@ -70,7 +70,6 @@ export async function getSessionFromRequest(request: Request, secret: string): P
     };
     if (!payload?.userId || typeof payload.exp !== 'number') return null;
     if (payload.exp < Date.now()) return null;
-    // For admin-password sessions, role is always admin
     return { id: payload.userId, role: payload.userId === 'admin' ? 'admin' : 'member' };
   } catch {
     return null;

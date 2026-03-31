@@ -1,5 +1,5 @@
 import { json, redirect, type Handle, type HandleServerError } from '@sveltejs/kit';
-import { getSessionFromRequest, getSupabaseSessionFromRequest } from '$lib/server/auth';
+import { getSessionFromRequest, getSupabaseSessionFromRequest, getUserById } from '$lib/server/auth';
 import { assertSchemaVersion } from '$lib/server/migrations';
 import { createRequestId } from '$lib/server/api';
 import { assertRuntimeConfig } from '$lib/server/runtime-config';
@@ -161,7 +161,13 @@ export const handle: Handle = async ({ event, resolve }) => {
   const supabaseSession = adminSession
     ? null
     : await getSupabaseSessionFromRequest(event.request, event.locals.db, env);
-  event.locals.user = adminSession ?? supabaseSession;
+  let resolvedUser = adminSession ?? supabaseSession;
+  // Session cookie stores userId but not role — look up actual role from DB
+  if (resolvedUser && resolvedUser.id !== 'admin') {
+    const dbUser = await getUserById(event.locals.db, resolvedUser.id);
+    if (dbUser) resolvedUser = dbUser;
+  }
+  event.locals.user = resolvedUser;
   const shouldSetCsrfCookie = Boolean(event.locals.user) && !readCsrfCookieFromRequest(event.request);
   const finalizeWithCsrf = (response: Response) => {
     const headers = new Headers(response.headers);

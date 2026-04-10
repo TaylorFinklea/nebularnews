@@ -15,6 +15,9 @@ import { onboardingRoutes } from './routes/onboarding';
 import { enrichRoutes } from './routes/enrich';
 import { chatRoutes } from './routes/chat';
 import { briefRoutes } from './routes/brief';
+import { pollFeeds } from './cron/poll-feeds';
+import { scoreArticles } from './cron/score-articles';
+import { cleanup } from './cron/cleanup';
 
 export type AppEnv = { Bindings: Env; Variables: { userId: string } };
 
@@ -49,10 +52,20 @@ app.route('/api', protectedApi);
 export default {
   fetch: app.fetch,
   scheduled: async (
-    _event: ScheduledEvent,
-    _env: Env,
-    _ctx: ExecutionContext,
+    event: ScheduledEvent,
+    env: Env,
+    ctx: ExecutionContext,
   ) => {
-    // TODO: Phase 6 — cron handlers
+    switch (event.cron) {
+      case '*/5 * * * *':
+        ctx.waitUntil(pollFeeds(env));
+        break;
+      case '0 * * * *':
+        ctx.waitUntil(scoreArticles(env));
+        break;
+      case '30 3 * * *':
+        ctx.waitUntil(cleanup(env));
+        break;
+    }
   },
 };

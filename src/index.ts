@@ -12,6 +12,9 @@ import { settingsRoutes } from './routes/settings';
 import { todayRoutes } from './routes/today';
 import { deviceRoutes } from './routes/devices';
 import { onboardingRoutes } from './routes/onboarding';
+import { enrichRoutes } from './routes/enrich';
+import { chatRoutes } from './routes/chat';
+import { briefRoutes } from './routes/brief';
 
 export type AppEnv = { Bindings: Env; Variables: { userId: string } };
 
@@ -37,7 +40,9 @@ protectedApi.route('/', todayRoutes);
 protectedApi.route('/', deviceRoutes);
 protectedApi.route('/', onboardingRoutes);
 
-// TODO: Phase 5 — mount enrich, chat, brief routes
+protectedApi.route('/', enrichRoutes);
+protectedApi.route('/', chatRoutes);
+protectedApi.route('/', briefRoutes);
 
 app.route('/api', protectedApi);
 

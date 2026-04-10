@@ -1,56 +1,30 @@
 name = "nebular-news"
-main = ".svelte-kit/cloudflare/_worker.js"
+main = "src/index.ts"
 compatibility_date = "2025-01-15"
 compatibility_flags = ["nodejs_compat"]
-
-[assets]
-directory = ".svelte-kit/cloudflare"
-binding = "ASSETS"
 
 [triggers]
 crons = ["*/5 * * * *", "0 * * * *", "30 3 * * *"]
 
-[[hyperdrive]]
-binding = "HYPERDRIVE"
-id = "1becfd1ac424429c886144310283d781"
-
 [[d1_databases]]
 binding = "DB"
-database_name = "__DEV_D1_DATABASE_NAME__"
+database_name = "nebular-news-dev"
 database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
 
 [vars]
 APP_ENV = "development"
 DEFAULT_PROVIDER = "anthropic"
 DEFAULT_MODEL_A = "claude-haiku-4-5-20251001"
 DEFAULT_MODEL_B = "claude-sonnet-4-6"
-DEFAULT_MODEL_A_REASONING_EFFORT = "low"
-DEFAULT_MODEL_B_REASONING_EFFORT = "medium"
-DEFAULT_REASONING_EFFORT = "medium"
-MCP_SERVER_NAME = "Nebular News MCP"
-MCP_SERVER_VERSION = "0.1.0"
-MCP_ALLOWED_ORIGINS = ""
-MCP_PUBLIC_ENABLED = "false"
-MCP_PUBLIC_BASE_URL = ""
-MCP_PUBLIC_ALLOWED_ORIGINS = ""
-MOBILE_PUBLIC_ENABLED = "false"
-MOBILE_PUBLIC_BASE_URL = ""
-MOBILE_PUBLIC_ALLOWED_ORIGINS = ""
-MOBILE_OAUTH_CLIENT_ID = "nebular-news-ios"
-MOBILE_OAUTH_CLIENT_NAME = "Nebular News iOS"
-MOBILE_OAUTH_REDIRECT_URIS = "nebularnews://oauth/callback"
-EVENTS_V2_ENABLED = "true"
-OPTIMISTIC_MUTATIONS_ENABLED = "true"
-JOB_BATCH_V2_ENABLED = "true"
 MAX_FEEDS_PER_POLL = "12"
 MAX_ITEMS_PER_POLL = "120"
-EVENTS_POLL_MS = "15000"
-DASHBOARD_REFRESH_MIN_MS = "30000"
-JOB_PROCESSOR_BATCH_SIZE = "12"
 APNS_KEY_ID = "R9GNGC6U6N"
 APNS_TEAM_ID = "K7CBQW6MPG"
 APNS_BUNDLE_ID = "com.nebularnews.ios"
 APNS_SANDBOX = "true"
+
+# ── Staging ──────────────────────────────────────────────────────────────────
 
 [env.staging]
 name = "nebular-news-staging"
@@ -60,90 +34,46 @@ crons = ["*/5 * * * *", "0 * * * *", "30 3 * * *"]
 
 [[env.staging.d1_databases]]
 binding = "DB"
-database_name = "__STAGING_D1_DATABASE_NAME__"
+database_name = "nebular-news-staging"
 database_id = "__STAGING_D1_DATABASE_ID__"
+migrations_dir = "migrations"
 
 [env.staging.vars]
 APP_ENV = "staging"
 DEFAULT_PROVIDER = "anthropic"
 DEFAULT_MODEL_A = "claude-haiku-4-5-20251001"
 DEFAULT_MODEL_B = "claude-sonnet-4-6"
-DEFAULT_MODEL_A_REASONING_EFFORT = "low"
-DEFAULT_MODEL_B_REASONING_EFFORT = "medium"
-DEFAULT_REASONING_EFFORT = "medium"
-MCP_SERVER_NAME = "Nebular News MCP"
-MCP_SERVER_VERSION = "0.1.0"
-MCP_ALLOWED_ORIGINS = ""
-MCP_PUBLIC_ENABLED = "false"
-MCP_PUBLIC_BASE_URL = ""
-MCP_PUBLIC_ALLOWED_ORIGINS = ""
-MOBILE_PUBLIC_ENABLED = "false"
-MOBILE_PUBLIC_BASE_URL = ""
-MOBILE_PUBLIC_ALLOWED_ORIGINS = ""
-MOBILE_OAUTH_CLIENT_ID = "nebular-news-ios"
-MOBILE_OAUTH_CLIENT_NAME = "Nebular News iOS"
-MOBILE_OAUTH_REDIRECT_URIS = "nebularnews://oauth/callback"
-EVENTS_V2_ENABLED = "true"
-OPTIMISTIC_MUTATIONS_ENABLED = "true"
-JOB_BATCH_V2_ENABLED = "true"
 MAX_FEEDS_PER_POLL = "12"
 MAX_ITEMS_PER_POLL = "120"
-EVENTS_POLL_MS = "15000"
-DASHBOARD_REFRESH_MIN_MS = "30000"
-JOB_PROCESSOR_BATCH_SIZE = "12"
 APNS_KEY_ID = "R9GNGC6U6N"
 APNS_TEAM_ID = "K7CBQW6MPG"
 APNS_BUNDLE_ID = "com.nebularnews.ios"
 APNS_SANDBOX = "true"
 
+# ── Production ───────────────────────────────────────────────────────────────
+
 [env.production]
 name = "nebular-news"
 routes = [
-  { pattern = "app.nebularnews.com", custom_domain = true },
-  { pattern = "api.nebularnews.com", custom_domain = true },
-  { pattern = "mcp.nebularnews.com", custom_domain = true }
+  { pattern = "api.nebularnews.com", custom_domain = true }
 ]
 
 [env.production.triggers]
 crons = ["*/5 * * * *", "0 * * * *", "30 3 * * *"]
 
-[[env.production.hyperdrive]]
-binding = "HYPERDRIVE"
-id = "1becfd1ac424429c886144310283d781"
-
 [[env.production.d1_databases]]
 binding = "DB"
-database_name = "__PRODUCTION_D1_DATABASE_NAME__"
+database_name = "nebular-news-prod"
 database_id = "__PRODUCTION_D1_DATABASE_ID__"
+migrations_dir = "migrations"
 
 [env.production.vars]
 APP_ENV = "production"
 DEFAULT_PROVIDER = "anthropic"
 DEFAULT_MODEL_A = "claude-haiku-4-5-20251001"
 DEFAULT_MODEL_B = "claude-sonnet-4-6"
-DEFAULT_MODEL_A_REASONING_EFFORT = "low"
-DEFAULT_MODEL_B_REASONING_EFFORT = "medium"
-DEFAULT_REASONING_EFFORT = "medium"
-MCP_SERVER_NAME = "Nebular News MCP"
-MCP_SERVER_VERSION = "0.1.0"
-MCP_ALLOWED_ORIGINS = "__PRODUCTION_MCP_ALLOWED_ORIGINS__"
-MCP_PUBLIC_ENABLED = "true"
-MCP_PUBLIC_BASE_URL = "__PRODUCTION_MCP_BASE_URL__"
-MCP_PUBLIC_ALLOWED_ORIGINS = "__PRODUCTION_MCP_ALLOWED_ORIGINS__"
-MOBILE_PUBLIC_ENABLED = "true"
-MOBILE_PUBLIC_BASE_URL = "__PRODUCTION_MOBILE_BASE_URL__"
-MOBILE_PUBLIC_ALLOWED_ORIGINS = "__PRODUCTION_MOBILE_ALLOWED_ORIGINS__"
-MOBILE_OAUTH_CLIENT_ID = "__PRODUCTION_MOBILE_OAUTH_CLIENT_ID__"
-MOBILE_OAUTH_CLIENT_NAME = "__PRODUCTION_MOBILE_OAUTH_CLIENT_NAME__"
-MOBILE_OAUTH_REDIRECT_URIS = "__PRODUCTION_MOBILE_OAUTH_REDIRECT_URIS__"
-EVENTS_V2_ENABLED = "false"
-OPTIMISTIC_MUTATIONS_ENABLED = "true"
-JOB_BATCH_V2_ENABLED = "true"
 MAX_FEEDS_PER_POLL = "8"
 MAX_ITEMS_PER_POLL = "60"
-EVENTS_POLL_MS = "15000"
-DASHBOARD_REFRESH_MIN_MS = "30000"
-JOB_PROCESSOR_BATCH_SIZE = "6"
 APNS_KEY_ID = "R9GNGC6U6N"
 APNS_TEAM_ID = "K7CBQW6MPG"
 APNS_BUNDLE_ID = "com.nebularnews.ios"

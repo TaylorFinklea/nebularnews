@@ -109,10 +109,10 @@ tagRoutes.post('/articles/:articleId/tags', async (c) => {
   const now = Date.now();
   await dbRun(
     c.env.DB,
-    `INSERT INTO article_tags (id, user_id, article_id, tag_id)
-     VALUES (?, ?, ?, ?)
+    `INSERT INTO article_tags (id, user_id, article_id, tag_id, source, created_at, updated_at)
+     VALUES (?, ?, ?, ?, 'manual', ?, ?)
      ON CONFLICT (user_id, article_id, tag_id) DO NOTHING`,
-    [id, userId, articleId, tag.id],
+    [id, userId, articleId, tag.id, now, now],
   );
 
   const tags = await getArticleTags(c.env.DB, userId, articleId);

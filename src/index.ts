@@ -5,6 +5,13 @@ import { envelope } from './middleware/envelope';
 import { requireAuth } from './middleware/auth';
 import { healthRoutes } from './routes/health';
 import { authRoutes } from './routes/auth';
+import { articleRoutes } from './routes/articles';
+import { feedRoutes } from './routes/feeds';
+import { tagRoutes } from './routes/tags';
+import { settingsRoutes } from './routes/settings';
+import { todayRoutes } from './routes/today';
+import { deviceRoutes } from './routes/devices';
+import { onboardingRoutes } from './routes/onboarding';
 
 export type AppEnv = { Bindings: Env; Variables: { userId: string } };
 
@@ -22,7 +29,14 @@ app.route('/api', authRoutes);
 const protectedApi = new Hono<AppEnv>();
 protectedApi.use('*', requireAuth());
 
-// TODO: Phase 4 — mount article, feed, tag, settings, today, device, onboarding routes
+protectedApi.route('/', articleRoutes);
+protectedApi.route('/', feedRoutes);
+protectedApi.route('/', tagRoutes);
+protectedApi.route('/', settingsRoutes);
+protectedApi.route('/', todayRoutes);
+protectedApi.route('/', deviceRoutes);
+protectedApi.route('/', onboardingRoutes);
+
 // TODO: Phase 5 — mount enrich, chat, brief routes
 
 app.route('/api', protectedApi);

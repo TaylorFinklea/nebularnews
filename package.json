@@ -20,6 +20,8 @@
     "fast-xml-parser": "4.4.1",
     "hono": "^4.7.0",
     "jose": "^6.2.2",
+    "kysely": "^0.28.16",
+    "kysely-d1": "^0.4.0",
     "linkedom": "0.16.11",
     "nanoid": "5.0.7",
     "zod": "^4.3.6"

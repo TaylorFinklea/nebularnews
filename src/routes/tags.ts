@@ -86,7 +86,7 @@ tagRoutes.get('/tags', async (c) => {
 tagRoutes.post('/tags', async (c) => {
   const { name } = await c.req.json<{ name: string }>();
   const tag = await findOrCreateTag(c.env.DB, name);
-  return c.json({ ok: true, data: tag });
+  return c.json({ ok: true, data: { ...tag, article_count: 0 } });
 });
 
 // DELETE /tags/:id — delete tag and cascade article_tags

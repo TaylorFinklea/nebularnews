@@ -192,6 +192,15 @@ enrichRoutes.post('/enrich/:articleId/score', async (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// GET /enrich/:articleId/suggest-questions — return cached suggestions (or empty)
+// ---------------------------------------------------------------------------
+
+enrichRoutes.get('/enrich/:articleId/suggest-questions', async (c) => {
+  // No persistent storage for suggested questions yet — return empty array.
+  return c.json({ ok: true, data: [] });
+});
+
+// ---------------------------------------------------------------------------
 // POST /enrich/:articleId/suggest-questions
 // ---------------------------------------------------------------------------
 
@@ -207,7 +216,7 @@ enrichRoutes.post('/enrich/:articleId/suggest-questions', async (c) => {
 
   const contentText = truncateContent(article.content_text);
   if (!contentText) {
-    return c.json({ ok: true, data: { questions: [] } });
+    return c.json({ ok: true, data: [] });
   }
 
   // Pull the most recent summary for richer context (optional).
@@ -240,7 +249,7 @@ enrichRoutes.post('/enrich/:articleId/suggest-questions', async (c) => {
     : [];
 
   // Return without storing (no article_suggested_questions table yet).
-  return c.json({ ok: true, data: { questions } });
+  return c.json({ ok: true, data: questions });
 });
 
 // ---------------------------------------------------------------------------

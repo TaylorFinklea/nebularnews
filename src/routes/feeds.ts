@@ -162,7 +162,7 @@ feedRoutes.post('/feeds/import-opml', async (c) => {
     await dbBatch(c.env.DB, statements);
   }
 
-  return c.json({ ok: true, data: { imported: urls.length } });
+  return c.json({ ok: true, data: { added: urls.length } });
 });
 
 // GET /feeds/export-opml — export subscriptions as OPML
@@ -198,7 +198,7 @@ feedRoutes.get('/feeds/export-opml', async (c) => {
     },
   });
 
-  return c.text(xml, 200, { 'Content-Type': 'text/xml' });
+  return c.json({ ok: true, data: { opml: xml } });
 });
 
 // POST /feeds/trigger-pull — no-op placeholder (cron handles polling)

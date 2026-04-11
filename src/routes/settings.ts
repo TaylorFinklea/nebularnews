@@ -44,19 +44,19 @@ settingsRoutes.get('/settings', async (c) => {
   return c.json({
     ok: true,
     data: {
-      pollIntervalMinutes: parseInt(merged.pollIntervalMinutes, 10),
-      summaryStyle: merged.summaryStyle,
-      scoringMethod: merged.scoringMethod,
-      upNextLimit: parseInt(merged.upNextLimit, 10),
-      retentionArchiveDays: parseInt(merged.retentionArchiveDays, 10),
-      retentionDeleteDays: parseInt(merged.retentionDeleteDays, 10),
-      newsBriefConfig: {
+      poll_interval_minutes: parseInt(merged.pollIntervalMinutes, 10),
+      summary_style: merged.summaryStyle,
+      scoring_method: merged.scoringMethod,
+      up_next_limit: parseInt(merged.upNextLimit, 10),
+      retention_archive_days: parseInt(merged.retentionArchiveDays, 10),
+      retention_delete_days: parseInt(merged.retentionDeleteDays, 10),
+      news_brief_config: {
         enabled: merged.newsBriefEnabled === 'true',
         timezone: merged.newsBriefTimezone,
-        morningTime: merged.newsBriefMorningTime,
-        eveningTime: merged.newsBriefEveningTime,
-        lookbackHours: parseInt(merged.newsBriefLookbackHours, 10),
-        scoreCutoff: parseInt(merged.newsBriefScoreCutoff, 10),
+        morning_time: merged.newsBriefMorningTime,
+        evening_time: merged.newsBriefEveningTime,
+        lookback_hours: parseInt(merged.newsBriefLookbackHours, 10),
+        score_cutoff: parseInt(merged.newsBriefScoreCutoff, 10),
       },
     },
   });
@@ -125,5 +125,35 @@ settingsRoutes.put('/settings', async (c) => {
 
   await dbBatch(c.env.DB, statements);
 
-  return c.json({ ok: true, data: null });
+  // Re-read all settings and return full merged object (same shape as GET)
+  const rows = await dbAll<SettingRow>(
+    c.env.DB,
+    `SELECT key, value FROM settings WHERE user_id = ?`,
+    [userId],
+  );
+  const stored: Record<string, string> = {};
+  for (const row of rows) {
+    stored[row.key] = row.value;
+  }
+  const merged = { ...DEFAULTS, ...stored };
+
+  return c.json({
+    ok: true,
+    data: {
+      poll_interval_minutes: parseInt(merged.pollIntervalMinutes, 10),
+      summary_style: merged.summaryStyle,
+      scoring_method: merged.scoringMethod,
+      up_next_limit: parseInt(merged.upNextLimit, 10),
+      retention_archive_days: parseInt(merged.retentionArchiveDays, 10),
+      retention_delete_days: parseInt(merged.retentionDeleteDays, 10),
+      news_brief_config: {
+        enabled: merged.newsBriefEnabled === 'true',
+        timezone: merged.newsBriefTimezone,
+        morning_time: merged.newsBriefMorningTime,
+        evening_time: merged.newsBriefEveningTime,
+        lookback_hours: parseInt(merged.newsBriefLookbackHours, 10),
+        score_cutoff: parseInt(merged.newsBriefScoreCutoff, 10),
+      },
+    },
+  });
 });

@@ -49,23 +49,23 @@ type MessageRow = {
 function formatThread(t: ThreadRow) {
   return {
     id: t.id,
-    articleId: t.article_id,
+    article_id: t.article_id,
     title: t.title,
-    createdAt: t.created_at,
-    updatedAt: t.updated_at,
+    created_at: t.created_at,
+    updated_at: t.updated_at,
   };
 }
 
 function formatMessage(m: MessageRow) {
   return {
     id: m.id,
-    threadId: m.thread_id,
+    thread_id: m.thread_id,
     role: m.role,
     content: m.content,
-    tokenCount: m.token_count ?? null,
+    token_count: m.token_count ?? null,
     provider: m.provider ?? null,
     model: m.model ?? null,
-    createdAt: m.created_at,
+    created_at: m.created_at,
   };
 }
 

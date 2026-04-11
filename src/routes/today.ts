@@ -67,12 +67,12 @@ todayRoutes.get('/today', async (c) => {
     newsBrief = {
       state: 'done',
       title: `${briefRow.edition_kind === 'morning' ? 'Morning' : 'Evening'} Brief`,
-      editionLabel: briefRow.edition_slot,
-      generatedAt: briefRow.generated_at,
-      windowHours,
-      scoreCutoff: briefRow.score_cutoff,
+      edition_label: briefRow.edition_slot,
+      generated_at: briefRow.generated_at,
+      window_hours: windowHours,
+      score_cutoff: briefRow.score_cutoff,
       bullets: JSON.parse(briefRow.bullets_json || '[]'),
-      nextScheduledAt: null,
+      next_scheduled_at: null,
       stale: false,
     };
   }
@@ -81,13 +81,13 @@ todayRoutes.get('/today', async (c) => {
     ok: true,
     data: {
       hero,
-      upNext: upNextRest,
+      up_next: upNextRest,
       stats: {
-        unreadTotal: unreadRow?.count ?? 0,
-        newToday: newTodayRow?.count ?? 0,
-        highFitUnread: highFitRow?.count ?? 0,
+        unread_total: unreadRow?.count ?? 0,
+        new_today: newTodayRow?.count ?? 0,
+        high_fit_unread: highFitRow?.count ?? 0,
       },
-      newsBrief,
+      news_brief: newsBrief,
     },
   });
 });

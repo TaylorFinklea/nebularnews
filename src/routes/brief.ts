@@ -169,17 +169,15 @@ briefRoutes.post('/brief/generate', async (c) => {
   return c.json({
     ok: true,
     data: {
-      brief: {
-        id: briefId,
-        user_id: userId,
-        edition_type: editionType,
-        brief_text: briefText,
-        article_ids_json: articleIdsJson,
-        provider: ai.provider,
-        model: ai.model,
-        created_at: now,
-      },
+      state: 'done',
+      title: 'News Brief',
+      edition_label: editionType === 'morning' ? 'Morning' : 'Evening',
+      generated_at: now,
+      window_hours: LOOKBACK_HOURS,
+      score_cutoff: SCORE_CUTOFF,
       bullets,
+      next_scheduled_at: null,
+      stale: false,
     },
   });
 });

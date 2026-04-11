@@ -129,51 +129,82 @@ articleRoutes.get('/articles/:id', async (c) => {
   const db = c.env.DB;
   const articleId = c.req.param('id');
 
-  const article = await dbGet<Record<string, unknown>>(db,
-    `SELECT
-      a.*,
-      ${readExpr(userId)} as is_read,
-      ${reactionExpr(userId)} as reaction_value,
-      ${savedExpr(userId)} as saved_at,
-      ${scoreExpr(userId)} as score,
-      ${scoreLabelExpr(userId)} as score_label,
-      ${scoreMethodExpr(userId)} as scoring_method,
-      ${sourceNameExpr} as source_name,
-      ${sourceFeedIdExpr} as source_feed_id
-    FROM articles a WHERE a.id = ?`,
+  const articleRow = await dbGet<Record<string, unknown>>(db,
+    `SELECT a.id, a.canonical_url, a.title, a.author, a.published_at, a.fetched_at,
+       a.content_html, a.content_text, a.excerpt, a.word_count, a.image_url, a.status
+     FROM articles a WHERE a.id = ?`,
     [articleId]);
 
-  if (!article) return c.json({ ok: false, error: { code: 'not_found', message: 'Article not found' } }, 404);
+  if (!articleRow) return c.json({ ok: false, error: { code: 'not_found', message: 'Article not found' } }, 404);
 
-  // Parallel lookups
-  const [summary, keyPoints, tags, tagSuggestions] = await Promise.all([
-    dbGet<{ summary_text: string }>(db,
-      `SELECT summary_text FROM article_summaries WHERE article_id = ? ORDER BY created_at DESC LIMIT 1`,
+  // Parallel lookups for nested sub-objects
+  const [summaryRow, keyPointsRow, scoreRow, reactionRow, feedbackRows, sourceRow, sourcesRows, tags, tagSuggestions, readStateRow] = await Promise.all([
+    dbGet<{ summary_text: string; provider: string | null; model: string | null; created_at: number }>(db,
+      `SELECT summary_text, provider, model, created_at FROM article_summaries WHERE article_id = ? ORDER BY created_at DESC LIMIT 1`,
       [articleId]),
-    dbGet<{ key_points_json: string }>(db,
-      `SELECT key_points_json FROM article_key_points WHERE article_id = ? ORDER BY created_at DESC LIMIT 1`,
+    dbGet<{ key_points_json: string; provider: string | null; model: string | null; created_at: number }>(db,
+      `SELECT key_points_json, provider, model, created_at FROM article_key_points WHERE article_id = ? ORDER BY created_at DESC LIMIT 1`,
       [articleId]),
-    dbAll<{ id: string; name: string; slug: string }>(db,
-      `SELECT t.id, t.name, t.slug FROM tags t
+    dbGet<{ score: number; label: string | null; reason_text: string | null; evidence_json: string | null; score_status: string | null; confidence: number | null; scoring_method: string | null; created_at: number }>(db,
+      `SELECT score, label, reason_text, evidence_json, score_status, confidence, scoring_method, created_at
+       FROM article_scores WHERE article_id = ? AND user_id = ? ORDER BY created_at DESC LIMIT 1`,
+      [articleId, userId]),
+    dbGet<{ article_id: string; feed_id: string; value: number; created_at: number }>(db,
+      `SELECT article_id, feed_id, value, created_at FROM article_reactions WHERE article_id = ? AND user_id = ? LIMIT 1`,
+      [articleId, userId]),
+    dbAll<Record<string, unknown>>(db,
+      `SELECT * FROM article_feedback WHERE article_id = ? AND user_id = ? ORDER BY created_at DESC`,
+      [articleId, userId]),
+    dbGet<{ feed_id: string; feed_title: string | null; site_url: string | null; feed_url: string | null }>(db,
+      `SELECT src.feed_id, f.title as feed_title, f.site_url, f.url as feed_url
+       FROM article_sources src JOIN feeds f ON f.id = src.feed_id
+       WHERE src.article_id = ? LIMIT 1`,
+      [articleId]),
+    dbAll<{ feed_id: string; feed_title: string | null; site_url: string | null; feed_url: string | null }>(db,
+      `SELECT src.feed_id, f.title as feed_title, f.site_url, f.url as feed_url
+       FROM article_sources src JOIN feeds f ON f.id = src.feed_id
+       WHERE src.article_id = ?`,
+      [articleId]),
+    dbAll<{ id: string; name: string }>(db,
+      `SELECT t.id, t.name FROM tags t
        JOIN article_tags at2 ON at2.tag_id = t.id
        WHERE at2.article_id = ? AND at2.user_id = ?
        ORDER BY t.name`,
       [articleId, userId]),
-    dbAll<{ name: string; confidence: number | null }>(db,
-      `SELECT name, confidence FROM article_tag_suggestions
+    dbAll<{ id: string; name: string; confidence: number | null }>(db,
+      `SELECT id, name, confidence FROM article_tag_suggestions
        WHERE article_id = ? AND user_id = ?
        ORDER BY confidence DESC`,
       [articleId, userId]),
+    dbGet<{ is_read: number; saved_at: number | null }>(db,
+      `SELECT is_read, saved_at FROM article_read_state WHERE article_id = ? AND user_id = ? LIMIT 1`,
+      [articleId, userId]),
   ]);
+
+  // Fetch reaction reason codes if reaction exists
+  let reactionReasonCodes: string[] = [];
+  if (reactionRow) {
+    const reasons = await dbAll<{ reason_code: string }>(db,
+      `SELECT reason_code FROM article_reaction_reasons WHERE article_id = ? AND user_id = ?`,
+      [articleId, userId]);
+    reactionReasonCodes = reasons.map((r) => r.reason_code);
+  }
 
   return c.json({
     ok: true,
     data: {
-      ...article,
-      summary_text: summary?.summary_text ?? null,
-      key_points: keyPoints?.key_points_json ? JSON.parse(keyPoints.key_points_json) : [],
+      article: articleRow,
+      summary: summaryRow ? { summary_text: summaryRow.summary_text, provider: summaryRow.provider, model: summaryRow.model, created_at: summaryRow.created_at } : null,
+      key_points: keyPointsRow ? { key_points_json: keyPointsRow.key_points_json, provider: keyPointsRow.provider, model: keyPointsRow.model, created_at: keyPointsRow.created_at } : null,
+      score: scoreRow ? { score: scoreRow.score, label: scoreRow.label, reason_text: scoreRow.reason_text, evidence_json: scoreRow.evidence_json, score_status: scoreRow.score_status, confidence: scoreRow.confidence, scoring_method: scoreRow.scoring_method, created_at: scoreRow.created_at } : null,
+      feedback: feedbackRows,
+      reaction: reactionRow ? { article_id: reactionRow.article_id, feed_id: reactionRow.feed_id, value: reactionRow.value, created_at: reactionRow.created_at, reason_codes: reactionReasonCodes } : null,
+      preferred_source: sourceRow ? { feed_id: sourceRow.feed_id, feed_title: sourceRow.feed_title, site_url: sourceRow.site_url, feed_url: sourceRow.feed_url } : null,
+      sources: sourcesRows.map((s) => ({ feed_id: s.feed_id, feed_title: s.feed_title, site_url: s.site_url, feed_url: s.feed_url })),
       tags,
       tag_suggestions: tagSuggestions,
+      is_read: readStateRow?.is_read ?? 0,
+      saved_at: readStateRow?.saved_at ?? null,
     },
   });
 });
@@ -207,7 +238,7 @@ articleRoutes.post('/articles/:id/save', async (c) => {
      ON CONFLICT (user_id, article_id) DO UPDATE SET saved_at = excluded.saved_at, updated_at = excluded.updated_at`,
     [userId, c.req.param('id'), now, saved ? now : null]);
 
-  return c.json({ ok: true, data: { saved } });
+  return c.json({ ok: true, data: { article_id: c.req.param('id'), saved, saved_at: saved ? now : null } });
 });
 
 // ── POST /articles/:id/dismiss ──────────────────────────────────────────────
@@ -260,5 +291,5 @@ articleRoutes.post('/articles/:id/reaction', async (c) => {
     }
   }
 
-  return c.json({ ok: true, data: { value, reasonCodes } });
+  return c.json({ ok: true, data: { article_id: articleId, value, reason_codes: reasonCodes } });
 });

@@ -37,6 +37,10 @@ export function createAuth(env: Env) {
       expiresIn: 60 * 60 * 24 * 30, // 30 days
       updateAge: 60 * 60 * 24, // refresh every 24h
     },
+    trustedOrigins: ['nebularnews://*', 'http://localhost:*'],
+    advanced: {
+      crossSubDomainCookies: { enabled: false },
+    },
   });
 }
 

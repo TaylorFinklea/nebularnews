@@ -201,39 +201,6 @@ feedRoutes.get('/feeds/export-opml', async (c) => {
   return c.json({ ok: true, data: { opml: xml } });
 });
 
-// GET /feeds/debug-poll/:id — test polling a single feed (temporary debug)
-feedRoutes.get('/feeds/debug-poll/:id', async (c) => {
-  const feedId = c.req.param('id');
-  const feed = await dbGet<{ id: string; url: string; title: string | null }>(c.env.DB, 'SELECT id, url, title FROM feeds WHERE id = ?', [feedId]);
-  if (!feed) return c.json({ ok: false, error: { code: 'not_found', message: 'Feed not found' } }, 404);
-
-  try {
-    const res = await fetch(feed.url, { headers: { 'User-Agent': 'NebularNews/2.0 (+rss)' } });
-    const status = res.status;
-    const contentType = res.headers.get('content-type');
-    const body = await res.text();
-    const bodyLen = body.length;
-
-    const { parseFeed } = await import('../lib/feed-parser');
-    const parsed = parseFeed(body);
-    return c.json({ ok: true, data: { feed: feed.title, url: feed.url, http_status: status, content_type: contentType, body_length: bodyLen, items_count: parsed.items.length, first_item_url: parsed.items[0]?.url ?? null } });
-  } catch (err) {
-    return c.json({ ok: false, error: { code: 'debug', message: err instanceof Error ? `${err.message}\n${err.stack}` : String(err) } }, 500);
-  }
-});
-
-// POST /feeds/trigger-score — manually trigger algorithmic scoring
-feedRoutes.post('/feeds/trigger-score', async (c) => {
-  const { scoreArticles } = await import('../cron/score-articles');
-  try {
-    await scoreArticles(c.env);
-    return c.json({ ok: true, data: { message: 'Scoring completed' } });
-  } catch (err) {
-    const msg = err instanceof Error ? `${err.message}\n${err.stack}` : String(err);
-    return c.json({ ok: false, error: { code: 'score_error', message: msg } }, 500);
-  }
-});
-
 // POST /feeds/trigger-pull — manually trigger feed polling
 feedRoutes.post('/feeds/trigger-pull', async (c) => {
   const { pollFeeds } = await import('../cron/poll-feeds');

@@ -33,6 +33,7 @@ async function findOrCreateTag(db: D1Database, name: string): Promise<Tag> {
   );
   if (existing) return existing;
 
+  const now = Date.now();
   const tag: Tag = {
     id: nanoid(),
     name: name.trim(),
@@ -41,8 +42,8 @@ async function findOrCreateTag(db: D1Database, name: string): Promise<Tag> {
   };
   await dbRun(
     db,
-    `INSERT INTO tags (id, name, name_normalized, slug) VALUES (?, ?, ?, ?)`,
-    [tag.id, tag.name, tag.name_normalized, tag.slug],
+    `INSERT INTO tags (id, name, name_normalized, slug, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
+    [tag.id, tag.name, tag.name_normalized, tag.slug, now, now],
   );
   return tag;
 }
@@ -64,7 +65,7 @@ tagRoutes.get('/tags', async (c) => {
   const query = c.req.query('query');
   const limit = parseInt(c.req.query('limit') ?? '100', 10);
 
-  let sql = `SELECT t.id, t.name, t.name_normalized, t.slug,
+  let sql = `SELECT t.id, t.name, t.name_normalized, t.slug, t.color, t.description,
                     COUNT(at_.id) AS article_count
              FROM tags t
              LEFT JOIN article_tags at_ ON at_.tag_id = t.id AND at_.user_id = ?`;
@@ -86,7 +87,7 @@ tagRoutes.get('/tags', async (c) => {
 tagRoutes.post('/tags', async (c) => {
   const { name } = await c.req.json<{ name: string }>();
   const tag = await findOrCreateTag(c.env.DB, name);
-  return c.json({ ok: true, data: { ...tag, article_count: 0 } });
+  return c.json({ ok: true, data: { ...tag, color: null, description: null, article_count: 0 } });
 });
 
 // DELETE /tags/:id — delete tag and cascade article_tags

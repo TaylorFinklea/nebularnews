@@ -110,8 +110,8 @@ onboardingRoutes.post('/onboarding/bulk-subscribe', async (c) => {
       const catalogEntry = FEED_CATALOG.find((f) => f.url === url);
       await dbRun(
         db,
-        'INSERT INTO feeds (id, url, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
-        [feedId, url, catalogEntry?.title ?? url, now, now],
+        'INSERT INTO feeds (id, url, title) VALUES (?, ?, ?)',
+        [feedId, url, catalogEntry?.title ?? url],
       );
       feed = { id: feedId, url };
     }
@@ -125,8 +125,8 @@ onboardingRoutes.post('/onboarding/bulk-subscribe', async (c) => {
     if (!existing) {
       await dbRun(
         db,
-        'INSERT INTO user_feed_subscriptions (id, user_id, feed_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)',
-        [nanoid(), userId, feed.id, now, now],
+        'INSERT INTO user_feed_subscriptions (id, user_id, feed_id, created_at) VALUES (?, ?, ?, ?)',
+        [nanoid(), userId, feed.id, now],
       );
       newCount++;
     }

@@ -54,9 +54,7 @@ APNS_SANDBOX = "true"
 
 [env.production]
 name = "nebular-news"
-routes = [
-  { pattern = "api.nebularnews.com", custom_domain = true }
-]
+routes = [{ pattern = "api.nebularnews.com", custom_domain = true }]
 
 [env.production.triggers]
 crons = ["*/5 * * * *", "0 * * * *", "30 3 * * *"]
@@ -64,7 +62,7 @@ crons = ["*/5 * * * *", "0 * * * *", "30 3 * * *"]
 [[env.production.d1_databases]]
 binding = "DB"
 database_name = "nebular-news-prod"
-database_id = "__PRODUCTION_D1_DATABASE_ID__"
+database_id = "140afce3-88f1-445d-9cff-652ed1bfc967"
 migrations_dir = "migrations"
 
 [env.production.vars]

@@ -24,11 +24,14 @@ interface FeedWithSub extends Feed {
 // GET /feeds — list user's subscribed feeds
 feedRoutes.get('/feeds', async (c) => {
   const userId = c.get('userId');
-  const rows = await dbAll<FeedWithSub>(
+  const rows = await dbAll<Record<string, unknown>>(
     c.env.DB,
     `SELECT f.id, f.url, f.title, f.site_url,
-            s.id AS sub_id, s.paused, s.max_articles_per_day, s.min_score,
-            s.created_at AS subscribed_at
+            f.last_polled_at, f.next_poll_at, f.error_count, f.disabled,
+            f.scrape_mode, f.scrape_provider, f.feed_type,
+            f.avg_extraction_quality, f.scrape_article_count, f.scrape_error_count, f.last_scrape_error,
+            s.paused, s.max_articles_per_day, s.min_score,
+            (SELECT COUNT(*) FROM article_sources src WHERE src.feed_id = f.id) as article_count
      FROM user_feed_subscriptions s
      JOIN feeds f ON f.id = s.feed_id
      WHERE s.user_id = ?`,

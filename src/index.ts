@@ -56,15 +56,19 @@ export default {
     env: Env,
     ctx: ExecutionContext,
   ) => {
+    const run = async (name: string, fn: () => Promise<void>) => {
+      try { await fn(); }
+      catch (err) { console.error(`[cron:${name}]`, err); }
+    };
     switch (event.cron) {
       case '*/5 * * * *':
-        ctx.waitUntil(pollFeeds(env));
+        ctx.waitUntil(run('poll-feeds', () => pollFeeds(env)));
         break;
       case '0 * * * *':
-        ctx.waitUntil(scoreArticles(env));
+        ctx.waitUntil(run('score-articles', () => scoreArticles(env)));
         break;
       case '30 3 * * *':
-        ctx.waitUntil(cleanup(env));
+        ctx.waitUntil(run('cleanup', () => cleanup(env)));
         break;
     }
   },

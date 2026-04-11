@@ -201,7 +201,14 @@ feedRoutes.get('/feeds/export-opml', async (c) => {
   return c.json({ ok: true, data: { opml: xml } });
 });
 
-// POST /feeds/trigger-pull — no-op placeholder (cron handles polling)
-feedRoutes.post('/feeds/trigger-pull', (c) => {
-  return c.json({ ok: true, data: { message: 'Pull scheduled via cron' } });
+// POST /feeds/trigger-pull — manually trigger feed polling
+feedRoutes.post('/feeds/trigger-pull', async (c) => {
+  const { pollFeeds } = await import('../cron/poll-feeds');
+  try {
+    await pollFeeds(c.env);
+    return c.json({ ok: true, data: { message: 'Pull completed' } });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return c.json({ ok: false, error: { code: 'poll_error', message: msg } }, 500);
+  }
 });

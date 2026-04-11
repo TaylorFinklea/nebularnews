@@ -1,34 +1,53 @@
 import { createMiddleware } from 'hono/factory';
 import type { AppEnv } from '../index';
-import { createAuth } from '../lib/auth';
+import { dbGet } from '../db/helpers';
+
+interface SessionRow {
+  id: string;
+  userId: string;
+  token: string;
+  expiresAt: string;
+}
 
 /**
- * Auth middleware: validates Bearer token against better-auth session table.
- * Sets c.set('userId', ...) for downstream handlers.
+ * Auth middleware: validates Bearer token by looking up the session table
+ * in D1 directly (better-auth only supports cookie-based getSession,
+ * but mobile apps send Bearer tokens).
  */
 export const requireAuth = () =>
   createMiddleware<AppEnv>(async (c, next) => {
-    const auth = createAuth(c.env);
-
-    const headers = new Headers();
     const authHeader = c.req.header('Authorization');
-    if (authHeader) {
-      headers.set('Authorization', authHeader);
-    }
-    const cookieHeader = c.req.header('Cookie');
-    if (cookieHeader) {
-      headers.set('Cookie', cookieHeader);
-    }
+    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
 
-    const session = await auth.api.getSession({ headers });
-
-    if (!session?.user) {
+    if (!token) {
       return c.json(
-        { ok: false, error: { code: 'unauthorized', message: 'Invalid or expired session' } },
+        { ok: false, error: { code: 'unauthorized', message: 'Missing authorization token' } },
         401,
       );
     }
 
-    c.set('userId', session.user.id);
+    const session = await dbGet<SessionRow>(
+      c.env.DB,
+      `SELECT id, userId, token, expiresAt FROM session WHERE token = ? LIMIT 1`,
+      [token],
+    );
+
+    if (!session) {
+      return c.json(
+        { ok: false, error: { code: 'unauthorized', message: 'Invalid session token' } },
+        401,
+      );
+    }
+
+    // Check expiry
+    const expiresAt = new Date(session.expiresAt).getTime();
+    if (expiresAt < Date.now()) {
+      return c.json(
+        { ok: false, error: { code: 'unauthorized', message: 'Session expired' } },
+        401,
+      );
+    }
+
+    c.set('userId', session.userId);
     await next();
   });

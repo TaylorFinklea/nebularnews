@@ -33,6 +33,7 @@ export async function pollFeeds(env: Env): Promise<void> {
   let totalNew = 0;
   let totalSkipped = 0;
   let totalErrors = 0;
+  const errorDetails: string[] = [];
 
   for (const feed of feeds) {
     try {
@@ -120,7 +121,9 @@ export async function pollFeeds(env: Env): Promise<void> {
         [now, now + FIVE_MINUTES_MS, newEtag, newLastModified, feed.id],
       );
     } catch (err) {
-      console.error(`[poll-feeds] Error polling ${feed.url}:`, err instanceof Error ? err.message : err);
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.error(`[poll-feeds] Error polling ${feed.url}:`, errMsg);
+      errorDetails.push(`${feed.url}: ${errMsg}`);
       totalErrors++;
       const newErrorCount = (feed.error_count || 0) + 1;
       // Exponential backoff: 5min * 2^error_count, capped at 24h
@@ -136,7 +139,7 @@ export async function pollFeeds(env: Env): Promise<void> {
   }
 
   // Record pull_run stats
-  const statsJson = JSON.stringify({ feeds_polled: feeds.length, articles_new: totalNew, articles_skipped: totalSkipped, errors: totalErrors });
+  const statsJson = JSON.stringify({ feeds_polled: feeds.length, articles_new: totalNew, articles_skipped: totalSkipped, errors: totalErrors, error_details: errorDetails });
   await dbRun(db,
     `INSERT INTO pull_runs (id, status, trigger, started_at, completed_at, stats_json, created_at, updated_at)
      VALUES (?, 'done', 'cron', ?, ?, ?, ?, ?)`,

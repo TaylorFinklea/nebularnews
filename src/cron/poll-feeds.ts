@@ -80,18 +80,18 @@ export async function pollFeeds(env: Env): Promise<void> {
         if (!existing) {
           const articleId = nanoid();
           await dbRun(db,
-            `INSERT INTO articles (id, title, canonical_url, author, content_html, content_text, image_url, published_at, created_at, updated_at)
+            `INSERT INTO articles (id, title, canonical_url, guid, author, content_html, content_text, image_url, published_at, fetched_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               articleId,
               item.title,
               canonicalUrl,
+              item.guid,
               item.author,
               item.contentHtml,
               item.contentText,
               item.imageUrl,
               item.publishedAt,
-              now,
               now,
             ],
           );

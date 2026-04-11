@@ -115,9 +115,9 @@ export async function pollFeeds(env: Env): Promise<void> {
 
       // Update feed metadata on success
       await dbRun(db,
-        `UPDATE feeds SET last_polled_at = ?, next_poll_at = ?, etag = ?, last_modified = ?, error_count = 0, updated_at = ?
+        `UPDATE feeds SET last_polled_at = ?, next_poll_at = ?, etag = ?, last_modified = ?, error_count = 0
          WHERE id = ?`,
-        [now, now + FIVE_MINUTES_MS, newEtag, newLastModified, now, feed.id],
+        [now, now + FIVE_MINUTES_MS, newEtag, newLastModified, feed.id],
       );
     } catch (err) {
       totalErrors++;
@@ -128,17 +128,17 @@ export async function pollFeeds(env: Env): Promise<void> {
         24 * 60 * 60 * 1000,
       );
       await dbRun(db,
-        `UPDATE feeds SET error_count = ?, next_poll_at = ?, last_error = ?, updated_at = ?
-         WHERE id = ?`,
-        [newErrorCount, now + backoffMs, String(err), now, feed.id],
+        `UPDATE feeds SET error_count = ?, next_poll_at = ? WHERE id = ?`,
+        [newErrorCount, now + backoffMs, feed.id],
       );
     }
   }
 
   // Record pull_run stats
+  const statsJson = JSON.stringify({ feeds_polled: feeds.length, articles_new: totalNew, articles_skipped: totalSkipped, errors: totalErrors });
   await dbRun(db,
-    `INSERT INTO pull_runs (id, started_at, finished_at, feeds_polled, articles_new, articles_skipped, errors, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [nanoid(), now, Date.now(), feeds.length, totalNew, totalSkipped, totalErrors, now],
+    `INSERT INTO pull_runs (id, status, trigger, started_at, completed_at, stats_json, created_at, updated_at)
+     VALUES (?, 'done', 'cron', ?, ?, ?, ?, ?)`,
+    [nanoid(), now, Date.now(), statsJson, now, now],
   );
 }

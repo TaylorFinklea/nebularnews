@@ -13,6 +13,10 @@ export interface Env {
   OPENAI_API_KEY?: string;
   ANTHROPIC_API_KEY?: string;
 
+  // Scraping providers
+  STEEL_API_KEY?: string;
+  BROWSERLESS_API_KEY?: string;
+
   // AI model config
   DEFAULT_PROVIDER: string;
   DEFAULT_MODEL_A: string;

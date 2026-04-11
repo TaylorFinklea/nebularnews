@@ -2,6 +2,7 @@ import { nanoid } from 'nanoid';
 import type { Env } from '../env';
 import { dbAll, dbGet, dbRun } from '../db/helpers';
 import { parseFeed } from '../lib/feed-parser';
+import { scrapeAndExtract, type ScrapeProvider } from '../lib/scraper';
 
 type Feed = {
   id: string;
@@ -9,6 +10,9 @@ type Feed = {
   etag: string | null;
   last_modified: string | null;
   error_count: number;
+  scrape_mode: string;
+  scrape_provider: string | null;
+  feed_type: string;
 };
 
 const FIVE_MINUTES_MS = 5 * 60 * 1000;
@@ -22,7 +26,7 @@ export async function pollFeeds(env: Env): Promise<void> {
 
   const feeds = await dbAll<Feed>(
     db,
-    `SELECT id, url, etag, last_modified, error_count
+    `SELECT id, url, etag, last_modified, error_count, scrape_mode, scrape_provider, feed_type
      FROM feeds
      WHERE disabled = 0 AND (next_poll_at IS NULL OR next_poll_at <= ?)
      ORDER BY next_poll_at ASC
@@ -102,6 +106,45 @@ export async function pollFeeds(env: Env): Promise<void> {
             [nanoid(), articleId, feed.id, item.guid, item.publishedAt, now],
           );
           newArticles++;
+
+          // Scrape full content if feed has scraping enabled
+          if (feed.scrape_mode !== 'rss_only' && (env.STEEL_API_KEY || env.BROWSERLESS_API_KEY)) {
+            try {
+              const scrapeUrl = feed.feed_type === 'aggregator' ? canonicalUrl : canonicalUrl;
+              const result = await scrapeAndExtract(
+                scrapeUrl,
+                env,
+                (feed.scrape_provider as ScrapeProvider) || undefined,
+              );
+              await dbRun(db,
+                `UPDATE articles SET content_html = ?, content_text = ?, excerpt = ?,
+                  word_count = ?, extraction_method = ?, extraction_quality = ?,
+                  title = COALESCE(?, title), author = COALESCE(?, author),
+                  image_url = COALESCE(?, image_url)
+                 WHERE id = ?`,
+                [
+                  result.contentHtml, result.contentText, result.excerpt,
+                  result.wordCount, result.extractionMethod, result.extractionQuality,
+                  result.title, result.author, result.imageUrl,
+                  articleId,
+                ],
+              );
+              // Update feed scrape stats
+              await dbRun(db,
+                `UPDATE feeds SET scrape_article_count = scrape_article_count + 1,
+                  avg_extraction_quality = COALESCE(avg_extraction_quality * 0.9 + ? * 0.1, ?)
+                 WHERE id = ?`,
+                [result.extractionQuality, result.extractionQuality, feed.id],
+              );
+            } catch (scrapeErr) {
+              console.error(`[poll-feeds] Scrape failed for ${canonicalUrl}:`, scrapeErr instanceof Error ? scrapeErr.message : scrapeErr);
+              await dbRun(db,
+                `UPDATE feeds SET scrape_error_count = scrape_error_count + 1,
+                  last_scrape_error = ? WHERE id = ?`,
+                [String(scrapeErr instanceof Error ? scrapeErr.message : scrapeErr), feed.id],
+              );
+            }
+          }
         } else {
           // Article exists — link source if not already linked
           await dbRun(db,

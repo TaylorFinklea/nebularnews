@@ -170,10 +170,17 @@ export async function scoreArticles(env: Env): Promise<void> {
         // Map 0-1 to 1-5
         const score = Math.max(1, Math.min(5, Math.round(1 + 4 * average)));
 
+        const label = score >= 4 ? 'Good fit' : score === 3 ? 'Moderate fit' : score === 2 ? 'Low fit' : score <= 1 ? 'Poor fit' : 'Excellent fit';
+        const evidenceJson = JSON.stringify(signals);
+        const dataCount = Object.values(signals).filter(v => v !== 0.5).length;
+        const status = dataCount >= 2 ? 'ready' : 'insufficient_signal';
+
         await dbRun(db,
-          `INSERT INTO article_scores (id, article_id, user_id, score, method, created_at)
-           VALUES (?, ?, ?, ?, 'algorithmic', ?)`,
-          [nanoid(), article.id, user_id, score, now],
+          `INSERT INTO article_scores (id, article_id, user_id, score, label, reason_text, evidence_json, score_status, confidence, weighted_average, scoring_method, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'algorithmic', ?)`,
+          [nanoid(), article.id, user_id, score, label,
+           `Algorithmic: ${dataCount}/4 signals`, evidenceJson, status,
+           dataCount / 4, Math.round(average * 1000) / 1000, now],
         );
       }
     } catch (err) {

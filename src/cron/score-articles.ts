@@ -77,11 +77,11 @@ export async function scoreArticles(env: Env): Promise<void> {
          FROM articles a
          JOIN article_sources asrc ON asrc.article_id = a.id
          JOIN user_feed_subscriptions ufs ON ufs.feed_id = asrc.feed_id AND ufs.user_id = ?
-         WHERE a.published_at >= ?
+         WHERE COALESCE(a.published_at, a.fetched_at, 0) >= ?
            AND ufs.paused = 0
            AND NOT EXISTS (
              SELECT 1 FROM article_scores sc
-             WHERE sc.article_id = a.id AND sc.user_id = ? AND sc.method = 'algorithmic'
+             WHERE sc.article_id = a.id AND sc.user_id = ? AND sc.scoring_method = 'algorithmic'
            )
          GROUP BY a.id
          LIMIT 200`,
@@ -93,30 +93,30 @@ export async function scoreArticles(env: Env): Promise<void> {
       // Pre-load user's reaction history for source_reputation
       const reactions = await dbAll<ReactionRow>(
         db,
-        `SELECT asrc.feed_id, r.reaction
-         FROM reactions r
+        `SELECT asrc.feed_id, CAST(r.value AS TEXT) as reaction
+         FROM article_reactions r
          JOIN article_sources asrc ON asrc.article_id = r.article_id
          WHERE r.user_id = ?`,
         [user_id],
       );
 
-      // Compute per-feed reputation from reactions
+      // Compute per-feed reputation from reactions (value: 1=up, -1=down)
       const feedStats = new Map<string, { up: number; down: number }>();
       for (const r of reactions) {
         if (!feedStats.has(r.feed_id)) feedStats.set(r.feed_id, { up: 0, down: 0 });
         const stats = feedStats.get(r.feed_id)!;
-        if (r.reaction === 'upvote' || r.reaction === 'save') stats.up++;
-        else if (r.reaction === 'downvote' || r.reaction === 'hide') stats.down++;
+        if (r.reaction === '1') stats.up++;
+        else if (r.reaction === '-1') stats.down++;
       }
 
       // Pre-load user's upvoted article tags for tag_match_ratio
       const userTags = await dbAll<TagRow>(
         db,
         `SELECT DISTINCT t.name_normalized
-         FROM reactions r
-         JOIN article_tags at ON at.article_id = r.article_id
-         JOIN tags t ON t.id = at.tag_id
-         WHERE r.user_id = ? AND r.reaction IN ('upvote', 'save')`,
+         FROM article_reactions r
+         JOIN article_tags at2 ON at2.article_id = r.article_id AND at2.user_id = r.user_id
+         JOIN tags t ON t.id = at2.tag_id
+         WHERE r.user_id = ? AND r.value = 1`,
         [user_id],
       );
       const userTagSet = new Set(userTags.map((t) => t.name_normalized));

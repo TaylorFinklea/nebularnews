@@ -44,7 +44,7 @@ todayRoutes.get('/today', async (c) => {
     ),
     dbAll<TopArticle>(
       db,
-      `SELECT a.id, a.title, a.image_url, a.published_at, s.score, s.score_label
+      `SELECT a.id, a.title, a.image_url, a.published_at, s.score, s.label as score_label
        FROM article_scores s
        JOIN articles a ON a.id = s.article_id
        WHERE s.user_id = ? AND s.scoring_method = 'algorithmic'

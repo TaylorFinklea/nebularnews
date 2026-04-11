@@ -37,7 +37,13 @@ feedRoutes.get('/feeds', async (c) => {
      WHERE s.user_id = ?`,
     [userId],
   );
-  return c.json({ ok: true, data: rows });
+  // Convert integer booleans to actual booleans for iOS Codable compatibility
+  const feeds = rows.map((r: Record<string, unknown>) => ({
+    ...r,
+    paused: r.paused === 1,
+    disabled: r.disabled,
+  }));
+  return c.json({ ok: true, data: feeds });
 });
 
 // POST /feeds — subscribe to a feed by url

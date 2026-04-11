@@ -97,7 +97,7 @@ export async function pollFeeds(env: Env): Promise<void> {
             ],
           );
           await dbRun(db,
-            `INSERT OR IGNORE INTO article_sources (id, article_id, feed_id, guid, published_at, created_at)
+            `INSERT OR IGNORE INTO article_sources (id, article_id, feed_id, item_guid, published_at, created_at)
              VALUES (?, ?, ?, ?, ?, ?)`,
             [nanoid(), articleId, feed.id, item.guid, item.publishedAt, now],
           );
@@ -105,7 +105,7 @@ export async function pollFeeds(env: Env): Promise<void> {
         } else {
           // Article exists — link source if not already linked
           await dbRun(db,
-            `INSERT OR IGNORE INTO article_sources (id, article_id, feed_id, guid, published_at, created_at)
+            `INSERT OR IGNORE INTO article_sources (id, article_id, feed_id, item_guid, published_at, created_at)
              VALUES (?, ?, ?, ?, ?, ?)`,
             [nanoid(), existing.id, feed.id, item.guid, item.publishedAt, now],
           );

@@ -120,6 +120,7 @@ export async function pollFeeds(env: Env): Promise<void> {
         [now, now + FIVE_MINUTES_MS, newEtag, newLastModified, feed.id],
       );
     } catch (err) {
+      console.error(`[poll-feeds] Error polling ${feed.url}:`, err instanceof Error ? err.message : err);
       totalErrors++;
       const newErrorCount = (feed.error_count || 0) + 1;
       // Exponential backoff: 5min * 2^error_count, capped at 24h

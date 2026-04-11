@@ -119,7 +119,7 @@ articleRoutes.get('/articles', async (c) => {
     LIMIT ? OFFSET ?`,
     [...params, limit, offset]);
 
-  return c.json({ ok: true, data: { articles, total } });
+  return c.json({ ok: true, data: { articles, total, limit, offset } });
 });
 
 // ── GET /articles/:id ────────────────────────────────────────────────────────

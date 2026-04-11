@@ -61,19 +61,29 @@ onboardingRoutes.get('/onboarding/suggestions', async (c) => {
 
   const subscribedUrls = new Set(subscribed.map((s: SubscribedFeed) => s.feed_url));
 
-  const categories = new Map<string, (FeedSuggestion & { subscribed: boolean })[]>();
+  const categoryIcons: Record<string, string> = {
+    'Technology': 'cpu',
+    'AI & ML': 'brain',
+    'Science': 'flask',
+    'News': 'newspaper',
+    'Developer': 'chevron.left.forwardslash.chevron.right',
+  };
+
+  const grouped = new Map<string, { url: string; title: string; description: string | null; siteUrl: string | null }[]>();
   for (const feed of FEED_CATALOG) {
-    const list = categories.get(feed.category) ?? [];
-    list.push({ ...feed, subscribed: subscribedUrls.has(feed.url) });
-    categories.set(feed.category, list);
+    const list = grouped.get(feed.category) ?? [];
+    list.push({ url: feed.url, title: feed.title, description: feed.description, siteUrl: null });
+    grouped.set(feed.category, list);
   }
 
-  return c.json({
-    ok: true,
-    data: {
-      categories: Object.fromEntries(categories),
-    },
-  });
+  const categories = [...grouped.entries()].map(([name, feeds]) => ({
+    id: name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+    name,
+    icon: categoryIcons[name] ?? 'folder',
+    feeds,
+  }));
+
+  return c.json({ ok: true, data: { categories } });
 });
 
 onboardingRoutes.post('/onboarding/bulk-subscribe', async (c) => {

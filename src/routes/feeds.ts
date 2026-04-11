@@ -222,6 +222,18 @@ feedRoutes.get('/feeds/debug-poll/:id', async (c) => {
   }
 });
 
+// POST /feeds/trigger-score — manually trigger algorithmic scoring
+feedRoutes.post('/feeds/trigger-score', async (c) => {
+  const { scoreArticles } = await import('../cron/score-articles');
+  try {
+    await scoreArticles(c.env);
+    return c.json({ ok: true, data: { message: 'Scoring completed' } });
+  } catch (err) {
+    const msg = err instanceof Error ? `${err.message}\n${err.stack}` : String(err);
+    return c.json({ ok: false, error: { code: 'score_error', message: msg } }, 500);
+  }
+});
+
 // POST /feeds/trigger-pull — manually trigger feed polling
 feedRoutes.post('/feeds/trigger-pull', async (c) => {
   const { pollFeeds } = await import('../cron/poll-feeds');

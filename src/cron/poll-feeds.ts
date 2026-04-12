@@ -157,11 +157,12 @@ export async function pollFeeds(env: Env): Promise<void> {
 
       totalNew += newArticles;
 
-      // Update feed metadata on success
+      // Update feed metadata on success (including title/siteUrl from RSS)
       await dbRun(db,
-        `UPDATE feeds SET last_polled_at = ?, next_poll_at = ?, etag = ?, last_modified = ?, error_count = 0
+        `UPDATE feeds SET last_polled_at = ?, next_poll_at = ?, etag = ?, last_modified = ?, error_count = 0,
+          title = COALESCE(?, title), site_url = COALESCE(?, site_url)
          WHERE id = ?`,
-        [now, now + FIVE_MINUTES_MS, newEtag, newLastModified, feed.id],
+        [now, now + FIVE_MINUTES_MS, newEtag, newLastModified, parsed.title, parsed.siteUrl, feed.id],
       );
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);

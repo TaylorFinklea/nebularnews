@@ -32,8 +32,8 @@ async function scrapeWithSteel(url: string, apiKey: string): Promise<string> {
   try {
     const res = await fetch('https://api.steel.dev/v1/scrape', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
-      body: JSON.stringify({ url, wait_for: 'networkidle', format: ['html'] }),
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({ url, format: ['html'] }),
       signal: controller.signal,
     });
     if (!res.ok) {
@@ -54,7 +54,7 @@ async function scrapeWithBrowserless(url: string, apiKey: string): Promise<strin
     const res = await fetch(`https://chrome.browserless.io/content?token=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url, waitFor: 'networkidle0' }),
+      body: JSON.stringify({ url }),
       signal: controller.signal,
     });
     if (!res.ok) {
@@ -155,8 +155,29 @@ export async function scrapeAndExtract(
     if (browserlessEntry) providers.push(browserlessEntry);
   }
 
+  // If no browser providers available, fall back to simple fetch + Readability
   if (providers.length === 0) {
-    throw new Error('No scraping provider configured (set STEEL_API_KEY or BROWSERLESS_API_KEY)');
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), SCRAPER_TIMEOUT_MS);
+    try {
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'NebularNews/2.0 (+rss)' },
+        signal: controller.signal,
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const html = await res.text();
+      const extracted = extractWithReadability(html, url);
+      const quality = scoreExtractionQuality(extracted, html);
+      return {
+        html, title: extracted.title, author: extracted.author,
+        contentHtml: extracted.contentHtml, contentText: extracted.contentText,
+        excerpt: extracted.excerpt, imageUrl: extracted.imageUrl,
+        wordCount: extracted.wordCount, extractionQuality: quality,
+        extractionMethod: 'readability',
+      };
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   let lastError: Error | null = null;
@@ -176,7 +197,23 @@ export async function scrapeAndExtract(
   }
 
   if (lastError || !html) {
-    throw lastError ?? new Error('All scraping providers failed');
+    // Fallback: simple fetch + Readability (no headless browser)
+    console.log(`[scraper] Browser providers failed, falling back to Readability for ${url}`);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), SCRAPER_TIMEOUT_MS);
+    try {
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'NebularNews/2.0 (+rss)' },
+        signal: controller.signal,
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      html = await res.text();
+      usedProvider = 'readability' as any;
+    } catch (fallbackErr) {
+      throw lastError ?? fallbackErr ?? new Error('All scraping methods failed');
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   const extracted = extractWithReadability(html, url);

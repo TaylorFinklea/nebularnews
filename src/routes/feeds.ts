@@ -215,7 +215,7 @@ feedRoutes.post('/feeds/trigger-score', async (c) => {
 
 // POST /feeds/backfill-scrape — scrape existing articles from scrape-enabled feeds that lack content
 feedRoutes.post('/feeds/backfill-scrape', async (c) => {
-  const { scrapeAndExtract, type ScrapeProvider } = await import('../lib/scraper');
+  const { scrapeAndExtract } = await import('../lib/scraper');
   const db = c.env.DB;
   const limit = 10; // process 10 at a time to stay within CPU limits
 
@@ -236,7 +236,7 @@ feedRoutes.post('/feeds/backfill-scrape', async (c) => {
   let errors = 0;
   for (const article of articles) {
     try {
-      const result = await scrapeAndExtract(article.canonical_url, c.env, (article.scrape_provider as ScrapeProvider) || undefined);
+      const result = await scrapeAndExtract(article.canonical_url, c.env, article.scrape_provider || undefined);
       await dbRun(db,
         `UPDATE articles SET content_html = ?, content_text = ?, excerpt = ?,
           word_count = ?, extraction_method = ?, extraction_quality = ?,

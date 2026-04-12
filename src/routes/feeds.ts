@@ -226,7 +226,7 @@ feedRoutes.post('/feeds/backfill-scrape', async (c) => {
      JOIN article_sources src ON src.article_id = a.id
      JOIN feeds f ON f.id = src.feed_id
      WHERE f.scrape_mode != 'rss_only'
-       AND (a.content_text IS NULL OR length(a.content_text) < 100)
+       AND (a.content_text IS NULL OR length(a.content_text) < 500)
        AND a.extraction_method IS NULL
      LIMIT ?`,
     [limit],

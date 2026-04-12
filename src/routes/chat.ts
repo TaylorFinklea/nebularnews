@@ -4,6 +4,7 @@ import type { AppEnv } from '../index';
 import { dbGet, dbAll, dbRun } from '../db/helpers';
 import { resolveAIKey } from '../lib/ai-key-resolver';
 import { runChat, runChatStreaming, type ChatMessage } from '../lib/ai';
+import { recordUsage, checkBudget } from '../lib/rate-limiter';
 
 export const chatRoutes = new Hono<AppEnv>();
 
@@ -242,7 +243,18 @@ chatRoutes.post('/chat/:articleId', async (c) => {
     });
   }
 
-  // 6. Call AI (streaming or standard).
+  // 6. Budget check for non-BYOK users.
+  if (!ai.isByok) {
+    const budget = await checkBudget(db, userId);
+    if (!budget.allowed) {
+      return c.json({
+        ok: false,
+        error: { code: 'budget_exceeded', message: 'Daily or weekly AI budget exceeded', reset_at: budget.resetAt },
+      }, 429);
+    }
+  }
+
+  // 7. Call AI (streaming or standard).
   const wantStream = c.req.query('stream') === 'true';
 
   if (wantStream) {
@@ -251,7 +263,7 @@ chatRoutes.post('/chat/:articleId', async (c) => {
     // Wrap the provider stream: tee it to capture the final content for DB storage.
     const [browserStream, captureStream] = stream.tee();
 
-    // Fire-and-forget: read capture stream to save the final message.
+    // Fire-and-forget: read capture stream to save the final message + record usage.
     (async () => {
       const reader = captureStream.getReader();
       const decoder = new TextDecoder();
@@ -286,6 +298,7 @@ chatRoutes.post('/chat/:articleId', async (c) => {
           [aiMsgId, thread.id, finalContent, ai.provider, ai.model, aiNow],
         );
         await dbRun(db, `UPDATE chat_threads SET updated_at = ? WHERE id = ?`, [aiNow, thread.id]);
+        await recordUsage(db, userId, ai.provider, ai.model, finalUsage, 'chat', ai.isByok);
       }
     })();
 
@@ -298,7 +311,7 @@ chatRoutes.post('/chat/:articleId', async (c) => {
     });
   }
 
-  const { content: aiContent } = await runChat(
+  const { content: aiContent, usage: chatUsage } = await runChat(
     ai.provider,
     ai.apiKey,
     ai.model,
@@ -322,6 +335,9 @@ chatRoutes.post('/chat/:articleId', async (c) => {
     `UPDATE chat_threads SET updated_at = ? WHERE id = ?`,
     [aiNow, thread.id],
   );
+
+  // Record usage.
+  await recordUsage(db, userId, ai.provider, ai.model, chatUsage, 'chat', ai.isByok);
 
   // 8. Return full thread.
   const response = await loadThreadResponse(db, thread.id);
@@ -476,7 +492,18 @@ Your role:
     });
   }
 
-  // 6. Call AI (streaming or standard).
+  // 6. Budget check for non-BYOK users.
+  if (!ai.isByok) {
+    const budget = await checkBudget(db, userId);
+    if (!budget.allowed) {
+      return c.json({
+        ok: false,
+        error: { code: 'budget_exceeded', message: 'Daily or weekly AI budget exceeded', reset_at: budget.resetAt },
+      }, 429);
+    }
+  }
+
+  // 7. Call AI (streaming or standard).
   const wantStream = c.req.query('stream') === 'true';
 
   if (wantStream) {
@@ -487,6 +514,7 @@ Your role:
       const reader = captureStream.getReader();
       const decoder = new TextDecoder();
       let finalContent = '';
+      let finalUsage = {};
       try {
         while (true) {
           const { done, value } = await reader.read();
@@ -499,6 +527,7 @@ Your role:
               const parsed = JSON.parse(trimmed.slice(6));
               if (parsed.type === 'done') {
                 finalContent = parsed.content ?? finalContent;
+                finalUsage = parsed.usage ?? finalUsage;
               }
             } catch { /* skip */ }
           }
@@ -515,6 +544,7 @@ Your role:
           [aiMsgId, thread.id, finalContent, ai.provider, ai.model, aiNow],
         );
         await dbRun(db, `UPDATE chat_threads SET updated_at = ? WHERE id = ?`, [aiNow, thread.id]);
+        await recordUsage(db, userId, ai.provider, ai.model, finalUsage, 'chat_multi', ai.isByok);
       }
     })();
 
@@ -527,7 +557,7 @@ Your role:
     });
   }
 
-  const { content: aiContent } = await runChat(
+  const { content: aiContent, usage: multiChatUsage } = await runChat(
     ai.provider,
     ai.apiKey,
     ai.model,
@@ -535,7 +565,7 @@ Your role:
     { maxTokens: 1024 },
   );
 
-  // 7. Save assistant message.
+  // 8. Save assistant message.
   const aiMsgId = nanoid();
   const aiNow = Date.now();
   await dbRun(
@@ -551,7 +581,10 @@ Your role:
     [aiNow, thread.id],
   );
 
-  // 8. Return full thread.
+  // Record usage.
+  await recordUsage(db, userId, ai.provider, ai.model, multiChatUsage, 'chat_multi', ai.isByok);
+
+  // 9. Return full thread.
   const response = await loadThreadResponse(db, thread.id);
   return c.json({ ok: true, data: response });
 });

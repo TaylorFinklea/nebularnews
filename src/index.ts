@@ -15,6 +15,7 @@ import { onboardingRoutes } from './routes/onboarding';
 import { enrichRoutes } from './routes/enrich';
 import { chatRoutes } from './routes/chat';
 import { briefRoutes } from './routes/brief';
+import { usageRoutes } from './routes/usage';
 import { pollFeeds } from './cron/poll-feeds';
 import { scoreArticles } from './cron/score-articles';
 import { cleanup } from './cron/cleanup';
@@ -46,6 +47,7 @@ protectedApi.route('/', onboardingRoutes);
 protectedApi.route('/', enrichRoutes);
 protectedApi.route('/', chatRoutes);
 protectedApi.route('/', briefRoutes);
+protectedApi.route('/', usageRoutes);
 
 app.route('/api', protectedApi);
 

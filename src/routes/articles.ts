@@ -33,7 +33,7 @@ const subFilter = (uid: string) => `EXISTS (
   JOIN user_feed_subscriptions ufs ON ufs.feed_id = src.feed_id
   WHERE src.article_id = a.id AND ufs.user_id = '${esc(uid)}'
 )`;
-const sourceNameExpr = `(SELECT f.title FROM article_sources src JOIN feeds f ON f.id = src.feed_id WHERE src.article_id = a.id LIMIT 1)`;
+const sourceNameExpr = `(SELECT COALESCE(f.title, f.url) FROM article_sources src JOIN feeds f ON f.id = src.feed_id WHERE src.article_id = a.id LIMIT 1)`;
 const sourceFeedIdExpr = `(SELECT src.feed_id FROM article_sources src WHERE src.article_id = a.id LIMIT 1)`;
 
 // ── GET /articles ────────────────────────────────────────────────────────────

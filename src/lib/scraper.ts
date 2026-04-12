@@ -32,7 +32,7 @@ async function scrapeWithSteel(url: string, apiKey: string): Promise<string> {
   try {
     const res = await fetch('https://api.steel.dev/v1/scrape', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      headers: { 'Content-Type': 'application/json', 'Steel-Api-Key': apiKey },
       body: JSON.stringify({ url, format: ['html'] }),
       signal: controller.signal,
     });

@@ -1,4 +1,5 @@
 import type { Provider } from './model-config';
+import { withRetry, type RetryOptions } from './retry';
 
 export type { Provider } from './model-config';
 
@@ -217,10 +218,13 @@ export async function runChat(
   apiKey: string,
   model: string,
   messages: ChatMessage[],
-  options?: LlmOptions,
+  options?: LlmOptions & { retry?: RetryOptions },
 ): Promise<{ content: string; usage: LlmUsage }> {
-  if (provider === 'openai') return callOpenAI(apiKey, model, messages, options);
-  return callAnthropic(apiKey, model, messages, options);
+  const call = () => {
+    if (provider === 'openai') return callOpenAI(apiKey, model, messages, options);
+    return callAnthropic(apiKey, model, messages, options);
+  };
+  return withRetry(call, options?.retry);
 }
 
 // ---------------------------------------------------------------------------

@@ -213,6 +213,54 @@ feedRoutes.post('/feeds/trigger-score', async (c) => {
   }
 });
 
+// POST /feeds/backfill-scrape — scrape existing articles from scrape-enabled feeds that lack content
+feedRoutes.post('/feeds/backfill-scrape', async (c) => {
+  const { scrapeAndExtract, type ScrapeProvider } = await import('../lib/scraper');
+  const db = c.env.DB;
+  const limit = 10; // process 10 at a time to stay within CPU limits
+
+  const articles = await dbAll<{ id: string; canonical_url: string; feed_id: string; scrape_provider: string | null }>(
+    db,
+    `SELECT a.id, a.canonical_url, src.feed_id, f.scrape_provider
+     FROM articles a
+     JOIN article_sources src ON src.article_id = a.id
+     JOIN feeds f ON f.id = src.feed_id
+     WHERE f.scrape_mode != 'rss_only'
+       AND (a.content_text IS NULL OR length(a.content_text) < 100)
+       AND a.extraction_method IS NULL
+     LIMIT ?`,
+    [limit],
+  );
+
+  let scraped = 0;
+  let errors = 0;
+  for (const article of articles) {
+    try {
+      const result = await scrapeAndExtract(article.canonical_url, c.env, (article.scrape_provider as ScrapeProvider) || undefined);
+      await dbRun(db,
+        `UPDATE articles SET content_html = ?, content_text = ?, excerpt = ?,
+          word_count = ?, extraction_method = ?, extraction_quality = ?,
+          title = COALESCE(?, title), author = COALESCE(?, author),
+          image_url = COALESCE(?, image_url)
+         WHERE id = ?`,
+        [result.contentHtml, result.contentText, result.excerpt,
+         result.wordCount, result.extractionMethod, result.extractionQuality,
+         result.title, result.author, result.imageUrl, article.id]);
+      await dbRun(db,
+        `UPDATE feeds SET scrape_article_count = scrape_article_count + 1,
+          avg_extraction_quality = COALESCE(avg_extraction_quality * 0.9 + ? * 0.1, ?)
+         WHERE id = ?`,
+        [result.extractionQuality, result.extractionQuality, article.feed_id]);
+      scraped++;
+    } catch (err) {
+      errors++;
+      console.error(`[backfill-scrape] Failed ${article.canonical_url}:`, err instanceof Error ? err.message : err);
+    }
+  }
+
+  return c.json({ ok: true, data: { candidates: articles.length, scraped, errors } });
+});
+
 // POST /feeds/trigger-pull — manually trigger feed polling
 feedRoutes.post('/feeds/trigger-pull', async (c) => {
   const { pollFeeds } = await import('../cron/poll-feeds');

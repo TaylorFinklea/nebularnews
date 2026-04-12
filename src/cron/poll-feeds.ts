@@ -84,9 +84,11 @@ export async function pollFeeds(env: Env): Promise<void> {
 
         if (!existing) {
           const articleId = nanoid();
+          const wordCount = item.contentText ? item.contentText.split(/\s+/).filter(Boolean).length : 0;
+          const excerpt = item.contentText ? item.contentText.slice(0, 300) : null;
           await dbRun(db,
-            `INSERT INTO articles (id, title, canonical_url, guid, author, content_html, content_text, image_url, published_at, fetched_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO articles (id, title, canonical_url, guid, author, content_html, content_text, excerpt, word_count, image_url, published_at, fetched_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               articleId,
               item.title,
@@ -95,6 +97,8 @@ export async function pollFeeds(env: Env): Promise<void> {
               item.author,
               item.contentHtml,
               item.contentText,
+              excerpt,
+              wordCount,
               item.imageUrl,
               item.publishedAt,
               now,

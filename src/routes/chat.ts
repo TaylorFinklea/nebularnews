@@ -24,6 +24,76 @@ function truncate(text: string | null, limit: number): string {
 }
 
 // ---------------------------------------------------------------------------
+// Conversation memory: generate summaries + load recent context
+// ---------------------------------------------------------------------------
+
+const MAX_CONTEXT_SUMMARIES = 3;
+
+async function loadRecentConversationSummaries(
+  db: D1Database,
+  userId: string,
+  excludeThreadId?: string,
+): Promise<string[]> {
+  const rows = await dbAll<{ article_title: string | null; summary: string }>(
+    db,
+    `SELECT article_title, summary FROM chat_context_summaries
+     WHERE user_id = ? ${excludeThreadId ? 'AND thread_id != ?' : ''}
+     ORDER BY created_at DESC LIMIT ?`,
+    excludeThreadId
+      ? [userId, excludeThreadId, MAX_CONTEXT_SUMMARIES]
+      : [userId, MAX_CONTEXT_SUMMARIES],
+  );
+  return rows.map(r =>
+    r.article_title ? `[${r.article_title}] ${r.summary}` : r.summary,
+  );
+}
+
+function extractFollowUpSuggestions(content: string): { text: string; suggestions: string[] } {
+  const lines = content.split('\n');
+  const suggestions: string[] = [];
+  const textLines: string[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('>>')) {
+      const question = trimmed.slice(2).trim();
+      if (question) suggestions.push(question);
+    } else {
+      textLines.push(line);
+    }
+  }
+
+  // Trim trailing empty lines from the main text.
+  while (textLines.length > 0 && textLines[textLines.length - 1].trim() === '') {
+    textLines.pop();
+  }
+
+  return { text: textLines.join('\n'), suggestions };
+}
+
+async function saveConversationSummary(
+  db: D1Database,
+  userId: string,
+  threadId: string,
+  articleId: string | null,
+  articleTitle: string | null,
+  userMessage: string,
+  assistantMessage: string,
+): Promise<void> {
+  // Generate a short summary of this exchange (deterministic, no AI call needed).
+  const userPreview = userMessage.length > 80 ? userMessage.slice(0, 80) + '...' : userMessage;
+  const assistantPreview = assistantMessage.length > 150 ? assistantMessage.slice(0, 150) + '...' : assistantMessage;
+  const summary = `User asked: "${userPreview}" — AI discussed: ${assistantPreview}`;
+
+  await dbRun(
+    db,
+    `INSERT INTO chat_context_summaries (id, user_id, thread_id, article_id, article_title, summary, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [nanoid(), userId, threadId, articleId, articleTitle, summary, Date.now()],
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Shared: load thread + messages, format response
 // ---------------------------------------------------------------------------
 
@@ -200,7 +270,13 @@ chatRoutes.post('/chat/:articleId', async (c) => {
     [thread.id, MAX_HISTORY_MESSAGES],
   );
 
-  // 5. Build AI messages.
+  // 5. Load conversation memory from other threads.
+  const priorSummaries = await loadRecentConversationSummaries(db, userId, thread.id);
+  const memoryContext = priorSummaries.length > 0
+    ? `\n\nPrevious discussions:\n${priorSummaries.map(s => `- ${s}`).join('\n')}`
+    : '';
+
+  // 6. Build AI messages.
   const systemPrompt = `You are an expert analyst discussing a news article with the user. Your role:
 
 - Answer questions about the article with precision, citing specific passages when relevant.
@@ -209,7 +285,8 @@ chatRoutes.post('/chat/:articleId', async (c) => {
 - When referencing the article, use phrases like "The article states..." or "According to the piece..."
 - If the user asks about something not covered in the article, clearly say so and offer related context if you can.
 - Be concise but thorough. Prefer structured responses over walls of text.
-- If the article has key points or a summary, use them to provide quick answers before diving deeper.`;
+- If the article has key points or a summary, use them to provide quick answers before diving deeper.
+- After your response, on new lines, suggest 2-3 follow-up questions the user might want to ask. Prefix each with ">>". Example: ">> What are the implications for...?"${memoryContext}`;
 
   const contentText = truncate(article.content_text, MAX_CONTENT_LENGTH);
 
@@ -299,6 +376,7 @@ chatRoutes.post('/chat/:articleId', async (c) => {
         );
         await dbRun(db, `UPDATE chat_threads SET updated_at = ? WHERE id = ?`, [aiNow, thread.id]);
         await recordUsage(db, userId, ai.provider, ai.model, finalUsage, 'chat', ai.isByok);
+        await saveConversationSummary(db, userId, thread.id, articleId, article.title, message, finalContent).catch(() => {});
       }
     })();
 
@@ -311,7 +389,7 @@ chatRoutes.post('/chat/:articleId', async (c) => {
     });
   }
 
-  const { content: aiContent, usage: chatUsage } = await runChat(
+  const { content: rawAiContent, usage: chatUsage } = await runChat(
     ai.provider,
     ai.apiKey,
     ai.model,
@@ -319,7 +397,10 @@ chatRoutes.post('/chat/:articleId', async (c) => {
     { maxTokens: 1024 },
   );
 
-  // 7. Save assistant message.
+  // Extract follow-up suggestions from the response.
+  const { text: aiContent, suggestions } = extractFollowUpSuggestions(rawAiContent);
+
+  // 8. Save assistant message (with suggestions stripped).
   const aiMsgId = nanoid();
   const aiNow = Date.now();
   await dbRun(
@@ -339,9 +420,12 @@ chatRoutes.post('/chat/:articleId', async (c) => {
   // Record usage.
   await recordUsage(db, userId, ai.provider, ai.model, chatUsage, 'chat', ai.isByok);
 
-  // 8. Return full thread.
+  // Save conversation memory (fire-and-forget).
+  saveConversationSummary(db, userId, thread.id, articleId, article.title, message, aiContent).catch(() => {});
+
+  // 9. Return full thread + suggestions.
   const response = await loadThreadResponse(db, thread.id);
-  return c.json({ ok: true, data: response });
+  return c.json({ ok: true, data: { ...response, suggestions } });
 });
 
 // ---------------------------------------------------------------------------

@@ -4,6 +4,7 @@ import type { AppEnv } from '../index';
 import { dbGet, dbAll, dbRun } from '../db/helpers';
 import { resolveAIKey } from '../lib/ai-key-resolver';
 import { runChat, parseJsonResponse } from '../lib/ai';
+import { recordUsage, checkBudget } from '../lib/rate-limiter';
 import {
   buildSummarizePrompt,
   buildKeyPointsPrompt,
@@ -18,6 +19,7 @@ import {
   normalizeTagName,
   normalizeTagConfidence,
 } from '../lib/normalizers';
+import type { SummaryStyle, SummaryLength } from '../lib/prompts';
 
 export const enrichRoutes = new Hono<AppEnv>();
 
@@ -334,6 +336,110 @@ enrichRoutes.post('/enrich/:articleId/auto-tag', async (c) => {
           confidence: normalizeTagConfidence(row.confidence ?? row.score),
         };
       }).filter((s: { name: string }) => s.name),
+    },
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /enrich/batch — batch enrichment (summarize + key-points) for BYOK users
+//
+// Accepts an array of article IDs and processes them sequentially.
+// Returns an SSE stream of results as each article completes.
+// ---------------------------------------------------------------------------
+
+enrichRoutes.post('/enrich/batch', async (c) => {
+  const userId = c.get('userId');
+  const db = c.env.DB;
+
+  const body = await c.req.json<{ article_ids: string[] }>();
+  const articleIds = body.article_ids ?? [];
+  if (articleIds.length === 0 || articleIds.length > 20) {
+    return c.json({ ok: false, error: { code: 'bad_request', message: 'Provide 1-20 article IDs' } }, 400);
+  }
+
+  const ai = await resolveAIKey(db, userId, c.req.raw, c.env);
+  if (!ai) return c.json({ ok: false, error: { code: 'no_ai_key', message: 'No AI provider configured' } }, 503);
+
+  // Budget check for non-BYOK.
+  if (!ai.isByok) {
+    const budget = await checkBudget(db, userId);
+    if (!budget.allowed) {
+      return c.json({ ok: false, error: { code: 'budget_exceeded', message: 'Budget exceeded' } }, 429);
+    }
+  }
+
+  // Load user settings for summary style.
+  const settings = await dbGet<{ value: string }>(
+    db,
+    `SELECT value FROM user_settings WHERE user_id = ? AND key = 'summaryStyle'`,
+    [userId],
+  );
+  const summaryStyle = (settings?.value ?? 'concise') as SummaryStyle;
+  const summaryLength: SummaryLength = 'short';
+
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    async start(controller) {
+      for (const articleId of articleIds) {
+        try {
+          const article = await dbGet<EnrichmentArticle>(
+            db,
+            `SELECT id, title, canonical_url, content_text FROM articles WHERE id = ?`,
+            [articleId],
+          );
+          if (!article || !article.content_text) {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'skip', article_id: articleId, reason: 'not_found' })}\n\n`));
+            continue;
+          }
+
+          const content = truncateContent(article.content_text, 12_000);
+
+          // Summarize.
+          const sumPrompt = buildSummarizePrompt(article.title, article.canonical_url, content, summaryStyle, summaryLength);
+          const { content: sumRaw, usage: sumUsage } = await runChat(ai.provider, ai.apiKey, ai.model, sumPrompt, { maxTokens: 400 });
+          const sumParsed = parseJsonResponse(sumRaw) as Record<string, unknown> | null;
+          if (sumParsed) {
+            const summaryText = normalizeParagraphSummary(String(sumParsed.summary ?? sumParsed.paragraph ?? ''));
+            await dbRun(db,
+              `INSERT INTO article_summaries (id, article_id, summary_text, length_category, style, provider, model, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+              [nanoid(), articleId, summaryText, summaryLength, summaryStyle, ai.provider, ai.model, Date.now()],
+            );
+          }
+          await recordUsage(db, userId, ai.provider, ai.model, sumUsage, 'enrich_batch', ai.isByok);
+
+          // Key points.
+          const kpPrompt = buildKeyPointsPrompt(article.title, article.canonical_url, content, summaryLength);
+          const { content: kpRaw, usage: kpUsage } = await runChat(ai.provider, ai.apiKey, ai.model, kpPrompt, { maxTokens: 300 });
+          const kpParsed = parseJsonResponse(kpRaw) as Record<string, unknown> | null;
+          if (kpParsed) {
+            const rawPoints = (kpParsed.key_points ?? kpParsed.keyPoints ?? []) as unknown[];
+            const keyPoints = normalizeKeyPoints(rawPoints);
+            await dbRun(db,
+              `INSERT INTO article_key_points (id, article_id, key_points_json, provider, model, created_at)
+               VALUES (?, ?, ?, ?, ?, ?)`,
+              [nanoid(), articleId, JSON.stringify(keyPoints), ai.provider, ai.model, Date.now()],
+            );
+          }
+          await recordUsage(db, userId, ai.provider, ai.model, kpUsage, 'enrich_batch', ai.isByok);
+
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'done', article_id: articleId, title: article.title })}\n\n`));
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : 'Unknown error';
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'error', article_id: articleId, error: msg })}\n\n`));
+        }
+      }
+
+      controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'complete', total: articleIds.length })}\n\n`));
+      controller.close();
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
     },
   });
 });

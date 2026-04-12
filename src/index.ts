@@ -17,6 +17,7 @@ import { chatRoutes } from './routes/chat';
 import { briefRoutes } from './routes/brief';
 import { usageRoutes } from './routes/usage';
 import { mcpRoutes } from './routes/mcp';
+import { subscriptionRoutes } from './routes/subscription';
 import { pollFeeds } from './cron/poll-feeds';
 import { scoreArticles } from './cron/score-articles';
 import { cleanup } from './cron/cleanup';
@@ -50,6 +51,7 @@ protectedApi.route('/', chatRoutes);
 protectedApi.route('/', briefRoutes);
 protectedApi.route('/', usageRoutes);
 protectedApi.route('/', mcpRoutes);
+protectedApi.route('/', subscriptionRoutes);
 
 app.route('/api', protectedApi);
 

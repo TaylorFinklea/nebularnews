@@ -3,7 +3,7 @@ import { nanoid } from 'nanoid';
 import type { AppEnv } from '../index';
 import { dbGet, dbAll, dbRun } from '../db/helpers';
 import { resolveAIKey } from '../lib/ai-key-resolver';
-import { runChat, type ChatMessage } from '../lib/ai';
+import { runChat, runChatStreaming, type ChatMessage } from '../lib/ai';
 
 export const chatRoutes = new Hono<AppEnv>();
 
@@ -242,7 +242,62 @@ chatRoutes.post('/chat/:articleId', async (c) => {
     });
   }
 
-  // 6. Call AI.
+  // 6. Call AI (streaming or standard).
+  const wantStream = c.req.query('stream') === 'true';
+
+  if (wantStream) {
+    const stream = runChatStreaming(ai.provider, ai.apiKey, ai.model, chatMessages, { maxTokens: 1024 });
+
+    // Wrap the provider stream: tee it to capture the final content for DB storage.
+    const [browserStream, captureStream] = stream.tee();
+
+    // Fire-and-forget: read capture stream to save the final message.
+    (async () => {
+      const reader = captureStream.getReader();
+      const decoder = new TextDecoder();
+      let finalContent = '';
+      let finalUsage = {};
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const text = decoder.decode(value, { stream: true });
+          for (const line of text.split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data: ')) continue;
+            try {
+              const parsed = JSON.parse(trimmed.slice(6));
+              if (parsed.type === 'done') {
+                finalContent = parsed.content ?? finalContent;
+                finalUsage = parsed.usage ?? finalUsage;
+              }
+            } catch { /* skip */ }
+          }
+        }
+      } catch { /* stream error — save what we have */ }
+
+      if (finalContent) {
+        const aiMsgId = nanoid();
+        const aiNow = Date.now();
+        await dbRun(
+          db,
+          `INSERT INTO chat_messages (id, thread_id, role, content, provider, model, created_at)
+           VALUES (?, ?, 'assistant', ?, ?, ?, ?)`,
+          [aiMsgId, thread.id, finalContent, ai.provider, ai.model, aiNow],
+        );
+        await dbRun(db, `UPDATE chat_threads SET updated_at = ? WHERE id = ?`, [aiNow, thread.id]);
+      }
+    })();
+
+    return new Response(browserStream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+      },
+    });
+  }
+
   const { content: aiContent } = await runChat(
     ai.provider,
     ai.apiKey,
@@ -421,7 +476,57 @@ Your role:
     });
   }
 
-  // 6. Call AI.
+  // 6. Call AI (streaming or standard).
+  const wantStream = c.req.query('stream') === 'true';
+
+  if (wantStream) {
+    const stream = runChatStreaming(ai.provider, ai.apiKey, ai.model, chatMessages, { maxTokens: 1024 });
+    const [browserStream, captureStream] = stream.tee();
+
+    (async () => {
+      const reader = captureStream.getReader();
+      const decoder = new TextDecoder();
+      let finalContent = '';
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const text = decoder.decode(value, { stream: true });
+          for (const line of text.split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data: ')) continue;
+            try {
+              const parsed = JSON.parse(trimmed.slice(6));
+              if (parsed.type === 'done') {
+                finalContent = parsed.content ?? finalContent;
+              }
+            } catch { /* skip */ }
+          }
+        }
+      } catch { /* save what we have */ }
+
+      if (finalContent) {
+        const aiMsgId = nanoid();
+        const aiNow = Date.now();
+        await dbRun(
+          db,
+          `INSERT INTO chat_messages (id, thread_id, role, content, provider, model, created_at)
+           VALUES (?, ?, 'assistant', ?, ?, ?, ?)`,
+          [aiMsgId, thread.id, finalContent, ai.provider, ai.model, aiNow],
+        );
+        await dbRun(db, `UPDATE chat_threads SET updated_at = ? WHERE id = ?`, [aiNow, thread.id]);
+      }
+    })();
+
+    return new Response(browserStream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+      },
+    });
+  }
+
   const { content: aiContent } = await runChat(
     ai.provider,
     ai.apiKey,

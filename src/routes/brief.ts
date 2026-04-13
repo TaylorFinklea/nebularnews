@@ -5,6 +5,7 @@ import { dbGet, dbAll, dbRun } from '../db/helpers';
 import { resolveAIKey } from '../lib/ai-key-resolver';
 import { runChat, parseJsonResponse } from '../lib/ai';
 import { buildNewsBriefPrompt } from '../lib/prompts';
+import { recordUsage } from '../lib/rate-limiter';
 
 export const briefRoutes = new Hono<AppEnv>();
 
@@ -12,20 +13,58 @@ export const briefRoutes = new Hono<AppEnv>();
 // Constants
 // ---------------------------------------------------------------------------
 
-const LOOKBACK_HOURS = 12;
-const SCORE_CUTOFF = 3;
+const DEFAULT_LOOKBACK_HOURS = 12;
+const DEFAULT_SCORE_CUTOFF = 3;
 const MAX_ARTICLES = 20;
 
+type BriefDepth = 'headlines' | 'summary' | 'deep';
+
+function maxWordsForDepth(depth: BriefDepth): number {
+  switch (depth) {
+    case 'headlines': return 8;
+    case 'summary': return 18;
+    case 'deep': return 50;
+  }
+}
+
+function maxBulletsForDepth(depth: BriefDepth): number {
+  switch (depth) {
+    case 'headlines': return 8;
+    case 'summary': return 5;
+    case 'deep': return 4;
+  }
+}
+
 // ---------------------------------------------------------------------------
-// POST /brief/generate
+// POST /brief/generate — generate a news brief (supports per-topic + depth)
+//
+// Body (all optional):
+//   topic_tag_id: string — filter to articles with this tag
+//   depth: 'headlines' | 'summary' | 'deep' — configurable detail level
+//   lookback_hours: number — override user setting
 // ---------------------------------------------------------------------------
 
 briefRoutes.post('/brief/generate', async (c) => {
   const userId = c.get('userId');
   const db = c.env.DB;
 
+  const body = await c.req.json<{
+    topic_tag_id?: string;
+    depth?: BriefDepth;
+    lookback_hours?: number;
+  }>().catch(() => ({ topic_tag_id: undefined, depth: undefined, lookback_hours: undefined }));
+
+  const depth: BriefDepth = body.depth ?? 'summary';
+  const topicTagId = body.topic_tag_id ?? null;
+
   const ai = await resolveAIKey(db, userId, c.req.raw, c.env);
   if (!ai) return c.json({ ok: false, error: { code: 'no_ai_key', message: 'No AI provider configured' } }, 503);
+
+  // Load user's brief settings.
+  const lookbackSetting = await dbGet<{ value: string }>(db, `SELECT value FROM user_settings WHERE user_id = ? AND key = 'newsBriefLookbackHours'`, [userId]);
+  const cutoffSetting = await dbGet<{ value: string }>(db, `SELECT value FROM user_settings WHERE user_id = ? AND key = 'newsBriefScoreCutoff'`, [userId]);
+  const lookbackHours = body.lookback_hours ?? (parseInt(lookbackSetting?.value ?? '') || DEFAULT_LOOKBACK_HOURS);
+  const scoreCutoff = parseInt(cutoffSetting?.value ?? '') || DEFAULT_SCORE_CUTOFF;
 
   // Get user's subscribed (non-paused) feed IDs.
   const subFeeds = await dbAll<{ feed_id: string }>(
@@ -42,7 +81,7 @@ briefRoutes.post('/brief/generate', async (c) => {
   const placeholders = feedIds.map(() => '?').join(', ');
 
   // Get recent article IDs from subscribed feeds within the lookback window.
-  const cutoffMs = Date.now() - LOOKBACK_HOURS * 3_600_000;
+  const cutoffMs = Date.now() - lookbackHours * 3_600_000;
   const sources = await dbAll<{ article_id: string; feed_id: string }>(
     db,
     `SELECT DISTINCT src.article_id, src.feed_id
@@ -67,13 +106,29 @@ briefRoutes.post('/brief/generate', async (c) => {
     }
   }
 
+  // If topic filter, narrow to articles with that tag.
+  let filteredArticleIds = articleIds;
+  if (topicTagId) {
+    const taggedRows = await dbAll<{ article_id: string }>(
+      db,
+      `SELECT article_id FROM article_tags WHERE tag_id = ? AND article_id IN (${articlePlaceholders})`,
+      [topicTagId, ...articleIds],
+    );
+    filteredArticleIds = taggedRows.map(r => r.article_id);
+    if (filteredArticleIds.length === 0) {
+      return c.json({ ok: true, data: { brief: null, reason: 'No articles matching topic' } });
+    }
+  }
+
+  const filteredPlaceholders = filteredArticleIds.map(() => '?').join(', ');
+
   // Get scores for these articles (only those meeting cutoff).
   const scores = await dbAll<{ article_id: string; score: number }>(
     db,
     `SELECT article_id, score FROM article_scores
-     WHERE user_id = ? AND article_id IN (${articlePlaceholders}) AND score >= ?
+     WHERE user_id = ? AND article_id IN (${filteredPlaceholders}) AND score >= ?
      ORDER BY score DESC`,
-    [userId, ...articleIds, SCORE_CUTOFF],
+    [userId, ...filteredArticleIds, scoreCutoff],
   );
 
   if (scores.length === 0) {
@@ -145,9 +200,11 @@ briefRoutes.post('/brief/generate', async (c) => {
   const hour = new Date().getUTCHours();
   const windowLabel = hour < 12 ? 'Morning Brief' : 'Evening Brief';
 
-  // Call AI.
-  const messages = buildNewsBriefPrompt(candidates, windowLabel, 5);
-  const { content } = await runChat(ai.provider, ai.apiKey, ai.model, messages);
+  // Call AI with depth-aware bullet count.
+  const maxBullets = maxBulletsForDepth(depth);
+  const maxWords = maxWordsForDepth(depth);
+  const messages = buildNewsBriefPrompt(candidates, windowLabel, maxBullets, maxWords);
+  const { content, usage } = await runChat(ai.provider, ai.apiKey, ai.model, messages);
 
   const parsed = parseJsonResponse(content) as Record<string, unknown> | null;
   const bullets = Array.isArray(parsed?.bullets) ? parsed!.bullets : [];
@@ -166,6 +223,8 @@ briefRoutes.post('/brief/generate', async (c) => {
     [briefId, userId, editionType, briefText, articleIdsJson, ai.provider, ai.model, now],
   );
 
+  await recordUsage(db, userId, ai.provider, ai.model, usage, 'brief', ai.isByok);
+
   return c.json({
     ok: true,
     data: {
@@ -173,8 +232,10 @@ briefRoutes.post('/brief/generate', async (c) => {
       title: 'News Brief',
       edition_label: editionType === 'morning' ? 'Morning' : 'Evening',
       generated_at: now,
-      window_hours: LOOKBACK_HOURS,
-      score_cutoff: SCORE_CUTOFF,
+      window_hours: lookbackHours,
+      score_cutoff: scoreCutoff,
+      depth,
+      topic_tag_id: topicTagId,
       bullets,
       next_scheduled_at: null,
       stale: false,

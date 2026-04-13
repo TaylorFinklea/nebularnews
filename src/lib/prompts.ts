@@ -262,6 +262,7 @@ export function buildNewsBriefPrompt(
   }>,
   windowLabel: string,
   maxBullets: number = 5,
+  maxWordsPerBullet: number = 18,
 ): ChatMessage[] {
   const cappedBullets = Math.min(8, Math.max(1, Math.floor(maxBullets)));
 
@@ -297,7 +298,7 @@ Requirements:
     ]
   }
 - Provide up to ${cappedBullets} bullets.
-- Each bullet must be <= 18 words.
+- Each bullet must be <= ${maxWordsPerBullet} words.
 - Each bullet must summarize exactly one notable article from the candidate list.
 - Each bullet must cite exactly one source_article_id selected only from the article IDs provided below.
 - Favor the highest-fit and most recent developments.

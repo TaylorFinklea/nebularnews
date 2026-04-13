@@ -1,6 +1,10 @@
 import { Hono } from 'hono';
+import { nanoid } from 'nanoid';
 import type { AppEnv } from '../index';
-import { dbAll, dbGet } from '../db/helpers';
+import { dbAll, dbGet, dbRun } from '../db/helpers';
+import { resolveAIKey } from '../lib/ai-key-resolver';
+import { runChat, type ChatMessage } from '../lib/ai';
+import { recordUsage } from '../lib/rate-limiter';
 
 export const insightsRoutes = new Hono<AppEnv>();
 
@@ -145,23 +149,69 @@ insightsRoutes.get('/insights/weekly', async (c) => {
   );
 
   const articlesRead = stats?.articles_read ?? 0;
-  const topicBreakdown = topTopics.map(t => `${t.name} (${t.cnt})`).join(', ');
-  const feedBreakdown = topFeeds.map(f => `${f.title} (${f.cnt})`).join(', ');
+  const dataPayload = {
+    articles_read: articlesRead,
+    top_topics: topTopics,
+    top_feeds: topFeeds,
+  };
 
-  const insightText = articlesRead > 0
-    ? `You read ${articlesRead} articles this week.${topicBreakdown ? ` Top topics: ${topicBreakdown}.` : ''}${feedBreakdown ? ` Most from: ${feedBreakdown}.` : ''}`
-    : 'No articles read this week. Check your feeds for new content!';
+  // Try AI-generated insight if provider available.
+  let insightText: string;
+  let insightProvider: string | null = null;
+  let insightModel: string | null = null;
+
+  const ai = await resolveAIKey(db, userId, c.req.raw, c.env);
+
+  if (ai && articlesRead > 0) {
+    const topicBreakdown = topTopics.map(t => `${t.name}: ${t.cnt} articles`).join(', ');
+    const feedBreakdown = topFeeds.map(f => `${f.title}: ${f.cnt} articles`).join(', ');
+
+    const messages: ChatMessage[] = [
+      {
+        role: 'system',
+        content: 'You write brief, friendly reading insights for a news reader app. Keep it to 2-3 sentences. Be specific and observational, not generic.',
+      },
+      {
+        role: 'user',
+        content: `Generate a weekly reading insight from this data:\n\nArticles read: ${articlesRead}\nTop topics: ${topicBreakdown || 'None'}\nTop feeds: ${feedBreakdown || 'None'}\n\nMake it personal and insightful. Note any patterns, shifts, or interesting observations.`,
+      },
+    ];
+
+    try {
+      const { content, usage } = await runChat(ai.provider, ai.apiKey, ai.model, messages, { maxTokens: 200 });
+      insightText = content.trim();
+      insightProvider = ai.provider;
+      insightModel = ai.model;
+      await recordUsage(db, userId, ai.provider, ai.model, usage, 'insights', ai.isByok);
+    } catch {
+      // Fall back to template.
+      const topicStr = topTopics.map(t => `${t.name} (${t.cnt})`).join(', ');
+      const feedStr = topFeeds.map(f => `${f.title} (${f.cnt})`).join(', ');
+      insightText = `You read ${articlesRead} articles this week.${topicStr ? ` Top topics: ${topicStr}.` : ''}${feedStr ? ` Most from: ${feedStr}.` : ''}`;
+    }
+  } else {
+    const topicStr = topTopics.map(t => `${t.name} (${t.cnt})`).join(', ');
+    const feedStr = topFeeds.map(f => `${f.title} (${f.cnt})`).join(', ');
+    insightText = articlesRead > 0
+      ? `You read ${articlesRead} articles this week.${topicStr ? ` Top topics: ${topicStr}.` : ''}${feedStr ? ` Most from: ${feedStr}.` : ''}`
+      : 'No articles read this week. Check your feeds for new content!';
+  }
+
+  // Cache the insight.
+  const now = Date.now();
+  await dbRun(
+    db,
+    `INSERT INTO reading_insights (id, user_id, insight_type, insight_text, data_json, period_start, period_end, provider, model, created_at)
+     VALUES (?, ?, 'weekly', ?, ?, ?, ?, ?, ?, ?)`,
+    [nanoid(), userId, insightText, JSON.stringify(dataPayload), weekAgo, now, insightProvider, insightModel, now],
+  );
 
   return c.json({
     ok: true,
     data: {
       text: insightText,
-      data: {
-        articles_read: articlesRead,
-        top_topics: topTopics,
-        top_feeds: topFeeds,
-      },
-      generated_at: Date.now(),
+      data: dataPayload,
+      generated_at: now,
     },
   });
 });

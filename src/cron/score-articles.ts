@@ -20,6 +20,8 @@ const DEFAULT_WEIGHTS: Record<string, number> = {
   content_freshness: 0.6,
   content_depth: 0.5,
   tag_match_ratio: 0.9,
+  save_rate: 0.7,
+  dismiss_rate: 0.6,
 };
 
 // ---------------------------------------------------------------------------
@@ -121,6 +123,24 @@ export async function scoreArticles(env: Env): Promise<void> {
       );
       const userTagSet = new Set(userTags.map((t) => t.name_normalized));
 
+      // Pre-load behavioral signals: save and dismiss rates per feed
+      const feedBehavior = new Map<string, { saves: number; dismisses: number; total: number }>();
+      const behaviorRows = await dbAll<{ feed_id: string; saved_at: number | null; dismissed_at: number | null }>(
+        db,
+        `SELECT asrc.feed_id, uas.saved_at, uas.dismissed_at
+         FROM user_article_states uas
+         JOIN article_sources asrc ON asrc.article_id = uas.article_id
+         WHERE uas.user_id = ?`,
+        [user_id],
+      );
+      for (const row of behaviorRows) {
+        if (!feedBehavior.has(row.feed_id)) feedBehavior.set(row.feed_id, { saves: 0, dismisses: 0, total: 0 });
+        const stats = feedBehavior.get(row.feed_id)!;
+        stats.total++;
+        if (row.saved_at) stats.saves++;
+        if (row.dismissed_at) stats.dismisses++;
+      }
+
       // Score each article
       for (const article of articles) {
         // 1. source_reputation
@@ -156,8 +176,26 @@ export async function scoreArticles(env: Env): Promise<void> {
           }
         }
 
+        // 5. save_rate — how often user saves articles from this feed
+        let saveRate = 0.5;
+        if (article.feed_id && feedBehavior.has(article.feed_id)) {
+          const stats = feedBehavior.get(article.feed_id)!;
+          if (stats.total > 0) saveRate = stats.saves / stats.total;
+        }
+
+        // 6. dismiss_rate — inverted: high dismiss rate = low score
+        let dismissSignal = 0.5;
+        if (article.feed_id && feedBehavior.has(article.feed_id)) {
+          const stats = feedBehavior.get(article.feed_id)!;
+          if (stats.total > 0) dismissSignal = 1 - (stats.dismisses / stats.total);
+        }
+
         // Weighted average
-        const signals = { source_reputation: sourceRep, content_freshness: freshness, content_depth: depth, tag_match_ratio: tagMatch };
+        const signals = {
+          source_reputation: sourceRep, content_freshness: freshness,
+          content_depth: depth, tag_match_ratio: tagMatch,
+          save_rate: saveRate, dismiss_rate: dismissSignal,
+        };
         let weightedSum = 0;
         let totalWeight = 0;
         for (const [name, value] of Object.entries(signals)) {
@@ -179,8 +217,8 @@ export async function scoreArticles(env: Env): Promise<void> {
           `INSERT INTO article_scores (id, article_id, user_id, score, label, reason_text, evidence_json, score_status, confidence, weighted_average, scoring_method, created_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'algorithmic', ?)`,
           [nanoid(), article.id, user_id, score, label,
-           `Algorithmic: ${dataCount}/4 signals`, evidenceJson, status,
-           dataCount / 4, Math.round(average * 1000) / 1000, now],
+           `Algorithmic: ${dataCount}/6 signals`, evidenceJson, status,
+           dataCount / 6, Math.round(average * 1000) / 1000, now],
         );
       }
     } catch (err) {

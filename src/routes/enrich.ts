@@ -71,13 +71,21 @@ enrichRoutes.post('/enrich/:articleId/summarize', async (c) => {
 
   const { article, contentText } = await fetchArticleWithContent(db, articleId);
 
+  // Load user's summary preferences.
+  const styleRow = await dbGet<{ value: string }>(db, `SELECT value FROM user_settings WHERE user_id = ? AND key = 'summaryStyle'`, [userId]);
+  const lengthRow = await dbGet<{ value: string }>(db, `SELECT value FROM user_settings WHERE user_id = ? AND key = 'summaryLength'`, [userId]);
+  const style = (styleRow?.value ?? 'concise') as SummaryStyle;
+  const length = (lengthRow?.value ?? 'short') as SummaryLength;
+
   const messages = buildSummarizePrompt(
     article.title,
     article.canonical_url,
     contentText,
+    style,
+    length,
   );
 
-  const { content } = await runChat(ai.provider, ai.apiKey, ai.model, messages);
+  const { content, usage } = await runChat(ai.provider, ai.apiKey, ai.model, messages);
 
   const parsed = parseJsonResponse(content) as Record<string, unknown> | null;
   const rawSummary =
@@ -87,10 +95,12 @@ enrichRoutes.post('/enrich/:articleId/summarize', async (c) => {
   const now = Date.now();
   await dbRun(
     db,
-    `INSERT INTO article_summaries (id, article_id, summary_text, provider, model, created_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [nanoid(), articleId, summary, ai.provider, ai.model, now],
+    `INSERT INTO article_summaries (id, article_id, summary_text, length_category, style, provider, model, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [nanoid(), articleId, summary, length, style, ai.provider, ai.model, now],
   );
+
+  await recordUsage(db, userId, ai.provider, ai.model, usage, 'summarize', ai.isByok);
 
   return c.json({ ok: true, data: { summary_text: summary } });
 });

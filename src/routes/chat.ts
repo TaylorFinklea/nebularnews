@@ -5,6 +5,7 @@ import { dbGet, dbAll, dbRun } from '../db/helpers';
 import { resolveAIKey } from '../lib/ai-key-resolver';
 import { runChat, runChatStreaming, type ChatMessage } from '../lib/ai';
 import { recordUsage, checkBudget } from '../lib/rate-limiter';
+import { buildAssistantSystemPrompt, type AssistantPageContext } from '../lib/prompts';
 
 export const chatRoutes = new Hono<AppEnv>();
 
@@ -671,4 +672,281 @@ Your role:
   // 9. Return full thread.
   const response = await loadThreadResponse(db, thread.id);
   return c.json({ ok: true, data: response });
+});
+
+// ---------------------------------------------------------------------------
+// AI Assistant — floating context-aware chat
+// ---------------------------------------------------------------------------
+
+const ASSISTANT_THREAD_ARTICLE_ID = '__assistant__';
+
+// GET /chat/assistant — load the current assistant thread
+chatRoutes.get('/chat/assistant', async (c) => {
+  const userId = c.get('userId');
+  const db = c.env.DB;
+
+  const thread = await dbGet<ThreadRow>(
+    db,
+    `SELECT * FROM chat_threads WHERE user_id = ? AND article_id = ? ORDER BY updated_at DESC LIMIT 1`,
+    [userId, ASSISTANT_THREAD_ARTICLE_ID],
+  );
+
+  if (!thread) {
+    return c.json({ ok: true, data: { thread: null, messages: [] } });
+  }
+
+  const messages = await dbAll<MessageRow>(
+    db,
+    `SELECT * FROM chat_messages WHERE thread_id = ? ORDER BY created_at ASC`,
+    [thread.id],
+  );
+
+  return c.json({
+    ok: true,
+    data: { thread: formatThread(thread), messages: messages.map(formatMessage) },
+  });
+});
+
+// GET /chat/assistant/history — list recent assistant threads
+chatRoutes.get('/chat/assistant/history', async (c) => {
+  const userId = c.get('userId');
+  const db = c.env.DB;
+
+  const threads = await dbAll<ThreadRow & { message_count: number; last_content: string | null }>(
+    db,
+    `SELECT t.*,
+            (SELECT COUNT(*) FROM chat_messages WHERE thread_id = t.id AND role != 'system') AS message_count,
+            (SELECT content FROM chat_messages WHERE thread_id = t.id AND role = 'assistant' ORDER BY created_at DESC LIMIT 1) AS last_content
+     FROM chat_threads t
+     WHERE t.user_id = ? AND t.article_id = ?
+     ORDER BY t.updated_at DESC
+     LIMIT 20`,
+    [userId, ASSISTANT_THREAD_ARTICLE_ID],
+  );
+
+  const result = threads.map(t => ({
+    id: t.id,
+    title: t.title,
+    lastMessage: t.last_content ? truncate(t.last_content, 100) : null,
+    updatedAt: t.updated_at,
+    messageCount: t.message_count,
+  }));
+
+  return c.json({ ok: true, data: result });
+});
+
+// POST /chat/assistant — send a message with page context
+chatRoutes.post('/chat/assistant', async (c) => {
+  const userId = c.get('userId');
+  const db = c.env.DB;
+
+  const body = await c.req.json<{
+    message: string;
+    pageContext: AssistantPageContext;
+    threadId?: string;
+  }>();
+
+  const message = body.message?.trim();
+  if (!message) {
+    return c.json({ ok: false, error: { code: 'bad_request', message: 'message is required' } }, 400);
+  }
+
+  const pageContext = body.pageContext;
+  if (!pageContext?.pageType) {
+    return c.json({ ok: false, error: { code: 'bad_request', message: 'pageContext is required' } }, 400);
+  }
+
+  const ai = await resolveAIKey(db, userId, c.req.raw, c.env);
+  if (!ai) return c.json({ ok: false, error: { code: 'no_ai_key', message: 'No AI provider configured' } }, 503);
+
+  // Budget check for non-BYOK.
+  if (!ai.isByok) {
+    const budget = await checkBudget(db, userId);
+    if (!budget.allowed) {
+      return c.json({ ok: false, error: { code: 'budget_exceeded', message: 'Budget exceeded', reset_at: budget.resetAt } }, 429);
+    }
+  }
+
+  const now = Date.now();
+
+  // Find or create assistant thread.
+  let thread: ThreadRow | null = null;
+  if (body.threadId) {
+    thread = await dbGet<ThreadRow>(db, `SELECT * FROM chat_threads WHERE id = ? AND user_id = ?`, [body.threadId, userId]);
+  }
+  if (!thread) {
+    thread = await dbGet<ThreadRow>(
+      db,
+      `SELECT * FROM chat_threads WHERE user_id = ? AND article_id = ? ORDER BY updated_at DESC LIMIT 1`,
+      [userId, ASSISTANT_THREAD_ARTICLE_ID],
+    );
+  }
+  if (!thread) {
+    const threadId = nanoid();
+    await dbRun(
+      db,
+      `INSERT INTO chat_threads (id, user_id, article_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
+      [threadId, userId, ASSISTANT_THREAD_ARTICLE_ID, null, now, now],
+    );
+    thread = { id: threadId, user_id: userId, article_id: ASSISTANT_THREAD_ARTICLE_ID, title: null, created_at: now, updated_at: now };
+  }
+
+  // Check for context shift — compare with last page_context_json in this thread.
+  const lastContextMsg = await dbGet<{ page_context_json: string }>(
+    db,
+    `SELECT page_context_json FROM chat_messages WHERE thread_id = ? AND page_context_json IS NOT NULL ORDER BY created_at DESC LIMIT 1`,
+    [thread.id],
+  );
+
+  let contextShifted = false;
+  if (lastContextMsg?.page_context_json) {
+    try {
+      const prev = JSON.parse(lastContextMsg.page_context_json) as AssistantPageContext;
+      contextShifted = prev.pageType !== pageContext.pageType || prev.pageLabel !== pageContext.pageLabel;
+    } catch { contextShifted = true; }
+  } else {
+    contextShifted = true; // First message — always set context
+  }
+
+  // Insert segment marker if context shifted.
+  if (contextShifted) {
+    const markerContent = `[Context: ${pageContext.pageLabel}]`;
+    await dbRun(
+      db,
+      `INSERT INTO chat_messages (id, thread_id, role, content, page_context_json, created_at) VALUES (?, ?, 'system', ?, ?, ?)`,
+      [nanoid(), thread.id, markerContent, JSON.stringify(pageContext), now],
+    );
+  }
+
+  // Save user message.
+  await dbRun(
+    db,
+    `INSERT INTO chat_messages (id, thread_id, role, content, created_at) VALUES (?, ?, 'user', ?, ?)`,
+    [nanoid(), thread.id, message, now],
+  );
+
+  // Enrich context: for article_detail, fetch full content from D1.
+  if (pageContext.pageType === 'article_detail' && pageContext.articleDetail?.articleId) {
+    const article = await dbGet<{ content_text: string | null }>(
+      db,
+      `SELECT content_text FROM articles WHERE id = ?`,
+      [pageContext.articleDetail.articleId],
+    );
+    if (article?.content_text && pageContext.articleDetail) {
+      pageContext.articleDetail.contentExcerpt = truncate(article.content_text, 4000);
+    }
+  }
+
+  // For list pages with article refs, enrich source names from feeds.
+  if (pageContext.articles?.length && pageContext.pageType !== 'article_detail') {
+    for (const a of pageContext.articles.slice(0, 10)) {
+      if (!a.source) {
+        const feed = await dbGet<{ title: string }>(
+          db,
+          `SELECT f.title FROM feeds f JOIN article_sources asrc ON asrc.feed_id = f.id WHERE asrc.article_id = ? LIMIT 1`,
+          [a.id],
+        );
+        if (feed) a.source = feed.title;
+      }
+    }
+  }
+
+  // Load conversation memory.
+  const priorSummaries = await loadRecentConversationSummaries(db, userId, thread.id);
+
+  // Build system prompt.
+  const systemPrompt = buildAssistantSystemPrompt(pageContext, priorSummaries);
+
+  // Load chat history (skip system context markers for the AI call).
+  const historyRows = await dbAll<{ role: string; content: string }>(
+    db,
+    `SELECT role, content FROM chat_messages WHERE thread_id = ? AND role != 'system' ORDER BY created_at ASC LIMIT ?`,
+    [thread.id, MAX_HISTORY_MESSAGES],
+  );
+
+  const chatMessages: ChatMessage[] = [{ role: 'system', content: systemPrompt }];
+  for (const row of historyRows) {
+    chatMessages.push({ role: row.role as 'user' | 'assistant', content: row.content });
+  }
+
+  // Stream or standard response.
+  const wantStream = c.req.query('stream') === 'true';
+
+  if (wantStream) {
+    const stream = runChatStreaming(ai.provider, ai.apiKey, ai.model, chatMessages, { maxTokens: 1024 });
+    const [browserStream, captureStream] = stream.tee();
+
+    (async () => {
+      const reader = captureStream.getReader();
+      const decoder = new TextDecoder();
+      let finalContent = '';
+      let finalUsage = {};
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const text = decoder.decode(value, { stream: true });
+          for (const line of text.split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data: ')) continue;
+            try {
+              const parsed = JSON.parse(trimmed.slice(6));
+              if (parsed.type === 'done') {
+                finalContent = parsed.content ?? finalContent;
+                finalUsage = parsed.usage ?? finalUsage;
+              }
+            } catch { /* skip */ }
+          }
+        }
+      } catch { /* save what we have */ }
+
+      if (finalContent) {
+        const { text: cleanContent } = extractFollowUpSuggestions(finalContent);
+        await dbRun(db,
+          `INSERT INTO chat_messages (id, thread_id, role, content, provider, model, created_at) VALUES (?, ?, 'assistant', ?, ?, ?, ?)`,
+          [nanoid(), thread.id, cleanContent, ai.provider, ai.model, Date.now()],
+        );
+        await dbRun(db, `UPDATE chat_threads SET updated_at = ? WHERE id = ?`, [Date.now(), thread.id]);
+        await recordUsage(db, userId, ai.provider, ai.model, finalUsage, 'assistant', ai.isByok);
+        await saveConversationSummary(db, userId, thread.id, null, pageContext.pageLabel, message, cleanContent).catch(() => {});
+      }
+    })();
+
+    return new Response(browserStream, {
+      headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' },
+    });
+  }
+
+  // Non-streaming.
+  const { content: rawContent, usage } = await runChat(ai.provider, ai.apiKey, ai.model, chatMessages, { maxTokens: 1024 });
+  const { text: aiContent, suggestions } = extractFollowUpSuggestions(rawContent);
+
+  const aiMsgId = nanoid();
+  const aiNow = Date.now();
+  await dbRun(db,
+    `INSERT INTO chat_messages (id, thread_id, role, content, provider, model, created_at) VALUES (?, ?, 'assistant', ?, ?, ?, ?)`,
+    [aiMsgId, thread.id, aiContent, ai.provider, ai.model, aiNow],
+  );
+  await dbRun(db, `UPDATE chat_threads SET updated_at = ? WHERE id = ?`, [aiNow, thread.id]);
+  await recordUsage(db, userId, ai.provider, ai.model, usage, 'assistant', ai.isByok);
+  await saveConversationSummary(db, userId, thread.id, null, pageContext.pageLabel, message, aiContent).catch(() => {});
+
+  const response = await loadThreadResponse(db, thread.id);
+  return c.json({ ok: true, data: { ...response, suggestions } });
+});
+
+// POST /chat/assistant/new — start a new assistant conversation
+chatRoutes.post('/chat/assistant/new', async (c) => {
+  const userId = c.get('userId');
+  const db = c.env.DB;
+  const now = Date.now();
+  const threadId = nanoid();
+
+  await dbRun(
+    db,
+    `INSERT INTO chat_threads (id, user_id, article_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
+    [threadId, userId, ASSISTANT_THREAD_ARTICLE_ID, null, now, now],
+  );
+
+  return c.json({ ok: true, data: { threadId } });
 });

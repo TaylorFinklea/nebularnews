@@ -316,3 +316,112 @@ ${candidateText}`;
     { role: 'user', content: prompt },
   ];
 }
+
+// ---------------------------------------------------------------------------
+// AI Assistant — context-aware system prompt
+// ---------------------------------------------------------------------------
+
+export type AssistantPageContext = {
+  pageType: string;
+  pageLabel: string;
+  articles?: Array<{ id: string; title: string; score?: number; source?: string; date?: string; isRead?: boolean }>;
+  articleDetail?: {
+    articleId: string;
+    title: string;
+    summary?: string;
+    keyPoints?: string[];
+    score?: number;
+    tags?: string[];
+    contentExcerpt?: string;
+  };
+  stats?: { unreadCount?: number; totalCount?: number; newToday?: number };
+  filters?: Record<string, string>;
+  tags?: string[];
+  feeds?: Array<{ id: string; title: string; articleCount?: number; isPaused?: boolean }>;
+  briefSummary?: string;
+};
+
+export function buildAssistantSystemPrompt(
+  pageContext: AssistantPageContext,
+  memoryContext: string[],
+): string {
+  let contextBlock = '';
+
+  switch (pageContext.pageType) {
+    case 'today': {
+      const stats = pageContext.stats;
+      contextBlock = `The user is on their Today dashboard.`;
+      if (stats) {
+        contextBlock += `\nStats: ${stats.unreadCount ?? '?'} unread, ${stats.newToday ?? '?'} new today, ${stats.totalCount ?? '?'} total articles.`;
+      }
+      if (pageContext.briefSummary) {
+        contextBlock += `\nToday's brief: ${pageContext.briefSummary}`;
+      }
+      if (pageContext.articles?.length) {
+        contextBlock += `\nFeatured articles:\n${pageContext.articles.map(a => `- [[article:${a.id}:${a.title}]] (score: ${a.score ?? '?'}/5, from ${a.source ?? 'unknown'})`).join('\n')}`;
+      }
+      break;
+    }
+    case 'articles': {
+      contextBlock = `The user is browsing their Articles list.`;
+      if (pageContext.filters && Object.keys(pageContext.filters).length > 0) {
+        contextBlock += `\nActive filters: ${Object.entries(pageContext.filters).map(([k, v]) => `${k}=${v}`).join(', ')}`;
+      }
+      if (pageContext.articles?.length) {
+        contextBlock += `\nVisible articles:\n${pageContext.articles.map(a => `- [[article:${a.id}:${a.title}]] (score: ${a.score ?? '?'}/5, from ${a.source ?? 'unknown'}, ${a.isRead ? 'read' : 'unread'})`).join('\n')}`;
+      }
+      break;
+    }
+    case 'article_detail': {
+      const detail = pageContext.articleDetail;
+      if (detail) {
+        contextBlock = `The user is reading: "${detail.title}"`;
+        if (detail.summary) contextBlock += `\nSummary: ${detail.summary}`;
+        if (detail.keyPoints?.length) contextBlock += `\nKey points:\n${detail.keyPoints.map(p => `- ${p}`).join('\n')}`;
+        if (detail.tags?.length) contextBlock += `\nTags: ${detail.tags.join(', ')}`;
+        if (detail.score) contextBlock += `\nScore: ${detail.score}/5`;
+        if (detail.contentExcerpt) contextBlock += `\nContent excerpt: ${detail.contentExcerpt}`;
+      }
+      break;
+    }
+    case 'discover': {
+      contextBlock = `The user is on the Discover page.`;
+      if (pageContext.tags?.length) contextBlock += `\nAvailable tags: ${pageContext.tags.slice(0, 20).join(', ')}`;
+      if (pageContext.feeds?.length) contextBlock += `\n${pageContext.feeds.length} feeds subscribed.`;
+      break;
+    }
+    case 'reading_list': {
+      contextBlock = `The user is viewing their Reading List (saved articles).`;
+      if (pageContext.articles?.length) {
+        contextBlock += `\nSaved articles:\n${pageContext.articles.map(a => `- [[article:${a.id}:${a.title}]] (from ${a.source ?? 'unknown'})`).join('\n')}`;
+      }
+      break;
+    }
+    case 'feeds': {
+      contextBlock = `The user is managing their Feed subscriptions.`;
+      if (pageContext.feeds?.length) {
+        contextBlock += `\nFeeds:\n${pageContext.feeds.map(f => `- ${f.title}${f.isPaused ? ' (paused)' : ''} — ${f.articleCount ?? '?'} articles`).join('\n')}`;
+      }
+      break;
+    }
+    default:
+      contextBlock = `The user is on: ${pageContext.pageLabel}`;
+  }
+
+  const memory = memoryContext.length > 0
+    ? `\n\nPrevious discussions:\n${memoryContext.map(s => `- ${s}`).join('\n')}`
+    : '';
+
+  return `You are the NebularNews AI assistant. You help the user understand and navigate their personalized news feed.
+
+Current page: ${pageContext.pageLabel}
+
+${contextBlock}
+
+Guidelines:
+- When referencing articles, use this exact format: [[article:ARTICLE_ID:Article Title]]. These render as tappable cards.
+- Be concise and actionable. Use markdown for emphasis and structure.
+- You can help with: finding articles, explaining content, comparing stories, identifying trends, managing feeds, and answering questions about the user's news.
+- If the user asks to find or filter articles, describe the results clearly with article references.
+- After your response, suggest 2-3 follow-up questions on new lines prefixed with ">>".${memory}`;
+}

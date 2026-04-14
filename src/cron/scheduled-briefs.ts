@@ -18,16 +18,16 @@ export async function generateScheduledBriefs(env: Env): Promise<void> {
   const currentMinute = new Date().getUTCMinutes();
 
   // Find users with brief enabled and whose morning or evening time matches current hour.
-  // user_settings stores 'newsBriefEnabled', 'newsBriefMorningTime' (HH:mm), 'newsBriefEveningTime' (HH:mm).
+  // settings stores 'newsBriefEnabled', 'newsBriefMorningTime' (HH:mm), 'newsBriefEveningTime' (HH:mm).
   const enabledUsers = await dbAll<{ user_id: string }>(
     db,
-    `SELECT DISTINCT user_id FROM user_settings WHERE key = 'newsBriefEnabled' AND value = 'true'`,
+    `SELECT DISTINCT user_id FROM settings WHERE key = 'newsBriefEnabled' AND value = 'true'`,
   );
 
   for (const { user_id } of enabledUsers) {
     try {
-      const morningRow = await dbGet<{ value: string }>(db, `SELECT value FROM user_settings WHERE user_id = ? AND key = 'newsBriefMorningTime'`, [user_id]);
-      const eveningRow = await dbGet<{ value: string }>(db, `SELECT value FROM user_settings WHERE user_id = ? AND key = 'newsBriefEveningTime'`, [user_id]);
+      const morningRow = await dbGet<{ value: string }>(db, `SELECT value FROM settings WHERE user_id = ? AND key = 'newsBriefMorningTime'`, [user_id]);
+      const eveningRow = await dbGet<{ value: string }>(db, `SELECT value FROM settings WHERE user_id = ? AND key = 'newsBriefEveningTime'`, [user_id]);
 
       const morningTime = morningRow?.value ?? '08:00';
       const eveningTime = eveningRow?.value ?? '17:00';
@@ -59,8 +59,8 @@ export async function generateScheduledBriefs(env: Env): Promise<void> {
       if (!ai) continue;
 
       // Load user settings.
-      const lookbackRow = await dbGet<{ value: string }>(db, `SELECT value FROM user_settings WHERE user_id = ? AND key = 'newsBriefLookbackHours'`, [user_id]);
-      const cutoffRow = await dbGet<{ value: string }>(db, `SELECT value FROM user_settings WHERE user_id = ? AND key = 'newsBriefScoreCutoff'`, [user_id]);
+      const lookbackRow = await dbGet<{ value: string }>(db, `SELECT value FROM settings WHERE user_id = ? AND key = 'newsBriefLookbackHours'`, [user_id]);
+      const cutoffRow = await dbGet<{ value: string }>(db, `SELECT value FROM settings WHERE user_id = ? AND key = 'newsBriefScoreCutoff'`, [user_id]);
       const lookbackHours = parseInt(lookbackRow?.value ?? '') || 12;
       const scoreCutoff = parseInt(cutoffRow?.value ?? '') || 3;
 

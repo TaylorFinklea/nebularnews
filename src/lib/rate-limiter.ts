@@ -93,7 +93,7 @@ export async function checkBudget(
   const settings = await dbGet<{ allow_overages: number }>(
     db,
     `SELECT COALESCE(
-       (SELECT value FROM user_settings WHERE user_id = ? AND key = 'allow_overages'),
+       (SELECT value FROM settings WHERE user_id = ? AND key = 'allow_overages'),
        '0'
      ) AS allow_overages`,
     [userId],
@@ -146,7 +146,7 @@ export async function getUsageSummary(
   const settings = await dbGet<{ allow_overages: number }>(
     db,
     `SELECT COALESCE(
-       (SELECT value FROM user_settings WHERE user_id = ? AND key = 'allow_overages'),
+       (SELECT value FROM settings WHERE user_id = ? AND key = 'allow_overages'),
        '0'
      ) AS allow_overages`,
     [userId],

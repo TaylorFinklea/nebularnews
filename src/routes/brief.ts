@@ -50,11 +50,15 @@ briefRoutes.post('/brief/generate', async (c) => {
 
   let body: { topic_tag_id?: string; depth?: BriefDepth; lookback_hours?: number } = {};
   try {
-    const text = await c.req.text();
+    // Clone the request before reading body — Hono may have already read it.
+    const cloned = c.req.raw.clone();
+    const text = await cloned.text();
     if (text && text.trim()) {
       body = JSON.parse(text);
     }
   } catch { /* empty body is fine — use defaults */ }
+
+  try {
 
   const depth: BriefDepth = body.depth ?? 'summary';
   const topicTagId = body.topic_tag_id ?? null;
@@ -63,8 +67,8 @@ briefRoutes.post('/brief/generate', async (c) => {
   if (!ai) return c.json({ ok: false, error: { code: 'no_ai_key', message: 'No AI provider configured' } }, 503);
 
   // Load user's brief settings.
-  const lookbackSetting = await dbGet<{ value: string }>(db, `SELECT value FROM user_settings WHERE user_id = ? AND key = 'newsBriefLookbackHours'`, [userId]);
-  const cutoffSetting = await dbGet<{ value: string }>(db, `SELECT value FROM user_settings WHERE user_id = ? AND key = 'newsBriefScoreCutoff'`, [userId]);
+  const lookbackSetting = await dbGet<{ value: string }>(db, `SELECT value FROM settings WHERE user_id = ? AND key = 'newsBriefLookbackHours'`, [userId]);
+  const cutoffSetting = await dbGet<{ value: string }>(db, `SELECT value FROM settings WHERE user_id = ? AND key = 'newsBriefScoreCutoff'`, [userId]);
   const lookbackHours = body.lookback_hours ?? (parseInt(lookbackSetting?.value ?? '') || DEFAULT_LOOKBACK_HOURS);
   const scoreCutoff = parseInt(cutoffSetting?.value ?? '') || DEFAULT_SCORE_CUTOFF;
 
@@ -254,4 +258,10 @@ briefRoutes.post('/brief/generate', async (c) => {
       stale: false,
     },
   });
+
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    console.error('[brief/generate] Error:', msg, err);
+    return c.json({ ok: false, error: { code: 'internal_error', message: msg } }, 500);
+  }
 });

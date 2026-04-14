@@ -72,8 +72,8 @@ enrichRoutes.post('/enrich/:articleId/summarize', async (c) => {
   const { article, contentText } = await fetchArticleWithContent(db, articleId);
 
   // Load user's summary preferences.
-  const styleRow = await dbGet<{ value: string }>(db, `SELECT value FROM user_settings WHERE user_id = ? AND key = 'summaryStyle'`, [userId]);
-  const lengthRow = await dbGet<{ value: string }>(db, `SELECT value FROM user_settings WHERE user_id = ? AND key = 'summaryLength'`, [userId]);
+  const styleRow = await dbGet<{ value: string }>(db, `SELECT value FROM settings WHERE user_id = ? AND key = 'summaryStyle'`, [userId]);
+  const lengthRow = await dbGet<{ value: string }>(db, `SELECT value FROM settings WHERE user_id = ? AND key = 'summaryLength'`, [userId]);
   const style = (styleRow?.value ?? 'concise') as SummaryStyle;
   const length = (lengthRow?.value ?? 'short') as SummaryLength;
 
@@ -381,7 +381,7 @@ enrichRoutes.post('/enrich/batch', async (c) => {
   // Load user settings for summary style.
   const settings = await dbGet<{ value: string }>(
     db,
-    `SELECT value FROM user_settings WHERE user_id = ? AND key = 'summaryStyle'`,
+    `SELECT value FROM settings WHERE user_id = ? AND key = 'summaryStyle'`,
     [userId],
   );
   const summaryStyle = (settings?.value ?? 'concise') as SummaryStyle;

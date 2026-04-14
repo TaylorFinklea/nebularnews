@@ -20,6 +20,7 @@ import { mcpRoutes } from './routes/mcp';
 import { subscriptionRoutes } from './routes/subscription';
 import { syncRoutes } from './routes/sync';
 import { insightsRoutes } from './routes/insights';
+import { adminRoutes } from './routes/admin';
 import { runIntelligence } from './cron/intelligence';
 import { pollFeeds } from './cron/poll-feeds';
 import { scoreArticles } from './cron/score-articles';
@@ -58,6 +59,7 @@ protectedApi.route('/', mcpRoutes);
 protectedApi.route('/', subscriptionRoutes);
 protectedApi.route('/', syncRoutes);
 protectedApi.route('/', insightsRoutes);
+protectedApi.route('/', adminRoutes);
 
 app.route('/api', protectedApi);
 

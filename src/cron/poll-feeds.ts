@@ -3,6 +3,11 @@ import type { Env } from '../env';
 import { dbAll, dbGet, dbRun } from '../db/helpers';
 import { parseFeed } from '../lib/feed-parser';
 import { scrapeAndExtract, type ScrapeProvider } from '../lib/scraper';
+import { resolveAIKey } from '../lib/ai-key-resolver';
+import { runChat, parseJsonResponse } from '../lib/ai';
+import { buildSummarizePrompt, buildKeyPointsPrompt } from '../lib/prompts';
+import { truncateContent, normalizeParagraphSummary, normalizeKeyPoints } from '../lib/normalizers';
+import { recordUsage, checkBudget } from '../lib/rate-limiter';
 
 type Feed = {
   id: string;
@@ -193,4 +198,102 @@ export async function pollFeeds(env: Env): Promise<void> {
      VALUES (?, 'done', 'cron', ?, ?, ?, ?, ?)`,
     [nanoid(), now, Date.now(), statsJson, now, now],
   );
+
+  // Auto-enrich new articles for subscription-tier users.
+  if (totalNew > 0) {
+    await autoEnrichForSubscribers(db, env);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Auto-enrichment: summarize + key-points for subscription-tier users
+// ---------------------------------------------------------------------------
+
+const MAX_AUTO_ENRICH_PER_USER = 10;
+
+async function autoEnrichForSubscribers(db: D1Database, env: Env): Promise<void> {
+  // Find users with active subscriptions.
+  const subscribers = await dbAll<{ user_id: string }>(
+    db,
+    `SELECT user_id FROM user_subscriptions WHERE expires_at > ?`,
+    [Date.now()],
+  );
+
+  if (subscribers.length === 0) return;
+
+  for (const { user_id } of subscribers) {
+    try {
+      // Check budget before enriching.
+      const budget = await checkBudget(db, user_id);
+      if (!budget.allowed) continue;
+
+      // Resolve AI key for this user (will use platform key since they're subscribers).
+      const dummyReq = new Request('https://api.nebularnews.com', { headers: new Headers() });
+      const ai = await resolveAIKey(db, user_id, dummyReq, env);
+      if (!ai) continue;
+
+      // Find recent articles from subscribed feeds that haven't been summarized yet.
+      const unsummarized = await dbAll<{ id: string; title: string; canonical_url: string; content_text: string | null }>(
+        db,
+        `SELECT a.id, a.title, a.canonical_url, a.content_text
+         FROM articles a
+         JOIN article_sources asrc ON asrc.article_id = a.id
+         JOIN user_feed_subscriptions ufs ON ufs.feed_id = asrc.feed_id AND ufs.user_id = ?
+         WHERE a.content_text IS NOT NULL
+           AND NOT EXISTS (SELECT 1 FROM article_summaries s WHERE s.article_id = a.id)
+         ORDER BY COALESCE(a.published_at, a.fetched_at) DESC
+         LIMIT ?`,
+        [user_id, MAX_AUTO_ENRICH_PER_USER],
+      );
+
+      if (unsummarized.length === 0) continue;
+
+      for (const article of unsummarized) {
+        // Re-check budget each iteration.
+        const midBudget = await checkBudget(db, user_id);
+        if (!midBudget.allowed) break;
+
+        const content = truncateContent(article.content_text ?? '', 12_000);
+
+        // Summarize.
+        try {
+          const sumPrompt = buildSummarizePrompt(article.title, article.canonical_url, content);
+          const { content: sumRaw, usage: sumUsage } = await runChat(ai.provider, ai.apiKey, ai.model, sumPrompt, { maxTokens: 400 });
+          const parsed = parseJsonResponse(sumRaw) as Record<string, unknown> | null;
+          if (parsed) {
+            const summaryText = normalizeParagraphSummary(String(parsed.summary ?? parsed.paragraph ?? ''));
+            await dbRun(db,
+              `INSERT INTO article_summaries (id, article_id, summary_text, provider, model, created_at)
+               VALUES (?, ?, ?, ?, ?, ?)`,
+              [nanoid(), article.id, summaryText, ai.provider, ai.model, Date.now()],
+            );
+          }
+          await recordUsage(db, user_id, ai.provider, ai.model, sumUsage, 'auto_enrich', false);
+        } catch {
+          // Skip this article on error, continue to next.
+        }
+
+        // Key points.
+        try {
+          const kpPrompt = buildKeyPointsPrompt(article.title, article.canonical_url, content);
+          const { content: kpRaw, usage: kpUsage } = await runChat(ai.provider, ai.apiKey, ai.model, kpPrompt, { maxTokens: 300 });
+          const parsed = parseJsonResponse(kpRaw) as Record<string, unknown> | null;
+          if (parsed) {
+            const rawPoints = (parsed.key_points ?? parsed.keyPoints ?? []) as unknown[];
+            const keyPoints = normalizeKeyPoints(rawPoints);
+            await dbRun(db,
+              `INSERT INTO article_key_points (id, article_id, key_points_json, provider, model, created_at)
+               VALUES (?, ?, ?, ?, ?, ?)`,
+              [nanoid(), article.id, JSON.stringify(keyPoints), ai.provider, ai.model, Date.now()],
+            );
+          }
+          await recordUsage(db, user_id, ai.provider, ai.model, kpUsage, 'auto_enrich', false);
+        } catch {
+          // Skip on error.
+        }
+      }
+    } catch {
+      console.error(`[auto-enrich] Error for user ${user_id}`);
+    }
+  }
 }

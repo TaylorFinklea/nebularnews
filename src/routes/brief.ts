@@ -48,11 +48,13 @@ briefRoutes.post('/brief/generate', async (c) => {
   const userId = c.get('userId');
   const db = c.env.DB;
 
-  const body = await c.req.json<{
-    topic_tag_id?: string;
-    depth?: BriefDepth;
-    lookback_hours?: number;
-  }>().catch(() => ({ topic_tag_id: undefined, depth: undefined, lookback_hours: undefined }));
+  let body: { topic_tag_id?: string; depth?: BriefDepth; lookback_hours?: number } = {};
+  try {
+    const text = await c.req.text();
+    if (text && text.trim()) {
+      body = JSON.parse(text);
+    }
+  } catch { /* empty body is fine — use defaults */ }
 
   const depth: BriefDepth = body.depth ?? 'summary';
   const topicTagId = body.topic_tag_id ?? null;
@@ -74,7 +76,7 @@ briefRoutes.post('/brief/generate', async (c) => {
   );
 
   if (subFeeds.length === 0) {
-    return c.json({ ok: true, data: { brief: null, reason: 'No subscribed feeds' } });
+    return c.json({ ok: true, data: { state: 'empty', title: 'News Brief', edition_label: '', generated_at: Date.now(), window_hours: 12, score_cutoff: 3, bullets: [], next_scheduled_at: null, stale: false } });
   }
 
   const feedIds = subFeeds.map((s) => s.feed_id);
@@ -92,7 +94,7 @@ briefRoutes.post('/brief/generate', async (c) => {
   );
 
   if (sources.length === 0) {
-    return c.json({ ok: true, data: { brief: null, reason: 'No recent articles' } });
+    return c.json({ ok: true, data: { state: 'empty', title: 'News Brief', edition_label: '', generated_at: Date.now(), window_hours: 12, score_cutoff: 3, bullets: [], next_scheduled_at: null, stale: false } });
   }
 
   const articleIds = [...new Set(sources.map((s) => s.article_id))];
@@ -116,7 +118,7 @@ briefRoutes.post('/brief/generate', async (c) => {
     );
     filteredArticleIds = taggedRows.map(r => r.article_id);
     if (filteredArticleIds.length === 0) {
-      return c.json({ ok: true, data: { brief: null, reason: 'No articles matching topic' } });
+      return c.json({ ok: true, data: { state: 'empty', title: 'News Brief', edition_label: '', generated_at: Date.now(), window_hours: 12, score_cutoff: 3, bullets: [], next_scheduled_at: null, stale: false } });
     }
   }
 
@@ -132,7 +134,7 @@ briefRoutes.post('/brief/generate', async (c) => {
   );
 
   if (scores.length === 0) {
-    return c.json({ ok: true, data: { brief: null, reason: 'No articles meeting score cutoff' } });
+    return c.json({ ok: true, data: { state: 'empty', title: 'News Brief', edition_label: '', generated_at: Date.now(), window_hours: 12, score_cutoff: 3, bullets: [], next_scheduled_at: null, stale: false } });
   }
 
   const scoreMap = new Map<string, number>();
@@ -159,7 +161,7 @@ briefRoutes.post('/brief/generate', async (c) => {
   );
 
   if (articles.length === 0) {
-    return c.json({ ok: true, data: { brief: null, reason: 'No articles found' } });
+    return c.json({ ok: true, data: { state: 'empty', title: 'News Brief', edition_label: '', generated_at: Date.now(), window_hours: 12, score_cutoff: 3, bullets: [], next_scheduled_at: null, stale: false } });
   }
 
   // Fetch summaries and feed titles for context.
@@ -207,7 +209,18 @@ briefRoutes.post('/brief/generate', async (c) => {
   const { content, usage } = await runChat(ai.provider, ai.apiKey, ai.model, messages);
 
   const parsed = parseJsonResponse(content) as Record<string, unknown> | null;
-  const bullets = Array.isArray(parsed?.bullets) ? parsed!.bullets : [];
+  const rawBullets = Array.isArray(parsed?.bullets) ? (parsed!.bullets as Array<{ text?: string; source_article_ids?: string[] }>) : [];
+
+  // Enrich bullets with article metadata for the iOS client.
+  const candidateMap = new Map(candidates.map(c => [c.id, c]));
+  const bullets = rawBullets.map(b => {
+    const sourceIds = b.source_article_ids ?? [];
+    const sources = sourceIds
+      .map(id => candidateMap.get(id))
+      .filter(Boolean)
+      .map(a => ({ article_id: a!.id, title: a!.title, canonical_url: null }));
+    return { text: b.text ?? '', sources };
+  });
 
   // Save to news_brief_editions.
   const editionType = hour < 12 ? 'morning' : 'evening';

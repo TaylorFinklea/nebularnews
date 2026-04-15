@@ -22,6 +22,7 @@ import { syncRoutes } from './routes/sync';
 import { insightsRoutes } from './routes/insights';
 import { adminRoutes } from './routes/admin';
 import { newsletterRoutes } from './routes/newsletters';
+import { collectionRoutes } from './routes/collections';
 import { handleEmail } from './email/handler';
 import { runIntelligence } from './cron/intelligence';
 import { pollFeeds } from './cron/poll-feeds';
@@ -63,6 +64,7 @@ protectedApi.route('/', syncRoutes);
 protectedApi.route('/', insightsRoutes);
 protectedApi.route('/', adminRoutes);
 protectedApi.route('/', newsletterRoutes);
+protectedApi.route('/', collectionRoutes);
 
 app.route('/api', protectedApi);
 

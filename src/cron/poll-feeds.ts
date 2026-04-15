@@ -33,7 +33,7 @@ export async function pollFeeds(env: Env): Promise<void> {
     db,
     `SELECT id, url, etag, last_modified, error_count, scrape_mode, scrape_provider, feed_type
      FROM feeds
-     WHERE disabled = 0 AND (next_poll_at IS NULL OR next_poll_at <= ?)
+     WHERE disabled = 0 AND feed_type NOT IN ('email_newsletter', 'web_clip') AND (next_poll_at IS NULL OR next_poll_at <= ?)
      ORDER BY next_poll_at ASC
      LIMIT ?`,
     [now, maxFeeds],

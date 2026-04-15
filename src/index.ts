@@ -21,6 +21,8 @@ import { subscriptionRoutes } from './routes/subscription';
 import { syncRoutes } from './routes/sync';
 import { insightsRoutes } from './routes/insights';
 import { adminRoutes } from './routes/admin';
+import { newsletterRoutes } from './routes/newsletters';
+import { handleEmail } from './email/handler';
 import { runIntelligence } from './cron/intelligence';
 import { pollFeeds } from './cron/poll-feeds';
 import { scoreArticles } from './cron/score-articles';
@@ -60,6 +62,7 @@ protectedApi.route('/', subscriptionRoutes);
 protectedApi.route('/', syncRoutes);
 protectedApi.route('/', insightsRoutes);
 protectedApi.route('/', adminRoutes);
+protectedApi.route('/', newsletterRoutes);
 
 app.route('/api', protectedApi);
 
@@ -87,5 +90,12 @@ export default {
         ctx.waitUntil(run('intelligence', () => runIntelligence(env)));
         break;
     }
+  },
+  email: async (
+    message: { from: string; to: string; raw: ReadableStream<Uint8Array>; headers: Headers },
+    env: Env,
+    ctx: ExecutionContext,
+  ) => {
+    ctx.waitUntil(handleEmail(message, env));
   },
 };

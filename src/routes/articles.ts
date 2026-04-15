@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { AppEnv } from '../index';
 import { dbAll, dbGet, dbRun } from '../db/helpers';
 import { nanoid } from 'nanoid';
+import { scrapeAndExtract } from '../lib/scraper';
 
 export const articleRoutes = new Hono<AppEnv>();
 
@@ -292,4 +293,106 @@ articleRoutes.post('/articles/:id/reaction', async (c) => {
   }
 
   return c.json({ ok: true, data: { article_id: articleId, value, reason_codes: reasonCodes } });
+});
+
+// ---------------------------------------------------------------------------
+// POST /articles/clip — save any URL as an article (web clipper)
+// ---------------------------------------------------------------------------
+
+articleRoutes.post('/articles/clip', async (c) => {
+  const userId = c.get('userId');
+  const db = c.env.DB;
+
+  const body = await c.req.json<{ url: string }>();
+  const url = body.url?.trim();
+  if (!url) {
+    return c.json({ ok: false, error: { code: 'bad_request', message: 'url is required' } }, 400);
+  }
+
+  const now = Date.now();
+
+  // Find or create the user's Web Clips feed.
+  const clipFeedUrl = `clip://${userId}`;
+  let clipFeed = await dbGet<{ id: string }>(
+    db,
+    `SELECT id FROM feeds WHERE url = ? AND feed_type = 'web_clip'`,
+    [clipFeedUrl],
+  );
+
+  if (!clipFeed) {
+    const feedId = nanoid();
+    await dbRun(
+      db,
+      `INSERT INTO feeds (id, url, title, feed_type, scrape_mode, disabled, created_at)
+       VALUES (?, ?, 'Web Clips', 'web_clip', 'rss_only', 0, ?)`,
+      [feedId, clipFeedUrl, now],
+    );
+    clipFeed = { id: feedId };
+
+    await dbRun(
+      db,
+      `INSERT OR IGNORE INTO user_feed_subscriptions (id, user_id, feed_id, paused, created_at, updated_at)
+       VALUES (?, ?, ?, 0, ?, ?)`,
+      [nanoid(), userId, clipFeed.id, now, now],
+    );
+  }
+
+  // Check if article already exists.
+  let article = await dbGet<{ id: string; title: string }>(
+    db,
+    `SELECT id, title FROM articles WHERE canonical_url = ?`,
+    [url],
+  );
+
+  if (!article) {
+    // Scrape the URL.
+    try {
+      const result = await scrapeAndExtract(url, c.env);
+
+      const articleId = nanoid();
+      await dbRun(
+        db,
+        `INSERT INTO articles (id, canonical_url, title, author, content_html, content_text, excerpt, word_count, image_url, extraction_method, extraction_quality, fetched_at, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          articleId, url,
+          result.title ?? url, result.author,
+          result.contentHtml, result.contentText, result.excerpt,
+          result.wordCount, result.imageUrl,
+          result.extractionMethod, result.extractionQuality,
+          now, now,
+        ],
+      );
+      article = { id: articleId, title: result.title ?? url };
+    } catch (err) {
+      // Scraping failed — create a minimal article with just the URL.
+      const articleId = nanoid();
+      await dbRun(
+        db,
+        `INSERT INTO articles (id, canonical_url, title, fetched_at, created_at)
+         VALUES (?, ?, ?, ?, ?)`,
+        [articleId, url, url, now, now],
+      );
+      article = { id: articleId, title: url };
+    }
+  }
+
+  // Link to web clips feed.
+  await dbRun(
+    db,
+    `INSERT OR IGNORE INTO article_sources (id, article_id, feed_id, item_guid, created_at)
+     VALUES (?, ?, ?, ?, ?)`,
+    [nanoid(), article.id, clipFeed.id, url, now],
+  );
+
+  // Auto-save the article.
+  await dbRun(
+    db,
+    `INSERT INTO user_article_states (id, user_id, article_id, saved_at, created_at)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(user_id, article_id) DO UPDATE SET saved_at = ?`,
+    [nanoid(), userId, article.id, now, now, now],
+  );
+
+  return c.json({ ok: true, data: { article_id: article.id, title: article.title } });
 });

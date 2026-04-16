@@ -139,7 +139,7 @@ articleRoutes.get('/articles/:id', async (c) => {
   if (!articleRow) return c.json({ ok: false, error: { code: 'not_found', message: 'Article not found' } }, 404);
 
   // Parallel lookups for nested sub-objects
-  const [summaryRow, keyPointsRow, scoreRow, reactionRow, feedbackRows, sourceRow, sourcesRows, tags, tagSuggestions, readStateRow] = await Promise.all([
+  const [summaryRow, keyPointsRow, scoreRow, reactionRow, feedbackRows, sourceRow, sourcesRows, tags, tagSuggestions, readStateRow, highlightRows, annotationRow] = await Promise.all([
     dbGet<{ summary_text: string; provider: string | null; model: string | null; created_at: number }>(db,
       `SELECT summary_text, provider, model, created_at FROM article_summaries WHERE article_id = ? ORDER BY created_at DESC LIMIT 1`,
       [articleId]),
@@ -180,6 +180,15 @@ articleRoutes.get('/articles/:id', async (c) => {
     dbGet<{ is_read: number; saved_at: number | null }>(db,
       `SELECT is_read, saved_at FROM article_read_state WHERE article_id = ? AND user_id = ? LIMIT 1`,
       [articleId, userId]),
+    dbAll<{ id: string; selected_text: string; block_index: number | null; text_offset: number | null; text_length: number | null; note: string | null; color: string; created_at: number; updated_at: number }>(db,
+      `SELECT id, selected_text, block_index, text_offset, text_length, note, color, created_at, updated_at
+       FROM article_highlights WHERE article_id = ? AND user_id = ?
+       ORDER BY block_index, text_offset, created_at`,
+      [articleId, userId]),
+    dbGet<{ id: string; content: string; created_at: number; updated_at: number }>(db,
+      `SELECT id, content, created_at, updated_at FROM article_annotations
+       WHERE article_id = ? AND user_id = ?`,
+      [articleId, userId]),
   ]);
 
   // Fetch reaction reason codes if reaction exists
@@ -206,6 +215,8 @@ articleRoutes.get('/articles/:id', async (c) => {
       tag_suggestions: tagSuggestions,
       is_read: readStateRow?.is_read ?? 0,
       saved_at: readStateRow?.saved_at ?? null,
+      highlights: highlightRows,
+      annotation: annotationRow ?? null,
     },
   });
 });

@@ -1,10 +1,12 @@
 import { Hono } from 'hono';
 import { nanoid } from 'nanoid';
 import type { AppEnv } from '../index';
+import type { Env } from '../env';
 import { dbGet, dbAll, dbRun } from '../db/helpers';
 import { resolveAIKey } from '../lib/ai-key-resolver';
 import { runChat, parseJsonResponse } from '../lib/ai';
 import { recordUsage, checkBudget } from '../lib/rate-limiter';
+import { scrapeAndExtract, type ScrapeProvider } from '../lib/scraper';
 import {
   buildSummarizePrompt,
   buildKeyPointsPrompt,
@@ -47,14 +49,86 @@ async function fetchArticle(
   return article;
 }
 
+// If the RSS item arrived with no body (e.g. Anthropic feeds), transparently
+// deep-fetch the canonical URL before running the AI action. Mirrors the
+// cooldown logic in POST /articles/:id/fetch-content so repeated failures
+// don't hammer Steel/Browserless.
+const ENRICH_FETCH_COOLDOWN_MS = 60 * 60 * 1000;
+
 async function fetchArticleWithContent(
   db: D1Database,
+  env: Env,
   articleId: string,
 ): Promise<{ article: EnrichmentArticle; contentText: string }> {
   const article = await fetchArticle(db, articleId);
-  const contentText = truncateContent(article.content_text);
-  if (!contentText) throw new Error('No article content');
-  return { article, contentText };
+  const initialContent = truncateContent(article.content_text);
+  if (initialContent) return { article, contentText: initialContent };
+
+  const fetchState = await dbGet<{
+    last_fetch_attempt_at: number | null;
+    fetch_attempt_count: number | null;
+  }>(
+    db,
+    `SELECT last_fetch_attempt_at, fetch_attempt_count FROM articles WHERE id = ?`,
+    [articleId],
+  );
+
+  const now = Date.now();
+  const lastAttempt = fetchState?.last_fetch_attempt_at ?? 0;
+  const attempts = fetchState?.fetch_attempt_count ?? 0;
+  if (lastAttempt && attempts > 1 && now - lastAttempt < ENRICH_FETCH_COOLDOWN_MS) {
+    throw new Error('No article content');
+  }
+
+  const feedRow = await dbGet<{ scrape_provider: string | null }>(
+    db,
+    `SELECT f.scrape_provider FROM article_sources src
+     JOIN feeds f ON f.id = src.feed_id
+     WHERE src.article_id = ? AND f.scrape_provider IS NOT NULL
+     LIMIT 1`,
+    [articleId],
+  );
+  const preferredProvider = (feedRow?.scrape_provider as ScrapeProvider | null) ?? undefined;
+
+  try {
+    const result = await scrapeAndExtract(article.canonical_url, env, preferredProvider);
+    await dbRun(
+      db,
+      `UPDATE articles SET
+         content_html = ?, content_text = ?, excerpt = ?,
+         word_count = ?, extraction_method = ?, extraction_quality = ?,
+         title = COALESCE(?, title), author = COALESCE(?, author),
+         image_url = COALESCE(?, image_url),
+         last_fetch_attempt_at = ?,
+         fetch_attempt_count = COALESCE(fetch_attempt_count, 0) + 1,
+         last_fetch_error = NULL
+       WHERE id = ?`,
+      [
+        result.contentHtml, result.contentText, result.excerpt,
+        result.wordCount, result.extractionMethod, result.extractionQuality,
+        result.title, result.author, result.imageUrl,
+        now, articleId,
+      ],
+    );
+    const fresh = truncateContent(result.contentText);
+    if (!fresh) throw new Error('No article content');
+    return {
+      article: { ...article, content_text: result.contentText },
+      contentText: fresh,
+    };
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    await dbRun(
+      db,
+      `UPDATE articles SET
+         last_fetch_attempt_at = ?,
+         fetch_attempt_count = COALESCE(fetch_attempt_count, 0) + 1,
+         last_fetch_error = ?
+       WHERE id = ?`,
+      [now, errMsg.slice(0, 500), articleId],
+    );
+    throw new Error('No article content');
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -69,7 +143,7 @@ enrichRoutes.post('/enrich/:articleId/summarize', async (c) => {
   const ai = await resolveAIKey(db, userId, c.req.raw, c.env);
   if (!ai) return c.json({ ok: false, error: { code: 'no_ai_key', message: 'No AI provider configured' } }, 503);
 
-  const { article, contentText } = await fetchArticleWithContent(db, articleId);
+  const { article, contentText } = await fetchArticleWithContent(db, c.env, articleId);
 
   // Load user's summary preferences.
   const styleRow = await dbGet<{ value: string }>(db, `SELECT value FROM settings WHERE user_id = ? AND key = 'summaryStyle'`, [userId]);
@@ -117,7 +191,7 @@ enrichRoutes.post('/enrich/:articleId/key-points', async (c) => {
   const ai = await resolveAIKey(db, userId, c.req.raw, c.env);
   if (!ai) return c.json({ ok: false, error: { code: 'no_ai_key', message: 'No AI provider configured' } }, 503);
 
-  const { article, contentText } = await fetchArticleWithContent(db, articleId);
+  const { article, contentText } = await fetchArticleWithContent(db, c.env, articleId);
 
   const messages = buildKeyPointsPrompt(
     article.title,
@@ -276,7 +350,7 @@ enrichRoutes.post('/enrich/:articleId/auto-tag', async (c) => {
   const ai = await resolveAIKey(db, userId, c.req.raw, c.env);
   if (!ai) return c.json({ ok: false, error: { code: 'no_ai_key', message: 'No AI provider configured' } }, 503);
 
-  const { article, contentText } = await fetchArticleWithContent(db, articleId);
+  const { article, contentText } = await fetchArticleWithContent(db, c.env, articleId);
 
   // Get existing tags for candidate matching.
   const existingTags = await dbAll<{ id: string; name: string }>(

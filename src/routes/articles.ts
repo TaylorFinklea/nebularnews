@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import type { AppEnv } from '../index';
 import { dbAll, dbGet, dbRun } from '../db/helpers';
 import { nanoid } from 'nanoid';
-import { scrapeAndExtract } from '../lib/scraper';
+import { scrapeAndExtract, type ScrapeProvider } from '../lib/scraper';
 
 export const articleRoutes = new Hono<AppEnv>();
 
@@ -132,7 +132,9 @@ articleRoutes.get('/articles/:id', async (c) => {
 
   const articleRow = await dbGet<Record<string, unknown>>(db,
     `SELECT a.id, a.canonical_url, a.title, a.author, a.published_at, a.fetched_at,
-       a.content_html, a.content_text, a.excerpt, a.word_count, a.image_url, a.status
+       a.content_html, a.content_text, a.excerpt, a.word_count, a.image_url, a.status,
+       a.extraction_method, a.extraction_quality,
+       a.last_fetch_attempt_at, a.fetch_attempt_count, a.last_fetch_error
      FROM articles a WHERE a.id = ?`,
     [articleId]);
 
@@ -304,6 +306,131 @@ articleRoutes.post('/articles/:id/reaction', async (c) => {
   }
 
   return c.json({ ok: true, data: { article_id: articleId, value, reason_codes: reasonCodes } });
+});
+
+// ---------------------------------------------------------------------------
+// POST /articles/:id/fetch-content — on-demand deep scrape of an article
+// ---------------------------------------------------------------------------
+//
+// Fixes the "empty body" problem for feeds (e.g. Anthropic) whose RSS items
+// only carry title + link. Runs the existing Steel → Browserless → fetch+
+// Readability ladder from src/lib/scraper.ts and persists the fresh content
+// back to the articles row. Rate-limited to 1 hour per article after the
+// second attempt unless the caller passes ?force=true.
+
+const FETCH_COOLDOWN_MS = 60 * 60 * 1000;
+
+articleRoutes.post('/articles/:id/fetch-content', async (c) => {
+  const userId = c.get('userId');
+  const db = c.env.DB;
+  const articleId = c.req.param('id');
+  const force = c.req.query('force') === 'true';
+
+  const article = await dbGet<{
+    id: string;
+    canonical_url: string;
+    last_fetch_attempt_at: number | null;
+    fetch_attempt_count: number | null;
+  }>(db,
+    `SELECT id, canonical_url, last_fetch_attempt_at, fetch_attempt_count
+     FROM articles WHERE id = ?`,
+    [articleId]);
+
+  if (!article) {
+    return c.json({ ok: false, error: { code: 'not_found', message: 'Article not found' } }, 404);
+  }
+
+  // Ensure the user actually subscribes to a feed that references this article
+  // (or owns a web clip), matching the access pattern used elsewhere.
+  const access = await dbGet<{ found: number }>(db,
+    `SELECT 1 as found FROM article_sources src
+     JOIN user_feed_subscriptions ufs ON ufs.feed_id = src.feed_id
+     WHERE src.article_id = ? AND ufs.user_id = ?
+     LIMIT 1`,
+    [articleId, userId]);
+
+  if (!access) {
+    return c.json({ ok: false, error: { code: 'forbidden', message: 'Not authorized for this article' } }, 403);
+  }
+
+  const now = Date.now();
+  const attempts = article.fetch_attempt_count ?? 0;
+
+  if (!force && article.last_fetch_attempt_at && attempts > 1) {
+    const elapsed = now - article.last_fetch_attempt_at;
+    if (elapsed < FETCH_COOLDOWN_MS) {
+      const retryAfterSeconds = Math.ceil((FETCH_COOLDOWN_MS - elapsed) / 1000);
+      return c.json({
+        ok: false,
+        error: {
+          code: 'recently_attempted',
+          message: 'A recent fetch attempt is still cooling down. Try again later.',
+          retry_after_seconds: retryAfterSeconds,
+        },
+      }, 429);
+    }
+  }
+
+  // Prefer the provider configured on the originating feed, if any.
+  const feedRow = await dbGet<{ scrape_provider: string | null }>(db,
+    `SELECT f.scrape_provider FROM article_sources src
+     JOIN feeds f ON f.id = src.feed_id
+     WHERE src.article_id = ? AND f.scrape_provider IS NOT NULL
+     LIMIT 1`,
+    [articleId]);
+  const preferredProvider = (feedRow?.scrape_provider as ScrapeProvider | null) ?? undefined;
+
+  try {
+    const result = await scrapeAndExtract(article.canonical_url, c.env, preferredProvider);
+
+    await dbRun(db,
+      `UPDATE articles SET
+         content_html = ?, content_text = ?, excerpt = ?,
+         word_count = ?, extraction_method = ?, extraction_quality = ?,
+         title = COALESCE(?, title), author = COALESCE(?, author),
+         image_url = COALESCE(?, image_url),
+         last_fetch_attempt_at = ?,
+         fetch_attempt_count = COALESCE(fetch_attempt_count, 0) + 1,
+         last_fetch_error = NULL
+       WHERE id = ?`,
+      [
+        result.contentHtml, result.contentText, result.excerpt,
+        result.wordCount, result.extractionMethod, result.extractionQuality,
+        result.title, result.author, result.imageUrl,
+        now, articleId,
+      ],
+    );
+
+    return c.json({
+      ok: true,
+      data: {
+        article_id: articleId,
+        content_html: result.contentHtml,
+        content_text: result.contentText,
+        excerpt: result.excerpt,
+        word_count: result.wordCount,
+        image_url: result.imageUrl,
+        extraction_method: result.extractionMethod,
+        extraction_quality: result.extractionQuality,
+        last_fetch_attempt_at: now,
+        last_fetch_error: null,
+      },
+    });
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    await dbRun(db,
+      `UPDATE articles SET
+         last_fetch_attempt_at = ?,
+         fetch_attempt_count = COALESCE(fetch_attempt_count, 0) + 1,
+         last_fetch_error = ?
+       WHERE id = ?`,
+      [now, errMsg.slice(0, 500), articleId],
+    );
+    return c.json({
+      ok: false,
+      error: { code: 'fetch_failed', message: errMsg },
+    }, 502);
+  }
 });
 
 // ---------------------------------------------------------------------------

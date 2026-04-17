@@ -116,8 +116,20 @@ export async function pollFeeds(env: Env): Promise<void> {
           );
           newArticles++;
 
-          // Scrape full content if feed has scraping enabled
-          if (feed.scrape_mode !== 'rss_only' && (env.STEEL_API_KEY || env.BROWSERLESS_API_KEY)) {
+          // Scrape full content if feed has scraping enabled.
+          //   'rss_only'             → never scrape
+          //   'auto_fetch_on_empty'  → scrape only when RSS item has no usable body
+          //   anything else          → always scrape (preserves prior behavior)
+          const hasScrapers = Boolean(env.STEEL_API_KEY || env.BROWSERLESS_API_KEY);
+          const bodyWordCount = item.contentText
+            ? item.contentText.split(/\s+/).filter(Boolean).length
+            : 0;
+          const isEmptyBody = bodyWordCount < 50;
+          const shouldScrape = hasScrapers
+            && feed.scrape_mode !== 'rss_only'
+            && (feed.scrape_mode !== 'auto_fetch_on_empty' || isEmptyBody);
+
+          if (shouldScrape) {
             try {
               const scrapeUrl = feed.feed_type === 'aggregator' ? canonicalUrl : canonicalUrl;
               const result = await scrapeAndExtract(
@@ -129,13 +141,16 @@ export async function pollFeeds(env: Env): Promise<void> {
                 `UPDATE articles SET content_html = ?, content_text = ?, excerpt = ?,
                   word_count = ?, extraction_method = ?, extraction_quality = ?,
                   title = COALESCE(?, title), author = COALESCE(?, author),
-                  image_url = COALESCE(?, image_url)
+                  image_url = COALESCE(?, image_url),
+                  last_fetch_attempt_at = ?,
+                  fetch_attempt_count = COALESCE(fetch_attempt_count, 0) + 1,
+                  last_fetch_error = NULL
                  WHERE id = ?`,
                 [
                   result.contentHtml, result.contentText, result.excerpt,
                   result.wordCount, result.extractionMethod, result.extractionQuality,
                   result.title, result.author, result.imageUrl,
-                  articleId,
+                  now, articleId,
                 ],
               );
               // Update feed scrape stats
@@ -146,11 +161,19 @@ export async function pollFeeds(env: Env): Promise<void> {
                 [result.extractionQuality, result.extractionQuality, feed.id],
               );
             } catch (scrapeErr) {
-              console.error(`[poll-feeds] Scrape failed for ${canonicalUrl}:`, scrapeErr instanceof Error ? scrapeErr.message : scrapeErr);
+              const errMsg = scrapeErr instanceof Error ? scrapeErr.message : String(scrapeErr);
+              console.error(`[poll-feeds] Scrape failed for ${canonicalUrl}:`, errMsg);
+              await dbRun(db,
+                `UPDATE articles SET last_fetch_attempt_at = ?,
+                  fetch_attempt_count = COALESCE(fetch_attempt_count, 0) + 1,
+                  last_fetch_error = ?
+                 WHERE id = ?`,
+                [now, errMsg.slice(0, 500), articleId],
+              );
               await dbRun(db,
                 `UPDATE feeds SET scrape_error_count = scrape_error_count + 1,
                   last_scrape_error = ? WHERE id = ?`,
-                [String(scrapeErr instanceof Error ? scrapeErr.message : scrapeErr), feed.id],
+                [errMsg, feed.id],
               );
             }
           }

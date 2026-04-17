@@ -1,10 +1,8 @@
 export const MAX_CONTENT_LENGTH = 12_000;
 
-export function truncateContent(text: string | null): string {
+export function truncateContent(text: string | null, maxLength: number = MAX_CONTENT_LENGTH): string {
   if (!text) return '';
-  return text.length > MAX_CONTENT_LENGTH
-    ? text.slice(0, MAX_CONTENT_LENGTH)
-    : text;
+  return text.length > maxLength ? text.slice(0, maxLength) : text;
 }
 
 export function normalizeParagraphSummary(text: string): string {

@@ -46,17 +46,48 @@ feedRoutes.get('/feeds', async (c) => {
   return c.json({ ok: true, data: feeds });
 });
 
+// Whitelist of scrape_mode values the client may set.
+//   'rss_only'            → never deep-scrape
+//   'auto_fetch_on_empty' → deep-scrape when RSS item has no usable body
+//   'always'              → deep-scrape every item on ingestion
+const ALLOWED_SCRAPE_MODES = new Set(['rss_only', 'auto_fetch_on_empty', 'always']);
+
+function sanitizeScrapeMode(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  return ALLOWED_SCRAPE_MODES.has(value) ? value : null;
+}
+
 // POST /feeds — subscribe to a feed by url
 feedRoutes.post('/feeds', async (c) => {
   const userId = c.get('userId');
-  const { url } = await c.req.json<{ url: string }>();
+  const body = await c.req.json<{ url: string; scrape_mode?: string; scrapeMode?: string }>();
+  const url = body.url;
+  const requestedMode = sanitizeScrapeMode(body.scrape_mode ?? body.scrapeMode);
 
   let feed = await dbGet<Feed>(c.env.DB, `SELECT * FROM feeds WHERE url = ?`, [url]);
 
   if (!feed) {
     const feedId = nanoid();
-    await dbRun(c.env.DB, `INSERT INTO feeds (id, url) VALUES (?, ?)`, [feedId, url]);
+    if (requestedMode) {
+      await dbRun(
+        c.env.DB,
+        `INSERT INTO feeds (id, url, scrape_mode) VALUES (?, ?, ?)`,
+        [feedId, url, requestedMode],
+      );
+    } else {
+      await dbRun(c.env.DB, `INSERT INTO feeds (id, url) VALUES (?, ?)`, [feedId, url]);
+    }
     feed = { id: feedId, url, title: null, site_url: null };
+  } else if (requestedMode) {
+    // Upgrade the existing feed's scrape_mode if the caller asked for a more
+    // capable mode (e.g. subscribing to a subreddit wants auto_fetch_on_empty,
+    // but don't downgrade a feed an admin has set to 'always').
+    await dbRun(
+      c.env.DB,
+      `UPDATE feeds SET scrape_mode = ?
+       WHERE id = ? AND scrape_mode = 'rss_only'`,
+      [requestedMode, feed.id],
+    );
   }
 
   const subId = nanoid();
@@ -70,6 +101,31 @@ feedRoutes.post('/feeds', async (c) => {
   );
 
   return c.json({ ok: true, data: { id: feed.id } });
+});
+
+// PATCH /feeds/:id — update feed-level settings (shared across all subscribers)
+feedRoutes.patch('/feeds/:id', async (c) => {
+  const feedId = c.req.param('id');
+  const body = await c.req.json<{ scrape_mode?: string; scrapeMode?: string }>();
+  const mode = sanitizeScrapeMode(body.scrape_mode ?? body.scrapeMode);
+
+  if (!mode) {
+    return c.json({ ok: false, error: { code: 'bad_request', message: 'scrape_mode must be one of rss_only, auto_fetch_on_empty, always' } }, 400);
+  }
+
+  // Gate on subscription so users can only touch feeds they follow.
+  const userId = c.get('userId');
+  const sub = await dbGet<{ id: string }>(
+    c.env.DB,
+    `SELECT id FROM user_feed_subscriptions WHERE user_id = ? AND feed_id = ?`,
+    [userId, feedId],
+  );
+  if (!sub) {
+    return c.json({ ok: false, error: { code: 'forbidden', message: 'Not subscribed to this feed' } }, 403);
+  }
+
+  await dbRun(c.env.DB, `UPDATE feeds SET scrape_mode = ? WHERE id = ?`, [mode, feedId]);
+  return c.json({ ok: true, data: { id: feedId, scrape_mode: mode } });
 });
 
 // DELETE /feeds/:id — unsubscribe from a feed
@@ -236,7 +292,7 @@ feedRoutes.post('/feeds/backfill-scrape', async (c) => {
   let errors = 0;
   for (const article of articles) {
     try {
-      const result = await scrapeAndExtract(article.canonical_url, c.env, article.scrape_provider || undefined);
+      const result = await scrapeAndExtract(article.canonical_url, c.env, (article.scrape_provider as 'steel' | 'browserless' | null) || undefined);
       await dbRun(db,
         `UPDATE articles SET content_html = ?, content_text = ?, excerpt = ?,
           word_count = ?, extraction_method = ?, extraction_quality = ?,

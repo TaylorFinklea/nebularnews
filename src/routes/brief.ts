@@ -66,141 +66,66 @@ briefRoutes.post('/brief/generate', async (c) => {
   if (!ai) return c.json({ ok: false, error: { code: 'no_ai_key', message: 'No AI provider configured' } }, 503);
 
   // Load user's brief settings.
-  const lookbackSetting = await dbGet<{ value: string }>(db, `SELECT value FROM settings WHERE user_id = ? AND key = 'newsBriefLookbackHours'`, [userId]);
-  const cutoffSetting = await dbGet<{ value: string }>(db, `SELECT value FROM settings WHERE user_id = ? AND key = 'newsBriefScoreCutoff'`, [userId]);
+  const [lookbackSetting, cutoffSetting] = await Promise.all([
+    dbGet<{ value: string }>(db, `SELECT value FROM settings WHERE user_id = ? AND key = 'newsBriefLookbackHours'`, [userId]),
+    dbGet<{ value: string }>(db, `SELECT value FROM settings WHERE user_id = ? AND key = 'newsBriefScoreCutoff'`, [userId]),
+  ]);
   const lookbackHours = body.lookback_hours ?? (parseInt(lookbackSetting?.value ?? '') || DEFAULT_LOOKBACK_HOURS);
   const scoreCutoff = parseInt(cutoffSetting?.value ?? '') || DEFAULT_SCORE_CUTOFF;
-
-  // Get user's subscribed (non-paused) feed IDs.
-  const subFeeds = await dbAll<{ feed_id: string }>(
-    db,
-    `SELECT feed_id FROM user_feed_subscriptions WHERE user_id = ? AND paused = 0`,
-    [userId],
-  );
-
-  if (subFeeds.length === 0) {
-    return c.json({ ok: true, data: { state: 'empty', title: 'News Brief', edition_label: '', generated_at: Date.now(), window_hours: 12, score_cutoff: 3, bullets: [], next_scheduled_at: null, stale: false } });
-  }
-
-  const feedIds = subFeeds.map((s) => s.feed_id);
-  const placeholders = feedIds.map(() => '?').join(', ');
-
-  // Get recent article IDs from subscribed feeds within the lookback window.
   const cutoffMs = Date.now() - lookbackHours * 3_600_000;
-  const sources = await dbAll<{ article_id: string; feed_id: string }>(
-    db,
-    `SELECT DISTINCT src.article_id, src.feed_id
-     FROM article_sources src
-     WHERE src.feed_id IN (${placeholders})
-       AND src.created_at >= ?`,
-    [...feedIds, cutoffMs],
-  );
 
-  if (sources.length === 0) {
-    return c.json({ ok: true, data: { state: 'empty', title: 'News Brief', edition_label: '', generated_at: Date.now(), window_hours: 12, score_cutoff: 3, bullets: [], next_scheduled_at: null, stale: false } });
+  // Single JOIN query — replaces the chain of IN-clause queries that blow past
+  // D1's ~100 SQL variable limit when a user has many feeds or a long lookback window.
+  // Variable count is constant (5-6) regardless of data volume.
+  const topicClause = topicTagId
+    ? `AND EXISTS (SELECT 1 FROM article_tags at2 WHERE at2.article_id = a.id AND at2.tag_id = ?)`
+    : '';
+  const params: unknown[] = [userId, userId, cutoffMs, scoreCutoff];
+  if (topicTagId) params.push(topicTagId);
+  params.push(MAX_ARTICLES);
+
+  const rows = await dbAll<{
+    id: string; title: string | null;
+    published_at: number | null; fetched_at: number | null;
+    score: number; feed_title: string | null;
+  }>(db, `
+    SELECT
+      a.id, a.title, a.published_at, a.fetched_at,
+      MAX(COALESCE(s.score, 0)) AS score,
+      MIN(f.title) AS feed_title
+    FROM article_sources src
+    JOIN user_feed_subscriptions ufs ON ufs.feed_id = src.feed_id AND ufs.user_id = ? AND ufs.paused = 0
+    JOIN articles a ON a.id = src.article_id
+    LEFT JOIN article_scores s ON s.article_id = src.article_id AND s.user_id = ?
+    LEFT JOIN feeds f ON f.id = src.feed_id
+    WHERE src.created_at >= ?
+      AND COALESCE(s.score, 0) >= ?
+      ${topicClause}
+    GROUP BY a.id
+    ORDER BY score DESC, COALESCE(a.published_at, a.fetched_at) DESC
+    LIMIT ?
+  `, params);
+
+  if (rows.length === 0) {
+    return c.json({ ok: true, data: { state: 'empty', title: 'News Brief', edition_label: '', generated_at: Date.now(), window_hours: lookbackHours, score_cutoff: scoreCutoff, bullets: [], next_scheduled_at: null, stale: false } });
   }
 
-  const articleIds = [...new Set(sources.map((s) => s.article_id))];
-  const articlePlaceholders = articleIds.map(() => '?').join(', ');
-
-  // Build article-to-feed map.
-  const articleFeedMap = new Map<string, string>();
-  for (const src of sources) {
-    if (!articleFeedMap.has(src.article_id)) {
-      articleFeedMap.set(src.article_id, src.feed_id);
-    }
-  }
-
-  // If topic filter, narrow to articles with that tag.
-  let filteredArticleIds = articleIds;
-  if (topicTagId) {
-    const taggedRows = await dbAll<{ article_id: string }>(
+  // Fetch summaries for top articles. Bounded by MAX_ARTICLES so no IN-clause risk.
+  const candidates = await Promise.all(rows.map(async (row) => {
+    const summaryRow = await dbGet<{ summary_text: string }>(
       db,
-      `SELECT article_id FROM article_tags WHERE tag_id = ? AND article_id IN (${articlePlaceholders})`,
-      [topicTagId, ...articleIds],
+      `SELECT summary_text FROM article_summaries WHERE article_id = ? ORDER BY created_at DESC LIMIT 1`,
+      [row.id],
     );
-    filteredArticleIds = taggedRows.map(r => r.article_id);
-    if (filteredArticleIds.length === 0) {
-      return c.json({ ok: true, data: { state: 'empty', title: 'News Brief', edition_label: '', generated_at: Date.now(), window_hours: 12, score_cutoff: 3, bullets: [], next_scheduled_at: null, stale: false } });
-    }
-  }
-
-  const filteredPlaceholders = filteredArticleIds.map(() => '?').join(', ');
-
-  // Get scores for these articles (only those meeting cutoff).
-  const scores = await dbAll<{ article_id: string; score: number }>(
-    db,
-    `SELECT article_id, score FROM article_scores
-     WHERE user_id = ? AND article_id IN (${filteredPlaceholders}) AND score >= ?
-     ORDER BY score DESC`,
-    [userId, ...filteredArticleIds, scoreCutoff],
-  );
-
-  if (scores.length === 0) {
-    return c.json({ ok: true, data: { state: 'empty', title: 'News Brief', edition_label: '', generated_at: Date.now(), window_hours: 12, score_cutoff: 3, bullets: [], next_scheduled_at: null, stale: false } });
-  }
-
-  const scoreMap = new Map<string, number>();
-  for (const s of scores) {
-    scoreMap.set(s.article_id, s.score);
-  }
-
-  const scoredArticleIds = scores
-    .slice(0, MAX_ARTICLES)
-    .map((s) => s.article_id);
-
-  const scoredPlaceholders = scoredArticleIds.map(() => '?').join(', ');
-
-  // Fetch article data.
-  const articles = await dbAll<{
-    id: string;
-    title: string | null;
-    published_at: number | null;
-    fetched_at: number | null;
-  }>(
-    db,
-    `SELECT id, title, published_at, fetched_at FROM articles WHERE id IN (${scoredPlaceholders})`,
-    scoredArticleIds,
-  );
-
-  if (articles.length === 0) {
-    return c.json({ ok: true, data: { state: 'empty', title: 'News Brief', edition_label: '', generated_at: Date.now(), window_hours: 12, score_cutoff: 3, bullets: [], next_scheduled_at: null, stale: false } });
-  }
-
-  // Fetch summaries and feed titles for context.
-  const candidatePromises = articles.map(async (article) => {
-    const [summaryRow, feedRow] = await Promise.all([
-      dbGet<{ summary_text: string }>(
-        db,
-        `SELECT summary_text FROM article_summaries WHERE article_id = ? ORDER BY created_at DESC LIMIT 1`,
-        [article.id],
-      ),
-      dbGet<{ title: string }>(
-        db,
-        `SELECT title FROM feeds WHERE id = ?`,
-        [articleFeedMap.get(article.id) ?? ''],
-      ),
-    ]);
-
     return {
-      id: article.id,
-      title: article.title ?? 'Untitled',
-      sourceName: feedRow?.title ?? null,
-      publishedAt: article.published_at ?? article.fetched_at ?? null,
-      effectiveScore: scoreMap.get(article.id) ?? 3,
+      id: row.id,
+      title: row.title ?? 'Untitled',
+      sourceName: row.feed_title ?? null,
+      publishedAt: row.published_at ?? row.fetched_at ?? null,
+      effectiveScore: row.score,
       context: summaryRow?.summary_text ?? '',
     };
-  });
-
-  const candidates = await Promise.all(candidatePromises);
-
-  // Sort candidates: highest score first, then most recent.
-  candidates.sort((a, b) => {
-    if (b.effectiveScore !== a.effectiveScore) {
-      return b.effectiveScore - a.effectiveScore;
-    }
-    return (b.publishedAt ?? 0) - (a.publishedAt ?? 0);
-  });
+  }));
 
   const hour = new Date().getUTCHours();
   const windowLabel = hour < 12 ? 'Morning Brief' : 'Evening Brief';

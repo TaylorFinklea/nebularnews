@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
-import { nanoid } from 'nanoid';
 import type { AppEnv } from '../index';
-import { dbGet, dbAll, dbRun } from '../db/helpers';
+import { dbGet, dbAll } from '../db/helpers';
 import { resolveAIKey } from '../lib/ai-key-resolver';
 import { runChat, parseJsonResponse } from '../lib/ai';
 import { buildNewsBriefPrompt } from '../lib/prompts';
@@ -226,19 +225,8 @@ briefRoutes.post('/brief/generate', async (c) => {
     return { text: b.text ?? '', sources };
   });
 
-  // Save to news_brief_editions.
   const editionType = hour < 12 ? 'morning' : 'evening';
-  const briefText = JSON.stringify(bullets);
-  const articleIdsJson = JSON.stringify(candidates.map((c) => c.id));
-  const briefId = nanoid();
   const now = Date.now();
-
-  await dbRun(
-    db,
-    `INSERT INTO news_brief_editions (id, user_id, edition_type, brief_text, article_ids_json, provider, model, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [briefId, userId, editionType, briefText, articleIdsJson, ai.provider, ai.model, now],
-  );
 
   await recordUsage(db, userId, ai.provider, ai.model, usage, 'brief', ai.isByok);
 

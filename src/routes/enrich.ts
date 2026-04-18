@@ -169,9 +169,9 @@ enrichRoutes.post('/enrich/:articleId/summarize', async (c) => {
   const now = Date.now();
   await dbRun(
     db,
-    `INSERT INTO article_summaries (id, article_id, summary_text, length_category, style, provider, model, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [nanoid(), articleId, summary, length, style, ai.provider, ai.model, now],
+    `INSERT INTO article_summaries (id, article_id, summary_text, provider, model, created_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [nanoid(), articleId, summary, ai.provider, ai.model, now],
   );
 
   await recordUsage(db, userId, ai.provider, ai.model, usage, 'summarize', ai.isByok);

@@ -36,7 +36,7 @@ adminRoutes.get('/admin/users', async (c) => {
       dbGet<{ tier: string; expires_at: number }>(db, `SELECT tier, expires_at FROM user_subscriptions WHERE user_id = ? LIMIT 1`, [u.id]),
       dbGet<{ total_tokens: number }>(db, `SELECT COALESCE(SUM(tokens_input + tokens_output), 0) AS total_tokens FROM ai_usage WHERE user_id = ? AND created_at >= ?`, [u.id, Date.now() - 7 * 24 * 60 * 60 * 1000]),
       dbGet<{ cnt: number }>(db, `SELECT COUNT(*) AS cnt FROM user_feed_subscriptions WHERE user_id = ?`, [u.id]),
-      dbGet<{ read_count: number; last_active: number | null }>(db, `SELECT COUNT(CASE WHEN read_at IS NOT NULL THEN 1 END) AS read_count, MAX(COALESCE(read_at, created_at)) AS last_active FROM user_article_states WHERE user_id = ?`, [u.id]),
+      dbGet<{ read_count: number; last_active: number | null }>(db, `SELECT COUNT(CASE WHEN is_read = 1 THEN 1 END) AS read_count, MAX(updated_at) AS last_active FROM article_read_state WHERE user_id = ?`, [u.id]),
     ]);
 
     enriched.push({
@@ -85,7 +85,7 @@ adminRoutes.get('/admin/feeds', async (c) => {
     subscriber_count: number;
   }>(
     db,
-    `SELECT f.id, f.title, f.url, f.feed_type, f.error_count, f.last_polled_at,
+    `SELECT f.id, COALESCE(f.title, f.url) AS title, f.url, f.feed_type, f.error_count, f.last_polled_at,
             f.scrape_mode, f.scrape_error_count, f.avg_extraction_quality,
             (SELECT COUNT(*) FROM user_feed_subscriptions ufs WHERE ufs.feed_id = f.id) AS subscriber_count
      FROM feeds f

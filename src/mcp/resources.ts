@@ -133,11 +133,11 @@ async function readReadingHistory(ctx: ResourceContext) {
     title: string; read_at: number;
   }>(
     ctx.db,
-    `SELECT a.title, uas.read_at
-     FROM user_article_states uas
+    `SELECT a.title, uas.updated_at AS read_at
+     FROM article_read_state uas
      JOIN articles a ON a.id = uas.article_id
-     WHERE uas.user_id = ? AND uas.read_at IS NOT NULL
-     ORDER BY uas.read_at DESC
+     WHERE uas.user_id = ? AND uas.is_read = 1
+     ORDER BY uas.updated_at DESC
      LIMIT 20`,
     [ctx.userId],
   );

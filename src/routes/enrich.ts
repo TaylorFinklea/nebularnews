@@ -232,7 +232,7 @@ enrichRoutes.post('/enrich/:articleId/score', async (c) => {
   // Get user's preference profile.
   const profile = await dbGet<{ profile_text: string; version: number }>(
     db,
-    `SELECT profile_text, version FROM preference_profiles WHERE user_id = ? LIMIT 1`,
+    `SELECT profile_text, version FROM preference_profile WHERE user_id = ? LIMIT 1`,
     [userId],
   );
 
@@ -485,9 +485,9 @@ enrichRoutes.post('/enrich/batch', async (c) => {
           if (sumParsed) {
             const summaryText = normalizeParagraphSummary(String(sumParsed.summary ?? sumParsed.paragraph ?? ''));
             await dbRun(db,
-              `INSERT INTO article_summaries (id, article_id, summary_text, length_category, style, provider, model, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-              [nanoid(), articleId, summaryText, summaryLength, summaryStyle, ai.provider, ai.model, Date.now()],
+              `INSERT INTO article_summaries (id, article_id, summary_text, provider, model, created_at)
+               VALUES (?, ?, ?, ?, ?, ?)`,
+              [nanoid(), articleId, summaryText, ai.provider, ai.model, Date.now()],
             );
           }
           await recordUsage(db, userId, ai.provider, ai.model, sumUsage, 'enrich_batch', ai.isByok);

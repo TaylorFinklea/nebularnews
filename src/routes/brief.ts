@@ -92,12 +92,15 @@ briefRoutes.post('/brief/generate', async (c) => {
     SELECT
       a.id, a.title, a.published_at, a.fetched_at,
       MAX(COALESCE(s.score, 0)) AS score,
-      MIN(f.title) AS feed_title
+      (SELECT f.title FROM feeds f
+         JOIN article_sources src2 ON src2.feed_id = f.id
+         WHERE src2.article_id = a.id
+         ORDER BY src2.created_at ASC
+         LIMIT 1) AS feed_title
     FROM article_sources src
     JOIN user_feed_subscriptions ufs ON ufs.feed_id = src.feed_id AND ufs.user_id = ? AND ufs.paused = 0
     JOIN articles a ON a.id = src.article_id
     LEFT JOIN article_scores s ON s.article_id = src.article_id AND s.user_id = ?
-    LEFT JOIN feeds f ON f.id = src.feed_id
     WHERE src.created_at >= ?
       AND COALESCE(s.score, 0) >= ?
       ${topicClause}

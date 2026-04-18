@@ -38,12 +38,11 @@ syncRoutes.post('/sync/enrichment', async (c) => {
     case 'summary': {
       await dbRun(
         db,
-        `INSERT INTO article_summaries (id, article_id, summary_text, length_category, style, provider, model, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO article_summaries (id, article_id, summary_text, provider, model, created_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
         [
           nanoid(), body.article_id,
-          body.result.summary_text ?? '', body.result.length_category ?? 'short',
-          body.result.style ?? 'concise', provider, model, now,
+          body.result.summary_text ?? '', provider, model, now,
         ],
       );
       break;

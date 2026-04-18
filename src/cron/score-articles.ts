@@ -123,22 +123,34 @@ export async function scoreArticles(env: Env): Promise<void> {
       );
       const userTagSet = new Set(userTags.map((t) => t.name_normalized));
 
-      // Pre-load behavioral signals: save and dismiss rates per feed
+      // Pre-load behavioral signals: save and dismiss rates per feed.
+      // Saves live in article_read_state.saved_at; dismissals live in
+      // article_reactions.value = -1 (no dismissed_at column after the D1 migration).
       const feedBehavior = new Map<string, { saves: number; dismisses: number; total: number }>();
-      const behaviorRows = await dbAll<{ feed_id: string; saved_at: number | null; dismissed_at: number | null }>(
+      const behaviorRows = await dbAll<{ feed_id: string; action: 'read' | 'save' | 'dismiss' }>(
         db,
-        `SELECT asrc.feed_id, uas.saved_at, uas.dismissed_at
-         FROM user_article_states uas
+        `SELECT asrc.feed_id, 'read' AS action
+         FROM article_read_state uas
          JOIN article_sources asrc ON asrc.article_id = uas.article_id
-         WHERE uas.user_id = ?`,
-        [user_id],
+         WHERE uas.user_id = ? AND uas.is_read = 1
+         UNION ALL
+         SELECT asrc.feed_id, 'save' AS action
+         FROM article_read_state uas
+         JOIN article_sources asrc ON asrc.article_id = uas.article_id
+         WHERE uas.user_id = ? AND uas.saved_at IS NOT NULL
+         UNION ALL
+         SELECT asrc.feed_id, 'dismiss' AS action
+         FROM article_reactions ar
+         JOIN article_sources asrc ON asrc.article_id = ar.article_id
+         WHERE ar.user_id = ? AND ar.value = -1`,
+        [user_id, user_id, user_id],
       );
       for (const row of behaviorRows) {
         if (!feedBehavior.has(row.feed_id)) feedBehavior.set(row.feed_id, { saves: 0, dismisses: 0, total: 0 });
         const stats = feedBehavior.get(row.feed_id)!;
         stats.total++;
-        if (row.saved_at) stats.saves++;
-        if (row.dismissed_at) stats.dismisses++;
+        if (row.action === 'save') stats.saves++;
+        else if (row.action === 'dismiss') stats.dismisses++;
       }
 
       // Score each article

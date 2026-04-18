@@ -115,10 +115,10 @@ insightsRoutes.get('/insights/weekly', async (c) => {
   }>(
     db,
     `SELECT
-       COUNT(CASE WHEN uas.read_at IS NOT NULL THEN 1 END) AS articles_read,
+       COUNT(CASE WHEN uas.is_read = 1 THEN 1 END) AS articles_read,
        COUNT(*) AS total_articles
-     FROM user_article_states uas
-     WHERE uas.user_id = ? AND uas.created_at >= ?`,
+     FROM article_read_state uas
+     WHERE uas.user_id = ? AND uas.updated_at >= ?`,
     [userId, weekAgo],
   );
 
@@ -127,8 +127,8 @@ insightsRoutes.get('/insights/weekly', async (c) => {
     `SELECT t.name, COUNT(DISTINCT at2.article_id) AS cnt
      FROM tags t
      JOIN article_tags at2 ON at2.tag_id = t.id
-     JOIN user_article_states uas ON uas.article_id = at2.article_id AND uas.user_id = ?
-     WHERE uas.read_at IS NOT NULL AND uas.read_at >= ?
+     JOIN article_read_state uas ON uas.article_id = at2.article_id AND uas.user_id = ?
+     WHERE uas.is_read = 1 AND uas.updated_at >= ?
      GROUP BY t.id
      ORDER BY cnt DESC
      LIMIT 5`,
@@ -139,9 +139,9 @@ insightsRoutes.get('/insights/weekly', async (c) => {
     db,
     `SELECT f.title, COUNT(DISTINCT uas.article_id) AS cnt
      FROM feeds f
-     JOIN articles a ON a.feed_id = f.id
-     JOIN user_article_states uas ON uas.article_id = a.id AND uas.user_id = ?
-     WHERE uas.read_at IS NOT NULL AND uas.read_at >= ?
+     JOIN article_sources asrc ON asrc.feed_id = f.id
+     JOIN article_read_state uas ON uas.article_id = asrc.article_id AND uas.user_id = ?
+     WHERE uas.is_read = 1 AND uas.updated_at >= ?
      GROUP BY f.id
      ORDER BY cnt DESC
      LIMIT 5`,

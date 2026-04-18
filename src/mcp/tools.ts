@@ -368,8 +368,10 @@ async function saveArticle(args: Record<string, unknown>, ctx: ToolContext): Pro
   const now = Date.now();
   await dbGet(
     ctx.db,
-    `UPDATE user_article_states SET saved_at = ? WHERE user_id = ? AND article_id = ?`,
-    [now, ctx.userId, articleId],
+    `INSERT INTO article_read_state (user_id, article_id, is_read, updated_at, saved_at)
+     VALUES (?, ?, 0, ?, ?)
+     ON CONFLICT(user_id, article_id) DO UPDATE SET saved_at = excluded.saved_at, updated_at = excluded.updated_at`,
+    [ctx.userId, articleId, now, now],
   );
 
   return { content: [{ type: 'text', text: `Saved "${article.title}" to your bookmarks.` }] };

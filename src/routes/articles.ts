@@ -526,10 +526,10 @@ articleRoutes.post('/articles/clip', async (c) => {
   // Auto-save the article.
   await dbRun(
     db,
-    `INSERT INTO user_article_states (id, user_id, article_id, saved_at, created_at)
-     VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT(user_id, article_id) DO UPDATE SET saved_at = ?`,
-    [nanoid(), userId, article.id, now, now, now],
+    `INSERT INTO article_read_state (user_id, article_id, is_read, updated_at, saved_at)
+     VALUES (?, ?, 0, ?, ?)
+     ON CONFLICT(user_id, article_id) DO UPDATE SET saved_at = excluded.saved_at, updated_at = excluded.updated_at`,
+    [userId, article.id, now, now],
   );
 
   return c.json({ ok: true, data: { article_id: article.id, title: article.title } });

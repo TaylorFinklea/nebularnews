@@ -82,13 +82,23 @@ interface ReadabilityResult {
 }
 
 function extractWithReadability(html: string, url: string): ReadabilityResult {
-  const { document } = parseHTML(html);
+  let document: ReturnType<typeof parseHTML>['document'];
+  try {
+    ({ document } = parseHTML(html));
+  } catch {
+    return { title: null, author: null, contentHtml: '', contentText: '', excerpt: null, imageUrl: null, wordCount: 0 };
+  }
   if (!document) {
     return { title: null, author: null, contentHtml: '', contentText: '', excerpt: null, imageUrl: null, wordCount: 0 };
   }
 
   const reader = new Readability(document as any);
-  const article = reader.parse();
+  let article: ReturnType<typeof reader.parse> | null;
+  try {
+    article = reader.parse();
+  } catch {
+    return { title: null, author: null, contentHtml: '', contentText: '', excerpt: null, imageUrl: null, wordCount: 0 };
+  }
 
   if (!article || !article.textContent?.trim()) {
     return { title: null, author: null, contentHtml: '', contentText: '', excerpt: null, imageUrl: null, wordCount: 0 };

@@ -194,6 +194,76 @@ adminRoutes.get('/admin/health', async (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// GET /admin/scraping-stats — deep-fetch usage and error overview
+// ---------------------------------------------------------------------------
+
+adminRoutes.get('/admin/scraping-stats', async (c) => {
+  const db = c.env.DB;
+  const now = Date.now();
+  const hourAgo = now - 60 * 60 * 1000;
+  const dayAgo = now - 24 * 60 * 60 * 1000;
+
+  const [fetched1h, fetched24h, onCooldown, withErrors, avgQuality, byMode, recentErrors] = await Promise.all([
+    dbGet<{ cnt: number }>(
+      db,
+      `SELECT COUNT(*) AS cnt FROM articles WHERE last_fetch_attempt_at >= ? AND fetch_attempt_count > 0`,
+      [hourAgo],
+    ),
+    dbGet<{ cnt: number }>(
+      db,
+      `SELECT COUNT(*) AS cnt FROM articles WHERE last_fetch_attempt_at >= ? AND fetch_attempt_count > 0`,
+      [dayAgo],
+    ),
+    dbGet<{ cnt: number }>(
+      db,
+      `SELECT COUNT(*) AS cnt FROM articles WHERE fetch_attempt_count > 1 AND last_fetch_attempt_at >= ?`,
+      [hourAgo],
+    ),
+    dbGet<{ cnt: number }>(
+      db,
+      `SELECT COUNT(*) AS cnt FROM articles WHERE last_fetch_error IS NOT NULL`,
+    ),
+    dbGet<{ avg_quality: number | null }>(
+      db,
+      `SELECT AVG(extraction_quality) AS avg_quality FROM articles WHERE fetch_attempt_count > 0 AND extraction_quality IS NOT NULL AND last_fetch_attempt_at >= ?`,
+      [dayAgo],
+    ),
+    dbAll<{ scrape_mode: string; fetch_count: number }>(
+      db,
+      `SELECT f.scrape_mode, COUNT(DISTINCT a.id) AS fetch_count
+       FROM articles a
+       JOIN article_sources ars ON ars.article_id = a.id
+       JOIN feeds f ON f.id = ars.feed_id
+       WHERE a.fetch_attempt_count > 0 AND a.last_fetch_attempt_at >= ?
+       GROUP BY f.scrape_mode`,
+      [dayAgo],
+    ),
+    dbAll<{ article_id: string; title: string | null; error: string; attempted_at: number; feed_title: string | null }>(
+      db,
+      `SELECT a.id AS article_id, a.title, a.last_fetch_error AS error, a.last_fetch_attempt_at AS attempted_at,
+              (SELECT f.title FROM article_sources ars JOIN feeds f ON f.id = ars.feed_id WHERE ars.article_id = a.id LIMIT 1) AS feed_title
+       FROM articles a
+       WHERE a.last_fetch_error IS NOT NULL
+       ORDER BY a.last_fetch_attempt_at DESC
+       LIMIT 20`,
+    ),
+  ]);
+
+  return c.json({
+    ok: true,
+    data: {
+      fetched_1h: fetched1h?.cnt ?? 0,
+      fetched_24h: fetched24h?.cnt ?? 0,
+      on_cooldown: onCooldown?.cnt ?? 0,
+      total_with_errors: withErrors?.cnt ?? 0,
+      avg_extraction_quality_24h: avgQuality?.avg_quality ?? null,
+      by_scrape_mode: byMode,
+      recent_errors: recentErrors,
+    },
+  });
+});
+
+// ---------------------------------------------------------------------------
 // GET /admin/me — check if current user is admin
 // ---------------------------------------------------------------------------
 

@@ -264,6 +264,73 @@ adminRoutes.get('/admin/scraping-stats', async (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// GET /admin/tool-call-stats — M11 tool-calling usage overview
+// ---------------------------------------------------------------------------
+
+adminRoutes.get('/admin/tool-call-stats', async (c) => {
+  const db = c.env.DB;
+  const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+
+  type Row = { tool_calls_json: string; created_at: number };
+  const rows = await dbAll<Row>(
+    db,
+    `SELECT tool_calls_json, created_at
+     FROM chat_messages
+     WHERE tool_calls_json IS NOT NULL AND created_at >= ?
+     ORDER BY created_at DESC
+     LIMIT 1000`,
+    [weekAgo],
+  );
+
+  type Call = { kind: string; name: string; succeeded?: boolean };
+  type Agg = { count: number; succeeded: number; failed: number; lastAt: number };
+  const byTool = new Map<string, Agg>();
+  let totalCalls = 0;
+  let serverCalls = 0;
+  let clientCalls = 0;
+
+  for (const row of rows) {
+    let calls: Call[] = [];
+    try { calls = JSON.parse(row.tool_calls_json) as Call[]; } catch { continue; }
+    for (const call of calls) {
+      totalCalls++;
+      if (call.kind === 'server') serverCalls++;
+      else if (call.kind === 'client') clientCalls++;
+
+      const agg = byTool.get(call.name) ?? { count: 0, succeeded: 0, failed: 0, lastAt: 0 };
+      agg.count++;
+      if (call.succeeded === true) agg.succeeded++;
+      else if (call.succeeded === false) agg.failed++;
+      agg.lastAt = Math.max(agg.lastAt, row.created_at);
+      byTool.set(call.name, agg);
+    }
+  }
+
+  const byToolSorted = [...byTool.entries()]
+    .map(([name, agg]) => ({
+      name,
+      count: agg.count,
+      succeeded: agg.succeeded,
+      failed: agg.failed,
+      success_rate: agg.count > 0 ? agg.succeeded / agg.count : null,
+      last_at: agg.lastAt,
+    }))
+    .sort((a, b) => b.count - a.count);
+
+  return c.json({
+    ok: true,
+    data: {
+      window_days: 7,
+      total_calls: totalCalls,
+      server_calls: serverCalls,
+      client_calls: clientCalls,
+      messages_with_tools: rows.length,
+      by_tool: byToolSorted,
+    },
+  });
+});
+
+// ---------------------------------------------------------------------------
 // GET /admin/me — check if current user is admin
 // ---------------------------------------------------------------------------
 

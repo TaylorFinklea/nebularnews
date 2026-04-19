@@ -3,9 +3,10 @@ import { nanoid } from 'nanoid';
 import type { AppEnv } from '../index';
 import { dbGet, dbAll, dbRun } from '../db/helpers';
 import { resolveAIKey } from '../lib/ai-key-resolver';
-import { runChat, runChatStreaming, type ChatMessage } from '../lib/ai';
+import { runChat, runChatStreaming, runChatWithTools, type ChatMessage, type ExtendedChatMessage, type LlmUsage } from '../lib/ai';
 import { recordUsage, checkBudget } from '../lib/rate-limiter';
 import { buildAssistantSystemPrompt, type AssistantPageContext } from '../lib/prompts';
+import { ALL_TOOLS, isClientTool, isServerTool, executeServerTool } from '../lib/chat-tools';
 
 export const chatRoutes = new Hono<AppEnv>();
 
@@ -18,6 +19,20 @@ const MAX_HISTORY_MESSAGES = 20;
 const MAX_ARTICLES_MULTI = 5;
 const MAX_CONTENT_PER_ARTICLE_MULTI = 2_000;
 const MULTI_CHAT_THREAD_ARTICLE_ID = '__multi_chat__';
+
+// Maximum tool-calling rounds per assistant request. A runaway model that keeps
+// requesting tool calls is capped here before it burns user tokens. Includes
+// the final text turn — i.e. at MAX_TOOL_ROUNDS-1 calls we still get one more
+// round to produce the final message.
+const MAX_TOOL_ROUNDS = 4;
+
+function mergeUsage(a: LlmUsage, b: LlmUsage): LlmUsage {
+  return {
+    prompt_tokens: (a.prompt_tokens ?? 0) + (b.prompt_tokens ?? 0),
+    completion_tokens: (a.completion_tokens ?? 0) + (b.completion_tokens ?? 0),
+    total_tokens: (a.total_tokens ?? 0) + (b.total_tokens ?? 0),
+  };
+}
 
 function truncate(text: string | null, limit: number): string {
   if (!text) return '';
@@ -869,70 +884,145 @@ chatRoutes.post('/chat/assistant', async (c) => {
     chatMessages.push({ role: row.role as 'user' | 'assistant', content: row.content });
   }
 
-  // Stream or standard response.
+  // Stream or standard response. Both branches now loop through server-side
+  // tool calls (up to MAX_TOOL_ROUNDS rounds) and forward client-side tool
+  // calls to the caller via SSE / response payload.
   const wantStream = c.req.query('stream') === 'true';
+  const toolCtx = { userId, db, req: c.req.raw, env: c.env };
 
   if (wantStream) {
-    const stream = runChatStreaming(ai.provider, ai.apiKey, ai.model, chatMessages, { maxTokens: 1024 });
-    const [browserStream, captureStream] = stream.tee();
+    const encoder = new TextEncoder();
 
-    (async () => {
-      const reader = captureStream.getReader();
-      const decoder = new TextDecoder();
-      let finalContent = '';
-      let finalUsage = {};
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          const text = decoder.decode(value, { stream: true });
-          for (const line of text.split('\n')) {
-            const trimmed = line.trim();
-            if (!trimmed.startsWith('data: ')) continue;
-            try {
-              const parsed = JSON.parse(trimmed.slice(6));
-              if (parsed.type === 'done') {
-                finalContent = parsed.content ?? finalContent;
-                finalUsage = parsed.usage ?? finalUsage;
+    const stream = new ReadableStream({
+      async start(controller) {
+        const sse = (payload: unknown) => {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+        };
+
+        const convo: ExtendedChatMessage[] = [...chatMessages];
+        const toolCallLog: Array<Record<string, unknown>> = [];
+        let accumulatedUsage: LlmUsage = {};
+        let finalContent = '';
+        let errorMessage: string | null = null;
+
+        try {
+          for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+            const result = await runChatWithTools(ai.provider, ai.apiKey, ai.model, convo, ALL_TOOLS, { maxTokens: 1024 });
+            accumulatedUsage = mergeUsage(accumulatedUsage, result.usage);
+
+            if (result.kind === 'message') {
+              finalContent = result.content;
+              sse({ type: 'delta', content: finalContent });
+              break;
+            }
+
+            // Tool calls. Record the assistant's tool-use turn in the conversation.
+            convo.push({ role: 'assistant', content: result.preface, toolCalls: result.toolCalls });
+
+            for (const call of result.toolCalls) {
+              if (isServerTool(call.name)) {
+                const execResult = await executeServerTool(call, toolCtx);
+                toolCallLog.push({ kind: 'server', name: call.name, args: call.args, summary: execResult.summary, succeeded: execResult.succeeded });
+                sse({ type: 'tool_call_server', name: call.name, summary: execResult.summary, succeeded: execResult.succeeded });
+                convo.push({ role: 'tool', callId: execResult.callId, content: execResult.content });
+              } else if (isClientTool(call.name)) {
+                toolCallLog.push({ kind: 'client', name: call.name, args: call.args });
+                sse({ type: 'tool_call_client', name: call.name, args: call.args });
+                // Synthetic tool result so the AI can reason about its turn completing.
+                convo.push({ role: 'tool', callId: call.id, content: `Action "${call.name}" dispatched to the user's device.` });
+              } else {
+                sse({ type: 'tool_call_server', name: call.name, summary: `Unknown tool: ${call.name}`, succeeded: false });
+                convo.push({ role: 'tool', callId: call.id, content: `Unknown tool: ${call.name}` });
               }
-            } catch { /* skip */ }
+            }
+
+            if (round === MAX_TOOL_ROUNDS - 1 && !finalContent) {
+              errorMessage = 'tool_loop_limit';
+              sse({ type: 'error', error: 'Reached tool-call limit without a final response.' });
+            }
+          }
+        } catch (err) {
+          errorMessage = err instanceof Error ? err.message : 'Unknown error';
+          sse({ type: 'error', error: errorMessage });
+        }
+
+        sse({ type: 'done', content: finalContent, usage: accumulatedUsage });
+        controller.close();
+
+        // Persist the assistant message with tool call log.
+        const { text: cleanContent } = finalContent ? extractFollowUpSuggestions(finalContent) : { text: '' };
+        if (cleanContent || toolCallLog.length > 0) {
+          await dbRun(
+            db,
+            `INSERT INTO chat_messages (id, thread_id, role, content, provider, model, tool_calls_json, created_at)
+             VALUES (?, ?, 'assistant', ?, ?, ?, ?, ?)`,
+            [
+              nanoid(), thread.id, cleanContent,
+              ai.provider, ai.model,
+              toolCallLog.length > 0 ? JSON.stringify(toolCallLog) : null,
+              Date.now(),
+            ],
+          );
+          await dbRun(db, `UPDATE chat_threads SET updated_at = ? WHERE id = ?`, [Date.now(), thread.id]);
+          await recordUsage(db, userId, ai.provider, ai.model, accumulatedUsage, 'assistant', ai.isByok);
+          if (cleanContent) {
+            await saveConversationSummary(db, userId, thread.id, null, pageContext.pageLabel, message, cleanContent).catch(() => {});
           }
         }
-      } catch { /* save what we have */ }
+      },
+    });
 
-      if (finalContent) {
-        const { text: cleanContent } = extractFollowUpSuggestions(finalContent);
-        await dbRun(db,
-          `INSERT INTO chat_messages (id, thread_id, role, content, provider, model, created_at) VALUES (?, ?, 'assistant', ?, ?, ?, ?)`,
-          [nanoid(), thread.id, cleanContent, ai.provider, ai.model, Date.now()],
-        );
-        await dbRun(db, `UPDATE chat_threads SET updated_at = ? WHERE id = ?`, [Date.now(), thread.id]);
-        await recordUsage(db, userId, ai.provider, ai.model, finalUsage, 'assistant', ai.isByok);
-        await saveConversationSummary(db, userId, thread.id, null, pageContext.pageLabel, message, cleanContent).catch(() => {});
-      }
-    })();
-
-    return new Response(browserStream, {
+    return new Response(stream, {
       headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' },
     });
   }
 
-  // Non-streaming.
-  const { content: rawContent, usage } = await runChat(ai.provider, ai.apiKey, ai.model, chatMessages, { maxTokens: 1024 });
-  const { text: aiContent, suggestions } = extractFollowUpSuggestions(rawContent);
+  // Non-streaming — same tool loop, collect final payload.
+  const convo: ExtendedChatMessage[] = [...chatMessages];
+  const toolCallLog: Array<Record<string, unknown>> = [];
+  const clientCalls: Array<{ name: string; args: Record<string, unknown> }> = [];
+  let accumulatedUsage: LlmUsage = {};
+  let finalContent = '';
+
+  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+    const result = await runChatWithTools(ai.provider, ai.apiKey, ai.model, convo, ALL_TOOLS, { maxTokens: 1024 });
+    accumulatedUsage = mergeUsage(accumulatedUsage, result.usage);
+
+    if (result.kind === 'message') {
+      finalContent = result.content;
+      break;
+    }
+
+    convo.push({ role: 'assistant', content: result.preface, toolCalls: result.toolCalls });
+    for (const call of result.toolCalls) {
+      if (isServerTool(call.name)) {
+        const execResult = await executeServerTool(call, toolCtx);
+        toolCallLog.push({ kind: 'server', name: call.name, args: call.args, summary: execResult.summary, succeeded: execResult.succeeded });
+        convo.push({ role: 'tool', callId: execResult.callId, content: execResult.content });
+      } else if (isClientTool(call.name)) {
+        clientCalls.push({ name: call.name, args: call.args });
+        toolCallLog.push({ kind: 'client', name: call.name, args: call.args });
+        convo.push({ role: 'tool', callId: call.id, content: `Action "${call.name}" dispatched to the user's device.` });
+      }
+    }
+  }
+
+  const { text: aiContent, suggestions } = extractFollowUpSuggestions(finalContent);
 
   const aiMsgId = nanoid();
   const aiNow = Date.now();
-  await dbRun(db,
-    `INSERT INTO chat_messages (id, thread_id, role, content, provider, model, created_at) VALUES (?, ?, 'assistant', ?, ?, ?, ?)`,
-    [aiMsgId, thread.id, aiContent, ai.provider, ai.model, aiNow],
+  await dbRun(
+    db,
+    `INSERT INTO chat_messages (id, thread_id, role, content, provider, model, tool_calls_json, created_at)
+     VALUES (?, ?, 'assistant', ?, ?, ?, ?, ?)`,
+    [aiMsgId, thread.id, aiContent, ai.provider, ai.model, toolCallLog.length > 0 ? JSON.stringify(toolCallLog) : null, aiNow],
   );
   await dbRun(db, `UPDATE chat_threads SET updated_at = ? WHERE id = ?`, [aiNow, thread.id]);
-  await recordUsage(db, userId, ai.provider, ai.model, usage, 'assistant', ai.isByok);
+  await recordUsage(db, userId, ai.provider, ai.model, accumulatedUsage, 'assistant', ai.isByok);
   await saveConversationSummary(db, userId, thread.id, null, pageContext.pageLabel, message, aiContent).catch(() => {});
 
   const response = await loadThreadResponse(db, thread.id);
-  return c.json({ ok: true, data: { ...response, suggestions } });
+  return c.json({ ok: true, data: { ...response, suggestions, clientToolCalls: clientCalls } });
 });
 
 // POST /chat/assistant/new — start a new assistant conversation

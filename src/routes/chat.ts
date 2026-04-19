@@ -6,7 +6,7 @@ import { resolveAIKey } from '../lib/ai-key-resolver';
 import { runChat, runChatStreaming, runChatWithTools, type ChatMessage, type ExtendedChatMessage, type LlmUsage } from '../lib/ai';
 import { recordUsage, checkBudget } from '../lib/rate-limiter';
 import { buildAssistantSystemPrompt, type AssistantPageContext } from '../lib/prompts';
-import { ALL_TOOLS, isClientTool, isServerTool, executeServerTool } from '../lib/chat-tools';
+import { ALL_TOOLS, isClientTool, isServerTool, executeServerTool, executeUndoTool } from '../lib/chat-tools';
 
 export const chatRoutes = new Hono<AppEnv>();
 
@@ -755,6 +755,7 @@ chatRoutes.post('/chat/assistant', async (c) => {
   const userId = c.get('userId');
   const db = c.env.DB;
 
+  try {
   const body = await c.req.json<{
     message: string;
     pageContext: AssistantPageContext;
@@ -881,6 +882,12 @@ chatRoutes.post('/chat/assistant', async (c) => {
 
   const chatMessages: ChatMessage[] = [{ role: 'system', content: systemPrompt }];
   for (const row of historyRows) {
+    // Skip empty-content rows — these are usually tool-call-only turns we
+    // persisted as assistant messages with cleanContent = ''. Feeding an
+    // empty-string assistant message back to Anthropic/OpenAI is rejected
+    // (empty content blocks are invalid). The tool_calls_json column keeps
+    // the history record for auditing.
+    if (!row.content || !row.content.trim()) continue;
     chatMessages.push({ role: row.role as 'user' | 'assistant', content: row.content });
   }
 
@@ -922,8 +929,14 @@ chatRoutes.post('/chat/assistant', async (c) => {
             for (const call of result.toolCalls) {
               if (isServerTool(call.name)) {
                 const execResult = await executeServerTool(call, toolCtx);
-                toolCallLog.push({ kind: 'server', name: call.name, args: call.args, summary: execResult.summary, succeeded: execResult.succeeded });
-                sse({ type: 'tool_call_server', name: call.name, summary: execResult.summary, succeeded: execResult.succeeded });
+                toolCallLog.push({ kind: 'server', name: call.name, args: call.args, summary: execResult.summary, succeeded: execResult.succeeded, undo: execResult.undo ?? null });
+                sse({
+                  type: 'tool_call_server',
+                  name: call.name,
+                  summary: execResult.summary,
+                  succeeded: execResult.succeeded,
+                  undo: execResult.undo ?? null,
+                });
                 convo.push({ role: 'tool', callId: execResult.callId, content: execResult.content });
               } else if (isClientTool(call.name)) {
                 toolCallLog.push({ kind: 'client', name: call.name, args: call.args });
@@ -1023,6 +1036,34 @@ chatRoutes.post('/chat/assistant', async (c) => {
 
   const response = await loadThreadResponse(db, thread.id);
   return c.json({ ok: true, data: { ...response, suggestions, clientToolCalls: clientCalls } });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    const stack = err instanceof Error ? err.stack : undefined;
+    console.error('[chat/assistant] 500:', msg, stack);
+    return c.json({ ok: false, error: { code: 'internal_error', message: msg } }, 500);
+  }
+});
+
+// POST /chat/undo-tool — reverse a destructive tool call by name + args.
+// Only tools in UNDO_TOOL_NAMES are accepted. The {tool, args} payload was
+// originally minted by the server and echoed via the tool_call_server SSE
+// event; the iOS client stores and replays it verbatim on Undo tap.
+chatRoutes.post('/chat/undo-tool', async (c) => {
+  try {
+    const userId = c.get('userId');
+    const body = await c.req.json<{ tool: string; args: Record<string, unknown> }>();
+    if (!body.tool) {
+      return c.json({ ok: false, error: { code: 'bad_request', message: 'tool is required' } }, 400);
+    }
+    const result = await executeUndoTool(body.tool, body.args ?? {}, {
+      userId, db: c.env.DB, req: c.req.raw, env: c.env,
+    });
+    return c.json({ ok: true, data: result });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    console.error('[chat/undo-tool] 500:', msg);
+    return c.json({ ok: false, error: { code: 'internal_error', message: msg } }, 500);
+  }
 });
 
 // POST /chat/assistant/new — start a new assistant conversation

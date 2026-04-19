@@ -207,7 +207,27 @@ export type ToolExecutionResult = {
   content: string;       // text payload fed back to the AI
   summary: string;       // short human-readable line for the UI chip
   succeeded: boolean;
+  /// When set, the iOS chip shows an Undo button. The tool name must be one
+  /// of the UNDO_TOOL_NAMES allowlist; args are passed verbatim to the
+  /// inverse executor when the user taps Undo.
+  undo?: UndoSpec;
 };
+
+export type UndoSpec = {
+  tool: string;
+  args: Record<string, unknown>;
+};
+
+/// Allowlist for inverse tools — only these names are accepted by the
+/// /chat/undo-tool endpoint, preventing replay/abuse of the undo channel
+/// as a generic RPC surface.
+export const UNDO_TOOL_NAMES = new Set([
+  'undo_mark_articles_read',
+  'undo_set_article_reaction',
+  'undo_apply_tag_to_article',
+  'undo_pause_feed',
+  'undo_subscribe_to_feed',
+]);
 
 export async function executeServerTool(
   call: ToolCall,
@@ -247,6 +267,7 @@ export async function executeServerTool(
           content: `Marked ${ids.length} article(s) as read.`,
           summary: `Marked ${ids.length} article${ids.length === 1 ? '' : 's'} as read`,
           succeeded: true,
+          undo: { tool: 'undo_mark_articles_read', args: { article_ids: ids } },
         };
       }
 
@@ -279,6 +300,7 @@ export async function executeServerTool(
           content: `Reaction set to ${value > 0 ? 'liked' : 'disliked'}.`,
           summary: value > 0 ? 'Liked article' : 'Disliked article',
           succeeded: true,
+          undo: { tool: 'undo_set_article_reaction', args: { article_id: articleId } },
         };
       }
 
@@ -323,6 +345,7 @@ export async function executeServerTool(
           content: `Applied tag "${tagName}" to article ${articleId}.`,
           summary: `Applied tag "${tagName}"`,
           succeeded: true,
+          undo: { tool: 'undo_apply_tag_to_article', args: { article_id: articleId, tag_id: tag.id } },
         };
       }
 
@@ -363,6 +386,7 @@ export async function executeServerTool(
           content: paused ? 'Feed paused.' : 'Feed resumed.',
           summary: paused ? 'Paused feed' : 'Resumed feed',
           succeeded: true,
+          undo: { tool: 'undo_pause_feed', args: { feed_id: feedId, paused: paused === 1 } },
         };
       }
 
@@ -439,6 +463,7 @@ export async function executeServerTool(
           content: `Subscribed to ${normalized.url}. Feed id: ${feed.id}.`,
           summary: label,
           succeeded: true,
+          undo: { tool: 'undo_subscribe_to_feed', args: { feed_id: feed.id } },
         };
       }
 
@@ -460,6 +485,89 @@ export async function executeServerTool(
       summary: `Failed: ${call.name}`,
       succeeded: false,
     };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Undo executor — called by /chat/undo-tool. Only accepts tool names from
+// UNDO_TOOL_NAMES; args are trusted because the undo payload was minted on
+// the server during the original destructive call and echoed via SSE.
+// ---------------------------------------------------------------------------
+
+export async function executeUndoTool(
+  toolName: string,
+  args: Record<string, unknown>,
+  ctx: ToolExecutionContext,
+): Promise<{ summary: string; succeeded: boolean }> {
+  if (!UNDO_TOOL_NAMES.has(toolName)) {
+    return { summary: `Unknown undo action: ${toolName}`, succeeded: false };
+  }
+
+  try {
+    switch (toolName) {
+      case 'undo_mark_articles_read': {
+        const ids = Array.isArray(args.article_ids) ? (args.article_ids as string[]) : [];
+        const now = Date.now();
+        for (const id of ids) {
+          await dbRun(
+            ctx.db,
+            `UPDATE article_read_state SET is_read = 0, updated_at = ? WHERE user_id = ? AND article_id = ?`,
+            [now, ctx.userId, id],
+          );
+        }
+        return { summary: `Restored ${ids.length} article${ids.length === 1 ? '' : 's'} to unread`, succeeded: true };
+      }
+
+      case 'undo_set_article_reaction': {
+        const articleId = String(args.article_id ?? '');
+        await dbRun(
+          ctx.db,
+          `DELETE FROM article_reactions WHERE user_id = ? AND article_id = ?`,
+          [ctx.userId, articleId],
+        );
+        return { summary: 'Reaction cleared', succeeded: true };
+      }
+
+      case 'undo_apply_tag_to_article': {
+        const articleId = String(args.article_id ?? '');
+        const tagId = String(args.tag_id ?? '');
+        await dbRun(
+          ctx.db,
+          `DELETE FROM article_tags WHERE user_id = ? AND article_id = ? AND tag_id = ?`,
+          [ctx.userId, articleId, tagId],
+        );
+        return { summary: 'Tag removed', succeeded: true };
+      }
+
+      case 'undo_pause_feed': {
+        const feedId = String(args.feed_id ?? '');
+        // args.paused is the state that WAS set by the original call; the
+        // inverse flips it.
+        const restoreTo = args.paused === true ? 0 : 1;
+        await dbRun(
+          ctx.db,
+          `UPDATE user_feed_subscriptions SET paused = ? WHERE user_id = ? AND feed_id = ?`,
+          [restoreTo, ctx.userId, feedId],
+        );
+        return { summary: restoreTo === 1 ? 'Feed paused again' : 'Feed resumed', succeeded: true };
+      }
+
+      case 'undo_subscribe_to_feed': {
+        const feedId = String(args.feed_id ?? '');
+        await dbRun(
+          ctx.db,
+          `DELETE FROM user_feed_subscriptions WHERE user_id = ? AND feed_id = ?`,
+          [ctx.userId, feedId],
+        );
+        return { summary: 'Unsubscribed', succeeded: true };
+      }
+
+      default:
+        return { summary: `Unhandled undo: ${toolName}`, succeeded: false };
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    return { summary: `Undo failed: ${msg}`, succeeded: false };
   }
 }
 

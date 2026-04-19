@@ -2,6 +2,7 @@ import { nanoid } from 'nanoid';
 import type { D1Database } from '@cloudflare/workers-types';
 import { dbGet, dbRun } from '../db/helpers';
 import { handleToolCall as handleMcpToolCall } from '../mcp/tools';
+import { normalizeFeedURL } from './feed-url-normalizer';
 import type { ToolDefinition, ToolCall } from './ai';
 
 // ---------------------------------------------------------------------------
@@ -117,6 +118,17 @@ export const SERVER_TOOLS: ToolDefinition[] = [
         paused: { type: 'boolean' },
       },
       required: ['feed_id', 'paused'],
+    },
+  },
+  {
+    name: 'subscribe_to_feed',
+    description: 'Subscribe the user to a new RSS feed by URL. Supports Reddit subreddits, Hacker News, Mastodon accounts, and YouTube channels (not @handles).',
+    parameters: {
+      type: 'object',
+      properties: {
+        url: { type: 'string', description: 'Feed or source URL. Will be normalized to the RSS equivalent for known sources.' },
+      },
+      required: ['url'],
     },
   },
 ];
@@ -350,6 +362,82 @@ export async function executeServerTool(
           name: call.name,
           content: paused ? 'Feed paused.' : 'Feed resumed.',
           summary: paused ? 'Paused feed' : 'Resumed feed',
+          succeeded: true,
+        };
+      }
+
+      case 'subscribe_to_feed': {
+        const rawUrl = String(call.args.url ?? '').trim();
+        if (!rawUrl) {
+          return { callId: call.id, name: call.name, content: 'Missing url.', summary: 'Missing URL', succeeded: false };
+        }
+
+        const normalized = normalizeFeedURL(rawUrl);
+        // Guard: YouTube @handles cannot be resolved server-side and the normalizer
+        // returns the original URL with a helpful sourceLabel. Don't subscribe blindly.
+        if (/youtube\.com\/@/.test(normalized.url)) {
+          return {
+            callId: call.id, name: call.name,
+            content: normalized.sourceLabel ?? 'YouTube @handle cannot be subscribed without the channel RSS URL.',
+            summary: 'Need YouTube channel RSS URL',
+            succeeded: false,
+          };
+        }
+
+        const now = Date.now();
+        let feed = await dbGet<{ id: string; title: string | null }>(
+          ctx.db,
+          `SELECT id, title FROM feeds WHERE url = ?`,
+          [normalized.url],
+        );
+        if (!feed) {
+          const feedId = nanoid();
+          if (normalized.scrapeMode) {
+            await dbRun(
+              ctx.db,
+              `INSERT INTO feeds (id, url, scrape_mode) VALUES (?, ?, ?)`,
+              [feedId, normalized.url, normalized.scrapeMode],
+            );
+          } else {
+            await dbRun(ctx.db, `INSERT INTO feeds (id, url) VALUES (?, ?)`, [feedId, normalized.url]);
+          }
+          feed = { id: feedId, title: null };
+        } else if (normalized.scrapeMode) {
+          await dbRun(
+            ctx.db,
+            `UPDATE feeds SET scrape_mode = ? WHERE id = ? AND scrape_mode = 'rss_only'`,
+            [normalized.scrapeMode, feed.id],
+          );
+        }
+
+        // Subscribe the user (ignore if already subscribed).
+        const existing = await dbGet<{ id: string }>(
+          ctx.db,
+          `SELECT id FROM user_feed_subscriptions WHERE user_id = ? AND feed_id = ?`,
+          [ctx.userId, feed.id],
+        );
+        if (existing) {
+          return {
+            callId: call.id, name: call.name,
+            content: `Already subscribed to ${feed.title ?? normalized.url}.`,
+            summary: `Already subscribed: ${feed.title ?? normalized.url}`,
+            succeeded: true,
+          };
+        }
+        await dbRun(
+          ctx.db,
+          `INSERT INTO user_feed_subscriptions (id, user_id, feed_id, created_at) VALUES (?, ?, ?, ?)`,
+          [nanoid(), ctx.userId, feed.id, now],
+        );
+
+        const label = normalized.sourceLabel
+          ? `Subscribed — ${normalized.sourceLabel}`
+          : `Subscribed to ${feed.title ?? normalized.url}`;
+        return {
+          callId: call.id,
+          name: call.name,
+          content: `Subscribed to ${normalized.url}. Feed id: ${feed.id}.`,
+          summary: label,
           succeeded: true,
         };
       }

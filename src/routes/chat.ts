@@ -788,23 +788,22 @@ chatRoutes.post('/chat/assistant', async (c) => {
   console.log('[CA]', reqId, 'enter userId=', userId);
   c.header('x-nebular-diag', reqId);
 
-  // Fire-and-forget trace writer using waitUntil so the write survives even if
-  // the SSE stream aborts with an unhandled error.
-  const dlog = (event: string, data?: unknown) => {
+  // Trace writer — mirrors the pre-handler pattern exactly using prepare/bind
+  // directly to rule out any wrapper issue with dbRun.
+  const dlog = async (event: string, data?: unknown) => {
     try {
-      const p = dbRun(
-        db,
+      const p = c.env.DB.prepare(
         `INSERT INTO debug_log (id, created_at, scope, event, data) VALUES (?, ?, ?, ?, ?)`,
-        [nanoid(), Date.now(), `assistant:${reqId}`, event, data ? JSON.stringify(data) : null],
-      ).catch(() => {});
+      )
+        .bind(nanoid(), Date.now(), `assistant:${reqId}`, event, data ? JSON.stringify(data) : null)
+        .run()
+        .catch(() => {});
       c.executionCtx.waitUntil(p);
       return p;
     } catch { return Promise.resolve(); }
   };
 
-  // Synchronous marker — if this row never appears, the handler itself is not
-  // being entered despite the tail showing POST /chat/assistant.
-  dlog('enter', { userId, hasExecCtx: !!c.executionCtx });
+  await dlog('enter', { userId });
 
   try {
   const body = await c.req.json<{

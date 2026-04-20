@@ -788,6 +788,13 @@ chatRoutes.get('/chat/assistant/history', async (c) => {
 
 // POST /chat/assistant — send a message with page context
 chatRoutes.post('/chat/assistant', async (c) => {
+  // ABSOLUTE FIRST LINE: set a header that proves this handler ran.
+  c.header('x-handler-entered', 'v2');
+  // Also attempt to mark __rawProbe before anything else can mutate or throw.
+  try {
+    (c as unknown as { __rawProbe?: unknown }).__rawProbe = { step: 'absolute_top' };
+  } catch { /* ignore */ }
+
   const userId = c.get('userId');
   const db = c.env.DB;
   const reqId = nanoid(8);

@@ -678,3 +678,177 @@ export function runChatStreaming(
   if (provider === 'openai') return streamOpenAI(apiKey, model, messages, options);
   return streamAnthropic(apiKey, model, messages, options);
 }
+
+// ---------------------------------------------------------------------------
+// Streaming with tool support
+// ---------------------------------------------------------------------------
+
+export type StreamChatToolEvent =
+  | { type: 'text_delta'; text: string }
+  | { type: 'tool_use'; call: ToolCall }
+  | { type: 'done'; kind: 'message' | 'toolCalls'; finalText: string; toolCalls: ToolCall[]; usage: LlmUsage };
+
+/**
+ * Streams a tool-capable Anthropic request, yielding incremental text deltas,
+ * completed tool_use blocks, and a final done event with usage + aggregate
+ * result. OpenAI streaming with tools is a future follow-up — callers can fall
+ * back to runChatWithTools for OpenAI to keep behaviour correct.
+ */
+export async function* streamChatWithTools(
+  provider: Provider,
+  apiKey: string,
+  model: string,
+  messages: ExtendedChatMessage[],
+  tools: ToolDefinition[],
+  options?: LlmOptions,
+): AsyncGenerator<StreamChatToolEvent, void, void> {
+  if (provider === 'openai') {
+    const result = await runChatWithTools(provider, apiKey, model, messages, tools, options);
+    if (result.kind === 'message') {
+      yield { type: 'text_delta', text: result.content };
+      yield { type: 'done', kind: 'message', finalText: result.content, toolCalls: [], usage: result.usage };
+    } else {
+      if (result.preface) yield { type: 'text_delta', text: result.preface };
+      for (const call of result.toolCalls) yield { type: 'tool_use', call };
+      yield { type: 'done', kind: 'toolCalls', finalText: result.preface, toolCalls: result.toolCalls, usage: result.usage };
+    }
+    return;
+  }
+
+  // Anthropic native streaming
+  const system = messages.find((m) => m.role === 'system')?.content ?? '';
+  const anthropicMessages: Array<{ role: 'user' | 'assistant'; content: unknown }> = [];
+  for (const m of messages) {
+    if (m.role === 'system') continue;
+    if (m.role === 'tool') {
+      const last = anthropicMessages[anthropicMessages.length - 1];
+      const toolResultBlock = { type: 'tool_result', tool_use_id: m.callId, content: m.content };
+      if (last && last.role === 'user' && Array.isArray(last.content)) {
+        (last.content as unknown[]).push(toolResultBlock);
+      } else {
+        anthropicMessages.push({ role: 'user', content: [toolResultBlock] });
+      }
+      continue;
+    }
+    if (m.role === 'assistant' && 'toolCalls' in m) {
+      const blocks: unknown[] = [];
+      if (m.content) blocks.push({ type: 'text', text: m.content });
+      for (const tc of m.toolCalls) {
+        blocks.push({ type: 'tool_use', id: tc.id, name: tc.name, input: tc.args });
+      }
+      anthropicMessages.push({ role: 'assistant', content: blocks });
+      continue;
+    }
+    anthropicMessages.push({ role: m.role as 'user' | 'assistant', content: m.content });
+  }
+
+  const res = await fetchWithTimeout(
+    'https://api.anthropic.com/v1/messages',
+    {
+      method: 'POST',
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        system,
+        max_tokens: options?.maxTokens ?? 1024,
+        temperature: 0.2,
+        messages: anthropicMessages,
+        tools: tools.map((t) => ({ name: t.name, description: t.description, input_schema: t.parameters })),
+        stream: true,
+      }),
+    },
+    AI_STREAM_TIMEOUT_MS,
+  );
+
+  if (!res.ok || !res.body) {
+    const body = await res.text();
+    throw new Error(`Anthropic streaming error: ${res.status} ${body}`);
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let finalText = '';
+  const toolCalls: ToolCall[] = [];
+  const blocks = new Map<number, { kind: 'text' | 'tool_use'; id?: string; name?: string; partialJson?: string }>();
+  let usage: LlmUsage = {};
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith('data: ')) continue;
+      const payload = trimmed.slice(6);
+      if (!payload) continue;
+
+      let parsed: {
+        type?: string;
+        index?: number;
+        content_block?: { type?: string; id?: string; name?: string };
+        delta?: { type?: string; text?: string; partial_json?: string; stop_reason?: string };
+        message?: { usage?: { input_tokens?: number } };
+        usage?: { input_tokens?: number; output_tokens?: number };
+      };
+      try { parsed = JSON.parse(payload); } catch { continue; }
+
+      if (parsed.type === 'message_start' && parsed.message?.usage?.input_tokens) {
+        usage.prompt_tokens = parsed.message.usage.input_tokens;
+      }
+
+      if (parsed.type === 'content_block_start' && typeof parsed.index === 'number' && parsed.content_block) {
+        if (parsed.content_block.type === 'text') {
+          blocks.set(parsed.index, { kind: 'text' });
+        } else if (parsed.content_block.type === 'tool_use') {
+          blocks.set(parsed.index, { kind: 'tool_use', id: parsed.content_block.id, name: parsed.content_block.name, partialJson: '' });
+        }
+      }
+
+      if (parsed.type === 'content_block_delta' && typeof parsed.index === 'number') {
+        const block = blocks.get(parsed.index);
+        if (!block) continue;
+        if (block.kind === 'text' && parsed.delta?.type === 'text_delta' && parsed.delta.text) {
+          finalText += parsed.delta.text;
+          yield { type: 'text_delta', text: parsed.delta.text };
+        } else if (block.kind === 'tool_use' && parsed.delta?.type === 'input_json_delta' && parsed.delta.partial_json !== undefined) {
+          block.partialJson = (block.partialJson ?? '') + parsed.delta.partial_json;
+        }
+      }
+
+      if (parsed.type === 'content_block_stop' && typeof parsed.index === 'number') {
+        const block = blocks.get(parsed.index);
+        if (block?.kind === 'tool_use' && block.id && block.name) {
+          let args: Record<string, unknown> = {};
+          try { args = block.partialJson ? JSON.parse(block.partialJson) : {}; } catch { args = {}; }
+          const call: ToolCall = { id: block.id, name: block.name, args };
+          toolCalls.push(call);
+          yield { type: 'tool_use', call };
+        }
+      }
+
+      if (parsed.type === 'message_delta' && parsed.usage?.output_tokens !== undefined) {
+        usage = {
+          prompt_tokens: usage.prompt_tokens,
+          completion_tokens: parsed.usage.output_tokens,
+          total_tokens: (usage.prompt_tokens ?? 0) + (parsed.usage.output_tokens ?? 0),
+        };
+      }
+    }
+  }
+
+  yield {
+    type: 'done',
+    kind: toolCalls.length > 0 ? 'toolCalls' : 'message',
+    finalText,
+    toolCalls,
+    usage,
+  };
+}

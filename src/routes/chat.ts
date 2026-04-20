@@ -3,7 +3,7 @@ import { nanoid } from 'nanoid';
 import type { AppEnv } from '../index';
 import { dbGet, dbAll, dbRun } from '../db/helpers';
 import { resolveAIKey } from '../lib/ai-key-resolver';
-import { runChat, runChatStreaming, runChatWithTools, type ChatMessage, type ExtendedChatMessage, type LlmUsage } from '../lib/ai';
+import { runChat, runChatStreaming, runChatWithTools, streamChatWithTools, type ChatMessage, type ExtendedChatMessage, type LlmUsage } from '../lib/ai';
 import { recordUsage, checkBudget } from '../lib/rate-limiter';
 import { buildAssistantSystemPrompt, type AssistantPageContext } from '../lib/prompts';
 import { ALL_TOOLS, isClientTool, isServerTool, executeServerTool, executeUndoTool } from '../lib/chat-tools';
@@ -938,20 +938,35 @@ chatRoutes.post('/chat/assistant', async (c) => {
         try {
           for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
             await dlog('round_start', { round });
-            const result = await runChatWithTools(ai.provider, ai.apiKey, ai.model, convo, ALL_TOOLS, { maxTokens: 1024 });
-            await dlog('round_result', { round, kind: result.kind, toolNames: result.kind === 'toolCalls' ? result.toolCalls.map(t => t.name) : undefined });
-            accumulatedUsage = mergeUsage(accumulatedUsage, result.usage);
+            // Stream text deltas to the client as they arrive while buffering
+            // tool_use blocks for post-stream execution. The done event tells us
+            // whether we got plain text (break) or tool calls (continue loop).
+            let roundText = '';
+            let roundToolCalls: { id: string; name: string; args: Record<string, unknown> }[] = [];
+            let roundKind: 'message' | 'toolCalls' = 'message';
+            let roundUsage: LlmUsage = {};
+            for await (const evt of streamChatWithTools(ai.provider, ai.apiKey, ai.model, convo, ALL_TOOLS, { maxTokens: 1024 })) {
+              if (evt.type === 'text_delta') {
+                sse({ type: 'delta', content: evt.text });
+              } else if (evt.type === 'done') {
+                roundText = evt.finalText;
+                roundToolCalls = evt.toolCalls;
+                roundKind = evt.kind;
+                roundUsage = evt.usage;
+              }
+            }
+            await dlog('round_result', { round, kind: roundKind, toolNames: roundToolCalls.map(t => t.name) });
+            accumulatedUsage = mergeUsage(accumulatedUsage, roundUsage);
 
-            if (result.kind === 'message') {
-              finalContent = result.content;
-              sse({ type: 'delta', content: finalContent });
+            if (roundKind === 'message') {
+              finalContent = roundText;
               break;
             }
 
             // Tool calls. Record the assistant's tool-use turn in the conversation.
-            convo.push({ role: 'assistant', content: result.preface, toolCalls: result.toolCalls });
+            convo.push({ role: 'assistant', content: roundText, toolCalls: roundToolCalls });
 
-            for (const call of result.toolCalls) {
+            for (const call of roundToolCalls) {
               if (isServerTool(call.name)) {
                 await dlog('server_tool_start', { name: call.name, args: call.args });
                 const execResult = await executeServerTool(call, toolCtx);

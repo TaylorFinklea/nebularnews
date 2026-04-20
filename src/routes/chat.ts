@@ -10,6 +10,23 @@ import { ALL_TOOLS, isClientTool, isServerTool, executeServerTool, executeUndoTo
 
 export const chatRoutes = new Hono<AppEnv>();
 
+// Pre-handler trace: writes to debug_log BEFORE any chat route handler runs.
+// If this row appears but the handler's own dlog('enter') does not, the handler
+// body is aborting before its first statement.
+chatRoutes.use('/chat/assistant', async (c, next) => {
+  const marker = nanoid(8);
+  try {
+    const p = c.env.DB.prepare(
+      `INSERT INTO debug_log (id, created_at, scope, event, data) VALUES (?, ?, ?, ?, ?)`,
+    )
+      .bind(nanoid(), Date.now(), `pre:${marker}`, 'before_handler', JSON.stringify({ method: c.req.method, query: c.req.query() }))
+      .run()
+      .catch(() => {});
+    c.executionCtx.waitUntil(p);
+  } catch { /* ignore */ }
+  await next();
+});
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -758,17 +775,23 @@ chatRoutes.post('/chat/assistant', async (c) => {
   console.log('[CA]', reqId, 'enter userId=', userId);
   c.header('x-nebular-diag', reqId);
 
-  const dlog = async (event: string, data?: unknown) => {
+  // Fire-and-forget trace writer using waitUntil so the write survives even if
+  // the SSE stream aborts with an unhandled error.
+  const dlog = (event: string, data?: unknown) => {
     try {
-      await dbRun(
+      const p = dbRun(
         db,
         `INSERT INTO debug_log (id, created_at, scope, event, data) VALUES (?, ?, ?, ?, ?)`,
         [nanoid(), Date.now(), `assistant:${reqId}`, event, data ? JSON.stringify(data) : null],
-      );
-    } catch { /* ignore — diagnostic only */ }
+      ).catch(() => {});
+      c.executionCtx.waitUntil(p);
+      return p;
+    } catch { return Promise.resolve(); }
   };
 
-  await dlog('enter', { userId });
+  // Synchronous marker — if this row never appears, the handler itself is not
+  // being entered despite the tail showing POST /chat/assistant.
+  dlog('enter', { userId, hasExecCtx: !!c.executionCtx });
 
   try {
   const body = await c.req.json<{

@@ -790,24 +790,20 @@ chatRoutes.post('/chat/assistant', async (c) => {
   console.log('[CA]', reqId, 'enter userId=', userId);
   c.header('x-nebular-diag', reqId);
 
-  // RAW unconditional INSERT. No wrapper, no catch, no waitUntil. Awaited.
-  // If this row doesn't appear in debug_log, the handler body fundamentally
-  // can't write to D1 — which would point at a subtle context issue.
+  // MINIMAL raw INSERT with no dynamic fields that could throw during bind.
   let rawWriteOk = false;
   let rawWriteError: string | null = null;
   try {
-    await c.env.DB.prepare(
+    const stmt = c.env.DB.prepare(
       `INSERT INTO debug_log (id, created_at, scope, event, data) VALUES (?, ?, ?, ?, ?)`,
-    )
-      .bind(nanoid(), Date.now(), `raw:${reqId}`, 'handler_top', JSON.stringify({ userId, hasExecCtx: !!c.executionCtx, hasTrace: !!(c as unknown as { __trace?: unknown }).__trace }))
-      .run();
+    );
+    const bound = stmt.bind('raw-' + reqId, Date.now(), 'raw:handler', 'handler_top', reqId);
+    await bound.run();
     rawWriteOk = true;
   } catch (e) {
     rawWriteError = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
   }
 
-  // Also expose the result via response headers so we see it even if debug_log
-  // somehow doesn't reflect the write.
   c.header('x-raw-write-ok', String(rawWriteOk));
   if (rawWriteError) c.header('x-raw-write-err', rawWriteError.slice(0, 200));
 

@@ -28,6 +28,10 @@ chatRoutes.use('/chat/assistant', async (c, next) => {
   };
 
   writeTrace('before_handler', { method: c.req.method, query: c.req.query() });
+  // Inject writeTrace into the Hono context so the handler uses the pre-handler's
+  // proven-working closure for diagnostic logging, rather than rebuilding its own.
+  (c as unknown as { set: (k: string, v: unknown) => void }).set('__trace', writeTrace);
+
   let threw: string | null = null;
   try {
     await next();
@@ -788,22 +792,15 @@ chatRoutes.post('/chat/assistant', async (c) => {
   console.log('[CA]', reqId, 'enter userId=', userId);
   c.header('x-nebular-diag', reqId);
 
-  // Trace writer — mirrors the pre-handler pattern exactly using prepare/bind
-  // directly to rule out any wrapper issue with dbRun.
-  const dlog = async (event: string, data?: unknown) => {
-    try {
-      const p = c.env.DB.prepare(
-        `INSERT INTO debug_log (id, created_at, scope, event, data) VALUES (?, ?, ?, ?, ?)`,
-      )
-        .bind(nanoid(), Date.now(), `assistant:${reqId}`, event, data ? JSON.stringify(data) : null)
-        .run()
-        .catch(() => {});
-      c.executionCtx.waitUntil(p);
-      return p;
-    } catch { return Promise.resolve(); }
+  // Use the pre-handler's injected trace closure so we share its executionCtx
+  // and the prepare/bind/run path that's already proven to commit. Each event
+  // is prefixed with reqId so we can correlate across the pre: scope.
+  const trace = (c as unknown as { get: (k: string) => ((event: string, data: unknown) => void) | undefined }).get('__trace');
+  const dlog = (event: string, data?: unknown) => {
+    try { trace?.(`h:${reqId}:${event}`, data ?? null); } catch { /* ignore */ }
   };
 
-  await dlog('enter', { userId });
+  dlog('enter', { userId, hasTrace: !!trace });
 
   try {
   const body = await c.req.json<{

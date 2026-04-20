@@ -790,29 +790,39 @@ chatRoutes.post('/chat/assistant', async (c) => {
   console.log('[CA]', reqId, 'enter userId=', userId);
   c.header('x-nebular-diag', reqId);
 
-  // MINIMAL raw INSERT with no dynamic fields that could throw during bind.
+  // Write-then-read probe. If write returns success but read finds no row, the
+  // issue is D1 replication/commit visibility. If read finds it, the write works
+  // and something later rolls back / the row is invisible to our remote query.
   let rawWriteOk = false;
-  let rawWriteError: string | null = null;
+  let rawReadFound = false;
+  let rawErr: string | null = null;
+  let rawRunMeta = 'unknown';
+  const rawId = 'raw-' + reqId;
   try {
-    const stmt = c.env.DB.prepare(
+    const runRes = await c.env.DB.prepare(
       `INSERT INTO debug_log (id, created_at, scope, event, data) VALUES (?, ?, ?, ?, ?)`,
-    );
-    const bound = stmt.bind('raw-' + reqId, Date.now(), 'raw:handler', 'handler_top', reqId);
-    await bound.run();
+    ).bind(rawId, Date.now(), 'raw:handler', 'handler_top', reqId).run();
     rawWriteOk = true;
+    rawRunMeta = `success=${runRes.success} changes=${runRes.meta?.changes ?? '?'} rows_written=${runRes.meta?.rows_written ?? '?'}`;
+    const readBack = await c.env.DB.prepare(
+      `SELECT id FROM debug_log WHERE id = ?`,
+    ).bind(rawId).first<{ id: string }>();
+    rawReadFound = !!readBack;
   } catch (e) {
-    rawWriteError = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+    rawErr = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
   }
 
   c.header('x-raw-write-ok', String(rawWriteOk));
-  if (rawWriteError) c.header('x-raw-write-err', rawWriteError.slice(0, 200));
+  c.header('x-raw-read-found', String(rawReadFound));
+  c.header('x-raw-run-meta', rawRunMeta);
+  if (rawErr) c.header('x-raw-err', rawErr.slice(0, 200));
 
   const trace = (c as unknown as { __trace?: (e: string, d: unknown) => void }).__trace;
   const dlog = (event: string, data?: unknown) => {
     try { trace?.(`h:${reqId}:${event}`, data ?? null); } catch { /* ignore */ }
   };
 
-  dlog('enter', { userId, hasTrace: !!trace, rawWriteOk, rawWriteError });
+  dlog('enter', { userId, hasTrace: !!trace, rawWriteOk, rawReadFound, rawErr });
 
   try {
   const body = await c.req.json<{

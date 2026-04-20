@@ -28,10 +28,6 @@ chatRoutes.use('/chat/assistant', async (c, next) => {
   };
 
   writeTrace('before_handler', { method: c.req.method, query: c.req.query() });
-  // Attach writeTrace directly to the Context object so the handler can use the
-  // pre-handler's proven-working closure. Hono's Variables system (c.set/get)
-  // silently drops unknown keys when the AppEnv Variables type doesn't include
-  // them, so we bypass it with a direct property assignment.
   (c as unknown as { __trace?: (e: string, d: unknown) => void }).__trace = writeTrace;
 
   let threw: string | null = null;
@@ -794,15 +790,33 @@ chatRoutes.post('/chat/assistant', async (c) => {
   console.log('[CA]', reqId, 'enter userId=', userId);
   c.header('x-nebular-diag', reqId);
 
-  // Use the pre-handler's injected trace closure so we share its executionCtx
-  // and the prepare/bind/run path that's already proven to commit. Each event
-  // is prefixed with reqId so we can correlate across the pre: scope.
+  // RAW unconditional INSERT. No wrapper, no catch, no waitUntil. Awaited.
+  // If this row doesn't appear in debug_log, the handler body fundamentally
+  // can't write to D1 — which would point at a subtle context issue.
+  let rawWriteOk = false;
+  let rawWriteError: string | null = null;
+  try {
+    await c.env.DB.prepare(
+      `INSERT INTO debug_log (id, created_at, scope, event, data) VALUES (?, ?, ?, ?, ?)`,
+    )
+      .bind(nanoid(), Date.now(), `raw:${reqId}`, 'handler_top', JSON.stringify({ userId, hasExecCtx: !!c.executionCtx, hasTrace: !!(c as unknown as { __trace?: unknown }).__trace }))
+      .run();
+    rawWriteOk = true;
+  } catch (e) {
+    rawWriteError = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
+  }
+
+  // Also expose the result via response headers so we see it even if debug_log
+  // somehow doesn't reflect the write.
+  c.header('x-raw-write-ok', String(rawWriteOk));
+  if (rawWriteError) c.header('x-raw-write-err', rawWriteError.slice(0, 200));
+
   const trace = (c as unknown as { __trace?: (e: string, d: unknown) => void }).__trace;
   const dlog = (event: string, data?: unknown) => {
     try { trace?.(`h:${reqId}:${event}`, data ?? null); } catch { /* ignore */ }
   };
 
-  dlog('enter', { userId, hasTrace: !!trace });
+  dlog('enter', { userId, hasTrace: !!trace, rawWriteOk, rawWriteError });
 
   try {
   const body = await c.req.json<{

@@ -28,9 +28,11 @@ chatRoutes.use('/chat/assistant', async (c, next) => {
   };
 
   writeTrace('before_handler', { method: c.req.method, query: c.req.query() });
-  // Inject writeTrace into the Hono context so the handler uses the pre-handler's
-  // proven-working closure for diagnostic logging, rather than rebuilding its own.
-  (c as unknown as { set: (k: string, v: unknown) => void }).set('__trace', writeTrace);
+  // Attach writeTrace directly to the Context object so the handler can use the
+  // pre-handler's proven-working closure. Hono's Variables system (c.set/get)
+  // silently drops unknown keys when the AppEnv Variables type doesn't include
+  // them, so we bypass it with a direct property assignment.
+  (c as unknown as { __trace?: (e: string, d: unknown) => void }).__trace = writeTrace;
 
   let threw: string | null = null;
   try {
@@ -795,7 +797,7 @@ chatRoutes.post('/chat/assistant', async (c) => {
   // Use the pre-handler's injected trace closure so we share its executionCtx
   // and the prepare/bind/run path that's already proven to commit. Each event
   // is prefixed with reqId so we can correlate across the pre: scope.
-  const trace = (c as unknown as { get: (k: string) => ((event: string, data: unknown) => void) | undefined }).get('__trace');
+  const trace = (c as unknown as { __trace?: (e: string, d: unknown) => void }).__trace;
   const dlog = (event: string, data?: unknown) => {
     try { trace?.(`h:${reqId}:${event}`, data ?? null); } catch { /* ignore */ }
   };

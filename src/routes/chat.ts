@@ -754,6 +754,21 @@ chatRoutes.get('/chat/assistant/history', async (c) => {
 chatRoutes.post('/chat/assistant', async (c) => {
   const userId = c.get('userId');
   const db = c.env.DB;
+  const reqId = nanoid(8);
+  console.log('[CA]', reqId, 'enter userId=', userId);
+  c.header('x-nebular-diag', reqId);
+
+  const dlog = async (event: string, data?: unknown) => {
+    try {
+      await dbRun(
+        db,
+        `INSERT INTO debug_log (id, created_at, scope, event, data) VALUES (?, ?, ?, ?, ?)`,
+        [nanoid(), Date.now(), `assistant:${reqId}`, event, data ? JSON.stringify(data) : null],
+      );
+    } catch { /* ignore — diagnostic only */ }
+  };
+
+  await dlog('enter', { userId });
 
   try {
   const body = await c.req.json<{
@@ -799,12 +814,20 @@ chatRoutes.post('/chat/assistant', async (c) => {
   }
   if (!thread) {
     const threadId = nanoid();
-    await dbRun(
-      db,
-      `INSERT INTO chat_threads (id, user_id, article_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
-      [threadId, userId, ASSISTANT_THREAD_ARTICLE_ID, null, now, now],
-    );
+    try {
+      await dbRun(
+        db,
+        `INSERT INTO chat_threads (id, user_id, article_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
+        [threadId, userId, ASSISTANT_THREAD_ARTICLE_ID, null, now, now],
+      );
+    } catch (e) {
+      await dlog('insert_chat_threads_failed', { error: (e as Error).message });
+      throw e;
+    }
     thread = { id: threadId, user_id: userId, article_id: ASSISTANT_THREAD_ARTICLE_ID, title: null, created_at: now, updated_at: now };
+    await dlog('thread_created', { threadId });
+  } else {
+    await dlog('thread_found', { threadId: thread.id });
   }
 
   // Check for context shift — compare with last page_context_json in this thread.
@@ -827,19 +850,31 @@ chatRoutes.post('/chat/assistant', async (c) => {
   // Insert segment marker if context shifted.
   if (contextShifted) {
     const markerContent = `[Context: ${pageContext.pageLabel}]`;
-    await dbRun(
-      db,
-      `INSERT INTO chat_messages (id, thread_id, role, content, page_context_json, created_at) VALUES (?, ?, 'system', ?, ?, ?)`,
-      [nanoid(), thread.id, markerContent, JSON.stringify(pageContext), now],
-    );
+    try {
+      await dbRun(
+        db,
+        `INSERT INTO chat_messages (id, thread_id, role, content, page_context_json, created_at) VALUES (?, ?, 'system', ?, ?, ?)`,
+        [nanoid(), thread.id, markerContent, JSON.stringify(pageContext), now],
+      );
+      await dlog('context_marker_inserted');
+    } catch (e) {
+      await dlog('insert_context_marker_failed', { error: (e as Error).message });
+      throw e;
+    }
   }
 
   // Save user message.
-  await dbRun(
-    db,
-    `INSERT INTO chat_messages (id, thread_id, role, content, created_at) VALUES (?, ?, 'user', ?, ?)`,
-    [nanoid(), thread.id, message, now],
-  );
+  try {
+    await dbRun(
+      db,
+      `INSERT INTO chat_messages (id, thread_id, role, content, created_at) VALUES (?, ?, 'user', ?, ?)`,
+      [nanoid(), thread.id, message, now],
+    );
+    await dlog('user_message_inserted');
+  } catch (e) {
+    await dlog('insert_user_message_failed', { error: (e as Error).message });
+    throw e;
+  }
 
   // Enrich context: for article_detail, fetch full content from D1.
   if (pageContext.pageType === 'article_detail' && pageContext.articleDetail?.articleId) {
@@ -896,6 +931,7 @@ chatRoutes.post('/chat/assistant', async (c) => {
   // calls to the caller via SSE / response payload.
   const wantStream = c.req.query('stream') === 'true';
   const toolCtx = { userId, db, req: c.req.raw, env: c.env };
+  await dlog('pre_stream', { threadId: thread.id, historyLen: chatMessages.length, wantStream });
 
   if (wantStream) {
     const encoder = new TextEncoder();
@@ -912,9 +948,12 @@ chatRoutes.post('/chat/assistant', async (c) => {
         let finalContent = '';
         let errorMessage: string | null = null;
 
+        await dlog('stream_start');
         try {
           for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+            await dlog('round_start', { round });
             const result = await runChatWithTools(ai.provider, ai.apiKey, ai.model, convo, ALL_TOOLS, { maxTokens: 1024 });
+            await dlog('round_result', { round, kind: result.kind, toolNames: result.kind === 'toolCalls' ? result.toolCalls.map(t => t.name) : undefined });
             accumulatedUsage = mergeUsage(accumulatedUsage, result.usage);
 
             if (result.kind === 'message') {
@@ -928,7 +967,9 @@ chatRoutes.post('/chat/assistant', async (c) => {
 
             for (const call of result.toolCalls) {
               if (isServerTool(call.name)) {
+                await dlog('server_tool_start', { name: call.name, args: call.args });
                 const execResult = await executeServerTool(call, toolCtx);
+                await dlog('server_tool_done', { name: call.name, succeeded: execResult.succeeded, summary: execResult.summary });
                 toolCallLog.push({ kind: 'server', name: call.name, args: call.args, summary: execResult.summary, succeeded: execResult.succeeded, undo: execResult.undo ?? null });
                 sse({
                   type: 'tool_call_server',
@@ -956,30 +997,46 @@ chatRoutes.post('/chat/assistant', async (c) => {
           }
         } catch (err) {
           errorMessage = err instanceof Error ? err.message : 'Unknown error';
+          await dlog('stream_loop_error', { error: errorMessage, stack: (err as Error).stack });
           sse({ type: 'error', error: errorMessage });
         }
 
+        await dlog('stream_emit_done', { contentLen: finalContent.length, toolLogLen: toolCallLog.length });
         sse({ type: 'done', content: finalContent, usage: accumulatedUsage });
         controller.close();
 
         // Persist the assistant message with tool call log.
         const { text: cleanContent } = finalContent ? extractFollowUpSuggestions(finalContent) : { text: '' };
         if (cleanContent || toolCallLog.length > 0) {
-          await dbRun(
-            db,
-            `INSERT INTO chat_messages (id, thread_id, role, content, provider, model, tool_calls_json, created_at)
-             VALUES (?, ?, 'assistant', ?, ?, ?, ?, ?)`,
-            [
-              nanoid(), thread.id, cleanContent,
-              ai.provider, ai.model,
-              toolCallLog.length > 0 ? JSON.stringify(toolCallLog) : null,
-              Date.now(),
-            ],
-          );
-          await dbRun(db, `UPDATE chat_threads SET updated_at = ? WHERE id = ?`, [Date.now(), thread.id]);
-          await recordUsage(db, userId, ai.provider, ai.model, accumulatedUsage, 'assistant', ai.isByok);
+          try {
+            await dbRun(
+              db,
+              `INSERT INTO chat_messages (id, thread_id, role, content, provider, model, tool_calls_json, created_at)
+               VALUES (?, ?, 'assistant', ?, ?, ?, ?, ?)`,
+              [
+                nanoid(), thread.id, cleanContent,
+                ai.provider, ai.model,
+                toolCallLog.length > 0 ? JSON.stringify(toolCallLog) : null,
+                Date.now(),
+              ],
+            );
+          } catch (e) {
+            console.error('[assistant-persist] INSERT chat_messages failed:', (e as Error).message, 'thread.id=', thread.id, 'contentLen=', cleanContent.length, 'toolLog=', toolCallLog.length);
+          }
+          try {
+            await dbRun(db, `UPDATE chat_threads SET updated_at = ? WHERE id = ?`, [Date.now(), thread.id]);
+          } catch (e) {
+            console.error('[assistant-persist] UPDATE chat_threads failed:', (e as Error).message);
+          }
+          try {
+            await recordUsage(db, userId, ai.provider, ai.model, accumulatedUsage, 'assistant', ai.isByok);
+          } catch (e) {
+            console.error('[assistant-persist] recordUsage failed:', (e as Error).message);
+          }
           if (cleanContent) {
-            await saveConversationSummary(db, userId, thread.id, null, pageContext.pageLabel, message, cleanContent).catch(() => {});
+            await saveConversationSummary(db, userId, thread.id, null, pageContext.pageLabel, message, cleanContent).catch((e) => {
+              console.error('[assistant-persist] saveConversationSummary failed:', (e as Error).message);
+            });
           }
         }
       },

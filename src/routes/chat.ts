@@ -38,6 +38,10 @@ chatRoutes.use('/chat/assistant', async (c, next) => {
     writeTrace('handler_threw', { error: threw, stack: err instanceof Error ? err.stack?.slice(0, 500) : null });
     throw err;
   } finally {
+    // Read any probe result the handler stashed on c and log it via the
+    // pre-handler's proven-writing closure.
+    const probe = (c as unknown as { __rawProbe?: unknown }).__rawProbe;
+    if (probe) writeTrace('handler_raw_probe', probe);
     if (!threw) writeTrace('after_handler_ok', null);
   }
 });
@@ -818,6 +822,17 @@ chatRoutes.post('/chat/assistant', async (c) => {
   if (rawErr) c.header('x-raw-err', rawErr.slice(0, 200));
 
   const trace = (c as unknown as { __trace?: (e: string, d: unknown) => void }).__trace;
+
+  // Stash probe result on c so the pre-handler's finally block can log it via
+  // its proven-working writeTrace closure.
+  (c as unknown as { __rawProbe?: unknown }).__rawProbe = {
+    reqId,
+    rawWriteOk,
+    rawReadFound,
+    rawRunMeta,
+    rawErr,
+    hasTrace: !!trace,
+  };
   const dlog = (event: string, data?: unknown) => {
     try { trace?.(`h:${reqId}:${event}`, data ?? null); } catch { /* ignore */ }
   };

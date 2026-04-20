@@ -15,16 +15,29 @@ export const chatRoutes = new Hono<AppEnv>();
 // body is aborting before its first statement.
 chatRoutes.use('/chat/assistant', async (c, next) => {
   const marker = nanoid(8);
+  const writeTrace = (event: string, data: unknown) => {
+    try {
+      const p = c.env.DB.prepare(
+        `INSERT INTO debug_log (id, created_at, scope, event, data) VALUES (?, ?, ?, ?, ?)`,
+      )
+        .bind(nanoid(), Date.now(), `pre:${marker}`, event, data ? JSON.stringify(data) : null)
+        .run()
+        .catch(() => {});
+      c.executionCtx.waitUntil(p);
+    } catch { /* ignore */ }
+  };
+
+  writeTrace('before_handler', { method: c.req.method, query: c.req.query() });
+  let threw: string | null = null;
   try {
-    const p = c.env.DB.prepare(
-      `INSERT INTO debug_log (id, created_at, scope, event, data) VALUES (?, ?, ?, ?, ?)`,
-    )
-      .bind(nanoid(), Date.now(), `pre:${marker}`, 'before_handler', JSON.stringify({ method: c.req.method, query: c.req.query() }))
-      .run()
-      .catch(() => {});
-    c.executionCtx.waitUntil(p);
-  } catch { /* ignore */ }
-  await next();
+    await next();
+  } catch (err) {
+    threw = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+    writeTrace('handler_threw', { error: threw, stack: err instanceof Error ? err.stack?.slice(0, 500) : null });
+    throw err;
+  } finally {
+    if (!threw) writeTrace('after_handler_ok', null);
+  }
 });
 
 // ---------------------------------------------------------------------------

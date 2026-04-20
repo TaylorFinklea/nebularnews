@@ -10,42 +10,6 @@ import { ALL_TOOLS, isClientTool, isServerTool, executeServerTool, executeUndoTo
 
 export const chatRoutes = new Hono<AppEnv>();
 
-// Pre-handler trace: writes to debug_log BEFORE any chat route handler runs.
-// If this row appears but the handler's own dlog('enter') does not, the handler
-// body is aborting before its first statement.
-chatRoutes.use('/chat/assistant', async (c, next) => {
-  const marker = nanoid(8);
-  const writeTrace = (event: string, data: unknown) => {
-    try {
-      const p = c.env.DB.prepare(
-        `INSERT INTO debug_log (id, created_at, scope, event, data) VALUES (?, ?, ?, ?, ?)`,
-      )
-        .bind(nanoid(), Date.now(), `pre:${marker}`, event, data ? JSON.stringify(data) : null)
-        .run()
-        .catch(() => {});
-      c.executionCtx.waitUntil(p);
-    } catch { /* ignore */ }
-  };
-
-  writeTrace('before_handler', { method: c.req.method, query: c.req.query() });
-  (c as unknown as { __trace?: (e: string, d: unknown) => void }).__trace = writeTrace;
-
-  let threw: string | null = null;
-  try {
-    await next();
-  } catch (err) {
-    threw = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
-    writeTrace('handler_threw', { error: threw, stack: err instanceof Error ? err.stack?.slice(0, 500) : null });
-    throw err;
-  } finally {
-    // Read any probe result the handler stashed on c and log it via the
-    // pre-handler's proven-writing closure.
-    const probe = (c as unknown as { __rawProbe?: unknown }).__rawProbe;
-    if (probe) writeTrace('handler_raw_probe', probe);
-    if (!threw) writeTrace('after_handler_ok', null);
-  }
-});
-
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -212,7 +176,7 @@ async function loadThreadResponse(db: D1Database, threadId: string) {
 // GET /chat/:articleId — get existing thread + messages for user/article
 // ---------------------------------------------------------------------------
 
-chatRoutes.get('/chat/:articleId', async (c) => {
+chatRoutes.get('/chat/:articleId{(?!assistant$|assistant/|multi$|multi/|undo-tool$).+}', async (c) => {
   const userId = c.get('userId');
   const db = c.env.DB;
   const articleId = c.req.param('articleId');
@@ -243,7 +207,7 @@ chatRoutes.get('/chat/:articleId', async (c) => {
 // POST /chat/:articleId — send a message in article chat
 // ---------------------------------------------------------------------------
 
-chatRoutes.post('/chat/:articleId', async (c) => {
+chatRoutes.post('/chat/:articleId{(?!assistant$|assistant/|multi$|multi/|undo-tool$).+}', async (c) => {
   const userId = c.get('userId');
   const db = c.env.DB;
   const articleId = c.req.param('articleId');
@@ -788,63 +752,9 @@ chatRoutes.get('/chat/assistant/history', async (c) => {
 
 // POST /chat/assistant — send a message with page context
 chatRoutes.post('/chat/assistant', async (c) => {
-  // ABSOLUTE FIRST LINE: set a header that proves this handler ran.
-  c.header('x-handler-entered', 'v2');
-  // Also attempt to mark __rawProbe before anything else can mutate or throw.
-  try {
-    (c as unknown as { __rawProbe?: unknown }).__rawProbe = { step: 'absolute_top' };
-  } catch { /* ignore */ }
-
   const userId = c.get('userId');
   const db = c.env.DB;
-  const reqId = nanoid(8);
-  console.log('[CA]', reqId, 'enter userId=', userId);
-  c.header('x-nebular-diag', reqId);
-
-  // Write-then-read probe. If write returns success but read finds no row, the
-  // issue is D1 replication/commit visibility. If read finds it, the write works
-  // and something later rolls back / the row is invisible to our remote query.
-  let rawWriteOk = false;
-  let rawReadFound = false;
-  let rawErr: string | null = null;
-  let rawRunMeta = 'unknown';
-  const rawId = 'raw-' + reqId;
-  try {
-    const runRes = await c.env.DB.prepare(
-      `INSERT INTO debug_log (id, created_at, scope, event, data) VALUES (?, ?, ?, ?, ?)`,
-    ).bind(rawId, Date.now(), 'raw:handler', 'handler_top', reqId).run();
-    rawWriteOk = true;
-    rawRunMeta = `success=${runRes.success} changes=${runRes.meta?.changes ?? '?'} rows_written=${runRes.meta?.rows_written ?? '?'}`;
-    const readBack = await c.env.DB.prepare(
-      `SELECT id FROM debug_log WHERE id = ?`,
-    ).bind(rawId).first<{ id: string }>();
-    rawReadFound = !!readBack;
-  } catch (e) {
-    rawErr = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
-  }
-
-  c.header('x-raw-write-ok', String(rawWriteOk));
-  c.header('x-raw-read-found', String(rawReadFound));
-  c.header('x-raw-run-meta', rawRunMeta);
-  if (rawErr) c.header('x-raw-err', rawErr.slice(0, 200));
-
-  const trace = (c as unknown as { __trace?: (e: string, d: unknown) => void }).__trace;
-
-  // Stash probe result on c so the pre-handler's finally block can log it via
-  // its proven-working writeTrace closure.
-  (c as unknown as { __rawProbe?: unknown }).__rawProbe = {
-    reqId,
-    rawWriteOk,
-    rawReadFound,
-    rawRunMeta,
-    rawErr,
-    hasTrace: !!trace,
-  };
-  const dlog = (event: string, data?: unknown) => {
-    try { trace?.(`h:${reqId}:${event}`, data ?? null); } catch { /* ignore */ }
-  };
-
-  dlog('enter', { userId, hasTrace: !!trace, rawWriteOk, rawReadFound, rawErr });
+  const dlog = (_event: string, _data?: unknown) => { /* no-op placeholder from diagnostic phase */ };
 
   try {
   const body = await c.req.json<{

@@ -209,3 +209,126 @@ briefRoutes.post('/brief/generate', async (c) => {
     return c.json({ ok: false, error: { code: 'internal_error', message: msg } }, 500);
   }
 });
+
+// ---------------------------------------------------------------------------
+// GET /brief/history — paginated list of prior briefs for the current user
+//
+// Query params:
+//   limit: number (default 20, max 50)
+//   before: epoch ms — return briefs generated BEFORE this timestamp (cursor)
+// ---------------------------------------------------------------------------
+
+briefRoutes.get('/brief/history', async (c) => {
+  const userId = c.get('userId');
+  const db = c.env.DB;
+
+  const limitRaw = parseInt(c.req.query('limit') ?? '20', 10);
+  const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 20, 1), 50);
+  const beforeRaw = c.req.query('before');
+  const before = beforeRaw ? parseInt(beforeRaw, 10) : Number.MAX_SAFE_INTEGER;
+
+  const rows = await dbAll<{
+    id: string;
+    edition_kind: string;
+    edition_slot: string;
+    timezone: string;
+    generated_at: number;
+    window_start: number;
+    window_end: number;
+    score_cutoff: number;
+    bullets_json: string;
+    source_article_ids_json: string;
+  }>(
+    db,
+    `SELECT id, edition_kind, edition_slot, timezone, generated_at,
+            window_start, window_end, score_cutoff,
+            bullets_json, source_article_ids_json
+       FROM news_brief_editions
+       WHERE user_id = ? AND status = 'done' AND generated_at < ?
+       ORDER BY generated_at DESC
+       LIMIT ?`,
+    [userId, before, limit + 1],
+  );
+
+  const hasMore = rows.length > limit;
+  const page = hasMore ? rows.slice(0, limit) : rows;
+  const nextBefore = hasMore ? page[page.length - 1].generated_at : null;
+
+  const briefs = page.map((row) => ({
+    id: row.id,
+    edition_kind: row.edition_kind,
+    edition_slot: row.edition_slot,
+    timezone: row.timezone,
+    generated_at: row.generated_at,
+    window_start: row.window_start,
+    window_end: row.window_end,
+    score_cutoff: row.score_cutoff,
+    bullets: JSON.parse(row.bullets_json || '[]'),
+    source_article_ids: JSON.parse(row.source_article_ids_json || '[]'),
+  }));
+
+  return c.json({ ok: true, data: { briefs, next_before: nextBefore } });
+});
+
+// ---------------------------------------------------------------------------
+// GET /brief/:id — full brief detail including joined source article metadata
+// ---------------------------------------------------------------------------
+
+briefRoutes.get('/brief/:id', async (c) => {
+  const userId = c.get('userId');
+  const db = c.env.DB;
+  const briefId = c.req.param('id');
+
+  const row = await dbGet<{
+    id: string;
+    edition_kind: string;
+    edition_slot: string;
+    timezone: string;
+    generated_at: number;
+    window_start: number;
+    window_end: number;
+    score_cutoff: number;
+    bullets_json: string;
+    source_article_ids_json: string;
+  }>(
+    db,
+    `SELECT id, edition_kind, edition_slot, timezone, generated_at,
+            window_start, window_end, score_cutoff,
+            bullets_json, source_article_ids_json
+       FROM news_brief_editions
+       WHERE id = ? AND user_id = ? AND status = 'done'`,
+    [briefId, userId],
+  );
+
+  if (!row) {
+    return c.json({ ok: false, error: { code: 'not_found', message: 'Brief not found' } }, 404);
+  }
+
+  const sourceIds = JSON.parse(row.source_article_ids_json || '[]') as string[];
+  let sourceArticles: Array<{ id: string; title: string | null; canonical_url: string | null }> = [];
+  if (sourceIds.length > 0) {
+    const placeholders = sourceIds.map(() => '?').join(',');
+    sourceArticles = await dbAll<{ id: string; title: string | null; canonical_url: string | null }>(
+      db,
+      `SELECT id, title, canonical_url FROM articles WHERE id IN (${placeholders})`,
+      sourceIds,
+    );
+  }
+
+  return c.json({
+    ok: true,
+    data: {
+      id: row.id,
+      edition_kind: row.edition_kind,
+      edition_slot: row.edition_slot,
+      timezone: row.timezone,
+      generated_at: row.generated_at,
+      window_start: row.window_start,
+      window_end: row.window_end,
+      score_cutoff: row.score_cutoff,
+      bullets: JSON.parse(row.bullets_json || '[]'),
+      source_article_ids: sourceIds,
+      source_articles: sourceArticles,
+    },
+  });
+});

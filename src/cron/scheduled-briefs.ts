@@ -1,10 +1,10 @@
-import { nanoid } from 'nanoid';
 import type { Env } from '../env';
-import { dbAll, dbGet, dbRun } from '../db/helpers';
+import { dbAll, dbGet } from '../db/helpers';
 import { resolveAIKey } from '../lib/ai-key-resolver';
 import { runChat, parseJsonResponse } from '../lib/ai';
 import { buildNewsBriefPrompt } from '../lib/prompts';
 import { sendPushToUser } from '../lib/apns';
+import { persistBrief } from '../lib/brief-persist';
 
 // ---------------------------------------------------------------------------
 // Scheduled briefs cron — runs hourly, generates and pushes briefs
@@ -150,14 +150,26 @@ export async function generateScheduledBriefs(env: Env): Promise<void> {
       const parsed = parseJsonResponse(content) as Record<string, unknown> | null;
       const bullets = Array.isArray(parsed?.bullets) ? parsed!.bullets : [];
 
-      // Save brief.
-      const briefText = JSON.stringify(bullets);
-      const articleIdsJson = JSON.stringify(candidates.map(c => c.id));
-      await dbRun(db,
-        `INSERT INTO news_brief_editions (id, user_id, edition_type, brief_text, article_ids_json, provider, model, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [nanoid(), user_id, editionType, briefText, articleIdsJson, ai.provider, ai.model, now],
-      );
+      // Save brief. Slot key is user local day so each local day gets at most
+      // one morning + one evening edition even if the cron re-enters.
+      const localDate = new Date(dayStartMs);
+      const slotDate = `${localDate.getUTCFullYear()}-${String(localDate.getUTCMonth() + 1).padStart(2, '0')}-${String(localDate.getUTCDate()).padStart(2, '0')}`;
+      const inserted = await persistBrief(db, {
+        userId: user_id,
+        editionKind: editionType,
+        editionSlot: `${editionType}-${slotDate}`,
+        timezone,
+        windowStart: cutoffMs,
+        windowEnd: now,
+        scoreCutoff,
+        bullets: bullets as unknown[],
+        sourceArticleIds: candidates.map((c) => c.id),
+        provider: ai.provider,
+        model: ai.model,
+        candidateCount: candidates.length,
+        now,
+      });
+      if (!inserted) continue; // already generated — skip push
 
       // Send push notification.
       const bulletSummary = bullets.slice(0, 3).map((b: { text?: string }) => b.text ?? '').join(' • ');

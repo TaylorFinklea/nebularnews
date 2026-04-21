@@ -5,6 +5,7 @@ import { resolveAIKey } from '../lib/ai-key-resolver';
 import { runChat, parseJsonResponse } from '../lib/ai';
 import { buildNewsBriefPrompt } from '../lib/prompts';
 import { recordUsage } from '../lib/rate-limiter';
+import { persistBrief } from '../lib/brief-persist';
 
 export const briefRoutes = new Hono<AppEnv>();
 
@@ -157,6 +158,33 @@ briefRoutes.post('/brief/generate', async (c) => {
   const now = Date.now();
 
   await recordUsage(db, userId, ai.provider, ai.model, usage, 'brief', ai.isByok);
+
+  // Persist the brief so /today can return it on next app open. Failures here
+  // shouldn't break the user-facing response — log and continue.
+  try {
+    const tzRow = await dbGet<{ value: string }>(
+      db,
+      `SELECT value FROM settings WHERE user_id = ? AND key = 'newsBriefTimezone'`,
+      [userId],
+    );
+    await persistBrief(db, {
+      userId,
+      editionKind: editionType,
+      editionSlot: `ondemand-${now}`,
+      timezone: tzRow?.value || 'UTC',
+      windowStart: cutoffMs,
+      windowEnd: now,
+      scoreCutoff,
+      bullets,
+      sourceArticleIds: candidates.map((c) => c.id),
+      provider: ai.provider,
+      model: ai.model,
+      candidateCount: candidates.length,
+      now,
+    });
+  } catch (e) {
+    console.error('[brief/generate] persistBrief failed:', e instanceof Error ? e.message : e);
+  }
 
   return c.json({
     ok: true,

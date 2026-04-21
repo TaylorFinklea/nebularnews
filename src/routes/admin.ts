@@ -306,15 +306,37 @@ adminRoutes.get('/admin/tool-call-stats', async (c) => {
     }
   }
 
+  // Pull thrown-error counts from debug_log (scope tool-error:{name}) so we can
+  // surface tool failures that crashed before they could record succeeded=false.
+  type ErrRow = { scope: string; n: number };
+  const errRows = await dbAll<ErrRow>(
+    db,
+    `SELECT scope, COUNT(*) AS n
+       FROM debug_log
+       WHERE scope LIKE 'tool-error:%' AND created_at >= ?
+       GROUP BY scope`,
+    [weekAgo],
+  );
+  const errByTool = new Map<string, number>();
+  for (const r of errRows) {
+    errByTool.set(r.scope.replace(/^tool-error:/, ''), r.n);
+  }
+
   const byToolSorted = [...byTool.entries()]
-    .map(([name, agg]) => ({
-      name,
-      count: agg.count,
-      succeeded: agg.succeeded,
-      failed: agg.failed,
-      success_rate: agg.count > 0 ? agg.succeeded / agg.count : null,
-      last_at: agg.lastAt,
-    }))
+    .map(([name, agg]) => {
+      const thrown = errByTool.get(name) ?? 0;
+      const loggingGap = Math.max(0, agg.count - agg.succeeded - agg.failed);
+      return {
+        name,
+        count: agg.count,
+        succeeded: agg.succeeded,
+        failed: agg.failed,
+        thrown_errors: thrown,
+        logging_gap: loggingGap,
+        success_rate: agg.count > 0 ? agg.succeeded / agg.count : null,
+        last_at: agg.lastAt,
+      };
+    })
     .sort((a, b) => b.count - a.count);
 
   return c.json({

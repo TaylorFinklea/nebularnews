@@ -1,6 +1,6 @@
 import { nanoid } from 'nanoid';
 import type { D1Database } from '@cloudflare/workers-types';
-import { dbGet, dbRun } from '../db/helpers';
+import { dbGet, dbRun, dbAll } from '../db/helpers';
 import { handleToolCall as handleMcpToolCall } from '../mcp/tools';
 import { normalizeFeedURL } from './feed-url-normalizer';
 import type { ToolDefinition, ToolCall } from './ai';
@@ -226,6 +226,7 @@ export const UNDO_TOOL_NAMES = new Set([
   'undo_set_article_reaction',
   'undo_apply_tag_to_article',
   'undo_pause_feed',
+  'undo_set_feed_max_per_day',
   'undo_subscribe_to_feed',
 ]);
 
@@ -251,8 +252,20 @@ export async function executeServerTool(
         if (ids.length === 0) {
           return { callId: call.id, name: call.name, content: 'No article ids supplied.', summary: 'No articles to mark', succeeded: false };
         }
+        // Filter to ids that actually exist in the articles table so hallucinated
+        // ids don't return a false success.
+        const placeholders = ids.map(() => '?').join(',');
+        const existing = await dbAll<{ id: string }>(
+          ctx.db,
+          `SELECT id FROM articles WHERE id IN (${placeholders})`,
+          ids,
+        );
+        const validIds = existing.map((r) => r.id);
+        if (validIds.length === 0) {
+          return { callId: call.id, name: call.name, content: 'None of the supplied article ids were found.', summary: 'Articles not found', succeeded: false };
+        }
         const now = Date.now();
-        for (const articleId of ids) {
+        for (const articleId of validIds) {
           await dbRun(
             ctx.db,
             `INSERT INTO article_read_state (user_id, article_id, is_read, updated_at)
@@ -261,13 +274,15 @@ export async function executeServerTool(
             [ctx.userId, articleId, now],
           );
         }
+        const skipped = ids.length - validIds.length;
+        const skipNote = skipped > 0 ? ` (${skipped} unknown id${skipped === 1 ? '' : 's'} skipped)` : '';
         return {
           callId: call.id,
           name: call.name,
-          content: `Marked ${ids.length} article(s) as read.`,
-          summary: `Marked ${ids.length} article${ids.length === 1 ? '' : 's'} as read`,
+          content: `Marked ${validIds.length} article(s) as read${skipNote}.`,
+          summary: `Marked ${validIds.length} article${validIds.length === 1 ? '' : 's'} as read${skipNote}`,
           succeeded: true,
-          undo: { tool: 'undo_mark_articles_read', args: { article_ids: ids } },
+          undo: { tool: 'undo_mark_articles_read', args: { article_ids: validIds } },
         };
       }
 
@@ -355,17 +370,32 @@ export async function executeServerTool(
         if (!feedId) {
           return { callId: call.id, name: call.name, content: 'Missing feed_id.', summary: 'Missing feed', succeeded: false };
         }
+        // Verify the subscription exists so we don't silently succeed on a
+        // hallucinated feed_id. Also capture prior cap for undo.
+        const sub = await dbGet<{ max_articles_per_day: number | null; feed_title: string | null }>(
+          ctx.db,
+          `SELECT s.max_articles_per_day AS max_articles_per_day, f.title AS feed_title
+             FROM user_feed_subscriptions s
+             LEFT JOIN feeds f ON f.id = s.feed_id
+             WHERE s.user_id = ? AND s.feed_id = ?`,
+          [ctx.userId, feedId],
+        );
+        if (!sub) {
+          return { callId: call.id, name: call.name, content: `No subscription found for feed ${feedId}.`, summary: "Feed isn't subscribed", succeeded: false };
+        }
         await dbRun(
           ctx.db,
           `UPDATE user_feed_subscriptions SET max_articles_per_day = ? WHERE user_id = ? AND feed_id = ?`,
           [cap > 0 ? cap : null, ctx.userId, feedId],
         );
+        const label = sub.feed_title ?? feedId;
         return {
           callId: call.id,
           name: call.name,
-          content: cap > 0 ? `Set cap to ${cap} articles/day.` : 'Removed daily cap.',
-          summary: cap > 0 ? `Capped feed at ${cap}/day` : 'Removed daily cap',
+          content: cap > 0 ? `Set cap to ${cap} articles/day for ${label}.` : `Removed daily cap for ${label}.`,
+          summary: cap > 0 ? `Capped ${label} at ${cap}/day` : `Removed cap on ${label}`,
           succeeded: true,
+          undo: { tool: 'undo_set_feed_max_per_day', args: { feed_id: feedId, max_per_day: sub.max_articles_per_day ?? 0 } },
         };
       }
 
@@ -375,16 +405,29 @@ export async function executeServerTool(
         if (!feedId) {
           return { callId: call.id, name: call.name, content: 'Missing feed_id.', summary: 'Missing feed', succeeded: false };
         }
+        // Verify subscription exists so a bad feed_id doesn't silently succeed.
+        const sub = await dbGet<{ paused: number; feed_title: string | null }>(
+          ctx.db,
+          `SELECT s.paused AS paused, f.title AS feed_title
+             FROM user_feed_subscriptions s
+             LEFT JOIN feeds f ON f.id = s.feed_id
+             WHERE s.user_id = ? AND s.feed_id = ?`,
+          [ctx.userId, feedId],
+        );
+        if (!sub) {
+          return { callId: call.id, name: call.name, content: `No subscription found for feed ${feedId}.`, summary: "Feed isn't subscribed", succeeded: false };
+        }
         await dbRun(
           ctx.db,
           `UPDATE user_feed_subscriptions SET paused = ? WHERE user_id = ? AND feed_id = ?`,
           [paused, ctx.userId, feedId],
         );
+        const label = sub.feed_title ?? feedId;
         return {
           callId: call.id,
           name: call.name,
-          content: paused ? 'Feed paused.' : 'Feed resumed.',
-          summary: paused ? 'Paused feed' : 'Resumed feed',
+          content: paused ? `Paused ${label}.` : `Resumed ${label}.`,
+          summary: paused ? `Paused ${label}` : `Resumed ${label}`,
           succeeded: true,
           undo: { tool: 'undo_pause_feed', args: { feed_id: feedId, paused: paused === 1 } },
         };
@@ -477,7 +520,24 @@ export async function executeServerTool(
         };
     }
   } catch (err) {
+    const name = err instanceof Error ? err.name : 'Error';
     const msg = err instanceof Error ? err.message : 'Unknown error';
+    const stack = err instanceof Error ? err.stack?.slice(0, 800) ?? null : null;
+    // Persist full error context to debug_log so we can diagnose tool failures
+    // without relying on wrangler tail. Fire-and-forget — must not throw.
+    try {
+      await dbRun(
+        ctx.db,
+        `INSERT INTO debug_log (id, created_at, scope, event, data) VALUES (?, ?, ?, ?, ?)`,
+        [
+          nanoid(),
+          Date.now(),
+          `tool-error:${call.name}`,
+          'execute_failed',
+          JSON.stringify({ userId: ctx.userId, callId: call.id, args: call.args, name, msg, stack }),
+        ],
+      );
+    } catch { /* diagnostic only */ }
     return {
       callId: call.id,
       name: call.name,
@@ -550,6 +610,17 @@ export async function executeUndoTool(
           [restoreTo, ctx.userId, feedId],
         );
         return { summary: restoreTo === 1 ? 'Feed paused again' : 'Feed resumed', succeeded: true };
+      }
+
+      case 'undo_set_feed_max_per_day': {
+        const feedId = String(args.feed_id ?? '');
+        const restore = Number(args.max_per_day ?? 0);
+        await dbRun(
+          ctx.db,
+          `UPDATE user_feed_subscriptions SET max_articles_per_day = ? WHERE user_id = ? AND feed_id = ?`,
+          [restore > 0 ? restore : null, ctx.userId, feedId],
+        );
+        return { summary: restore > 0 ? `Restored cap to ${restore}/day` : 'Restored daily cap to default', succeeded: true };
       }
 
       case 'undo_subscribe_to_feed': {

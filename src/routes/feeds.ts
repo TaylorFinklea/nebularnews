@@ -140,15 +140,48 @@ feedRoutes.delete('/feeds/:id', async (c) => {
   return c.json({ ok: true, data: null });
 });
 
-// PATCH /feeds/:id/settings — update subscription settings
+// Compute a compact ETag-style hash of a subscription's mutable fields so the
+// client can detect concurrent edits via If-Match.
+function subscriptionEtag(row: { paused: number; max_articles_per_day: number | null; min_score: number | null }): string {
+  return `p${row.paused}m${row.max_articles_per_day ?? ''}n${row.min_score ?? ''}`;
+}
+
+// PATCH /feeds/:id/settings — update subscription settings.
+// Optional `If-Match` header: if present, must equal the current ETag computed
+// from (paused, max_articles_per_day, min_score). Mismatch returns 412 so the
+// client can reconcile a stale offline edit.
 feedRoutes.patch('/feeds/:id/settings', async (c) => {
   const userId = c.get('userId');
   const feedId = c.req.param('id');
+  const ifMatch = c.req.header('If-Match');
   const body = await c.req.json<{
     paused?: boolean;
     maxArticlesPerDay?: number;
     minScore?: number;
   }>();
+
+  if (ifMatch) {
+    const current = await dbGet<{ paused: number; max_articles_per_day: number | null; min_score: number | null }>(
+      c.env.DB,
+      `SELECT paused, max_articles_per_day, min_score
+         FROM user_feed_subscriptions
+         WHERE user_id = ? AND feed_id = ?`,
+      [userId, feedId],
+    );
+    if (!current) {
+      return c.json({ ok: false, error: { code: 'not_found', message: 'No subscription' } }, 404);
+    }
+    const currentTag = subscriptionEtag(current);
+    if (currentTag !== ifMatch) {
+      return c.json(
+        {
+          ok: false,
+          error: { code: 'precondition_failed', message: 'Subscription state changed since last read', current_etag: currentTag },
+        },
+        412,
+      );
+    }
+  }
 
   const sets: string[] = [];
   const params: unknown[] = [];
@@ -174,7 +207,16 @@ feedRoutes.patch('/feeds/:id/settings', async (c) => {
     `UPDATE user_feed_subscriptions SET ${sets.join(', ')} WHERE user_id = ? AND feed_id = ?`,
     params,
   );
-  return c.json({ ok: true, data: null });
+
+  const updated = await dbGet<{ paused: number; max_articles_per_day: number | null; min_score: number | null }>(
+    c.env.DB,
+    `SELECT paused, max_articles_per_day, min_score
+       FROM user_feed_subscriptions
+       WHERE user_id = ? AND feed_id = ?`,
+    [userId, feedId],
+  );
+  const newEtag = updated ? subscriptionEtag(updated) : null;
+  return c.json({ ok: true, data: { etag: newEtag } });
 });
 
 // POST /feeds/import-opml — bulk subscribe from OPML XML

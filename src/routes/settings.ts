@@ -101,8 +101,21 @@ settingsRoutes.put('/settings', async (c) => {
   if (brief) {
     if (brief.enabled !== undefined)
       pairs.push(['newsBriefEnabled', String(brief.enabled)]);
-    if (brief.timezone !== undefined)
+    if (brief.timezone !== undefined) {
+      // Validate the IANA identifier so the cron doesn't silently fall back to
+      // UTC later. Empty string is allowed (stored, cron treats as UTC).
+      if (brief.timezone !== '') {
+        try {
+          new Intl.DateTimeFormat('en-US', { timeZone: brief.timezone });
+        } catch {
+          return c.json(
+            { ok: false, error: { code: 'bad_request', message: `Unknown timezone: ${brief.timezone}` } },
+            400,
+          );
+        }
+      }
       pairs.push(['newsBriefTimezone', brief.timezone]);
+    }
     if (brief.morningTime !== undefined)
       pairs.push(['newsBriefMorningTime', brief.morningTime]);
     if (brief.eveningTime !== undefined)

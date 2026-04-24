@@ -169,14 +169,16 @@ export async function generateScheduledBriefs(env: Env): Promise<void> {
         candidateCount: candidates.length,
         now,
       });
-      if (!inserted) continue; // already generated — skip push
+      if (!inserted.id) continue; // already generated — skip push
 
-      // Send push notification.
-      const bulletSummary = bullets.slice(0, 3).map((b: { text?: string }) => b.text ?? '').join(' • ');
+      // Send push notification. Body previews the first bullet so the lock-
+      // screen notification surfaces actual content, not a generic message.
+      const firstBullet = (bullets[0] as { text?: string } | undefined)?.text ?? '';
+      const trimmedBody = firstBullet.length > 140 ? firstBullet.slice(0, 137) + '…' : firstBullet;
       await sendPushToUser(db, env, user_id, {
         title: editionType === 'morning' ? 'Morning Brief' : 'Evening Brief',
-        body: bulletSummary || 'Your news brief is ready.',
-        data: { type: 'brief', edition: editionType },
+        body: trimmedBody || 'Your news brief is ready.',
+        data: { type: 'brief', edition: editionType, id: inserted.id },
       });
 
     } catch (err) {

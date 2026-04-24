@@ -161,13 +161,14 @@ briefRoutes.post('/brief/generate', async (c) => {
 
   // Persist the brief so /today can return it on next app open. Failures here
   // shouldn't break the user-facing response — log and continue.
+  let persistedId: string | null = null;
   try {
     const tzRow = await dbGet<{ value: string }>(
       db,
       `SELECT value FROM settings WHERE user_id = ? AND key = 'newsBriefTimezone'`,
       [userId],
     );
-    await persistBrief(db, {
+    const result = await persistBrief(db, {
       userId,
       editionKind: editionType,
       editionSlot: `ondemand-${now}`,
@@ -182,6 +183,7 @@ briefRoutes.post('/brief/generate', async (c) => {
       candidateCount: candidates.length,
       now,
     });
+    persistedId = result.id;
   } catch (e) {
     console.error('[brief/generate] persistBrief failed:', e instanceof Error ? e.message : e);
   }
@@ -189,6 +191,7 @@ briefRoutes.post('/brief/generate', async (c) => {
   return c.json({
     ok: true,
     data: {
+      id: persistedId,
       state: 'done',
       title: 'News Brief',
       edition_label: editionType === 'morning' ? 'Morning' : 'Evening',

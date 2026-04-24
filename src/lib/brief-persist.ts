@@ -31,11 +31,13 @@ export interface PersistBriefInput {
 
 /**
  * Insert a completed brief. `edition_key` is UNIQUE; duplicate attempts on
- * the same (user, kind, slot) return false without throwing so callers can
- * treat a re-fire as idempotent.
+ * the same (user, kind, slot) return `{ id: null }` without throwing so
+ * callers can treat a re-fire as idempotent. On successful insert the new
+ * edition's id is returned so callers can thread it into push payloads.
  */
-export async function persistBrief(db: D1Database, input: PersistBriefInput): Promise<boolean> {
+export async function persistBrief(db: D1Database, input: PersistBriefInput): Promise<{ id: string | null }> {
   const editionKey = `${input.userId}:${input.editionKind}:${input.editionSlot}`;
+  const id = nanoid();
   try {
     await dbRun(
       db,
@@ -47,7 +49,7 @@ export async function persistBrief(db: D1Database, input: PersistBriefInput): Pr
          created_at, updated_at
        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'done', ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`,
       [
-        nanoid(),
+        id,
         input.userId,
         editionKey,
         input.editionKind,
@@ -68,11 +70,11 @@ export async function persistBrief(db: D1Database, input: PersistBriefInput): Pr
         input.now,
       ],
     );
-    return true;
+    return { id };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     // UNIQUE(edition_key) collisions are expected on re-fire; swallow.
-    if (msg.includes('UNIQUE')) return false;
+    if (msg.includes('UNIQUE')) return { id: null };
     throw err;
   }
 }

@@ -1,6 +1,13 @@
 import { Hono } from 'hono';
 import type { AppEnv } from '../index';
 import { dbGet, dbAll, dbRun } from '../db/helpers';
+import { scrapeAndPersist, type ScrapeProvider } from '../lib/scraper';
+import { persistBrief } from '../lib/brief-persist';
+import { resolveAIKey } from '../lib/ai-key-resolver';
+import { runChat, parseJsonResponse } from '../lib/ai';
+import { buildNewsBriefPrompt } from '../lib/prompts';
+
+const ALLOWED_SCRAPE_MODES = new Set(['rss_only', 'auto_fetch_on_empty', 'always']);
 
 export const adminRoutes = new Hono<AppEnv>();
 
@@ -106,6 +113,400 @@ adminRoutes.post('/admin/feeds/:feedId/repoll', async (c) => {
 
   await dbRun(db, `UPDATE feeds SET next_poll_at = 0, error_count = 0 WHERE id = ?`, [feedId]);
   return c.json({ ok: true, data: { feedId, message: 'Feed queued for next poll' } });
+});
+
+// ---------------------------------------------------------------------------
+// PATCH /admin/feeds/:feedId — update feed-level settings
+//
+// Accepts any subset of { scrape_mode, disabled, title }. Unknown keys are
+// ignored. Used by the web admin UI to flip a feed's scrape mode, pause a
+// chronically-failing source, or correct a bad title.
+// ---------------------------------------------------------------------------
+
+adminRoutes.patch('/admin/feeds/:feedId', async (c) => {
+  const db = c.env.DB;
+  const feedId = c.req.param('feedId');
+  const body = await c.req.json<{
+    scrape_mode?: string;
+    disabled?: boolean;
+    title?: string;
+  }>();
+
+  const sets: string[] = [];
+  const params: unknown[] = [];
+
+  if (body.scrape_mode !== undefined) {
+    if (!ALLOWED_SCRAPE_MODES.has(body.scrape_mode)) {
+      return c.json({ ok: false, error: { code: 'bad_request', message: `scrape_mode must be one of ${[...ALLOWED_SCRAPE_MODES].join(', ')}` } }, 400);
+    }
+    sets.push('scrape_mode = ?');
+    params.push(body.scrape_mode);
+  }
+  if (body.disabled !== undefined) {
+    sets.push('disabled = ?');
+    params.push(body.disabled ? 1 : 0);
+  }
+  if (body.title !== undefined) {
+    sets.push('title = ?');
+    params.push(body.title);
+  }
+
+  if (sets.length === 0) {
+    return c.json({ ok: false, error: { code: 'bad_request', message: 'No updatable fields supplied' } }, 400);
+  }
+
+  params.push(feedId);
+  await dbRun(db, `UPDATE feeds SET ${sets.join(', ')} WHERE id = ?`, params);
+
+  const updated = await dbGet<Record<string, unknown>>(
+    db,
+    `SELECT id, url, title, site_url, scrape_mode, scrape_provider, disabled,
+            error_count, scrape_error_count, avg_extraction_quality
+       FROM feeds WHERE id = ?`,
+    [feedId],
+  );
+  if (!updated) {
+    return c.json({ ok: false, error: { code: 'not_found', message: 'Feed not found' } }, 404);
+  }
+  return c.json({ ok: true, data: updated });
+});
+
+// ---------------------------------------------------------------------------
+// POST /admin/articles/:articleId/rescrape — force synchronous rescrape
+//
+// Resets retry bookkeeping so the cron will retry the article again later if
+// this admin-triggered scrape also fails. Returns the refreshed article row.
+// ---------------------------------------------------------------------------
+
+adminRoutes.post('/admin/articles/:articleId/rescrape', async (c) => {
+  const db = c.env.DB;
+  const articleId = c.req.param('articleId');
+
+  const article = await dbGet<{ id: string; canonical_url: string }>(
+    db,
+    `SELECT id, canonical_url FROM articles WHERE id = ?`,
+    [articleId],
+  );
+  if (!article) {
+    return c.json({ ok: false, error: { code: 'not_found', message: 'Article not found' } }, 404);
+  }
+
+  // Prefer the originating feed's configured scrape provider, if any.
+  const feedRow = await dbGet<{ scrape_provider: string | null }>(
+    db,
+    `SELECT f.scrape_provider FROM article_sources src
+       JOIN feeds f ON f.id = src.feed_id
+      WHERE src.article_id = ? AND f.scrape_provider IS NOT NULL
+      LIMIT 1`,
+    [articleId],
+  );
+
+  // Reset retry/attempt counters so the admin action starts a fresh budget.
+  await dbRun(
+    db,
+    `UPDATE articles SET scrape_retry_count = 0,
+       next_scrape_attempt_at = NULL,
+       fetch_attempt_count = 0,
+       last_fetch_error = NULL
+     WHERE id = ?`,
+    [articleId],
+  );
+
+  const result = await scrapeAndPersist(db, c.env, {
+    id: article.id,
+    canonical_url: article.canonical_url,
+    preferredProvider: (feedRow?.scrape_provider as ScrapeProvider) ?? null,
+  });
+
+  if (!result.ok) {
+    return c.json({
+      ok: false,
+      error: { code: 'scrape_failed', message: result.error ?? 'Unknown scrape error' },
+    }, 502);
+  }
+
+  const updated = await dbGet<Record<string, unknown>>(
+    db,
+    `SELECT id, title, canonical_url, excerpt, content_text, content_html,
+            word_count, extraction_method, extraction_quality,
+            last_fetch_attempt_at, fetch_attempt_count, last_fetch_error,
+            scrape_retry_count, next_scrape_attempt_at
+       FROM articles WHERE id = ?`,
+    [articleId],
+  );
+  return c.json({ ok: true, data: updated });
+});
+
+// ---------------------------------------------------------------------------
+// GET /admin/articles — paginated article list for the admin UI
+//
+// Query params:
+//   feed_id     — restrict to one feed
+//   empty_only  — only articles with missing/short content
+//   has_error   — only articles with last_fetch_error set
+//   limit       — page size (default 50, max 200)
+//   before      — cursor (epoch ms, return articles published BEFORE this)
+// ---------------------------------------------------------------------------
+
+adminRoutes.get('/admin/articles', async (c) => {
+  const db = c.env.DB;
+
+  const feedId = c.req.query('feed_id');
+  const emptyOnly = c.req.query('empty_only') === 'true';
+  const hasError = c.req.query('has_error') === 'true';
+  const limitRaw = parseInt(c.req.query('limit') ?? '50', 10);
+  const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 50, 1), 200);
+  const beforeRaw = c.req.query('before');
+  const before = beforeRaw ? parseInt(beforeRaw, 10) : Number.MAX_SAFE_INTEGER;
+
+  const conditions: string[] = ['COALESCE(a.published_at, a.fetched_at) < ?'];
+  const params: unknown[] = [before];
+
+  if (feedId) {
+    conditions.push('EXISTS (SELECT 1 FROM article_sources src WHERE src.article_id = a.id AND src.feed_id = ?)');
+    params.push(feedId);
+  }
+  if (emptyOnly) {
+    conditions.push('(a.content_text IS NULL OR length(a.content_text) < 50)');
+  }
+  if (hasError) {
+    conditions.push('a.last_fetch_error IS NOT NULL');
+  }
+
+  params.push(limit + 1);
+
+  const rows = await dbAll<{
+    id: string;
+    title: string | null;
+    canonical_url: string;
+    published_at: number | null;
+    fetched_at: number | null;
+    content_text_length: number;
+    last_fetch_error: string | null;
+    scrape_retry_count: number;
+    next_scrape_attempt_at: number | null;
+    fetch_attempt_count: number;
+    feed_id: string | null;
+    feed_title: string | null;
+  }>(
+    db,
+    `SELECT a.id, a.title, a.canonical_url, a.published_at, a.fetched_at,
+            COALESCE(length(a.content_text), 0) AS content_text_length,
+            a.last_fetch_error, a.scrape_retry_count, a.next_scrape_attempt_at,
+            a.fetch_attempt_count,
+            (SELECT src.feed_id FROM article_sources src WHERE src.article_id = a.id LIMIT 1) AS feed_id,
+            (SELECT f.title FROM article_sources src JOIN feeds f ON f.id = src.feed_id WHERE src.article_id = a.id LIMIT 1) AS feed_title
+       FROM articles a
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY COALESCE(a.published_at, a.fetched_at) DESC
+      LIMIT ?`,
+    params,
+  );
+
+  const hasMore = rows.length > limit;
+  const page = hasMore ? rows.slice(0, limit) : rows;
+  const nextBefore = hasMore
+    ? (page[page.length - 1].published_at ?? page[page.length - 1].fetched_at ?? null)
+    : null;
+
+  return c.json({
+    ok: true,
+    data: { articles: page, next_before: nextBefore },
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /admin/briefs — paginated recent brief editions across all users
+//
+// Query params:
+//   user_id — restrict to one user
+//   limit   — page size (default 50, max 200)
+//   before  — cursor (epoch ms; return briefs generated BEFORE this)
+// ---------------------------------------------------------------------------
+
+adminRoutes.get('/admin/briefs', async (c) => {
+  const db = c.env.DB;
+
+  const targetUserId = c.req.query('user_id');
+  const limitRaw = parseInt(c.req.query('limit') ?? '50', 10);
+  const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 50, 1), 200);
+  const beforeRaw = c.req.query('before');
+  const before = beforeRaw ? parseInt(beforeRaw, 10) : Number.MAX_SAFE_INTEGER;
+
+  const conditions: string[] = ['b.generated_at IS NOT NULL', 'b.generated_at < ?'];
+  const params: unknown[] = [before];
+  if (targetUserId) {
+    conditions.push('b.user_id = ?');
+    params.push(targetUserId);
+  }
+  params.push(limit + 1);
+
+  const rows = await dbAll<{
+    id: string;
+    user_id: string;
+    user_email: string | null;
+    edition_kind: string;
+    edition_slot: string;
+    timezone: string;
+    status: string;
+    generated_at: number;
+    candidate_count: number;
+    provider: string | null;
+    model: string | null;
+    source_count: number;
+  }>(
+    db,
+    `SELECT b.id, b.user_id, u.email AS user_email, b.edition_kind, b.edition_slot,
+            b.timezone, b.status, b.generated_at, b.candidate_count,
+            b.provider, b.model,
+            json_array_length(COALESCE(b.source_article_ids_json, '[]')) AS source_count
+       FROM news_brief_editions b
+       LEFT JOIN user u ON u.id = b.user_id
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY b.generated_at DESC
+      LIMIT ?`,
+    params,
+  );
+
+  const hasMore = rows.length > limit;
+  const page = hasMore ? rows.slice(0, limit) : rows;
+  const nextBefore = hasMore ? page[page.length - 1].generated_at : null;
+  return c.json({ ok: true, data: { briefs: page, next_before: nextBefore } });
+});
+
+// ---------------------------------------------------------------------------
+// POST /admin/briefs/generate-for-user — trigger brief generation on-demand
+//
+// Body: { user_id, edition_kind: 'morning' | 'evening', edition_slot? }
+//
+// Bypasses the timezone-based cron check so an admin can force-fire a brief
+// for diagnostics. Re-uses persistBrief() so the row shape matches /today.
+// ---------------------------------------------------------------------------
+
+adminRoutes.post('/admin/briefs/generate-for-user', async (c) => {
+  const db = c.env.DB;
+  const body = await c.req.json<{
+    user_id: string;
+    edition_kind: 'morning' | 'evening' | 'ondemand';
+    edition_slot?: string;
+    lookback_hours?: number;
+  }>();
+
+  if (!body.user_id) {
+    return c.json({ ok: false, error: { code: 'bad_request', message: 'user_id is required' } }, 400);
+  }
+  const editionKind = body.edition_kind === 'evening' || body.edition_kind === 'ondemand' ? body.edition_kind : 'morning';
+  const lookbackHours = body.lookback_hours ?? 12;
+
+  const ai = await resolveAIKey(db, body.user_id, c.req.raw, c.env);
+  if (!ai) {
+    return c.json({ ok: false, error: { code: 'no_ai_key', message: 'No AI provider configured for user' } }, 503);
+  }
+
+  // Gather scored articles from that user's subscribed feeds within lookback.
+  const cutoffSetting = await dbGet<{ value: string }>(
+    db,
+    `SELECT value FROM settings WHERE user_id = ? AND key = 'newsBriefScoreCutoff'`,
+    [body.user_id],
+  );
+  const tzRow = await dbGet<{ value: string }>(
+    db,
+    `SELECT value FROM settings WHERE user_id = ? AND key = 'newsBriefTimezone'`,
+    [body.user_id],
+  );
+  const scoreCutoff = parseInt(cutoffSetting?.value ?? '') || 3;
+  const timezone = tzRow?.value || 'UTC';
+  const now = Date.now();
+  const cutoffMs = now - lookbackHours * 3_600_000;
+
+  const rows = await dbAll<{
+    id: string;
+    title: string | null;
+    published_at: number | null;
+    score: number;
+    feed_title: string | null;
+    summary_text: string | null;
+  }>(
+    db,
+    `SELECT a.id, a.title, a.published_at,
+            MAX(COALESCE(s.score, 0)) AS score,
+            (SELECT f.title FROM feeds f
+               JOIN article_sources src2 ON src2.feed_id = f.id
+              WHERE src2.article_id = a.id LIMIT 1) AS feed_title,
+            (SELECT summary_text FROM article_summaries
+              WHERE article_id = a.id ORDER BY created_at DESC LIMIT 1) AS summary_text
+       FROM article_sources src
+       JOIN user_feed_subscriptions ufs ON ufs.feed_id = src.feed_id AND ufs.user_id = ? AND ufs.paused = 0
+       JOIN articles a ON a.id = src.article_id
+  LEFT JOIN article_scores s ON s.article_id = src.article_id AND s.user_id = ?
+      WHERE src.created_at >= ?
+        AND COALESCE(s.score, 0) >= ?
+      GROUP BY a.id
+      ORDER BY score DESC, COALESCE(a.published_at, a.fetched_at) DESC
+      LIMIT 20`,
+    [body.user_id, body.user_id, cutoffMs, scoreCutoff],
+  );
+
+  if (rows.length === 0) {
+    return c.json({ ok: false, error: { code: 'no_candidates', message: 'No scored articles in lookback window' } }, 409);
+  }
+
+  const candidates = rows.map((r) => ({
+    id: r.id,
+    title: r.title ?? 'Untitled',
+    sourceName: r.feed_title ?? null,
+    publishedAt: r.published_at,
+    effectiveScore: r.score,
+    context: r.summary_text ?? '',
+  }));
+
+  const windowLabel = editionKind === 'morning' ? 'Morning Brief' : editionKind === 'evening' ? 'Evening Brief' : 'News Brief';
+  const messages = buildNewsBriefPrompt(candidates, windowLabel, 5);
+  const { content } = await runChat(ai.provider, ai.apiKey, ai.model, messages);
+  const parsed = parseJsonResponse(content) as Record<string, unknown> | null;
+  const rawBullets = Array.isArray(parsed?.bullets)
+    ? (parsed!.bullets as Array<{ text?: string; source_article_ids?: string[] }>)
+    : [];
+
+  const candidateMap = new Map(candidates.map((c) => [c.id, c]));
+  const bullets = rawBullets.map((b) => {
+    const sources = (b.source_article_ids ?? [])
+      .map((id) => candidateMap.get(id))
+      .filter(Boolean)
+      .map((a) => ({ article_id: a!.id, title: a!.title, canonical_url: null }));
+    return { text: b.text ?? '', sources };
+  });
+
+  const slot = body.edition_slot ?? `${editionKind}-admin-${now}`;
+  const inserted = await persistBrief(db, {
+    userId: body.user_id,
+    editionKind,
+    editionSlot: slot,
+    timezone,
+    windowStart: cutoffMs,
+    windowEnd: now,
+    scoreCutoff,
+    bullets,
+    sourceArticleIds: candidates.map((c) => c.id),
+    provider: ai.provider,
+    model: ai.model,
+    candidateCount: candidates.length,
+    now,
+  });
+
+  return c.json({
+    ok: true,
+    data: {
+      id: inserted.id,
+      user_id: body.user_id,
+      edition_kind: editionKind,
+      edition_slot: slot,
+      candidate_count: candidates.length,
+      bullet_count: bullets.length,
+      generated_at: now,
+      duplicate: inserted.id === null,
+    },
+  });
 });
 
 // ---------------------------------------------------------------------------

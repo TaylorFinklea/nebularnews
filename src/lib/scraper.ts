@@ -1,5 +1,7 @@
 import { Readability } from '@mozilla/readability';
 import { parseHTML } from 'linkedom';
+import type { D1Database } from '@cloudflare/workers-types';
+import { dbRun } from '../db/helpers';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -241,4 +243,63 @@ export async function scrapeAndExtract(
     extractionQuality: quality,
     extractionMethod: usedProvider,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Shared persistence helper
+//
+// Both the poll-feeds cron (new-article path), the retry-empty-articles cron,
+// and the admin rescrape route use this to keep the UPDATE shape consistent
+// across callers. Feed-level stats (scrape_article_count, avg_extraction_quality)
+// stay in callers because they vary: poll-feeds always updates them; the
+// retry cron and admin path don't need to.
+// ---------------------------------------------------------------------------
+
+export interface ScrapeAndPersistResult {
+  ok: boolean;
+  scraped?: ScrapeResult;
+  error?: string;
+  attemptedAt: number;
+}
+
+export async function scrapeAndPersist(
+  db: D1Database,
+  env: { STEEL_API_KEY?: string; BROWSERLESS_API_KEY?: string },
+  article: { id: string; canonical_url: string; preferredProvider?: ScrapeProvider | null },
+): Promise<ScrapeAndPersistResult> {
+  const now = Date.now();
+  try {
+    const result = await scrapeAndExtract(
+      article.canonical_url,
+      env,
+      article.preferredProvider ?? undefined,
+    );
+    await dbRun(db,
+      `UPDATE articles SET content_html = ?, content_text = ?, excerpt = ?,
+         word_count = ?, extraction_method = ?, extraction_quality = ?,
+         title = COALESCE(?, title), author = COALESCE(?, author),
+         image_url = COALESCE(?, image_url),
+         last_fetch_attempt_at = ?,
+         fetch_attempt_count = COALESCE(fetch_attempt_count, 0) + 1,
+         last_fetch_error = NULL
+       WHERE id = ?`,
+      [
+        result.contentHtml, result.contentText, result.excerpt,
+        result.wordCount, result.extractionMethod, result.extractionQuality,
+        result.title, result.author, result.imageUrl,
+        now, article.id,
+      ],
+    );
+    return { ok: true, scraped: result, attemptedAt: now };
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    await dbRun(db,
+      `UPDATE articles SET last_fetch_attempt_at = ?,
+         fetch_attempt_count = COALESCE(fetch_attempt_count, 0) + 1,
+         last_fetch_error = ?
+       WHERE id = ?`,
+      [now, errMsg.slice(0, 500), article.id],
+    );
+    return { ok: false, error: errMsg, attemptedAt: now };
+  }
 }

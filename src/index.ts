@@ -31,6 +31,7 @@ import { pollFeeds } from './cron/poll-feeds';
 import { scoreArticles } from './cron/score-articles';
 import { cleanup } from './cron/cleanup';
 import { generateScheduledBriefs } from './cron/scheduled-briefs';
+import { retryEmptyArticles } from './cron/retry-empty-articles';
 
 export type AppEnv = { Bindings: Env; Variables: { userId: string } };
 
@@ -90,6 +91,7 @@ export default {
       case '0 * * * *':
         ctx.waitUntil(run('score-articles', () => scoreArticles(env)));
         ctx.waitUntil(run('scheduled-briefs', () => generateScheduledBriefs(env)));
+        ctx.waitUntil(run('retry-empty-articles', () => retryEmptyArticles(env)));
         break;
       case '30 3 * * *':
         ctx.waitUntil(run('cleanup', () => cleanup(env)));

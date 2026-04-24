@@ -52,6 +52,12 @@ feedRoutes.get('/feeds', async (c) => {
 //   'always'              → deep-scrape every item on ingestion
 const ALLOWED_SCRAPE_MODES = new Set(['rss_only', 'auto_fetch_on_empty', 'always']);
 
+// Effective default for newly created feeds. The column default in the initial
+// schema is still 'rss_only' (changing a column default in SQLite requires a
+// table rebuild), so every INSERT path must pass this value explicitly to
+// actually land on the desired floor.
+const DEFAULT_SCRAPE_MODE = 'auto_fetch_on_empty';
+
 function sanitizeScrapeMode(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   return ALLOWED_SCRAPE_MODES.has(value) ? value : null;
@@ -68,15 +74,11 @@ feedRoutes.post('/feeds', async (c) => {
 
   if (!feed) {
     const feedId = nanoid();
-    if (requestedMode) {
-      await dbRun(
-        c.env.DB,
-        `INSERT INTO feeds (id, url, scrape_mode) VALUES (?, ?, ?)`,
-        [feedId, url, requestedMode],
-      );
-    } else {
-      await dbRun(c.env.DB, `INSERT INTO feeds (id, url) VALUES (?, ?)`, [feedId, url]);
-    }
+    await dbRun(
+      c.env.DB,
+      `INSERT INTO feeds (id, url, scrape_mode) VALUES (?, ?, ?)`,
+      [feedId, url, requestedMode ?? DEFAULT_SCRAPE_MODE],
+    );
     feed = { id: feedId, url, title: null, site_url: null };
   } else if (requestedMode) {
     // Upgrade the existing feed's scrape_mode if the caller asked for a more
@@ -244,8 +246,8 @@ feedRoutes.post('/feeds/import-opml', async (c) => {
   for (const url of urls) {
     const feedId = nanoid();
     statements.push({
-      sql: `INSERT INTO feeds (id, url) VALUES (?, ?) ON CONFLICT (url) DO NOTHING`,
-      params: [feedId, url],
+      sql: `INSERT INTO feeds (id, url, scrape_mode) VALUES (?, ?, ?) ON CONFLICT (url) DO NOTHING`,
+      params: [feedId, url, DEFAULT_SCRAPE_MODE],
     });
     const subId = nanoid();
     statements.push({

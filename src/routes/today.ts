@@ -61,6 +61,43 @@ todayRoutes.get('/today', async (c) => {
      FROM news_brief_editions WHERE user_id = ? AND status = 'done' ORDER BY generated_at DESC LIMIT 1`,
     [userId]);
 
+  // Resume: most recent in-progress article (position 1-94 and not marked read).
+  const resumeRow = await dbGet<{
+    article_id: string;
+    title: string | null;
+    canonical_url: string | null;
+    image_url: string | null;
+    position_percent: number;
+    updated_at: number;
+  }>(db,
+    `SELECT rs.article_id AS article_id,
+            a.title AS title,
+            a.canonical_url AS canonical_url,
+            a.image_url AS image_url,
+            rs.read_position_percent AS position_percent,
+            rs.updated_at AS updated_at
+       FROM article_read_state rs
+       JOIN articles a ON a.id = rs.article_id
+       WHERE rs.user_id = ?
+         AND rs.is_read = 0
+         AND rs.read_position_percent IS NOT NULL
+         AND rs.read_position_percent BETWEEN 1 AND 94
+       ORDER BY rs.updated_at DESC
+       LIMIT 1`,
+    [userId]);
+
+  let resume = null;
+  if (resumeRow) {
+    resume = {
+      article_id: resumeRow.article_id,
+      title: resumeRow.title,
+      canonical_url: resumeRow.canonical_url,
+      image_url: resumeRow.image_url,
+      position_percent: resumeRow.position_percent,
+      updated_at: resumeRow.updated_at,
+    };
+  }
+
   let newsBrief = null;
   if (briefRow) {
     const windowHours = Math.round((briefRow.window_end - briefRow.window_start) / 3_600_000);
@@ -88,6 +125,7 @@ todayRoutes.get('/today', async (c) => {
         high_fit_unread: highFitRow?.count ?? 0,
       },
       news_brief: newsBrief,
+      resume,
     },
   });
 });

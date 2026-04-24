@@ -255,6 +255,30 @@ articleRoutes.post('/articles/:id/save', async (c) => {
   return c.json({ ok: true, data: { article_id: c.req.param('id'), saved, saved_at: saved ? now : null } });
 });
 
+// ── POST /articles/:id/reading-position ─────────────────────────────────────
+//
+// Records how far into the article the user has scrolled. Percent is clamped
+// to 0-100 server-side. Creates the article_read_state row if missing so the
+// user can save a reading position without first toggling read/saved state.
+
+articleRoutes.post('/articles/:id/reading-position', async (c) => {
+  const userId = c.get('userId');
+  const body = await c.req.json<{ percent?: number }>();
+  const raw = typeof body.percent === 'number' ? body.percent : 0;
+  const percent = Math.max(0, Math.min(100, Math.round(raw)));
+  const now = Date.now();
+
+  await dbRun(c.env.DB,
+    `INSERT INTO article_read_state (user_id, article_id, is_read, read_position_percent, updated_at)
+     VALUES (?, ?, 0, ?, ?)
+     ON CONFLICT (user_id, article_id) DO UPDATE SET
+       read_position_percent = excluded.read_position_percent,
+       updated_at = excluded.updated_at`,
+    [userId, c.req.param('id'), percent, now]);
+
+  return c.json({ ok: true, data: { article_id: c.req.param('id'), percent, updated_at: now } });
+});
+
 // ── POST /articles/:id/dismiss ──────────────────────────────────────────────
 
 articleRoutes.post('/articles/:id/dismiss', async (c) => {

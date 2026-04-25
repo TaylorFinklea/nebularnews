@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { nanoid } from 'nanoid';
 import type { AppEnv } from '../index';
 import { dbGet, dbAll, dbRun } from '../db/helpers';
 import { scrapeAndPersist, type ScrapeProvider } from '../lib/scraper';
@@ -8,6 +9,8 @@ import { runChat, parseJsonResponse } from '../lib/ai';
 import { buildNewsBriefPrompt } from '../lib/prompts';
 
 const ALLOWED_SCRAPE_MODES = new Set(['rss_only', 'auto_fetch_on_empty', 'always']);
+
+const AUDITED_METHODS = new Set(['POST', 'PATCH', 'DELETE']);
 
 export const adminRoutes = new Hono<AppEnv>();
 
@@ -23,6 +26,116 @@ adminRoutes.use('*', async (c, next) => {
     return c.json({ ok: false, error: { code: 'forbidden', message: 'Admin access required' } }, 403);
   }
   await next();
+});
+
+// ---------------------------------------------------------------------------
+// Audit middleware — logs every admin mutation
+//
+// Captures (user, method, path, params, body, status) for POST/PATCH/DELETE
+// calls. Body capture clones the request before next() so handlers can still
+// read it normally. The actual DB write is fire-and-forget via waitUntil so
+// the response isn't blocked.
+// ---------------------------------------------------------------------------
+
+adminRoutes.use('*', async (c, next) => {
+  if (!AUDITED_METHODS.has(c.req.method)) {
+    await next();
+    return;
+  }
+
+  // Capture body before the handler reads it. Hono lets handlers call
+  // c.req.json() multiple times in some versions, but cloning is the safe
+  // way to guarantee we don't consume the stream.
+  let bodyText: string | null = null;
+  try {
+    bodyText = await c.req.raw.clone().text();
+    if (bodyText && bodyText.length > 4000) bodyText = bodyText.slice(0, 4000) + '…';
+  } catch { /* no body or unreadable — skip */ }
+
+  await next();
+
+  const userId = c.get('userId');
+  const status = c.res.status;
+  const requestId = c.res.headers.get('x-request-id') ?? null;
+  const params = c.req.param();
+
+  c.executionCtx.waitUntil(
+    (async () => {
+      try {
+        await dbRun(
+          c.env.DB,
+          `INSERT INTO admin_audit
+            (id, user_id, method, path, params_json, body_json, status_code, request_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            nanoid(),
+            userId,
+            c.req.method,
+            new URL(c.req.url).pathname,
+            Object.keys(params).length > 0 ? JSON.stringify(params) : null,
+            bodyText,
+            status,
+            requestId,
+            Date.now(),
+          ],
+        );
+      } catch (err) {
+        // Audit failures must not surface to the client. Log and move on.
+        console.error('[admin-audit] failed to write row:', err);
+      }
+    })(),
+  );
+});
+
+// ---------------------------------------------------------------------------
+// GET /admin/audit — paginated audit log
+//
+// Filters: user_id, method (POST|PATCH|DELETE), path (prefix match), before
+// (cursor), limit. Returns ordered by most-recent first. Web UI for this is
+// design-blocked; the endpoint exists so the data is queryable now.
+// ---------------------------------------------------------------------------
+
+adminRoutes.get('/admin/audit', async (c) => {
+  const db = c.env.DB;
+  const userFilter = c.req.query('user_id');
+  const methodFilter = c.req.query('method')?.toUpperCase();
+  const pathPrefix = c.req.query('path');
+  const limitRaw = parseInt(c.req.query('limit') ?? '50', 10);
+  const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 50, 1), 200);
+  const beforeRaw = c.req.query('before');
+  const before = beforeRaw ? parseInt(beforeRaw, 10) : Number.MAX_SAFE_INTEGER;
+
+  const conditions: string[] = ['created_at < ?'];
+  const params: unknown[] = [before];
+  if (userFilter) { conditions.push('user_id = ?'); params.push(userFilter); }
+  if (methodFilter && AUDITED_METHODS.has(methodFilter)) { conditions.push('method = ?'); params.push(methodFilter); }
+  if (pathPrefix) { conditions.push('path LIKE ?'); params.push(pathPrefix + '%'); }
+  params.push(limit + 1);
+
+  const rows = await dbAll<{
+    id: string;
+    user_id: string;
+    method: string;
+    path: string;
+    params_json: string | null;
+    body_json: string | null;
+    status_code: number | null;
+    request_id: string | null;
+    created_at: number;
+  }>(
+    db,
+    `SELECT id, user_id, method, path, params_json, body_json, status_code, request_id, created_at
+       FROM admin_audit
+      WHERE ${conditions.join(' AND ')}
+      ORDER BY created_at DESC
+      LIMIT ?`,
+    params,
+  );
+
+  const hasMore = rows.length > limit;
+  const page = hasMore ? rows.slice(0, limit) : rows;
+  const nextBefore = hasMore ? page[page.length - 1].created_at : null;
+  return c.json({ ok: true, data: { entries: page, next_before: nextBefore } });
 });
 
 // ---------------------------------------------------------------------------

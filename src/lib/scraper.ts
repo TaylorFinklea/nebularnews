@@ -1,5 +1,6 @@
 import { Readability } from '@mozilla/readability';
 import { parseHTML } from 'linkedom';
+import { nanoid } from 'nanoid';
 import type { D1Database } from '@cloudflare/workers-types';
 import { dbRun } from '../db/helpers';
 
@@ -27,6 +28,62 @@ export interface ScrapeResult {
 }
 
 const SCRAPER_TIMEOUT_MS = 45_000;
+
+// ---------------------------------------------------------------------------
+// Per-call instrumentation
+//
+// Records every Steel/Browserless invocation into provider_calls so the
+// daily rollup cron and /admin/usage endpoint can show cost trends. Failures
+// are classified into a small taxonomy so we can spot patterns (timeout
+// surge → tune SCRAPER_TIMEOUT_MS, 5xx surge → provider incident, 4xx surge
+// → bad request shape after a deploy). Provider message format:
+//   "Steel error <status>: <body>"
+//   "Browserless error <status>: <body>"
+// ---------------------------------------------------------------------------
+
+function classifyProviderError(err: unknown): 'timeout' | 'http_4xx' | 'http_5xx' | 'network' {
+  const name = (err as { name?: string } | null)?.name;
+  if (name === 'AbortError' || name === 'TimeoutError') return 'timeout';
+  const msg = err instanceof Error ? err.message : String(err);
+  const m = msg.match(/error (\d{3}):/);
+  if (m) {
+    const status = parseInt(m[1], 10);
+    if (status >= 500) return 'http_5xx';
+    if (status >= 400) return 'http_4xx';
+  }
+  return 'network';
+}
+
+async function recordProviderCall(
+  db: D1Database,
+  args: {
+    provider: ScrapeProvider;
+    startedAt: number;
+    durationMs: number;
+    success: boolean;
+    errorClass: string | null;
+    articleId?: string | null;
+  },
+): Promise<void> {
+  try {
+    await dbRun(db,
+      `INSERT INTO provider_calls (id, provider, started_at, duration_ms, success, error_class, article_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [
+        nanoid(),
+        args.provider,
+        args.startedAt,
+        args.durationMs,
+        args.success ? 1 : 0,
+        args.errorClass,
+        args.articleId ?? null,
+      ],
+    );
+  } catch (err) {
+    // Instrumentation must never surface to callers. Log and move on.
+    console.error('[provider-usage] recordProviderCall failed:', err);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Providers
@@ -204,6 +261,9 @@ export async function scrapeAndExtract(
   url: string,
   env: { STEEL_API_KEY?: string; BROWSERLESS_API_KEY?: string },
   preferredProvider?: ScrapeProvider | null,
+  // Instrumentation hooks. Optional so unit tests / standalone callers can
+  // skip them; production callers always pass both.
+  instrumentation?: { db: D1Database; articleId?: string | null },
 ): Promise<ScrapeResult> {
   const providers: Array<{ name: ScrapeProvider; fn: (u: string, k: string) => Promise<string>; key: string }> = [];
 
@@ -260,14 +320,35 @@ export async function scrapeAndExtract(
   let usedProvider: ScrapeProvider = providers[0].name;
 
   for (const provider of providers) {
+    const startedAt = Date.now();
     try {
       html = await provider.fn(url, provider.key);
       usedProvider = provider.name;
       lastError = null;
+      if (instrumentation) {
+        await recordProviderCall(instrumentation.db, {
+          provider: provider.name,
+          startedAt,
+          durationMs: Date.now() - startedAt,
+          success: true,
+          errorClass: null,
+          articleId: instrumentation.articleId,
+        });
+      }
       break;
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
       console.error(`[scraper] ${provider.name} failed for ${url}:`, lastError.message);
+      if (instrumentation) {
+        await recordProviderCall(instrumentation.db, {
+          provider: provider.name,
+          startedAt,
+          durationMs: Date.now() - startedAt,
+          success: false,
+          errorClass: classifyProviderError(err),
+          articleId: instrumentation.articleId,
+        });
+      }
     }
   }
 
@@ -375,6 +456,7 @@ export async function scrapeAndPersist(
       article.canonical_url,
       env,
       article.preferredProvider ?? undefined,
+      { db, articleId: article.id },
     );
 
     const isStructuredFailure = UNSUPPORTED_EXTRACTION_METHODS.has(result.extractionMethod);

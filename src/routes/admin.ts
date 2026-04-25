@@ -1003,3 +1003,84 @@ adminRoutes.get('/admin/me', async (c) => {
     },
   });
 });
+
+// ---------------------------------------------------------------------------
+// GET /admin/usage — Steel + Browserless cost observability
+//
+// Query params:
+//   days  — how many days of rollup history to return (default 30, max 90)
+//
+// Response shape:
+//   {
+//     today: { steel: {...}, browserless: {...} },
+//     daily: [ { provider, day_unix, call_count, success_count, error_count,
+//                p50_duration_ms, p95_duration_ms } ]
+//   }
+//
+// "Today" is computed live from provider_calls because the daily rollup cron
+// only runs at 3:30am UTC. Historical days come from provider_usage_daily.
+// ---------------------------------------------------------------------------
+
+adminRoutes.get('/admin/usage', async (c) => {
+  const db = c.env.DB;
+  const daysRaw = parseInt(c.req.query('days') ?? '30', 10);
+  const days = Math.min(Math.max(Number.isFinite(daysRaw) ? daysRaw : 30, 1), 90);
+  const now = Date.now();
+  const cutoff = now - days * 24 * 60 * 60 * 1000;
+  const todayStart = Math.floor(now / (24 * 60 * 60 * 1000)) * (24 * 60 * 60 * 1000);
+
+  const [daily, todayRows] = await Promise.all([
+    dbAll<{
+      provider: string;
+      day_unix: number;
+      call_count: number;
+      success_count: number;
+      error_count: number;
+      total_duration_ms: number;
+      p50_duration_ms: number | null;
+      p95_duration_ms: number | null;
+    }>(
+      db,
+      `SELECT provider, day_unix, call_count, success_count, error_count,
+              total_duration_ms, p50_duration_ms, p95_duration_ms
+         FROM provider_usage_daily
+        WHERE day_unix >= ?
+        ORDER BY day_unix DESC, provider ASC`,
+      [cutoff],
+    ),
+    dbAll<{ provider: string; success: number; duration_ms: number }>(
+      db,
+      `SELECT provider, success, duration_ms FROM provider_calls WHERE started_at >= ?`,
+      [todayStart],
+    ),
+  ]);
+
+  // Compute today's running totals on the fly. Same shape as the rollup row
+  // so the client can render uniformly; computed_at is omitted.
+  const todayBuckets = new Map<string, { call_count: number; success_count: number; error_count: number; durations: number[] }>();
+  for (const r of todayRows) {
+    let b = todayBuckets.get(r.provider);
+    if (!b) { b = { call_count: 0, success_count: 0, error_count: 0, durations: [] }; todayBuckets.set(r.provider, b); }
+    b.call_count++;
+    b.durations.push(r.duration_ms);
+    if (r.success === 1) b.success_count++;
+    else b.error_count++;
+  }
+  const today: Record<string, unknown> = {};
+  for (const [provider, b] of todayBuckets.entries()) {
+    const sorted = b.durations.slice().sort((a, z) => a - z);
+    const p50Idx = Math.min(sorted.length - 1, Math.floor(0.5 * sorted.length));
+    const p95Idx = Math.min(sorted.length - 1, Math.floor(0.95 * sorted.length));
+    today[provider] = {
+      day_unix: todayStart,
+      call_count: b.call_count,
+      success_count: b.success_count,
+      error_count: b.error_count,
+      total_duration_ms: sorted.reduce((a, z) => a + z, 0),
+      p50_duration_ms: sorted[p50Idx] ?? null,
+      p95_duration_ms: sorted[p95Idx] ?? null,
+    };
+  }
+
+  return c.json({ ok: true, data: { today, daily } });
+});

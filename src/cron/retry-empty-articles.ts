@@ -3,8 +3,27 @@ import { dbAll, dbRun } from '../db/helpers';
 import { scrapeAndPersist, type ScrapeProvider } from '../lib/scraper';
 
 const MIN_CONTENT_WORDS = 50;
+// Below this extraction_quality, treat the result as a failure even if
+// wordCount cleared the minimum. Steel/Browserless will sometimes return a
+// paywall stub or "subscribe to read" teaser that has technically enough
+// words but no real article. Tuning point — watch the cron logs and adjust.
+const MIN_EXTRACTION_QUALITY = 0.25;
 const MAX_RETRIES = 5;
 const BATCH_SIZE = 50;
+
+/**
+ * Pick the OTHER provider for the next retry. If the prior attempt used
+ * Steel and produced a low-quality result, try Browserless next, and vice
+ * versa. Returns null when we don't know what was used last (e.g. the
+ * extraction_method is one of the structured-failure markers from chunk 2,
+ * or this is the first retry), in which case the feed's default preference
+ * holds.
+ */
+function escalatedProvider(lastMethod: string | null): ScrapeProvider | null {
+  if (lastMethod === 'steel') return 'browserless';
+  if (lastMethod === 'browserless') return 'steel';
+  return null;
+}
 
 // Exponential backoff for retry attempts. `nextAttempt` is 1-based, so the
 // first failure waits 15m, the second 30m, the third 1h, the fourth 2h, the
@@ -28,14 +47,21 @@ export async function retryEmptyArticles(env: Env): Promise<void> {
   const hasScrapers = Boolean(env.STEEL_API_KEY || env.BROWSERLESS_API_KEY);
   if (!hasScrapers) return;
 
+  // Pull last-attempt metadata too. extraction_method tells us which provider
+  // was used last — we use that to flip to the other one on low-quality
+  // outcomes (chunk 4). Queries used to read just scrape_provider from the
+  // feed config; now we override that with article-history when applicable.
   const articles = await dbAll<{
     id: string;
     canonical_url: string;
     scrape_retry_count: number;
     scrape_provider: string | null;
+    extraction_method: string | null;
+    extraction_quality: number | null;
   }>(
     db,
     `SELECT a.id, a.canonical_url, a.scrape_retry_count,
+            a.extraction_method, a.extraction_quality,
             (SELECT f2.scrape_provider FROM article_sources src2
                     JOIN feeds f2 ON f2.id = src2.feed_id
                    WHERE src2.article_id = a.id AND f2.scrape_provider IS NOT NULL
@@ -58,17 +84,35 @@ export async function retryEmptyArticles(env: Env): Promise<void> {
 
   let successes = 0;
   let failures = 0;
+  let escalations = 0;
 
   for (const article of articles) {
+    // If the LAST attempt was a low-quality result from a known provider,
+    // escalate to the other provider on this retry. Otherwise honor the
+    // feed's configured preference. The escalated choice gets passed as
+    // preferredProvider — scrapeAndExtract still falls back to the other
+    // provider if this one errors at the HTTP layer, which is fine.
+    const lastQuality = article.extraction_quality ?? null;
+    const wasLowQuality = lastQuality !== null && lastQuality < MIN_EXTRACTION_QUALITY;
+    const escalated = wasLowQuality ? escalatedProvider(article.extraction_method) : null;
+    const preferred = escalated ?? (article.scrape_provider as ScrapeProvider | null) ?? null;
+    if (escalated) escalations++;
+
     const result = await scrapeAndPersist(db, env, {
       id: article.id,
       canonical_url: article.canonical_url,
-      preferredProvider: (article.scrape_provider as ScrapeProvider) ?? null,
+      preferredProvider: preferred,
     });
 
-    const recovered = result.ok
-      && result.scraped !== undefined
-      && result.scraped.wordCount >= MIN_CONTENT_WORDS;
+    // Recovery now requires BOTH min word count AND min quality. A long
+    // paywall stub passes the word count check but won't pass quality, so
+    // we keep retrying it (until MAX_RETRIES) instead of marking recovered.
+    const newQuality = result.scraped?.extractionQuality ?? 0;
+    const recovered =
+      result.ok &&
+      result.scraped !== undefined &&
+      result.scraped.wordCount >= MIN_CONTENT_WORDS &&
+      newQuality >= MIN_EXTRACTION_QUALITY;
 
     if (recovered) {
       await dbRun(
@@ -90,6 +134,6 @@ export async function retryEmptyArticles(env: Env): Promise<void> {
   }
 
   console.log(
-    `[retry-empty-articles] batch=${articles.length} success=${successes} failure=${failures}`,
+    `[retry-empty-articles] batch=${articles.length} success=${successes} failure=${failures} escalations=${escalations}`,
   );
 }

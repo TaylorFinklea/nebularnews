@@ -172,6 +172,66 @@ adminRoutes.patch('/admin/feeds/:feedId', async (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// GET /admin/articles/:articleId — full detail for one article
+//
+// The list endpoint (/admin/articles) caps at 200 rows so anything older than
+// that page falls off the radar. Admin pages need to fetch by id directly,
+// joined with the originating feed (id + title + scrape_mode) so the detail
+// page can deep-link back to feed admin without an extra round-trip.
+// ---------------------------------------------------------------------------
+
+adminRoutes.get('/admin/articles/:articleId', async (c) => {
+  const db = c.env.DB;
+  const articleId = c.req.param('articleId');
+
+  const row = await dbGet<{
+    id: string;
+    title: string | null;
+    canonical_url: string;
+    excerpt: string | null;
+    content_text: string | null;
+    content_html: string | null;
+    word_count: number | null;
+    extraction_method: string | null;
+    extraction_quality: number | null;
+    published_at: number | null;
+    fetched_at: number | null;
+    last_fetch_attempt_at: number | null;
+    fetch_attempt_count: number;
+    last_fetch_error: string | null;
+    scrape_retry_count: number;
+    next_scrape_attempt_at: number | null;
+    feed_id: string | null;
+    feed_title: string | null;
+    feed_scrape_mode: string | null;
+  }>(
+    db,
+    `SELECT a.id, a.title, a.canonical_url, a.excerpt, a.content_text, a.content_html,
+            a.word_count, a.extraction_method, a.extraction_quality,
+            a.published_at, a.fetched_at, a.last_fetch_attempt_at, a.fetch_attempt_count,
+            a.last_fetch_error, a.scrape_retry_count, a.next_scrape_attempt_at,
+            (SELECT src.feed_id FROM article_sources src WHERE src.article_id = a.id LIMIT 1) AS feed_id,
+            (SELECT f.title FROM article_sources src JOIN feeds f ON f.id = src.feed_id WHERE src.article_id = a.id LIMIT 1) AS feed_title,
+            (SELECT f.scrape_mode FROM article_sources src JOIN feeds f ON f.id = src.feed_id WHERE src.article_id = a.id LIMIT 1) AS feed_scrape_mode
+       FROM articles a
+      WHERE a.id = ?`,
+    [articleId],
+  );
+
+  if (!row) {
+    return c.json({ ok: false, error: { code: 'not_found', message: 'Article not found' } }, 404);
+  }
+
+  return c.json({
+    ok: true,
+    data: {
+      ...row,
+      content_text_length: row.content_text ? row.content_text.length : 0,
+    },
+  });
+});
+
+// ---------------------------------------------------------------------------
 // POST /admin/articles/:articleId/rescrape — force synchronous rescrape
 //
 // Resets retry bookkeeping so the cron will retry the article again later if

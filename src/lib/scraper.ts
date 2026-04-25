@@ -20,6 +20,10 @@ export interface ScrapeResult {
   wordCount: number;
   extractionQuality: number;
   extractionMethod: string;
+  // Human-readable reason populated when extractionMethod is one of the
+  // structured failure markers (UNSUPPORTED_EXTRACTION_METHODS). Surfaced
+  // to admin via articles.last_fetch_error.
+  extractionReason?: string;
 }
 
 const SCRAPER_TIMEOUT_MS = 45_000;
@@ -73,6 +77,19 @@ async function scrapeWithBrowserless(url: string, apiKey: string): Promise<strin
 // Readability extraction
 // ---------------------------------------------------------------------------
 
+// Structured failure markers written to articles.extraction_method (and
+// surfaced via last_fetch_error) so admin can see WHY a scrape produced no
+// content rather than a raw exception message. The retry cron treats these
+// as permanent failures and quarantines the article instead of burning the
+// retry budget.
+export const UNSUPPORTED_EXTRACTION_METHODS = new Set<string>([
+  'unsupported_content_type',
+  'parse_failed',
+  'no_readable_content',
+]);
+
+type ReadabilityMethod = 'readability' | 'parse_failed' | 'no_readable_content';
+
 interface ReadabilityResult {
   title: string | null;
   author: string | null;
@@ -81,29 +98,63 @@ interface ReadabilityResult {
   excerpt: string | null;
   imageUrl: string | null;
   wordCount: number;
+  // Tracks whether parsing actually succeeded; the empty-result case is
+  // ambiguous between "linkedom couldn't parse" and "Readability ran but
+  // found nothing", and that distinction matters for retry decisions.
+  method: ReadabilityMethod;
+}
+
+const EMPTY_READABILITY: Omit<ReadabilityResult, 'method'> = {
+  title: null,
+  author: null,
+  contentHtml: '',
+  contentText: '',
+  excerpt: null,
+  imageUrl: null,
+  wordCount: 0,
+};
+
+/**
+ * Sniff the response body to decide whether Readability should even be
+ * attempted. PDFs and JSON responses (HN entries that link to GitHub raw,
+ * JSON APIs, etc.) burn linkedom CPU and produce confusing exceptions.
+ */
+function sniffContentType(body: string): 'html' | 'pdf' | 'json' {
+  const head = body.slice(0, 200).trim();
+  if (head.startsWith('%PDF-')) return 'pdf';
+  if (head.startsWith('{') || head.startsWith('[')) {
+    // Heuristic: a real HTML page wouldn't lead with { or [ at body start.
+    return 'json';
+  }
+  return 'html';
 }
 
 function extractWithReadability(html: string, url: string): ReadabilityResult {
   let document: ReturnType<typeof parseHTML>['document'];
   try {
     ({ document } = parseHTML(html));
-  } catch {
-    return { title: null, author: null, contentHtml: '', contentText: '', excerpt: null, imageUrl: null, wordCount: 0 };
+  } catch (err) {
+    // Linkedom occasionally throws on malformed input — e.g. the
+    // "this.buffers[0].slice is not a function" we see on some HN-linked
+    // pages. Treat as a structural parse failure, not a "found nothing".
+    console.warn(`[scraper] linkedom parseHTML failed for ${url}: ${err instanceof Error ? err.message : err}`);
+    return { ...EMPTY_READABILITY, method: 'parse_failed' };
   }
   if (!document) {
-    return { title: null, author: null, contentHtml: '', contentText: '', excerpt: null, imageUrl: null, wordCount: 0 };
+    return { ...EMPTY_READABILITY, method: 'parse_failed' };
   }
 
   const reader = new Readability(document as any);
   let article: ReturnType<typeof reader.parse> | null;
   try {
     article = reader.parse();
-  } catch {
-    return { title: null, author: null, contentHtml: '', contentText: '', excerpt: null, imageUrl: null, wordCount: 0 };
+  } catch (err) {
+    console.warn(`[scraper] Readability.parse failed for ${url}: ${err instanceof Error ? err.message : err}`);
+    return { ...EMPTY_READABILITY, method: 'parse_failed' };
   }
 
   if (!article || !article.textContent?.trim()) {
-    return { title: null, author: null, contentHtml: '', contentText: '', excerpt: null, imageUrl: null, wordCount: 0 };
+    return { ...EMPTY_READABILITY, method: 'no_readable_content' };
   }
 
   const contentText = article.textContent.replace(/\s+/g, ' ').trim();
@@ -123,6 +174,7 @@ function extractWithReadability(html: string, url: string): ReadabilityResult {
     excerpt: article.excerpt || contentText.slice(0, 300),
     imageUrl,
     wordCount,
+    method: 'readability',
   };
 }
 
@@ -177,7 +229,16 @@ export async function scrapeAndExtract(
         signal: controller.signal,
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const contentType = res.headers.get('content-type') ?? '';
       const html = await res.text();
+      const sniffed = sniffContentType(html);
+      if (
+        sniffed !== 'html' ||
+        contentType.startsWith('application/pdf') ||
+        contentType.startsWith('application/json')
+      ) {
+        return unsupportedResult(html, sniffed, contentType);
+      }
       const extracted = extractWithReadability(html, url);
       const quality = scoreExtractionQuality(extracted, html);
       return {
@@ -185,7 +246,7 @@ export async function scrapeAndExtract(
         contentHtml: extracted.contentHtml, contentText: extracted.contentText,
         excerpt: extracted.excerpt, imageUrl: extracted.imageUrl,
         wordCount: extracted.wordCount, extractionQuality: quality,
-        extractionMethod: 'readability',
+        extractionMethod: extracted.method,
       };
     } finally {
       clearTimeout(timer);
@@ -228,8 +289,22 @@ export async function scrapeAndExtract(
     }
   }
 
+  // Same content-type guard as the no-provider fallback path. Steel and
+  // Browserless will happily return a PDF binary as a string and feed it
+  // straight to linkedom, which then throws — that's the source of the
+  // `this.buffers[0].slice` error we saw from poll-feeds.
+  const sniffed = sniffContentType(html);
+  if (sniffed !== 'html') {
+    return unsupportedResult(html, sniffed);
+  }
+
   const extracted = extractWithReadability(html, url);
   const quality = scoreExtractionQuality(extracted, html);
+
+  // For successful Readability output, attribute the win to the browser
+  // provider that fetched the HTML. For parse failures or empty content,
+  // surface the more specific reason from extractWithReadability.
+  const extractionMethod = extracted.method === 'readability' ? usedProvider : extracted.method;
 
   return {
     html,
@@ -241,7 +316,24 @@ export async function scrapeAndExtract(
     imageUrl: extracted.imageUrl,
     wordCount: extracted.wordCount,
     extractionQuality: quality,
-    extractionMethod: usedProvider,
+    extractionMethod,
+  };
+}
+
+function unsupportedResult(html: string, sniffed: 'pdf' | 'json' | 'html', contentType?: string): ScrapeResult {
+  const reason = sniffed === 'html' && contentType ? `content-type ${contentType}` : `body looked like ${sniffed}`;
+  return {
+    html: html.slice(0, 200),
+    title: null,
+    author: null,
+    contentHtml: '',
+    contentText: '',
+    excerpt: null,
+    imageUrl: null,
+    wordCount: 0,
+    extractionQuality: 0,
+    extractionMethod: 'unsupported_content_type',
+    extractionReason: reason,
   };
 }
 
@@ -262,6 +354,14 @@ export interface ScrapeAndPersistResult {
   attemptedAt: number;
 }
 
+// Quarantine articles whose extractionMethod marker indicates a permanent
+// failure (PDF/JSON/parse failures) by jumping their retry counter to MAX so
+// the retry cron skips them. Anything that might recover on a future attempt
+// (transient HTTP error, "no_readable_content" — could be a rendering edge
+// case) leaves the counter alone and gets a normal retry.
+const QUARANTINE_METHODS = new Set<string>(['unsupported_content_type']);
+const QUARANTINE_RETRY_COUNT = 5;
+
 export async function scrapeAndPersist(
   db: D1Database,
   env: { STEEL_API_KEY?: string; BROWSERLESS_API_KEY?: string },
@@ -274,23 +374,59 @@ export async function scrapeAndPersist(
       env,
       article.preferredProvider ?? undefined,
     );
-    await dbRun(db,
-      `UPDATE articles SET content_html = ?, content_text = ?, excerpt = ?,
-         word_count = ?, extraction_method = ?, extraction_quality = ?,
-         title = COALESCE(?, title), author = COALESCE(?, author),
-         image_url = COALESCE(?, image_url),
-         last_fetch_attempt_at = ?,
-         fetch_attempt_count = COALESCE(fetch_attempt_count, 0) + 1,
-         last_fetch_error = NULL
-       WHERE id = ?`,
-      [
-        result.contentHtml, result.contentText, result.excerpt,
-        result.wordCount, result.extractionMethod, result.extractionQuality,
-        result.title, result.author, result.imageUrl,
-        now, article.id,
-      ],
-    );
-    return { ok: true, scraped: result, attemptedAt: now };
+
+    const isStructuredFailure = UNSUPPORTED_EXTRACTION_METHODS.has(result.extractionMethod);
+    const shouldQuarantine = QUARANTINE_METHODS.has(result.extractionMethod);
+    // For successful (or recoverable) outcomes, clear last_fetch_error.
+    // For structured failures, surface the marker + reason in last_fetch_error
+    // so admin can see why instead of staring at a NULL.
+    const lastError = isStructuredFailure
+      ? `${result.extractionMethod}${result.extractionReason ? ': ' + result.extractionReason : ''}`.slice(0, 500)
+      : null;
+
+    if (shouldQuarantine) {
+      await dbRun(db,
+        `UPDATE articles SET content_html = ?, content_text = ?, excerpt = ?,
+           word_count = ?, extraction_method = ?, extraction_quality = ?,
+           last_fetch_attempt_at = ?,
+           fetch_attempt_count = COALESCE(fetch_attempt_count, 0) + 1,
+           scrape_retry_count = ?,
+           next_scrape_attempt_at = NULL,
+           last_fetch_error = ?
+         WHERE id = ?`,
+        [
+          result.contentHtml, result.contentText, result.excerpt,
+          result.wordCount, result.extractionMethod, result.extractionQuality,
+          now,
+          QUARANTINE_RETRY_COUNT,
+          lastError,
+          article.id,
+        ],
+      );
+    } else {
+      await dbRun(db,
+        `UPDATE articles SET content_html = ?, content_text = ?, excerpt = ?,
+           word_count = ?, extraction_method = ?, extraction_quality = ?,
+           title = COALESCE(?, title), author = COALESCE(?, author),
+           image_url = COALESCE(?, image_url),
+           last_fetch_attempt_at = ?,
+           fetch_attempt_count = COALESCE(fetch_attempt_count, 0) + 1,
+           last_fetch_error = ?
+         WHERE id = ?`,
+        [
+          result.contentHtml, result.contentText, result.excerpt,
+          result.wordCount, result.extractionMethod, result.extractionQuality,
+          result.title, result.author, result.imageUrl,
+          now,
+          lastError,
+          article.id,
+        ],
+      );
+    }
+
+    // Treat structured failures as not-ok so the retry cron knows to count
+    // them as failures even when they didn't throw.
+    return { ok: !isStructuredFailure, scraped: result, attemptedAt: now };
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
     await dbRun(db,

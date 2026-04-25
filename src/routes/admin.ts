@@ -754,9 +754,27 @@ adminRoutes.get('/admin/tool-call-stats', async (c) => {
 });
 
 // ---------------------------------------------------------------------------
-// GET /admin/me — check if current user is admin
+// GET /admin/me — return identity for the signed-in admin
+//
+// The is_admin middleware has already gated this route, so reaching here
+// implies is_admin = true. We additionally return user_id + email so the
+// web admin can render "Signed in as <email>" without a second round-trip.
 // ---------------------------------------------------------------------------
 
 adminRoutes.get('/admin/me', async (c) => {
-  return c.json({ ok: true, data: { is_admin: true } });
+  const userId = c.get('userId');
+  const row = await dbGet<{ id: string; email: string | null; name: string | null }>(
+    c.env.DB,
+    `SELECT id, email, name FROM user WHERE id = ?`,
+    [userId],
+  );
+  return c.json({
+    ok: true,
+    data: {
+      is_admin: true,
+      user_id: row?.id ?? userId,
+      email: row?.email ?? null,
+      name: row?.name ?? null,
+    },
+  });
 });

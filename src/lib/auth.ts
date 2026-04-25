@@ -21,8 +21,19 @@ export function createAuth(env: Env) {
     },
     socialProviders: {
       apple: {
-        clientId: env.APPLE_CLIENT_ID,
-        clientSecret: env.APPLE_CLIENT_SECRET,
+        // For the web OAuth round-trip, Apple requires a Services ID as
+        // client_id (App IDs aren't valid web clients). When the Services ID
+        // env var is set, use it — iOS keeps working because it sends id_tokens
+        // directly via /api/auth/sign-in/social and never hits this OAuth flow.
+        clientId: env.APPLE_SERVICES_ID || env.APPLE_CLIENT_ID,
+        clientSecret: env.APPLE_CLIENT_SECRET_WEB || env.APPLE_CLIENT_SECRET,
+        // The native App ID — used as the bundle identifier when validating
+        // id_tokens minted by ASAuthorizationController on iOS.
+        appBundleIdentifier: env.APPLE_CLIENT_ID,
+        // Allow id_tokens minted under either the App ID (iOS) or the Services
+        // ID (web) to validate. Without this both flows can't share the same
+        // better-auth instance.
+        audience: [env.APPLE_CLIENT_ID, env.APPLE_SERVICES_ID].filter(Boolean) as string[],
       },
       ...(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
         ? {

@@ -38,7 +38,30 @@ export type AppEnv = { Bindings: Env; Variables: { userId: string } };
 const app = new Hono<AppEnv>();
 
 // Global middleware
-app.use('*', cors());
+//
+// CORS: native iOS clients send no Origin header so they bypass the browser
+// CORS gate entirely; the rules here only matter for the SvelteKit admin web
+// (and a future consumer web). Browser flows that go through better-auth
+// (e.g. /sign-in/social → cookies → callback) need credentials, which means
+// the response can't be Access-Control-Allow-Origin: *. We echo the origin
+// for known web hosts and for localhost dev, and otherwise drop the header
+// so the request is rejected by the browser.
+const ALLOWED_WEB_ORIGINS = new Set<string>([
+  'https://admin.nebularnews.com',
+  'https://app.nebularnews.com',
+]);
+app.use('*', cors({
+  origin: (origin) => {
+    if (!origin) return origin;
+    if (ALLOWED_WEB_ORIGINS.has(origin)) return origin;
+    if (origin.startsWith('http://localhost:')) return origin;
+    return null;
+  },
+  credentials: true,
+  allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowHeaders: ['Content-Type', 'Authorization'],
+  exposeHeaders: ['x-request-id'],
+}));
 app.use('*', envelope());
 
 // Public routes (no auth required)

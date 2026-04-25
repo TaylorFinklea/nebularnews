@@ -88,6 +88,7 @@ export async function retryEmptyArticles(env: Env): Promise<void> {
 
   let successes = 0;
   let failures = 0;
+  let quarantined = 0;
   let escalations = 0;
 
   for (const article of articles) {
@@ -127,17 +128,32 @@ export async function retryEmptyArticles(env: Env): Promise<void> {
       successes++;
     } else {
       const nextAttempt = (article.scrape_retry_count ?? 0) + 1;
-      const nextAt = now + backoffMs(nextAttempt);
-      await dbRun(
-        db,
-        `UPDATE articles SET scrape_retry_count = ?, next_scrape_attempt_at = ? WHERE id = ?`,
-        [nextAttempt, nextAt, article.id],
-      );
+      // When the article has exhausted its retry budget without recovering,
+      // quarantine it so it stops appearing in user-facing feeds. Manual
+      // unquarantine is available via /admin/articles/:id/unquarantine.
+      if (nextAttempt >= MAX_RETRIES) {
+        await dbRun(
+          db,
+          `UPDATE articles SET scrape_retry_count = ?,
+             next_scrape_attempt_at = NULL,
+             quarantined_at = COALESCE(quarantined_at, ?)
+           WHERE id = ?`,
+          [nextAttempt, now, article.id],
+        );
+        quarantined++;
+      } else {
+        const nextAt = now + backoffMs(nextAttempt);
+        await dbRun(
+          db,
+          `UPDATE articles SET scrape_retry_count = ?, next_scrape_attempt_at = ? WHERE id = ?`,
+          [nextAttempt, nextAt, article.id],
+        );
+      }
       failures++;
     }
   }
 
   console.log(
-    `[retry-empty-articles] batch=${articles.length} success=${successes} failure=${failures} escalations=${escalations}`,
+    `[retry-empty-articles] batch=${articles.length} success=${successes} failure=${failures} escalations=${escalations} quarantined=${quarantined}`,
   );
 }

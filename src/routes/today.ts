@@ -17,16 +17,19 @@ todayRoutes.get('/today', async (c) => {
     dbGet<{ count: number }>(db,
       `SELECT COUNT(*) as count FROM articles a
        WHERE EXISTS (SELECT 1 FROM article_sources src JOIN user_feed_subscriptions ufs ON ufs.feed_id = src.feed_id WHERE src.article_id = a.id AND ufs.user_id = ?)
+       AND a.quarantined_at IS NULL
        AND NOT EXISTS (SELECT 1 FROM article_read_state rs WHERE rs.article_id = a.id AND rs.user_id = ? AND rs.is_read = 1)`,
       [userId, userId]),
     dbGet<{ count: number }>(db,
       `SELECT COUNT(*) as count FROM articles a
        WHERE COALESCE(a.fetched_at, 0) >= ?
+       AND a.quarantined_at IS NULL
        AND EXISTS (SELECT 1 FROM article_sources src JOIN user_feed_subscriptions ufs ON ufs.feed_id = src.feed_id WHERE src.article_id = a.id AND ufs.user_id = ?)`,
       [oneDayAgo, userId]),
     dbGet<{ count: number }>(db,
       `SELECT COUNT(*) as count FROM articles a
        WHERE EXISTS (SELECT 1 FROM article_scores s WHERE s.article_id = a.id AND s.user_id = ? AND s.score >= 4)
+       AND a.quarantined_at IS NULL
        AND NOT EXISTS (SELECT 1 FROM article_read_state rs WHERE rs.article_id = a.id AND rs.user_id = ? AND rs.is_read = 1)`,
       [userId, userId]),
   ]);
@@ -43,7 +46,8 @@ todayRoutes.get('/today', async (c) => {
        (SELECT f.title FROM article_sources src JOIN feeds f ON f.id = src.feed_id WHERE src.article_id = a.id LIMIT 1) as source_name,
        (SELECT src.feed_id FROM article_sources src WHERE src.article_id = a.id LIMIT 1) as source_feed_id
      FROM articles a
-     WHERE EXISTS (SELECT 1 FROM article_sources src JOIN user_feed_subscriptions ufs ON ufs.feed_id = src.feed_id WHERE src.article_id = a.id AND ufs.user_id = '${esc(userId)}')
+     WHERE a.quarantined_at IS NULL
+     AND EXISTS (SELECT 1 FROM article_sources src JOIN user_feed_subscriptions ufs ON ufs.feed_id = src.feed_id WHERE src.article_id = a.id AND ufs.user_id = '${esc(userId)}')
      AND NOT EXISTS (SELECT 1 FROM article_read_state rs WHERE rs.article_id = a.id AND rs.user_id = '${esc(userId)}' AND rs.is_read = 1)
      AND EXISTS (SELECT 1 FROM article_scores s WHERE s.article_id = a.id AND s.user_id = '${esc(userId)}' AND s.score >= 3)
      ORDER BY (SELECT s.score FROM article_scores s WHERE s.article_id = a.id AND s.user_id = '${esc(userId)}' ORDER BY s.created_at DESC LIMIT 1) DESC,
@@ -80,6 +84,7 @@ todayRoutes.get('/today', async (c) => {
        JOIN articles a ON a.id = rs.article_id
        WHERE rs.user_id = ?
          AND rs.is_read = 0
+         AND a.quarantined_at IS NULL
          AND rs.read_position_percent IS NOT NULL
          AND rs.read_position_percent BETWEEN 1 AND 94
        ORDER BY rs.updated_at DESC

@@ -394,7 +394,8 @@ export async function scrapeAndPersist(
            fetch_attempt_count = COALESCE(fetch_attempt_count, 0) + 1,
            scrape_retry_count = ?,
            next_scrape_attempt_at = NULL,
-           last_fetch_error = ?
+           last_fetch_error = ?,
+           quarantined_at = COALESCE(quarantined_at, ?)
          WHERE id = ?`,
         [
           result.contentHtml, result.contentText, result.excerpt,
@@ -402,6 +403,7 @@ export async function scrapeAndPersist(
           now,
           QUARANTINE_RETRY_COUNT,
           lastError,
+          now,
           article.id,
         ],
       );

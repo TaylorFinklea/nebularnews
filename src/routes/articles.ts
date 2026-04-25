@@ -52,7 +52,10 @@ articleRoutes.get('/articles', async (c) => {
   const tag = c.req.query('tag') ?? null;
   const saved = c.req.query('saved') === 'true';
 
-  const conditions: string[] = [subFilter(userId)];
+  // Hide quarantined articles by default — they have permanent extraction
+  // failures (PDFs, JSON, paywalls past retry budget) and aren't useful in
+  // the iOS feed. Admin-tier callers can opt back in via ?include_quarantined=true.
+  const conditions: string[] = [subFilter(userId), 'a.quarantined_at IS NULL'];
   const params: unknown[] = [];
 
   // FTS5 search

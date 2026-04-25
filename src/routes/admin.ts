@@ -314,6 +314,7 @@ adminRoutes.get('/admin/articles/:articleId', async (c) => {
     last_fetch_error: string | null;
     scrape_retry_count: number;
     next_scrape_attempt_at: number | null;
+    quarantined_at: number | null;
     feed_id: string | null;
     feed_title: string | null;
     feed_scrape_mode: string | null;
@@ -323,6 +324,7 @@ adminRoutes.get('/admin/articles/:articleId', async (c) => {
             a.word_count, a.extraction_method, a.extraction_quality,
             a.published_at, a.fetched_at, a.last_fetch_attempt_at, a.fetch_attempt_count,
             a.last_fetch_error, a.scrape_retry_count, a.next_scrape_attempt_at,
+            a.quarantined_at,
             (SELECT src.feed_id FROM article_sources src WHERE src.article_id = a.id LIMIT 1) AS feed_id,
             (SELECT f.title FROM article_sources src JOIN feeds f ON f.id = src.feed_id WHERE src.article_id = a.id LIMIT 1) AS feed_title,
             (SELECT f.scrape_mode FROM article_sources src JOIN feeds f ON f.id = src.feed_id WHERE src.article_id = a.id LIMIT 1) AS feed_scrape_mode
@@ -374,13 +376,16 @@ adminRoutes.post('/admin/articles/:articleId/rescrape', async (c) => {
     [articleId],
   );
 
-  // Reset retry/attempt counters so the admin action starts a fresh budget.
+  // Reset retry/attempt counters AND clear quarantine so the admin action
+  // starts with a fresh budget. If the rescrape produces a permanent failure
+  // again, scrapeAndPersist will re-quarantine.
   await dbRun(
     db,
     `UPDATE articles SET scrape_retry_count = 0,
        next_scrape_attempt_at = NULL,
        fetch_attempt_count = 0,
-       last_fetch_error = NULL
+       last_fetch_error = NULL,
+       quarantined_at = NULL
      WHERE id = ?`,
     [articleId],
   );
@@ -403,7 +408,45 @@ adminRoutes.post('/admin/articles/:articleId/rescrape', async (c) => {
     `SELECT id, title, canonical_url, excerpt, content_text, content_html,
             word_count, extraction_method, extraction_quality,
             last_fetch_attempt_at, fetch_attempt_count, last_fetch_error,
-            scrape_retry_count, next_scrape_attempt_at
+            scrape_retry_count, next_scrape_attempt_at, quarantined_at
+       FROM articles WHERE id = ?`,
+    [articleId],
+  );
+  return c.json({ ok: true, data: updated });
+});
+
+// ---------------------------------------------------------------------------
+// POST /admin/articles/:articleId/unquarantine — clear quarantine flag
+//
+// Lets admin un-quarantine a misclassified article without forcing a
+// rescrape. Useful when the structured marker was wrong (e.g. a transient
+// CDN response that triggered the PDF guard) and you want the article back
+// in feeds with its current content. Resets retry counters too so the cron
+// will pick it up if content is still empty.
+// ---------------------------------------------------------------------------
+
+adminRoutes.post('/admin/articles/:articleId/unquarantine', async (c) => {
+  const db = c.env.DB;
+  const articleId = c.req.param('articleId');
+
+  const result = await dbRun(
+    db,
+    `UPDATE articles SET quarantined_at = NULL,
+       scrape_retry_count = 0,
+       next_scrape_attempt_at = NULL,
+       last_fetch_error = NULL
+     WHERE id = ? AND quarantined_at IS NOT NULL`,
+    [articleId],
+  );
+
+  if (result.meta.changes === 0) {
+    return c.json({ ok: false, error: { code: 'not_quarantined', message: 'Article not found or not quarantined' } }, 404);
+  }
+
+  const updated = await dbGet<Record<string, unknown>>(
+    db,
+    `SELECT id, title, canonical_url, scrape_retry_count, next_scrape_attempt_at,
+            quarantined_at
        FROM articles WHERE id = ?`,
     [articleId],
   );
@@ -427,6 +470,9 @@ adminRoutes.get('/admin/articles', async (c) => {
   const feedId = c.req.query('feed_id');
   const emptyOnly = c.req.query('empty_only') === 'true';
   const hasError = c.req.query('has_error') === 'true';
+  // include_quarantined: false (default) hides quarantined articles. true
+  // shows everything. only=true shows ONLY quarantined.
+  const includeQuarantined = c.req.query('include_quarantined');
   const limitRaw = parseInt(c.req.query('limit') ?? '50', 10);
   const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 50, 1), 200);
   const beforeRaw = c.req.query('before');
@@ -445,6 +491,11 @@ adminRoutes.get('/admin/articles', async (c) => {
   if (hasError) {
     conditions.push('a.last_fetch_error IS NOT NULL');
   }
+  if (includeQuarantined === 'only') {
+    conditions.push('a.quarantined_at IS NOT NULL');
+  } else if (includeQuarantined !== 'true') {
+    conditions.push('a.quarantined_at IS NULL');
+  }
 
   params.push(limit + 1);
 
@@ -459,6 +510,7 @@ adminRoutes.get('/admin/articles', async (c) => {
     scrape_retry_count: number;
     next_scrape_attempt_at: number | null;
     fetch_attempt_count: number;
+    quarantined_at: number | null;
     feed_id: string | null;
     feed_title: string | null;
   }>(
@@ -466,7 +518,7 @@ adminRoutes.get('/admin/articles', async (c) => {
     `SELECT a.id, a.title, a.canonical_url, a.published_at, a.fetched_at,
             COALESCE(length(a.content_text), 0) AS content_text_length,
             a.last_fetch_error, a.scrape_retry_count, a.next_scrape_attempt_at,
-            a.fetch_attempt_count,
+            a.fetch_attempt_count, a.quarantined_at,
             (SELECT src.feed_id FROM article_sources src WHERE src.article_id = a.id LIMIT 1) AS feed_id,
             (SELECT f.title FROM article_sources src JOIN feeds f ON f.id = src.feed_id WHERE src.article_id = a.id LIMIT 1) AS feed_title
        FROM articles a

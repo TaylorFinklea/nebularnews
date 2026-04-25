@@ -179,8 +179,8 @@ articleRoutes.get('/articles/:id', async (c) => {
        WHERE article_id = ? AND user_id = ?
        ORDER BY confidence DESC`,
       [articleId, userId]),
-    dbGet<{ is_read: number; saved_at: number | null }>(db,
-      `SELECT is_read, saved_at FROM article_read_state WHERE article_id = ? AND user_id = ? LIMIT 1`,
+    dbGet<{ is_read: number; saved_at: number | null; read_position_percent: number | null }>(db,
+      `SELECT is_read, saved_at, read_position_percent FROM article_read_state WHERE article_id = ? AND user_id = ? LIMIT 1`,
       [articleId, userId]),
     dbAll<{ id: string; selected_text: string; block_index: number | null; text_offset: number | null; text_length: number | null; note: string | null; color: string; created_at: number; updated_at: number }>(db,
       `SELECT id, selected_text, block_index, text_offset, text_length, note, color, created_at, updated_at
@@ -217,6 +217,9 @@ articleRoutes.get('/articles/:id', async (c) => {
       tag_suggestions: tagSuggestions,
       is_read: readStateRow?.is_read ?? 0,
       saved_at: readStateRow?.saved_at ?? null,
+      // Surfaced so the iOS detail view can auto-restore scroll on reopen
+      // (M16 Tier 2). null means no position tracked yet.
+      read_position_percent: readStateRow?.read_position_percent ?? null,
       highlights: highlightRows,
       annotation: annotationRow ?? null,
     },

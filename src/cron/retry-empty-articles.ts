@@ -18,8 +18,10 @@ const BATCH_SIZE = 50;
  * extraction_method is one of the structured-failure markers from chunk 2,
  * or this is the first retry), in which case the feed's default preference
  * holds.
+ *
+ * Exported for unit tests.
  */
-function escalatedProvider(lastMethod: string | null): ScrapeProvider | null {
+export function escalatedProvider(lastMethod: string | null): ScrapeProvider | null {
   if (lastMethod === 'steel') return 'browserless';
   if (lastMethod === 'browserless') return 'steel';
   return null;
@@ -29,7 +31,9 @@ function escalatedProvider(lastMethod: string | null): ScrapeProvider | null {
 // first failure waits 15m, the second 30m, the third 1h, the fourth 2h, the
 // fifth 4h. Capped at 24h for defensive safety (cap never triggers at the
 // current max-5 budget but keeps the function resilient to future tuning).
-function backoffMs(nextAttempt: number): number {
+//
+// Exported for unit tests.
+export function backoffMs(nextAttempt: number): number {
   const minutes = 15 * Math.pow(2, nextAttempt - 1);
   return Math.min(24 * 60, minutes) * 60 * 1000;
 }

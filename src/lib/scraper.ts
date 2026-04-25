@@ -118,8 +118,10 @@ const EMPTY_READABILITY: Omit<ReadabilityResult, 'method'> = {
  * Sniff the response body to decide whether Readability should even be
  * attempted. PDFs and JSON responses (HN entries that link to GitHub raw,
  * JSON APIs, etc.) burn linkedom CPU and produce confusing exceptions.
+ *
+ * Exported for unit tests; not part of the public scraper API.
  */
-function sniffContentType(body: string): 'html' | 'pdf' | 'json' {
+export function sniffContentType(body: string): 'html' | 'pdf' | 'json' {
   const head = body.slice(0, 200).trim();
   if (head.startsWith('%PDF-')) return 'pdf';
   if (head.startsWith('{') || head.startsWith('[')) {

@@ -4,6 +4,7 @@ import type { AppEnv } from '../index';
 import { dbGet, dbAll, dbRun } from '../db/helpers';
 import { scrapeAndPersist, type ScrapeProvider } from '../lib/scraper';
 import { persistBrief } from '../lib/brief-persist';
+import { sendPushToUser } from '../lib/apns';
 import { resolveAIKey } from '../lib/ai-key-resolver';
 import { runChat, parseJsonResponse } from '../lib/ai';
 import { buildNewsBriefPrompt } from '../lib/prompts';
@@ -651,9 +652,10 @@ adminRoutes.post('/admin/briefs/generate-for-user', async (c) => {
     score: number;
     feed_title: string | null;
     summary_text: string | null;
+    image_url: string | null;
   }>(
     db,
-    `SELECT a.id, a.title, a.published_at,
+    `SELECT a.id, a.title, a.published_at, a.image_url,
             MAX(COALESCE(s.score, 0)) AS score,
             (SELECT f.title FROM feeds f
                JOIN article_sources src2 ON src2.feed_id = f.id
@@ -683,6 +685,7 @@ adminRoutes.post('/admin/briefs/generate-for-user', async (c) => {
     publishedAt: r.published_at,
     effectiveScore: r.score,
     context: r.summary_text ?? '',
+    imageUrl: r.image_url ?? null,
   }));
 
   const windowLabel = editionKind === 'morning' ? 'Morning Brief' : editionKind === 'evening' ? 'Evening Brief' : 'News Brief';
@@ -719,6 +722,36 @@ adminRoutes.post('/admin/briefs/generate-for-user', async (c) => {
     now,
   });
 
+  // Optional push side effect — useful for verifying the iOS Notification
+  // Service Extension end-to-end without waiting for the timezone cron.
+  // Off by default so admins poking around for diagnostics don't spam the
+  // user. Same payload shape as scheduled-briefs.ts.
+  let pushed = false;
+  if (c.req.query('push') === 'true' && inserted.id) {
+    const firstBullet = bullets[0]?.text ?? '';
+    const trimmedBody = firstBullet.length > 140 ? firstBullet.slice(0, 137) + '…' : firstBullet;
+    const trimmedBullets = bullets
+      .slice(0, 3)
+      .map((b) => {
+        const text = b.text ?? '';
+        return text.length > 80 ? text.slice(0, 77) + '…' : text;
+      })
+      .filter((s) => s.length > 0);
+    const leadImage = candidates.find((c) => c.imageUrl)?.imageUrl ?? null;
+    await sendPushToUser(db, c.env, body.user_id, {
+      title: editionKind === 'morning' ? 'Morning Brief' : editionKind === 'evening' ? 'Evening Brief' : 'News Brief',
+      body: trimmedBody || 'Your news brief is ready.',
+      data: {
+        type: 'brief',
+        edition: editionKind,
+        id: inserted.id,
+        bullets: trimmedBullets,
+        image_url: leadImage,
+      },
+    });
+    pushed = true;
+  }
+
   return c.json({
     ok: true,
     data: {
@@ -730,6 +763,7 @@ adminRoutes.post('/admin/briefs/generate-for-user', async (c) => {
       bullet_count: bullets.length,
       generated_at: now,
       duplicate: inserted.id === null,
+      pushed,
     },
   });
 });

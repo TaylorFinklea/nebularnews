@@ -9,7 +9,10 @@ export async function sendPushToUser(
   db: D1Database,
   env: Env,
   userId: string,
-  payload: { title: string; body: string; data?: Record<string, string> },
+  // `data` values are widened to `unknown` so callers can include arrays
+  // (e.g. brief bullets[]) or numbers without coercing to string. APNs
+  // accepts arbitrary JSON in the custom keys alongside `aps`.
+  payload: { title: string; body: string; data?: Record<string, unknown> },
 ): Promise<void> {
   if (!env.APNS_KEY_P8) {
     console.warn('[apns] No APNS_KEY_P8 configured, skipping push');
@@ -32,6 +35,11 @@ export async function sendPushToUser(
     aps: {
       alert: { title: payload.title, body: payload.body },
       sound: 'default',
+      // mutable-content tells iOS to invoke the Notification Service
+      // Extension before displaying the alert. NSE downloads the preview
+      // image and rewrites the body to include 2 bullets. If no NSE is
+      // installed this flag is a no-op.
+      'mutable-content': 1,
     },
     ...payload.data,
   });

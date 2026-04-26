@@ -112,10 +112,11 @@ export async function generateScheduledBriefs(env: Env): Promise<void> {
       const feedPlaceholders = feedIds.map(() => '?').join(',');
       const cutoffMs = now - lookbackHours * 3_600_000;
 
-      // Get scored articles.
-      const articles = await dbAll<{ id: string; title: string; published_at: number | null; feed_id: string }>(
+      // Get scored articles. image_url surfaces to the push payload so the
+      // NSE can attach a preview thumbnail to the lock-screen notification.
+      const articles = await dbAll<{ id: string; title: string; published_at: number | null; feed_id: string; image_url: string | null }>(
         db,
-        `SELECT a.id, a.title, a.published_at, asrc.feed_id
+        `SELECT a.id, a.title, a.published_at, asrc.feed_id, a.image_url
          FROM articles a
          JOIN article_sources asrc ON asrc.article_id = a.id
          JOIN article_scores sc ON sc.article_id = a.id AND sc.user_id = ?
@@ -141,6 +142,7 @@ export async function generateScheduledBriefs(env: Env): Promise<void> {
           publishedAt: a.published_at,
           effectiveScore: score?.score ?? 3,
           context: summary?.summary_text ?? '',
+          imageUrl: a.image_url,
         });
       }
 
@@ -171,14 +173,37 @@ export async function generateScheduledBriefs(env: Env): Promise<void> {
       });
       if (!inserted.id) continue; // already generated — skip push
 
-      // Send push notification. Body previews the first bullet so the lock-
-      // screen notification surfaces actual content, not a generic message.
+      // Send push notification. Body previews the first bullet for clients
+      // without a Notification Service Extension; clients with the NSE
+      // installed (`mutable-content: 1` in apns.ts) will rewrite the body
+      // to include 2 bullets and attach a preview image.
       const firstBullet = (bullets[0] as { text?: string } | undefined)?.text ?? '';
       const trimmedBody = firstBullet.length > 140 ? firstBullet.slice(0, 137) + '…' : firstBullet;
+
+      // Trim bullets so the JSON payload stays under APNs' 4KB cap. 3
+      // bullets × 80 chars = 240 chars worst case; envelope adds ~150.
+      const trimmedBullets = (bullets as Array<{ text?: string }>)
+        .slice(0, 3)
+        .map((b) => {
+          const text = b.text ?? '';
+          return text.length > 80 ? text.slice(0, 77) + '…' : text;
+        })
+        .filter((s) => s.length > 0);
+
+      // Lead image = top-scored source article's image. Candidates are
+      // already sorted by score DESC, so first non-null wins.
+      const leadImage = candidates.find((c) => c.imageUrl)?.imageUrl ?? null;
+
       await sendPushToUser(db, env, user_id, {
         title: editionType === 'morning' ? 'Morning Brief' : 'Evening Brief',
         body: trimmedBody || 'Your news brief is ready.',
-        data: { type: 'brief', edition: editionType, id: inserted.id },
+        data: {
+          type: 'brief',
+          edition: editionType,
+          id: inserted.id,
+          bullets: trimmedBullets,
+          image_url: leadImage,
+        },
       });
 
     } catch (err) {

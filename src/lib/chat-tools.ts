@@ -73,6 +73,29 @@ export const SERVER_TOOLS: ToolDefinition[] = [
     },
   },
   {
+    name: 'save_articles',
+    description: 'Save (bookmark) one or more articles to the user\'s reading list. Idempotent.',
+    parameters: {
+      type: 'object',
+      properties: {
+        article_ids: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['article_ids'],
+    },
+  },
+  {
+    name: 'react_to_articles',
+    description: 'Record a +1 (liked) or -1 (disliked) reaction on one or more articles. Use when the user reacts to a brief bullet (which has multiple source articles) so the reaction applies to all of them.',
+    parameters: {
+      type: 'object',
+      properties: {
+        article_ids: { type: 'array', items: { type: 'string' } },
+        value: { type: 'number', enum: [1, -1] },
+      },
+      required: ['article_ids', 'value'],
+    },
+  },
+  {
     name: 'set_article_reaction',
     description: 'Record a +1 (liked) or -1 (disliked) reaction on an article.',
     parameters: {
@@ -175,6 +198,20 @@ export const CLIENT_TOOLS: ToolDefinition[] = [
     description: 'Trigger the news brief generator on the Today tab.',
     parameters: { type: 'object', properties: {} },
   },
+  {
+    name: 'dismiss_topic_request',
+    description: 'Suppress a topic from future briefs for a configurable duration. Suppressions are stored client-side (privacy by design); this tool just packages the request for the iOS coordinator to write to local storage. The next brief request will include this suppression so the AI skips matching topics unless a material new development surfaces.',
+    parameters: {
+      type: 'object',
+      properties: {
+        signature: { type: 'string', description: 'Short user-readable topic descriptor, e.g. "Iraq war coverage" or "Apple OS rumors".' },
+        article_ids: { type: 'array', items: { type: 'string' }, description: 'Source article ids the suppression should also cover by content fingerprint.' },
+        duration_days: { type: 'number', description: 'Days the suppression is active (default 3).' },
+        allow_resurface_on_developments: { type: 'boolean', description: 'If true, the AI may include articles on this topic when they describe a material new development. Default true.' },
+      },
+      required: ['signature', 'article_ids'],
+    },
+  },
 ];
 
 export const ALL_TOOLS: ToolDefinition[] = [...SERVER_TOOLS, ...CLIENT_TOOLS];
@@ -228,6 +265,8 @@ export const UNDO_TOOL_NAMES = new Set([
   'undo_pause_feed',
   'undo_set_feed_max_per_day',
   'undo_subscribe_to_feed',
+  'undo_save_articles',
+  'undo_react_to_articles',
 ]);
 
 export async function executeServerTool(
@@ -283,6 +322,83 @@ export async function executeServerTool(
           summary: `Marked ${validIds.length} article${validIds.length === 1 ? '' : 's'} as read${skipNote}`,
           succeeded: true,
           undo: { tool: 'undo_mark_articles_read', args: { article_ids: validIds } },
+        };
+      }
+
+      case 'save_articles': {
+        const ids = Array.isArray(call.args.article_ids) ? (call.args.article_ids as string[]) : [];
+        if (ids.length === 0) {
+          return { callId: call.id, name: call.name, content: 'No article ids supplied.', summary: 'Nothing to save', succeeded: false };
+        }
+        // Validate ids before mutating so a bad id doesn't pollute the read state.
+        const placeholders = ids.map(() => '?').join(',');
+        const valid = await dbAll<{ id: string }>(
+          ctx.db,
+          `SELECT id FROM articles WHERE id IN (${placeholders})`,
+          ids,
+        );
+        const validIds = valid.map((r) => r.id);
+        if (validIds.length === 0) {
+          return { callId: call.id, name: call.name, content: 'None of the supplied article ids exist.', summary: 'No articles found', succeeded: false };
+        }
+        const now = Date.now();
+        for (const id of validIds) {
+          await dbRun(
+            ctx.db,
+            `INSERT INTO article_read_state (user_id, article_id, is_read, updated_at, saved_at)
+             VALUES (?, ?, 0, ?, ?)
+             ON CONFLICT(user_id, article_id) DO UPDATE SET saved_at = excluded.saved_at, updated_at = excluded.updated_at`,
+            [ctx.userId, id, now, now],
+          );
+        }
+        const skipped = ids.length - validIds.length;
+        const summary = validIds.length === 1
+          ? 'Saved article'
+          : `Saved ${validIds.length} articles${skipped > 0 ? ` (${skipped} not found)` : ''}`;
+        return {
+          callId: call.id,
+          name: call.name,
+          content: `Saved ${validIds.length} article${validIds.length === 1 ? '' : 's'}.`,
+          summary,
+          succeeded: true,
+          undo: { tool: 'undo_save_articles', args: { article_ids: validIds } },
+        };
+      }
+
+      case 'react_to_articles': {
+        const ids = Array.isArray(call.args.article_ids) ? (call.args.article_ids as string[]) : [];
+        const value = Number(call.args.value);
+        if (ids.length === 0 || (value !== 1 && value !== -1)) {
+          return { callId: call.id, name: call.name, content: 'Invalid arguments for react_to_articles.', summary: 'Invalid reaction args', succeeded: false };
+        }
+        const placeholders = ids.map(() => '?').join(',');
+        // Pull each article's first feed_id for the reactions FK constraint.
+        const sources = await dbAll<{ article_id: string; feed_id: string }>(
+          ctx.db,
+          `SELECT article_id, feed_id FROM article_sources WHERE article_id IN (${placeholders}) GROUP BY article_id`,
+          ids,
+        );
+        if (sources.length === 0) {
+          return { callId: call.id, name: call.name, content: 'No matching articles found for reaction.', summary: 'No articles found', succeeded: false };
+        }
+        const now = Date.now();
+        for (const src of sources) {
+          await dbRun(
+            ctx.db,
+            `INSERT INTO article_reactions (id, user_id, article_id, feed_id, value, created_at)
+             VALUES (?, ?, ?, ?, ?, ?)
+             ON CONFLICT(user_id, article_id) DO UPDATE SET value = excluded.value, created_at = excluded.created_at`,
+            [nanoid(), ctx.userId, src.article_id, src.feed_id, value, now],
+          );
+        }
+        const summary = `${value > 0 ? 'Liked' : 'Disliked'} ${sources.length} article${sources.length === 1 ? '' : 's'}`;
+        return {
+          callId: call.id,
+          name: call.name,
+          content: `Set reaction ${value > 0 ? '+1' : '-1'} on ${sources.length} articles.`,
+          summary,
+          succeeded: true,
+          undo: { tool: 'undo_react_to_articles', args: { article_ids: sources.map((s) => s.article_id) } },
         };
       }
 
@@ -597,6 +713,30 @@ export async function executeUndoTool(
           [ctx.userId, articleId, tagId],
         );
         return { summary: 'Tag removed', succeeded: true };
+      }
+
+      case 'undo_save_articles': {
+        const ids = Array.isArray(args.article_ids) ? (args.article_ids as string[]) : [];
+        if (ids.length === 0) return { summary: 'Nothing to unsave', succeeded: false };
+        const placeholders = ids.map(() => '?').join(',');
+        await dbRun(
+          ctx.db,
+          `UPDATE article_read_state SET saved_at = NULL, updated_at = ? WHERE user_id = ? AND article_id IN (${placeholders})`,
+          [Date.now(), ctx.userId, ...ids],
+        );
+        return { summary: ids.length === 1 ? 'Unsaved' : `Unsaved ${ids.length} articles`, succeeded: true };
+      }
+
+      case 'undo_react_to_articles': {
+        const ids = Array.isArray(args.article_ids) ? (args.article_ids as string[]) : [];
+        if (ids.length === 0) return { summary: 'Nothing to clear', succeeded: false };
+        const placeholders = ids.map(() => '?').join(',');
+        await dbRun(
+          ctx.db,
+          `DELETE FROM article_reactions WHERE user_id = ? AND article_id IN (${placeholders})`,
+          [ctx.userId, ...ids],
+        );
+        return { summary: ids.length === 1 ? 'Reaction cleared' : `Cleared ${ids.length} reactions`, succeeded: true };
       }
 
       case 'undo_pause_feed': {

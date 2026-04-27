@@ -251,6 +251,12 @@ Requirements:
 }
 
 /** Build messages for news brief generation. */
+export type SuppressedTopic = {
+  signature: string;
+  expires_at: number;
+  allow_resurface_on_developments: boolean;
+};
+
 export function buildNewsBriefPrompt(
   candidates: Array<{
     id: string;
@@ -263,6 +269,7 @@ export function buildNewsBriefPrompt(
   windowLabel: string,
   maxBullets: number = 5,
   maxWordsPerBullet: number = 18,
+  suppressedTopics: SuppressedTopic[] = [],
 ): ChatMessage[] {
   const cappedBullets = Math.min(8, Math.max(1, Math.floor(maxBullets)));
 
@@ -282,9 +289,19 @@ export function buildNewsBriefPrompt(
     })
     .join('\n\n---\n\n');
 
+  // Topic-level suppression block. Stored client-side; sent here per-request
+  // so the AI can honor the user's "I'm tired of X for now" intent without
+  // missing material developments. Only included when the list is non-empty
+  // so the prompt stays terse for the common case.
+  const suppressionBlock = suppressedTopics.length > 0
+    ? `\n\nThe user has temporarily suppressed these topics. Skip any candidate that maps to one of these topics, **unless** an article describes a *material new development* (a significant new event, escalation, resolution, or substantial new finding) AND the topic's allow_resurface_on_developments flag is true. Do not mention the suppression list in the briefing itself.\n\n${suppressedTopics
+      .map((t) => `- "${t.signature}" (resurface_on_developments: ${t.allow_resurface_on_developments ? 'yes' : 'no'})`)
+      .join('\n')}\n`
+    : '';
+
   const prompt = `Create a concise editorial news briefing from these articles.
 
-Window: ${windowLabel}
+Window: ${windowLabel}${suppressionBlock}
 
 Requirements:
 - Return JSON only.

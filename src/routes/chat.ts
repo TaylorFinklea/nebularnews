@@ -187,7 +187,7 @@ async function loadThreadResponse(db: D1Database, threadId: string) {
 
 const TODAY_BRIEF_ARTICLE_ID = '__today_brief__';
 
-chatRoutes.get('/chat/:articleId{(?!assistant$|assistant/|multi$|multi/|undo-tool$).+}', async (c) => {
+chatRoutes.get('/chat/:articleId{(?!assistant$|assistant/|multi$|multi/|undo-tool$|exec-tool$).+}', async (c) => {
   const userId = c.get('userId');
   const db = c.env.DB;
   const articleId = c.req.param('articleId');
@@ -313,7 +313,7 @@ async function ensureTodayBriefSeed(db: D1Database, userId: string): Promise<voi
 // POST /chat/:articleId — send a message in article chat
 // ---------------------------------------------------------------------------
 
-chatRoutes.post('/chat/:articleId{(?!assistant$|assistant/|multi$|multi/|undo-tool$).+}', async (c) => {
+chatRoutes.post('/chat/:articleId{(?!assistant$|assistant/|multi$|multi/|undo-tool$|exec-tool$).+}', async (c) => {
   const userId = c.get('userId');
   const db = c.env.DB;
   const articleId = c.req.param('articleId');
@@ -1204,6 +1204,36 @@ chatRoutes.post('/chat/assistant', async (c) => {
     const msg = err instanceof Error ? err.message : 'Unknown error';
     const stack = err instanceof Error ? err.stack : undefined;
     console.error('[chat/assistant] 500:', msg, stack);
+    return c.json({ ok: false, error: { code: 'internal_error', message: msg } }, 500);
+  }
+});
+
+// POST /chat/exec-tool — execute a server-side chat tool directly.
+//
+// Used by the M18 chat-first Today tab so action chips (Save, React up/down)
+// fire immediately without the AI round-trip. The payload shape mirrors
+// /chat/undo-tool: { tool, args }. Only tools in the server registry are
+// allowed — client tools are dispatched in iOS and don't need a server
+// surface; undo tools have their own endpoint with the safer whitelist.
+chatRoutes.post('/chat/exec-tool', async (c) => {
+  try {
+    const userId = c.get('userId');
+    const body = await c.req.json<{ tool: string; args: Record<string, unknown> }>();
+    if (!body.tool) {
+      return c.json({ ok: false, error: { code: 'bad_request', message: 'tool is required' } }, 400);
+    }
+    if (!isServerTool(body.tool)) {
+      return c.json({ ok: false, error: { code: 'forbidden', message: `Tool ${body.tool} is not a server tool` } }, 403);
+    }
+    const callId = nanoid();
+    const result = await executeServerTool(
+      { id: callId, name: body.tool, args: body.args ?? {} },
+      { userId, db: c.env.DB, req: c.req.raw, env: c.env },
+    );
+    return c.json({ ok: true, data: result });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    console.error('[chat/exec-tool] 500:', msg);
     return c.json({ ok: false, error: { code: 'internal_error', message: msg } }, 500);
   }
 });

@@ -11,3 +11,8 @@ wrangler.generated.toml
 .claude/worktrees/
 .dev/worktree/
 .env*.local
+
+# Secrets — defense in depth. Apple keys, GCP service accounts, etc.
+*.p8
+AuthKey_*.p8
+*.json.key

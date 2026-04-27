@@ -48,7 +48,12 @@ briefRoutes.post('/brief/generate', async (c) => {
   const userId = c.get('userId');
   const db = c.env.DB;
 
-  let body: { topic_tag_id?: string; depth?: BriefDepth; lookback_hours?: number } = {};
+  let body: {
+    topic_tag_id?: string;
+    depth?: BriefDepth;
+    lookback_hours?: number;
+    suppressed_topics?: Array<{ signature: string; expires_at: number; allow_resurface_on_developments: boolean }>;
+  } = {};
   try {
     // Clone the request before reading body — Hono may have already read it.
     const cloned = c.req.raw.clone();
@@ -137,7 +142,14 @@ briefRoutes.post('/brief/generate', async (c) => {
   // Call AI with depth-aware bullet count.
   const maxBullets = maxBulletsForDepth(depth);
   const maxWords = maxWordsForDepth(depth);
-  const messages = buildNewsBriefPrompt(candidates, windowLabel, maxBullets, maxWords);
+  // Filter expired suppressions defensively — clients should already do this,
+  // but better to be safe than emit stale ones into the prompt.
+  const filterNow = Date.now();
+  const activeSuppressions = (body.suppressed_topics ?? []).filter((t) => t.expires_at > filterNow);
+  if (activeSuppressions.length > 0) {
+    console.log(`[brief/generate] applying ${activeSuppressions.length} suppressed topics for user ${userId}`);
+  }
+  const messages = buildNewsBriefPrompt(candidates, windowLabel, maxBullets, maxWords, activeSuppressions);
   const { content, usage } = await runChat(ai.provider, ai.apiKey, ai.model, messages);
 
   const parsed = parseJsonResponse(content) as Record<string, unknown> | null;

@@ -131,6 +131,7 @@ type MessageRow = {
   provider: string | null;
   model: string | null;
   created_at: number;
+  message_kind: string | null;
 };
 
 function formatThread(t: ThreadRow) {
@@ -153,6 +154,8 @@ function formatMessage(m: MessageRow) {
     provider: m.provider ?? null,
     model: m.model ?? null,
     created_at: m.created_at,
+    // Default to 'text' for legacy rows that predate migration 0019.
+    message_kind: m.message_kind ?? 'text',
   };
 }
 
@@ -174,12 +177,24 @@ async function loadThreadResponse(db: D1Database, threadId: string) {
 
 // ---------------------------------------------------------------------------
 // GET /chat/:articleId — get existing thread + messages for user/article
+//
+// Special case: when articleId == '__today_brief__' the handler creates the
+// thread on demand (if missing) and seeds it with a structured brief_seed
+// message representing the user's latest news brief. This is what powers
+// the chat-first Today tab on iOS — opening the tab loads a thread that
+// always has the latest brief at the top.
 // ---------------------------------------------------------------------------
+
+const TODAY_BRIEF_ARTICLE_ID = '__today_brief__';
 
 chatRoutes.get('/chat/:articleId{(?!assistant$|assistant/|multi$|multi/|undo-tool$).+}', async (c) => {
   const userId = c.get('userId');
   const db = c.env.DB;
   const articleId = c.req.param('articleId');
+
+  if (articleId === TODAY_BRIEF_ARTICLE_ID) {
+    await ensureTodayBriefSeed(db, userId);
+  }
 
   const thread = await dbGet<ThreadRow>(
     db,
@@ -202,6 +217,97 @@ chatRoutes.get('/chat/:articleId{(?!assistant$|assistant/|multi$|multi/|undo-too
     data: { thread: formatThread(thread), messages: messages.map(formatMessage) },
   });
 });
+
+/**
+ * Ensures the user has a `__today_brief__` thread containing a seeded
+ * brief_seed message for their most recent news brief. Idempotent — calling
+ * it repeatedly is safe and only inserts when the latest brief hasn't been
+ * seeded into the thread yet.
+ */
+async function ensureTodayBriefSeed(db: D1Database, userId: string): Promise<void> {
+  // 1. Get-or-create the thread.
+  let thread = await dbGet<ThreadRow>(
+    db,
+    `SELECT * FROM chat_threads WHERE user_id = ? AND article_id = ? LIMIT 1`,
+    [userId, TODAY_BRIEF_ARTICLE_ID],
+  );
+  const now = Date.now();
+  if (!thread) {
+    const newId = nanoid();
+    await dbRun(
+      db,
+      `INSERT INTO chat_threads (id, user_id, article_id, title, created_at, updated_at)
+       VALUES (?, ?, ?, 'Today', ?, ?)`,
+      [newId, userId, TODAY_BRIEF_ARTICLE_ID, now, now],
+    );
+    thread = {
+      id: newId,
+      user_id: userId,
+      article_id: TODAY_BRIEF_ARTICLE_ID,
+      title: 'Today',
+      created_at: now,
+      updated_at: now,
+    };
+  }
+
+  // 2. Find the latest completed brief.
+  const latestBrief = await dbGet<{
+    id: string;
+    edition_kind: string;
+    edition_slot: string;
+    bullets_json: string;
+    source_article_ids_json: string;
+    generated_at: number | null;
+    window_start: number;
+    window_end: number;
+  }>(
+    db,
+    `SELECT id, edition_kind, edition_slot, bullets_json, source_article_ids_json,
+            generated_at, window_start, window_end
+       FROM news_brief_editions
+      WHERE user_id = ? AND status = 'done'
+      ORDER BY COALESCE(generated_at, updated_at) DESC LIMIT 1`,
+    [userId],
+  );
+  if (!latestBrief) return;
+
+  // 3. Has this brief already been seeded into the thread? Match by brief_id
+  // baked into the seed JSON. LIKE pattern is safe because brief ids are
+  // nanoids (no glob metachars).
+  const existing = await dbGet<{ id: string }>(
+    db,
+    `SELECT id FROM chat_messages
+      WHERE thread_id = ? AND message_kind = 'brief_seed'
+        AND content LIKE ?
+      LIMIT 1`,
+    [thread.id, `%"brief_id":"${latestBrief.id}"%`],
+  );
+  if (existing) return;
+
+  // 4. Insert the seed.
+  let parsedBullets: unknown = [];
+  let parsedSources: unknown = [];
+  try { parsedBullets = JSON.parse(latestBrief.bullets_json); } catch { /* ignore */ }
+  try { parsedSources = JSON.parse(latestBrief.source_article_ids_json); } catch { /* ignore */ }
+
+  const seedContent = JSON.stringify({
+    brief_id: latestBrief.id,
+    edition_kind: latestBrief.edition_kind,
+    edition_slot: latestBrief.edition_slot,
+    generated_at: latestBrief.generated_at,
+    window_start: latestBrief.window_start,
+    window_end: latestBrief.window_end,
+    bullets: parsedBullets,
+    source_article_ids: parsedSources,
+  });
+
+  await dbRun(
+    db,
+    `INSERT INTO chat_messages (id, thread_id, role, content, created_at, message_kind)
+     VALUES (?, ?, 'assistant', ?, ?, 'brief_seed')`,
+    [nanoid(), thread.id, seedContent, latestBrief.generated_at ?? now],
+  );
+}
 
 // ---------------------------------------------------------------------------
 // POST /chat/:articleId — send a message in article chat

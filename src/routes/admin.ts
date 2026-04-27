@@ -616,6 +616,7 @@ adminRoutes.post('/admin/briefs/generate-for-user', async (c) => {
     edition_kind: 'morning' | 'evening' | 'ondemand';
     edition_slot?: string;
     lookback_hours?: number;
+    suppressed_topics?: Array<{ signature: string; expires_at: number; allow_resurface_on_developments: boolean }>;
   }>();
 
   if (!body.user_id) {
@@ -689,7 +690,9 @@ adminRoutes.post('/admin/briefs/generate-for-user', async (c) => {
   }));
 
   const windowLabel = editionKind === 'morning' ? 'Morning Brief' : editionKind === 'evening' ? 'Evening Brief' : 'News Brief';
-  const messages = buildNewsBriefPrompt(candidates, windowLabel, 5);
+  const nowForFilter = Date.now();
+  const activeSuppressions = (body.suppressed_topics ?? []).filter((t) => t.expires_at > nowForFilter);
+  const messages = buildNewsBriefPrompt(candidates, windowLabel, 5, undefined, activeSuppressions);
   const { content } = await runChat(ai.provider, ai.apiKey, ai.model, messages);
   const parsed = parseJsonResponse(content) as Record<string, unknown> | null;
   const rawBullets = Array.isArray(parsed?.bullets)

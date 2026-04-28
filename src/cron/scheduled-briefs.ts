@@ -116,13 +116,21 @@ export async function generateScheduledBriefs(env: Env): Promise<void> {
       // NSE can attach a preview thumbnail to the lock-screen notification.
       const articles = await dbAll<{ id: string; title: string; published_at: number | null; feed_id: string; image_url: string | null }>(
         db,
+        // M19: filter to substantive articles. The retry-empty-articles
+        // cron is independently filling thin RSS bodies via Steel/Browserless;
+        // we just trust that pipeline and only let articles with real content
+        // into the brief pool. Quarantined articles are also excluded —
+        // chunk-4 closed this leak on /today and /articles, brief generation
+        // was the last surface that still let them through.
         `SELECT a.id, a.title, a.published_at, asrc.feed_id, a.image_url
          FROM articles a
          JOIN article_sources asrc ON asrc.article_id = a.id
          JOIN article_scores sc ON sc.article_id = a.id AND sc.user_id = ?
          WHERE asrc.feed_id IN (${feedPlaceholders}) AND asrc.created_at >= ? AND sc.score >= ?
+           AND a.quarantined_at IS NULL
+           AND a.content_text IS NOT NULL AND a.word_count >= 100
          GROUP BY a.id
-         ORDER BY sc.score DESC, a.published_at DESC
+         ORDER BY sc.score DESC, a.word_count DESC, a.published_at DESC
          LIMIT 20`,
         [user_id, ...feedIds, cutoffMs, scoreCutoff],
       );

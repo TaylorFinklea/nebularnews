@@ -109,9 +109,11 @@ briefRoutes.post('/brief/generate', async (c) => {
     LEFT JOIN article_scores s ON s.article_id = src.article_id AND s.user_id = ?
     WHERE src.created_at >= ?
       AND COALESCE(s.score, 0) >= ?
+      AND a.quarantined_at IS NULL
+      AND a.content_text IS NOT NULL AND a.word_count >= 100
       ${topicClause}
     GROUP BY a.id
-    ORDER BY score DESC, COALESCE(a.published_at, a.fetched_at) DESC
+    ORDER BY score DESC, a.word_count DESC, COALESCE(a.published_at, a.fetched_at) DESC
     LIMIT ?
   `, params);
 

@@ -11,6 +11,20 @@ import { persistBrief } from '../lib/brief-persist';
 // for users whose configured morning/evening time has arrived.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// R2 fallback image pool — deterministic rotation by brief id.
+// Pool of 30 curated generic editorial images hosted at
+// https://r2-fallback.nebularnews.com/fallback-NNN.jpg (B1 infra).
+// Using brief id as the hash key keeps re-deliveries stable.
+// ---------------------------------------------------------------------------
+const FALLBACK_IMAGE_POOL_SIZE = 30;
+function fallbackImageForBriefId(briefId: string): string {
+  let h = 0;
+  for (let i = 0; i < briefId.length; i++) h = (h * 31 + briefId.charCodeAt(i)) | 0;
+  const idx = Math.abs(h) % FALLBACK_IMAGE_POOL_SIZE;
+  return `https://r2-fallback.nebularnews.com/fallback-${String(idx + 1).padStart(3, '0')}.jpg`;
+}
+
 /**
  * Return hour, minute, seconds, and the start-of-day epoch millis for a given
  * moment expressed in the supplied IANA timezone. Falls back to UTC if the
@@ -198,9 +212,12 @@ export async function generateScheduledBriefs(env: Env): Promise<void> {
         })
         .filter((s) => s.length > 0);
 
-      // Lead image = top-scored source article's image. Candidates are
-      // already sorted by score DESC, so first non-null wins.
-      const leadImage = candidates.find((c) => c.imageUrl)?.imageUrl ?? null;
+      // Lead image: top-scored source article's image. Candidates are sorted by
+      // score DESC, so first non-null wins. If no candidate has an image, rotate
+      // in a curated fallback deterministically by brief id so the same brief
+      // always gets the same image (re-deliveries are stable).
+      const candidateImage = candidates.find((c) => c.imageUrl)?.imageUrl ?? null;
+      const leadImage = candidateImage ?? fallbackImageForBriefId(inserted.id);
 
       await sendPushToUser(db, env, user_id, {
         title: editionType === 'morning' ? 'Morning Brief' : 'Evening Brief',

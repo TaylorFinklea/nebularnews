@@ -11,6 +11,19 @@ import { buildNewsBriefPrompt } from '../lib/prompts';
 
 const ALLOWED_SCRAPE_MODES = new Set(['rss_only', 'auto_fetch_on_empty', 'always']);
 
+// ---------------------------------------------------------------------------
+// R2 fallback image pool — deterministic rotation by brief id.
+// Mirrors the same helper in scheduled-briefs.ts so the dev-trigger push
+// path uses the same fallback as the cron path.
+// ---------------------------------------------------------------------------
+const FALLBACK_IMAGE_POOL_SIZE = 30;
+function fallbackImageForBriefId(briefId: string): string {
+  let h = 0;
+  for (let i = 0; i < briefId.length; i++) h = (h * 31 + briefId.charCodeAt(i)) | 0;
+  const idx = Math.abs(h) % FALLBACK_IMAGE_POOL_SIZE;
+  return `https://r2-fallback.nebularnews.com/fallback-${String(idx + 1).padStart(3, '0')}.jpg`;
+}
+
 const AUDITED_METHODS = new Set(['POST', 'PATCH', 'DELETE']);
 
 export const adminRoutes = new Hono<AppEnv>();
@@ -742,7 +755,8 @@ adminRoutes.post('/admin/briefs/generate-for-user', async (c) => {
         return text.length > 80 ? text.slice(0, 77) + '…' : text;
       })
       .filter((s) => s.length > 0);
-    const leadImage = candidates.find((c) => c.imageUrl)?.imageUrl ?? null;
+    const candidateImage = candidates.find((c) => c.imageUrl)?.imageUrl ?? null;
+    const leadImage = candidateImage ?? fallbackImageForBriefId(inserted.id);
     await sendPushToUser(db, c.env, body.user_id, {
       title: editionKind === 'morning' ? 'Morning Brief' : editionKind === 'evening' ? 'Evening Brief' : 'News Brief',
       body: trimmedBody || 'Your news brief is ready.',

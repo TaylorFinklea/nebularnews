@@ -6,7 +6,7 @@ import { resolveAIKey } from '../lib/ai-key-resolver';
 import { runChat, runChatStreaming, runChatWithTools, streamChatWithTools, type ChatMessage, type ExtendedChatMessage, type LlmUsage } from '../lib/ai';
 import { recordUsage, checkBudget } from '../lib/rate-limiter';
 import { buildAssistantSystemPrompt, type AssistantPageContext } from '../lib/prompts';
-import { ALL_TOOLS, isClientTool, isServerTool, executeServerTool, executeUndoTool } from '../lib/chat-tools';
+import { ALL_TOOLS, isClientTool, isServerTool, executeServerTool, executeUndoTool, requiresConfirmation, buildProposalDetail } from '../lib/chat-tools';
 
 export const chatRoutes = new Hono<AppEnv>();
 
@@ -25,6 +25,25 @@ const MULTI_CHAT_THREAD_ARTICLE_ID = '__multi_chat__';
 // the final text turn — i.e. at MAX_TOOL_ROUNDS-1 calls we still get one more
 // round to produce the final message.
 const MAX_TOOL_ROUNDS = 4;
+
+function buildProposalSummary(call: { name: string; args: Record<string, unknown> }): string {
+  switch (call.name) {
+    case 'mark_articles_read': {
+      const ids = Array.isArray(call.args.article_ids) ? call.args.article_ids : [];
+      return `Mark ${ids.length} article${ids.length === 1 ? '' : 's'} as read`;
+    }
+    case 'pause_feed':
+      return call.args.paused === true ? 'Pause feed' : 'Resume feed';
+    case 'unsubscribe_from_feed':
+      return 'Unsubscribe from feed';
+    case 'set_feed_max_per_day':
+      return `Cap feed at ${call.args.max_per_day ?? '?'} articles/day`;
+    case 'set_feed_min_score':
+      return `Set minimum score to ${call.args.min_score ?? '?'}`;
+    default:
+      return call.name;
+  }
+}
 
 function mergeUsage(a: LlmUsage, b: LlmUsage): LlmUsage {
   return {
@@ -867,6 +886,7 @@ chatRoutes.post('/chat/assistant', async (c) => {
     message: string;
     pageContext: AssistantPageContext;
     threadId?: string;
+    guardrails?: { policies: Record<string, 'confirm' | 'undo_only'> };
   }>();
 
   const message = body.message?.trim();
@@ -1023,6 +1043,7 @@ chatRoutes.post('/chat/assistant', async (c) => {
   // calls to the caller via SSE / response payload.
   const wantStream = c.req.query('stream') === 'true';
   const toolCtx = { userId, db, req: c.req.raw, env: c.env };
+  const guardrailPolicies: Record<string, 'confirm' | 'undo_only'> = body.guardrails?.policies ?? {};
   await dlog('pre_stream', { threadId: thread.id, historyLen: chatMessages.length, wantStream });
 
   if (wantStream) {
@@ -1071,6 +1092,80 @@ chatRoutes.post('/chat/assistant', async (c) => {
 
             // Tool calls. Record the assistant's tool-use turn in the conversation.
             convo.push({ role: 'assistant', content: roundText, toolCalls: roundToolCalls });
+
+            // Check if any call in this round requires confirmation.
+            // If so, propose the first such call and halt; iOS resumes via /chat/confirm-tool.
+            let proposedAndHalted = false;
+            for (const call of roundToolCalls) {
+              if (isServerTool(call.name) && requiresConfirmation(call, guardrailPolicies)) {
+                // Build detail payload.
+                const detail = await buildProposalDetail(call, toolCtx);
+                const proposeId = 'tcp_' + nanoid();
+                const lastUserMsg = message;
+                const proposalSummary = buildProposalSummary(call);
+
+                // Persist proposal to D1.
+                try {
+                  await dbRun(
+                    db,
+                    `INSERT INTO tool_call_proposals (id, user_id, thread_id, tool_name, args_json, preview_summary, preview_detail_json, conversation_snapshot_json, call_id, provider, model, created_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [
+                      proposeId,
+                      userId,
+                      thread.id,
+                      call.name,
+                      JSON.stringify(call.args),
+                      proposalSummary,
+                      detail ? JSON.stringify(detail) : '{}',
+                      JSON.stringify(convo),
+                      call.id,
+                      ai.provider,
+                      ai.model,
+                      Date.now(),
+                    ],
+                  );
+                } catch (e) {
+                  console.error('[chat/assistant] Failed to persist proposal:', (e as Error).message);
+                }
+
+                toolCallLog.push({ kind: 'proposed', name: call.name, args: call.args, summary: proposalSummary });
+                sse({
+                  type: 'tool_call_propose',
+                  proposeId,
+                  name: call.name,
+                  args: call.args,
+                  summary: proposalSummary,
+                  detail: detail ?? {},
+                  contextHint: lastUserMsg,
+                });
+                proposedAndHalted = true;
+                break; // Only propose one at a time.
+              }
+            }
+
+            if (proposedAndHalted) {
+              // Persist what we have and emit done — iOS will resume via /chat/confirm-tool.
+              const { text: cleanContent } = finalContent ? extractFollowUpSuggestions(finalContent) : { text: '' };
+              if (cleanContent || toolCallLog.length > 0) {
+                try {
+                  await dbRun(
+                    db,
+                    `INSERT INTO chat_messages (id, thread_id, role, content, provider, model, tool_calls_json, created_at)
+                     VALUES (?, ?, 'assistant', ?, ?, ?, ?, ?)`,
+                    [
+                      nanoid(), thread.id, cleanContent,
+                      ai.provider, ai.model,
+                      toolCallLog.length > 0 ? JSON.stringify(toolCallLog) : null,
+                      Date.now(),
+                    ],
+                  );
+                } catch (e) {
+                  console.error('[assistant-persist] INSERT chat_messages (propose) failed:', (e as Error).message);
+                }
+              }
+              break; // Exit the round loop — turn is done for now.
+            }
 
             for (const call of roundToolCalls) {
               if (isServerTool(call.name)) {
@@ -1256,6 +1351,233 @@ chatRoutes.post('/chat/undo-tool', async (c) => {
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
     console.error('[chat/undo-tool] 500:', msg);
+    return c.json({ ok: false, error: { code: 'internal_error', message: msg } }, 500);
+  }
+});
+
+// POST /chat/confirm-tool — approve or reject a pending tool proposal.
+// After confirmation the server resumes the SSE conversation with the tool result.
+chatRoutes.post('/chat/confirm-tool', async (c) => {
+  try {
+    const userId = c.get('userId');
+    const db = c.env.DB;
+
+    const body = await c.req.json<{
+      proposeId: string;
+      decision: 'approve' | 'reject';
+      edits?: Record<string, unknown>;
+    }>();
+
+    if (!body.proposeId || !body.decision) {
+      return c.json({ ok: false, error: { code: 'bad_request', message: 'proposeId and decision are required' } }, 400);
+    }
+
+    // Look up proposal — must belong to this user.
+    const proposal = await dbGet<{
+      id: string;
+      user_id: string;
+      thread_id: string;
+      tool_name: string;
+      args_json: string;
+      preview_summary: string;
+      conversation_snapshot_json: string;
+      call_id: string;
+      provider: string;
+      model: string;
+      created_at: number;
+      resolved_at: number | null;
+      resolution: string | null;
+    }>(
+      db,
+      `SELECT * FROM tool_call_proposals WHERE id = ? AND user_id = ?`,
+      [body.proposeId, userId],
+    );
+
+    if (!proposal) {
+      return c.json({ ok: false, error: { code: 'not_found', message: 'Proposal not found' } }, 404);
+    }
+    if (proposal.resolved_at !== null) {
+      return c.json({ ok: false, error: { code: 'already_resolved', message: 'Proposal already resolved' } }, 409);
+    }
+    const tenMinutesAgo = Date.now() - 10 * 60 * 1000;
+    if (proposal.created_at < tenMinutesAgo) {
+      // Mark as expired.
+      await dbRun(db, `UPDATE tool_call_proposals SET resolved_at = ?, resolution = 'expired' WHERE id = ?`, [Date.now(), proposal.id]);
+      return c.json({ ok: false, error: { code: 'expired', message: 'Proposal expired — ask again if you still want to do this' } }, 410);
+    }
+
+    // Mark resolved.
+    await dbRun(
+      db,
+      `UPDATE tool_call_proposals SET resolved_at = ?, resolution = ? WHERE id = ?`,
+      [Date.now(), body.decision === 'approve' ? 'approved' : 'rejected', proposal.id],
+    );
+
+    const ai = await resolveAIKey(db, userId, c.req.raw, c.env);
+    if (!ai) return c.json({ ok: false, error: { code: 'no_ai_key', message: 'No AI provider configured' } }, 503);
+
+    const toolCtx = { userId, db, req: c.req.raw, env: c.env };
+    const convo = JSON.parse(proposal.conversation_snapshot_json) as ExtendedChatMessage[];
+
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        const sse = (payload: unknown) => {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`));
+        };
+
+        const toolCallLog: Array<Record<string, unknown>> = [];
+        let accumulatedUsage: LlmUsage = {};
+        let finalContent = '';
+
+        try {
+          // Build the merged args.
+          const baseArgs: Record<string, unknown> = JSON.parse(proposal.args_json);
+          const mergedArgs = body.edits ? { ...baseArgs, ...body.edits } : baseArgs;
+          const call = { id: proposal.call_id, name: proposal.tool_name, args: mergedArgs };
+
+          if (body.decision === 'reject') {
+            // Record rejection in convo and let AI acknowledge.
+            toolCallLog.push({ kind: 'rejected', name: proposal.tool_name, args: mergedArgs, summary: 'Cancelled by user' });
+            sse({ type: 'tool_call_server', name: proposal.tool_name, summary: 'Cancelled by user', succeeded: false });
+            convo.push({ role: 'tool', callId: proposal.call_id, content: 'User declined to run this action.' });
+          } else {
+            // Execute the tool.
+            const execResult = await executeServerTool(call, toolCtx);
+            toolCallLog.push({ kind: 'server', name: call.name, args: mergedArgs, summary: execResult.summary, succeeded: execResult.succeeded, undo: execResult.undo ?? null });
+            sse({
+              type: 'tool_call_server',
+              name: call.name,
+              summary: execResult.summary,
+              succeeded: execResult.succeeded,
+              undo: execResult.undo ?? null,
+            });
+            convo.push({ role: 'tool', callId: execResult.callId, content: execResult.content });
+          }
+
+          // Continue conversation so AI can acknowledge.
+          for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+            let roundText = '';
+            let roundToolCalls: { id: string; name: string; args: Record<string, unknown> }[] = [];
+            let roundKind: 'message' | 'toolCalls' = 'message';
+            let roundUsage: LlmUsage = {};
+            for await (const evt of streamChatWithTools(ai.provider, ai.apiKey, ai.model, convo, ALL_TOOLS, { maxTokens: 1024 })) {
+              if (evt.type === 'text_delta') {
+                sse({ type: 'delta', content: evt.text });
+              } else if (evt.type === 'done') {
+                roundText = evt.finalText;
+                roundToolCalls = evt.toolCalls;
+                roundKind = evt.kind;
+                roundUsage = evt.usage;
+              }
+            }
+            accumulatedUsage = mergeUsage(accumulatedUsage, roundUsage);
+
+            if (roundKind === 'message') {
+              finalContent = roundText;
+              break;
+            }
+
+            convo.push({ role: 'assistant', content: roundText, toolCalls: roundToolCalls });
+
+            // Check for more proposals in follow-up rounds.
+            let proposedAgain = false;
+            for (const followCall of roundToolCalls) {
+              if (isServerTool(followCall.name) && requiresConfirmation(followCall, {})) {
+                // Propose (all-confirm defaults since we have no policy from the follow-up context).
+                const detail = await buildProposalDetail(followCall, toolCtx);
+                const proposeId = 'tcp_' + nanoid();
+                const proposalSummary = buildProposalSummary(followCall);
+                const threadId = proposal.thread_id;
+
+                try {
+                  await dbRun(
+                    db,
+                    `INSERT INTO tool_call_proposals (id, user_id, thread_id, tool_name, args_json, preview_summary, preview_detail_json, conversation_snapshot_json, call_id, provider, model, created_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [
+                      proposeId, userId, threadId, followCall.name,
+                      JSON.stringify(followCall.args), proposalSummary,
+                      detail ? JSON.stringify(detail) : '{}',
+                      JSON.stringify(convo), followCall.id,
+                      ai.provider, ai.model, Date.now(),
+                    ],
+                  );
+                } catch { /* ignore */ }
+
+                toolCallLog.push({ kind: 'proposed', name: followCall.name, args: followCall.args, summary: proposalSummary });
+                sse({
+                  type: 'tool_call_propose',
+                  proposeId,
+                  name: followCall.name,
+                  args: followCall.args,
+                  summary: proposalSummary,
+                  detail: detail ?? {},
+                  contextHint: null,
+                });
+                proposedAgain = true;
+                break;
+              }
+            }
+
+            if (proposedAgain) break;
+
+            for (const followCall of roundToolCalls) {
+              if (isServerTool(followCall.name)) {
+                const execResult = await executeServerTool(followCall, toolCtx);
+                toolCallLog.push({ kind: 'server', name: followCall.name, args: followCall.args, summary: execResult.summary, succeeded: execResult.succeeded, undo: execResult.undo ?? null });
+                sse({ type: 'tool_call_server', name: followCall.name, summary: execResult.summary, succeeded: execResult.succeeded, undo: execResult.undo ?? null });
+                convo.push({ role: 'tool', callId: execResult.callId, content: execResult.content });
+              } else if (isClientTool(followCall.name)) {
+                toolCallLog.push({ kind: 'client', name: followCall.name, args: followCall.args });
+                sse({ type: 'tool_call_client', name: followCall.name, args: followCall.args });
+                convo.push({ role: 'tool', callId: followCall.id, content: `Action "${followCall.name}" dispatched to the user's device.` });
+              }
+            }
+          }
+        } catch (err) {
+          const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+          console.error('[chat/confirm-tool] stream error:', errorMessage);
+          sse({ type: 'error', error: errorMessage });
+        }
+
+        sse({ type: 'done', content: finalContent, usage: accumulatedUsage });
+        controller.close();
+
+        // Persist the assistant follow-up.
+        const { text: cleanContent } = finalContent ? extractFollowUpSuggestions(finalContent) : { text: '' };
+        if (cleanContent || toolCallLog.length > 0) {
+          try {
+            await dbRun(
+              db,
+              `INSERT INTO chat_messages (id, thread_id, role, content, provider, model, tool_calls_json, created_at)
+               VALUES (?, ?, 'assistant', ?, ?, ?, ?, ?)`,
+              [
+                nanoid(), proposal.thread_id, cleanContent,
+                ai.provider, ai.model,
+                toolCallLog.length > 0 ? JSON.stringify(toolCallLog) : null,
+                Date.now(),
+              ],
+            );
+          } catch (e) {
+            console.error('[confirm-tool-persist] INSERT failed:', (e as Error).message);
+          }
+          try {
+            await dbRun(db, `UPDATE chat_threads SET updated_at = ? WHERE id = ?`, [Date.now(), proposal.thread_id]);
+          } catch { /* ignore */ }
+          try {
+            await recordUsage(db, userId, ai.provider, ai.model, accumulatedUsage, 'assistant', ai.isByok);
+          } catch { /* ignore */ }
+        }
+      },
+    });
+
+    return new Response(stream, {
+      headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' },
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    console.error('[chat/confirm-tool] 500:', msg);
     return c.json({ ok: false, error: { code: 'internal_error', message: msg } }, 500);
   }
 });

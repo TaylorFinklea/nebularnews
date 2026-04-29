@@ -50,6 +50,16 @@ export async function cleanup(env: Env): Promise<void> {
     `DELETE FROM provider_calls WHERE started_at < ?`,
     [thirtyDaysAgo],
   );
+
+  // 6. Expire stale unresolved tool_call_proposals older than 10 minutes.
+  //    Doesn't rollback anything (nothing was applied) — just reclaims state
+  //    so the table doesn't grow unbounded.
+  const tenMinutesAgo = now - 10 * 60 * 1000;
+  await dbRun(db,
+    `UPDATE tool_call_proposals SET resolved_at = ?, resolution = 'expired'
+     WHERE resolved_at IS NULL AND created_at < ?`,
+    [now, tenMinutesAgo],
+  );
 }
 
 // ---------------------------------------------------------------------------

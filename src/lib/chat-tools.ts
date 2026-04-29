@@ -154,6 +154,27 @@ export const SERVER_TOOLS: ToolDefinition[] = [
       required: ['url'],
     },
   },
+  {
+    name: 'unsubscribe_from_feed',
+    description: 'Unsubscribe the user from a feed. Reversible via undo within the same session.',
+    parameters: {
+      type: 'object',
+      properties: { feed_id: { type: 'string' } },
+      required: ['feed_id'],
+    },
+  },
+  {
+    name: 'set_feed_min_score',
+    description: 'Set the minimum article score for a feed subscription. Articles below this score are hidden from lists. Use 0 to disable.',
+    parameters: {
+      type: 'object',
+      properties: {
+        feed_id: { type: 'string' },
+        min_score: { type: 'number', description: '0 = no filter, 1-100 inclusive' },
+      },
+      required: ['feed_id', 'min_score'],
+    },
+  },
 ];
 
 export const CLIENT_TOOLS: ToolDefinition[] = [
@@ -267,7 +288,274 @@ export const UNDO_TOOL_NAMES = new Set([
   'undo_subscribe_to_feed',
   'undo_save_articles',
   'undo_react_to_articles',
+  'undo_unsubscribe_from_feed',
+  'undo_set_feed_min_score',
 ]);
+
+// ---------------------------------------------------------------------------
+// Guardrails — confirmation-before-execute policy
+// ---------------------------------------------------------------------------
+
+/// Governed destructive tools (names match what iOS stores in UserDefaults).
+export const GOVERNED_TOOL_NAMES = new Set([
+  'unsubscribe_from_feed',
+  'mark_articles_read',
+  'pause_feed',
+  'set_feed_max_per_day',
+  'set_feed_min_score',
+]);
+
+/// Client-driven policy for a single tool call. Returns true if the call
+/// must be confirmed by the user before the server mutates.
+export function requiresConfirmation(
+  call: { name: string; args: Record<string, unknown> },
+  policies: Record<string, 'confirm' | 'undo_only'>,
+): boolean {
+  switch (call.name) {
+    case 'unsubscribe_from_feed':
+      return policies.unsubscribe_from_feed !== 'undo_only';
+    case 'pause_feed':
+      // Only when actually pausing — resume is non-destructive.
+      if (call.args.paused !== true) return false;
+      return policies.pause_feed !== 'undo_only';
+    case 'set_feed_max_per_day':
+      return policies.set_feed_max_per_day !== 'undo_only';
+    case 'set_feed_min_score':
+      return policies.set_feed_min_score !== 'undo_only';
+    case 'mark_articles_read': {
+      const ids = Array.isArray(call.args.article_ids) ? (call.args.article_ids as string[]) : [];
+      // Small batches (<= 5) always run inline regardless of policy.
+      if (ids.length <= 5) return false;
+      return policies.mark_articles_read !== 'undo_only';
+    }
+    default:
+      return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Proposal detail builder — enriches a propose event with readable context
+// ---------------------------------------------------------------------------
+
+export type ToolProposalDetail =
+  | {
+      kind: 'mark_articles_read';
+      count: number;
+      previews: Array<{ id: string; title: string; feedTitle: string | null }>;
+      remainingCount: number;
+      feedBreakdown: Array<{ feedTitle: string; n: number }>;
+    }
+  | {
+      kind: 'pause_feed';
+      feedId: string;
+      feedTitle: string | null;
+      currentArticleCount24h: number;
+      currentlyPaused: boolean;
+    }
+  | {
+      kind: 'unsubscribe_from_feed';
+      feedId: string;
+      feedTitle: string | null;
+      subscribedAt: number | null;
+      totalArticlesEver: number;
+      currentlyPaused: boolean;
+    }
+  | {
+      kind: 'set_feed_max_per_day';
+      feedId: string;
+      feedTitle: string | null;
+      currentCap: number | null;
+      proposedCap: number;
+      avgArticlesPerDay: number;
+    }
+  | {
+      kind: 'set_feed_min_score';
+      feedId: string;
+      feedTitle: string | null;
+      currentMinScore: number | null;
+      proposedMinScore: number;
+      currentScoreDistribution: { p25: number; p50: number; p75: number };
+    };
+
+export async function buildProposalDetail(
+  call: { name: string; args: Record<string, unknown> },
+  ctx: ToolExecutionContext,
+): Promise<ToolProposalDetail | null> {
+  try {
+    switch (call.name) {
+      case 'mark_articles_read': {
+        const ids = Array.isArray(call.args.article_ids) ? (call.args.article_ids as string[]) : [];
+        const count = ids.length;
+        if (count === 0) return null;
+
+        // Fetch first 8 article titles + feed names.
+        const previewIds = ids.slice(0, 8);
+        const pPlaceholders = previewIds.map(() => '?').join(',');
+        const previewRows = await dbAll<{ id: string; title: string | null; feed_title: string | null }>(
+          ctx.db,
+          `SELECT a.id, a.title, f.title AS feed_title
+             FROM articles a
+             LEFT JOIN article_sources asrc ON asrc.article_id = a.id
+             LEFT JOIN feeds f ON f.id = asrc.feed_id
+             WHERE a.id IN (${pPlaceholders})
+             GROUP BY a.id
+             LIMIT 8`,
+          previewIds,
+        );
+
+        // Feed breakdown — how many ids per feed (top 5).
+        const allPlaceholders = ids.map(() => '?').join(',');
+        const breakdownRows = await dbAll<{ feed_title: string | null; n: number }>(
+          ctx.db,
+          `SELECT f.title AS feed_title, COUNT(*) AS n
+             FROM articles a
+             LEFT JOIN article_sources asrc ON asrc.article_id = a.id
+             LEFT JOIN feeds f ON f.id = asrc.feed_id
+             WHERE a.id IN (${allPlaceholders})
+             GROUP BY f.id
+             ORDER BY n DESC
+             LIMIT 5`,
+          ids,
+        );
+
+        return {
+          kind: 'mark_articles_read',
+          count,
+          previews: previewRows.map((r) => ({ id: r.id, title: r.title ?? '(untitled)', feedTitle: r.feed_title })),
+          remainingCount: Math.max(0, count - previewRows.length),
+          feedBreakdown: breakdownRows.map((r) => ({ feedTitle: r.feed_title ?? 'Unknown feed', n: r.n })),
+        };
+      }
+
+      case 'pause_feed': {
+        const feedId = String(call.args.feed_id ?? '');
+        const sub = await dbGet<{ feed_title: string | null; paused: number }>(
+          ctx.db,
+          `SELECT f.title AS feed_title, s.paused
+             FROM user_feed_subscriptions s
+             LEFT JOIN feeds f ON f.id = s.feed_id
+             WHERE s.user_id = ? AND s.feed_id = ?`,
+          [ctx.userId, feedId],
+        );
+        const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+        const countRow = await dbGet<{ n: number }>(
+          ctx.db,
+          `SELECT COUNT(*) AS n FROM articles a
+             JOIN article_sources asrc ON asrc.article_id = a.id
+             WHERE asrc.feed_id = ? AND a.created_at >= ?`,
+          [feedId, oneDayAgo],
+        );
+        return {
+          kind: 'pause_feed',
+          feedId,
+          feedTitle: sub?.feed_title ?? null,
+          currentArticleCount24h: countRow?.n ?? 0,
+          currentlyPaused: (sub?.paused ?? 0) === 1,
+        };
+      }
+
+      case 'unsubscribe_from_feed': {
+        const feedId = String(call.args.feed_id ?? '');
+        const sub = await dbGet<{ feed_title: string | null; created_at: number; paused: number }>(
+          ctx.db,
+          `SELECT f.title AS feed_title, s.created_at, s.paused
+             FROM user_feed_subscriptions s
+             LEFT JOIN feeds f ON f.id = s.feed_id
+             WHERE s.user_id = ? AND s.feed_id = ?`,
+          [ctx.userId, feedId],
+        );
+        const totalRow = await dbGet<{ n: number }>(
+          ctx.db,
+          `SELECT COUNT(*) AS n FROM articles a
+             JOIN article_sources asrc ON asrc.article_id = a.id
+             WHERE asrc.feed_id = ?`,
+          [feedId],
+        );
+        return {
+          kind: 'unsubscribe_from_feed',
+          feedId,
+          feedTitle: sub?.feed_title ?? null,
+          subscribedAt: sub?.created_at ?? null,
+          totalArticlesEver: totalRow?.n ?? 0,
+          currentlyPaused: (sub?.paused ?? 0) === 1,
+        };
+      }
+
+      case 'set_feed_max_per_day': {
+        const feedId = String(call.args.feed_id ?? '');
+        const proposedCap = Math.max(0, Math.floor(Number(call.args.max_per_day)));
+        const sub = await dbGet<{ feed_title: string | null; max_articles_per_day: number | null }>(
+          ctx.db,
+          `SELECT f.title AS feed_title, s.max_articles_per_day
+             FROM user_feed_subscriptions s
+             LEFT JOIN feeds f ON f.id = s.feed_id
+             WHERE s.user_id = ? AND s.feed_id = ?`,
+          [ctx.userId, feedId],
+        );
+        // Average articles per day over last 30 days.
+        const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+        const avgRow = await dbGet<{ n: number }>(
+          ctx.db,
+          `SELECT COUNT(*) AS n FROM articles a
+             JOIN article_sources asrc ON asrc.article_id = a.id
+             WHERE asrc.feed_id = ? AND a.created_at >= ?`,
+          [feedId, thirtyDaysAgo],
+        );
+        const avgPerDay = Math.round((avgRow?.n ?? 0) / 30);
+        return {
+          kind: 'set_feed_max_per_day',
+          feedId,
+          feedTitle: sub?.feed_title ?? null,
+          currentCap: sub?.max_articles_per_day ?? null,
+          proposedCap,
+          avgArticlesPerDay: avgPerDay,
+        };
+      }
+
+      case 'set_feed_min_score': {
+        const feedId = String(call.args.feed_id ?? '');
+        const proposedScore = Number(call.args.min_score ?? 0);
+        const sub = await dbGet<{ feed_title: string | null; min_score: number | null }>(
+          ctx.db,
+          `SELECT f.title AS feed_title, s.min_score
+             FROM user_feed_subscriptions s
+             LEFT JOIN feeds f ON f.id = s.feed_id
+             WHERE s.user_id = ? AND s.feed_id = ?`,
+          [ctx.userId, feedId],
+        );
+        // Score distribution for recent articles in this feed.
+        const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+        const scoreRows = await dbAll<{ score: number }>(
+          ctx.db,
+          `SELECT a.score FROM articles a
+             JOIN article_sources asrc ON asrc.article_id = a.id
+             WHERE asrc.feed_id = ? AND a.created_at >= ? AND a.score IS NOT NULL
+             ORDER BY a.score ASC`,
+          [feedId, sevenDaysAgo],
+        );
+        const scores = scoreRows.map((r) => r.score).sort((a, b) => a - b);
+        const p = (pct: number): number => {
+          if (scores.length === 0) return 0;
+          const idx = Math.min(scores.length - 1, Math.floor(pct * scores.length));
+          return scores[idx];
+        };
+        return {
+          kind: 'set_feed_min_score',
+          feedId,
+          feedTitle: sub?.feed_title ?? null,
+          currentMinScore: sub?.min_score ?? null,
+          proposedMinScore: proposedScore,
+          currentScoreDistribution: { p25: p(0.25), p50: p(0.5), p75: p(0.75) },
+        };
+      }
+
+      default:
+        return null;
+    }
+  } catch {
+    return null;
+  }
+}
 
 export async function executeServerTool(
   call: ToolCall,
@@ -549,6 +837,85 @@ export async function executeServerTool(
         };
       }
 
+      case 'unsubscribe_from_feed': {
+        const feedId = String(call.args.feed_id ?? '');
+        if (!feedId) {
+          return { callId: call.id, name: call.name, content: 'Missing feed_id.', summary: 'Missing feed', succeeded: false };
+        }
+        // Capture prior subscription state for undo.
+        const existingSub = await dbGet<{
+          paused: number;
+          max_articles_per_day: number | null;
+          min_score: number | null;
+          feed_title: string | null;
+        }>(
+          ctx.db,
+          `SELECT s.paused, s.max_articles_per_day, s.min_score, f.title AS feed_title
+             FROM user_feed_subscriptions s
+             LEFT JOIN feeds f ON f.id = s.feed_id
+             WHERE s.user_id = ? AND s.feed_id = ?`,
+          [ctx.userId, feedId],
+        );
+        if (!existingSub) {
+          return { callId: call.id, name: call.name, content: `Not subscribed to feed ${feedId}.`, summary: "Not subscribed to that feed", succeeded: false };
+        }
+        await dbRun(
+          ctx.db,
+          `DELETE FROM user_feed_subscriptions WHERE user_id = ? AND feed_id = ?`,
+          [ctx.userId, feedId],
+        );
+        const feedLabel = existingSub.feed_title ?? feedId;
+        return {
+          callId: call.id,
+          name: call.name,
+          content: `Unsubscribed from ${feedLabel}.`,
+          summary: `Unsubscribed from ${feedLabel}`,
+          succeeded: true,
+          undo: {
+            tool: 'undo_unsubscribe_from_feed',
+            args: {
+              feed_id: feedId,
+              prior_paused: existingSub.paused,
+              prior_max_per_day: existingSub.max_articles_per_day,
+              prior_min_score: existingSub.min_score,
+            },
+          },
+        };
+      }
+
+      case 'set_feed_min_score': {
+        const feedId = String(call.args.feed_id ?? '');
+        const minScore = Math.max(0, Math.floor(Number(call.args.min_score)));
+        if (!feedId) {
+          return { callId: call.id, name: call.name, content: 'Missing feed_id.', summary: 'Missing feed', succeeded: false };
+        }
+        const sub = await dbGet<{ min_score: number | null; feed_title: string | null }>(
+          ctx.db,
+          `SELECT s.min_score, f.title AS feed_title
+             FROM user_feed_subscriptions s
+             LEFT JOIN feeds f ON f.id = s.feed_id
+             WHERE s.user_id = ? AND s.feed_id = ?`,
+          [ctx.userId, feedId],
+        );
+        if (!sub) {
+          return { callId: call.id, name: call.name, content: `No subscription found for feed ${feedId}.`, summary: "Feed isn't subscribed", succeeded: false };
+        }
+        await dbRun(
+          ctx.db,
+          `UPDATE user_feed_subscriptions SET min_score = ? WHERE user_id = ? AND feed_id = ?`,
+          [minScore > 0 ? minScore : null, ctx.userId, feedId],
+        );
+        const label = sub.feed_title ?? feedId;
+        return {
+          callId: call.id,
+          name: call.name,
+          content: minScore > 0 ? `Set min score to ${minScore} for ${label}.` : `Removed min score filter for ${label}.`,
+          summary: minScore > 0 ? `Min score ${minScore} for ${label}` : `Removed score filter for ${label}`,
+          succeeded: true,
+          undo: { tool: 'undo_set_feed_min_score', args: { feed_id: feedId, min_score: sub.min_score ?? 0 } },
+        };
+      }
+
       case 'subscribe_to_feed': {
         const rawUrl = String(call.args.url ?? '').trim();
         if (!rawUrl) {
@@ -771,6 +1138,36 @@ export async function executeUndoTool(
           [ctx.userId, feedId],
         );
         return { summary: 'Unsubscribed', succeeded: true };
+      }
+
+      case 'undo_unsubscribe_from_feed': {
+        const feedId = String(args.feed_id ?? '');
+        const priorPaused = args.prior_paused === 1 ? 1 : 0;
+        const priorMaxPerDay = args.prior_max_per_day != null ? Number(args.prior_max_per_day) : null;
+        const priorMinScore = args.prior_min_score != null ? Number(args.prior_min_score) : null;
+        const now = Date.now();
+        await dbRun(
+          ctx.db,
+          `INSERT INTO user_feed_subscriptions (id, user_id, feed_id, paused, max_articles_per_day, min_score, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(user_id, feed_id) DO UPDATE SET
+             paused = excluded.paused,
+             max_articles_per_day = excluded.max_articles_per_day,
+             min_score = excluded.min_score`,
+          [nanoid(), ctx.userId, feedId, priorPaused, priorMaxPerDay, priorMinScore, now],
+        );
+        return { summary: 'Re-subscribed to feed', succeeded: true };
+      }
+
+      case 'undo_set_feed_min_score': {
+        const feedId = String(args.feed_id ?? '');
+        const restore = Number(args.min_score ?? 0);
+        await dbRun(
+          ctx.db,
+          `UPDATE user_feed_subscriptions SET min_score = ? WHERE user_id = ? AND feed_id = ?`,
+          [restore > 0 ? restore : null, ctx.userId, feedId],
+        );
+        return { summary: restore > 0 ? `Restored min score to ${restore}` : 'Removed min score filter', succeeded: true };
       }
 
       default:

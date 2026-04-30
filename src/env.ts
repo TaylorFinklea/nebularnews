@@ -14,9 +14,13 @@ export interface Env {
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
 
+  // R2 buckets
+  R2_FALLBACK: R2Bucket;
+
   // AI providers (server-side fallback keys)
   OPENAI_API_KEY?: string;
   ANTHROPIC_API_KEY?: string;
+  GEMINI_API_KEY?: string;
 
   // Scraping providers
   STEEL_API_KEY?: string;

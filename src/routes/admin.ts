@@ -8,6 +8,7 @@ import { sendPushToUser } from '../lib/apns';
 import { resolveAIKey } from '../lib/ai-key-resolver';
 import { runChat, parseJsonResponse } from '../lib/ai';
 import { buildNewsBriefPrompt } from '../lib/prompts';
+import { generateOpenAIImage, generateImagen3 } from '../lib/image-gen';
 
 const ALLOWED_SCRAPE_MODES = new Set(['rss_only', 'auto_fetch_on_empty', 'always']);
 
@@ -22,6 +23,23 @@ function fallbackImageForBriefId(briefId: string): string {
   for (let i = 0; i < briefId.length; i++) h = (h * 31 + briefId.charCodeAt(i)) | 0;
   const idx = Math.abs(h) % FALLBACK_IMAGE_POOL_SIZE;
   return `https://r2-fallback.nebularnews.com/fallback-${String(idx + 1).padStart(3, '0')}.jpg`;
+}
+
+// ---------------------------------------------------------------------------
+// Fallback image helpers
+// ---------------------------------------------------------------------------
+
+const FALLBACK_SLOT_COUNT = 30;
+const FALLBACK_PUBLIC_BASE = 'https://r2-fallback.nebularnews.com';
+
+function slotToKey(slot: number): string {
+  return `fallback-${String(slot).padStart(3, '0')}.jpg`;
+}
+
+function parseSlot(raw: string): number | null {
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n) || n < 1 || n > FALLBACK_SLOT_COUNT) return null;
+  return n;
 }
 
 const AUDITED_METHODS = new Set(['POST', 'PATCH', 'DELETE']);
@@ -99,6 +117,143 @@ adminRoutes.use('*', async (c, next) => {
       }
     })(),
   );
+});
+
+// ---------------------------------------------------------------------------
+// GET /admin/fallback-images — list all 30 pool slots with R2 metadata
+// ---------------------------------------------------------------------------
+
+adminRoutes.get('/admin/fallback-images', async (c) => {
+  const r2 = c.env.R2_FALLBACK;
+  const slots = await Promise.all(
+    Array.from({ length: FALLBACK_SLOT_COUNT }, async (_, i) => {
+      const slot = i + 1;
+      const key = slotToKey(slot);
+      const obj = await r2.head(key);
+      if (!obj) {
+        return { slot, exists: false };
+      }
+      const meta = obj.customMetadata ?? {};
+      return {
+        slot,
+        exists: true,
+        lastPrompt: meta.prompt ?? undefined,
+        lastProvider: (meta.provider as 'openai' | 'imagen3' | undefined) ?? undefined,
+        lastGeneratedAt: meta.generatedAt ? parseInt(meta.generatedAt, 10) : undefined,
+      };
+    }),
+  );
+  return c.json({ ok: true, data: { slots } });
+});
+
+// ---------------------------------------------------------------------------
+// POST /admin/fallback-images/:slot/generate — generate a preview image
+// ---------------------------------------------------------------------------
+
+adminRoutes.post('/admin/fallback-images/:slot/generate', async (c) => {
+  const slot = parseSlot(c.req.param('slot'));
+  if (slot === null) {
+    return c.json({ ok: false, error: { code: 'bad_request', message: 'slot must be an integer 1–30' } }, 400);
+  }
+
+  const body = await c.req.json<{ provider: 'openai' | 'imagen3'; prompt: string }>();
+  if (!body.provider || !['openai', 'imagen3'].includes(body.provider)) {
+    return c.json({ ok: false, error: { code: 'bad_request', message: 'provider must be openai or imagen3' } }, 400);
+  }
+  if (!body.prompt || typeof body.prompt !== 'string') {
+    return c.json({ ok: false, error: { code: 'bad_request', message: 'prompt is required' } }, 400);
+  }
+  if (body.prompt.length > 2000) {
+    return c.json({ ok: false, error: { code: 'bad_request', message: 'prompt must be 2000 characters or fewer' } }, 400);
+  }
+
+  let imageBytes: Uint8Array;
+  let mimeType: string;
+  try {
+    if (body.provider === 'openai') {
+      const apiKey = c.env.OPENAI_API_KEY;
+      if (!apiKey) return c.json({ ok: false, error: { code: 'not_configured', message: 'OPENAI_API_KEY is not set' } }, 503);
+      const result = await generateOpenAIImage(body.prompt, apiKey);
+      imageBytes = result.bytes;
+      mimeType = result.mimeType;
+    } else {
+      const apiKey = c.env.GEMINI_API_KEY;
+      if (!apiKey) return c.json({ ok: false, error: { code: 'not_configured', message: 'GEMINI_API_KEY is not set' } }, 503);
+      const result = await generateImagen3(body.prompt, apiKey);
+      imageBytes = result.bytes;
+      mimeType = result.mimeType;
+    }
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Image generation failed';
+    return c.json({ ok: false, error: { code: 'generation_failed', message } }, 502);
+  }
+
+  const previewId = nanoid();
+  const previewKey = `previews/${previewId}`;
+  await c.env.R2_FALLBACK.put(previewKey, imageBytes, {
+    httpMetadata: { contentType: mimeType },
+    customMetadata: {
+      slot: String(slot),
+      prompt: body.prompt,
+      provider: body.provider,
+      generatedAt: String(Date.now()),
+    },
+  });
+
+  const previewUrl = `${FALLBACK_PUBLIC_BASE}/${previewKey}`;
+  return c.json({ ok: true, data: { previewId, previewUrl } });
+});
+
+// ---------------------------------------------------------------------------
+// POST /admin/fallback-images/:slot/commit — promote preview to live slot
+// ---------------------------------------------------------------------------
+
+adminRoutes.post('/admin/fallback-images/:slot/commit', async (c) => {
+  const slot = parseSlot(c.req.param('slot'));
+  if (slot === null) {
+    return c.json({ ok: false, error: { code: 'bad_request', message: 'slot must be an integer 1–30' } }, 400);
+  }
+
+  const body = await c.req.json<{ previewId: string }>();
+  if (!body.previewId || typeof body.previewId !== 'string') {
+    return c.json({ ok: false, error: { code: 'bad_request', message: 'previewId is required' } }, 400);
+  }
+
+  const previewKey = `previews/${body.previewId}`;
+  const preview = await c.env.R2_FALLBACK.get(previewKey);
+  if (!preview) {
+    return c.json({ ok: false, error: { code: 'not_found', message: 'Preview not found — it may have expired' } }, 404);
+  }
+
+  const previewMeta = preview.customMetadata ?? {};
+  const destKey = slotToKey(slot);
+
+  // Copy bytes to the final slot key.
+  const bytes = await preview.arrayBuffer();
+  await c.env.R2_FALLBACK.put(destKey, bytes, {
+    httpMetadata: { contentType: preview.httpMetadata?.contentType ?? 'image/jpeg' },
+    customMetadata: {
+      prompt: previewMeta.prompt ?? '',
+      provider: previewMeta.provider ?? '',
+      generatedAt: previewMeta.generatedAt ?? String(Date.now()),
+    },
+  });
+
+  // Delete the preview object.
+  await c.env.R2_FALLBACK.delete(previewKey);
+
+  const url = `${FALLBACK_PUBLIC_BASE}/${destKey}`;
+  return c.json({ ok: true, data: { slot, url } });
+});
+
+// ---------------------------------------------------------------------------
+// DELETE /admin/fallback-images/preview/:previewId — explicit preview discard
+// ---------------------------------------------------------------------------
+
+adminRoutes.delete('/admin/fallback-images/preview/:previewId', async (c) => {
+  const previewId = c.req.param('previewId');
+  await c.env.R2_FALLBACK.delete(`previews/${previewId}`);
+  return c.json({ ok: true, data: {} });
 });
 
 // ---------------------------------------------------------------------------

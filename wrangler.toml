@@ -27,6 +27,10 @@ database_name = "nebular-news-dev"
 database_id = "00000000-0000-0000-0000-000000000000"
 migrations_dir = "migrations"
 
+[[r2_buckets]]
+binding = "R2_FALLBACK"
+bucket_name = "nebularnews-fallback-images"
+
 [vars]
 APP_ENV = "development"
 DEFAULT_PROVIDER = "anthropic"
@@ -52,6 +56,10 @@ binding = "DB"
 database_name = "nebular-news-staging"
 database_id = "__STAGING_D1_DATABASE_ID__"
 migrations_dir = "migrations"
+
+[[env.staging.r2_buckets]]
+binding = "R2_FALLBACK"
+bucket_name = "nebularnews-fallback-images"
 
 [env.staging.vars]
 APP_ENV = "staging"
@@ -79,6 +87,10 @@ binding = "DB"
 database_name = "nebular-news-prod"
 database_id = "140afce3-88f1-445d-9cff-652ed1bfc967"
 migrations_dir = "migrations"
+
+[[env.production.r2_buckets]]
+binding = "R2_FALLBACK"
+bucket_name = "nebularnews-fallback-images"
 
 [env.production.vars]
 APP_ENV = "production"

@@ -2,6 +2,45 @@ import type { Env } from '../env';
 import type { D1Database } from '@cloudflare/workers-types';
 import { dbRun, dbAll } from '../db/helpers';
 
+// ---------------------------------------------------------------------------
+// R2 preview sweep
+//
+// Lists all objects under previews/* and deletes any whose R2 `uploaded`
+// timestamp is older than 24 hours. These are generate-without-commit
+// leftovers. The listing cursor loop handles buckets with more than 1000
+// preview objects (unlikely but safe).
+// ---------------------------------------------------------------------------
+
+const PREVIEW_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+async function sweepR2Previews(env: Env, now: number): Promise<void> {
+  if (!env.R2_FALLBACK) return; // binding absent in dev without local R2
+
+  let cursor: string | undefined;
+  let deleted = 0;
+
+  do {
+    const listed = await env.R2_FALLBACK.list({
+      prefix: 'previews/',
+      cursor,
+    });
+    cursor = listed.truncated ? listed.cursor : undefined;
+
+    const stale = listed.objects.filter(
+      (obj) => now - obj.uploaded.getTime() > PREVIEW_TTL_MS,
+    );
+
+    if (stale.length > 0) {
+      await Promise.all(stale.map((obj) => env.R2_FALLBACK.delete(obj.key)));
+      deleted += stale.length;
+    }
+  } while (cursor);
+
+  if (deleted > 0) {
+    console.log(`[cleanup] swept ${deleted} stale R2 preview objects`);
+  }
+}
+
 export async function cleanup(env: Env): Promise<void> {
   const db = env.DB;
   const now = Date.now();
@@ -60,6 +99,9 @@ export async function cleanup(env: Env): Promise<void> {
      WHERE resolved_at IS NULL AND created_at < ?`,
     [now, tenMinutesAgo],
   );
+
+  // 7. Sweep stale R2 preview objects (generate-without-commit leftovers).
+  await sweepR2Previews(env, now);
 }
 
 // ---------------------------------------------------------------------------

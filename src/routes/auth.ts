@@ -2,9 +2,9 @@ import { Hono } from 'hono';
 import type { AppEnv } from '../index';
 import { createAuth } from '../lib/auth';
 import { dbGet } from '../db/helpers';
+import { requireAuth } from '../middleware/auth';
 
 export const authRoutes = new Hono<AppEnv>();
-export const authProtectedRoutes = new Hono<AppEnv>();
 
 // Allowlist for the web sign-in handoff. Anything not in this list is
 // rejected — prevents open-redirect abuse of the token endpoint.
@@ -51,27 +51,18 @@ authRoutes.get('/auth/web-handoff', async (c) => {
 });
 
 /**
- * Mount better-auth handler at /api/auth/*
- * This handles: sign-in, sign-up, sign-out, session, social providers
- */
-authRoutes.all('/auth/*', async (c) => {
-  const auth = createAuth(c.env);
-  return auth.handler(c.req.raw);
-});
-
-/**
  * GET /auth/me — identity for the signed-in user.
  *
  * Used by the consumer reader (`app.nebularnews.com`) and any other web
  * client that needs to know who the current bearer token belongs to without
- * requiring admin privileges. Mounted under `protectedApi`, so the bearer
- * token is already validated by the auth middleware before this handler
- * runs.
+ * requiring admin privileges. Auth-required via the same Bearer-token
+ * middleware iOS uses; admin web continues to use `/admin/me` for its
+ * is_admin gate.
  *
- * The admin web continues to use `/admin/me` since it needs the admin
- * gate baked in.
+ * Registered BEFORE the better-auth catch-all below so that the more
+ * specific route wins (Hono matches in registration order).
  */
-authProtectedRoutes.get('/auth/me', async (c) => {
+authRoutes.get('/auth/me', requireAuth(), async (c) => {
   const userId = c.get('userId');
   const row = await dbGet<{ id: string; email: string | null; name: string | null; is_admin: number }>(
     c.env.DB,
@@ -90,4 +81,13 @@ authProtectedRoutes.get('/auth/me', async (c) => {
       is_admin: row.is_admin === 1,
     },
   });
+});
+
+/**
+ * Mount better-auth handler at /api/auth/*
+ * This handles: sign-in, sign-up, sign-out, session, social providers
+ */
+authRoutes.all('/auth/*', async (c) => {
+  const auth = createAuth(c.env);
+  return auth.handler(c.req.raw);
 });

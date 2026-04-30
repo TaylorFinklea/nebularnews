@@ -4,7 +4,7 @@ import type { Env } from './env';
 import { envelope } from './middleware/envelope';
 import { requireAuth } from './middleware/auth';
 import { healthRoutes } from './routes/health';
-import { authRoutes, authProtectedRoutes } from './routes/auth';
+import { authRoutes } from './routes/auth';
 import { articleRoutes } from './routes/articles';
 import { feedRoutes } from './routes/feeds';
 import { tagRoutes } from './routes/tags';
@@ -93,7 +93,6 @@ protectedApi.route('/', newsletterRoutes);
 protectedApi.route('/', collectionRoutes);
 protectedApi.route('/', highlightRoutes);
 protectedApi.route('/', annotationRoutes);
-protectedApi.route('/', authProtectedRoutes);
 
 app.route('/api', protectedApi);
 

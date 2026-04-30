@@ -52,6 +52,7 @@ export function createAuth(env: Env) {
       'nebularnews://*',
       'http://localhost:*',
       'https://admin.nebularnews.com',
+      'https://app.nebularnews.com',
       'https://api.nebularnews.com',
     ],
     advanced: {

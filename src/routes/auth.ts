@@ -1,14 +1,18 @@
 import { Hono } from 'hono';
 import type { AppEnv } from '../index';
 import { createAuth } from '../lib/auth';
+import { dbGet } from '../db/helpers';
 
 export const authRoutes = new Hono<AppEnv>();
+export const authProtectedRoutes = new Hono<AppEnv>();
 
 // Allowlist for the web sign-in handoff. Anything not in this list is
 // rejected — prevents open-redirect abuse of the token endpoint.
 const ALLOWED_HANDOFF_TARGETS = new Set<string>([
   'https://admin.nebularnews.com/sign-in/callback',
   'http://localhost:5173/sign-in/callback',
+  'https://app.nebularnews.com/sign-in/callback',
+  'http://localhost:5174/sign-in/callback',
 ]);
 
 /**
@@ -53,4 +57,37 @@ authRoutes.get('/auth/web-handoff', async (c) => {
 authRoutes.all('/auth/*', async (c) => {
   const auth = createAuth(c.env);
   return auth.handler(c.req.raw);
+});
+
+/**
+ * GET /auth/me — identity for the signed-in user.
+ *
+ * Used by the consumer reader (`app.nebularnews.com`) and any other web
+ * client that needs to know who the current bearer token belongs to without
+ * requiring admin privileges. Mounted under `protectedApi`, so the bearer
+ * token is already validated by the auth middleware before this handler
+ * runs.
+ *
+ * The admin web continues to use `/admin/me` since it needs the admin
+ * gate baked in.
+ */
+authProtectedRoutes.get('/auth/me', async (c) => {
+  const userId = c.get('userId');
+  const row = await dbGet<{ id: string; email: string | null; name: string | null; is_admin: number }>(
+    c.env.DB,
+    `SELECT id, email, name, is_admin FROM user WHERE id = ? LIMIT 1`,
+    [userId],
+  );
+  if (!row) {
+    return c.json({ ok: false, error: { code: 'not_found', message: 'User not found' } }, 404);
+  }
+  return c.json({
+    ok: true,
+    data: {
+      user_id: row.id,
+      email: row.email,
+      name: row.name,
+      is_admin: row.is_admin === 1,
+    },
+  });
 });

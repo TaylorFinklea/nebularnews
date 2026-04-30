@@ -879,7 +879,6 @@ chatRoutes.get('/chat/assistant/history', async (c) => {
 chatRoutes.post('/chat/assistant', async (c) => {
   const userId = c.get('userId');
   const db = c.env.DB;
-  const dlog = (_event: string, _data?: unknown) => { /* no-op placeholder from diagnostic phase */ };
 
   try {
   const body = await c.req.json<{
@@ -933,13 +932,9 @@ chatRoutes.post('/chat/assistant', async (c) => {
         [threadId, userId, ASSISTANT_THREAD_ARTICLE_ID, null, now, now],
       );
     } catch (e) {
-      await dlog('insert_chat_threads_failed', { error: (e as Error).message });
       throw e;
     }
     thread = { id: threadId, user_id: userId, article_id: ASSISTANT_THREAD_ARTICLE_ID, title: null, created_at: now, updated_at: now };
-    await dlog('thread_created', { threadId });
-  } else {
-    await dlog('thread_found', { threadId: thread.id });
   }
 
   // Check for context shift — compare with last page_context_json in this thread.
@@ -968,9 +963,7 @@ chatRoutes.post('/chat/assistant', async (c) => {
         `INSERT INTO chat_messages (id, thread_id, role, content, page_context_json, created_at) VALUES (?, ?, 'system', ?, ?, ?)`,
         [nanoid(), thread.id, markerContent, JSON.stringify(pageContext), now],
       );
-      await dlog('context_marker_inserted');
     } catch (e) {
-      await dlog('insert_context_marker_failed', { error: (e as Error).message });
       throw e;
     }
   }
@@ -982,9 +975,7 @@ chatRoutes.post('/chat/assistant', async (c) => {
       `INSERT INTO chat_messages (id, thread_id, role, content, created_at) VALUES (?, ?, 'user', ?, ?)`,
       [nanoid(), thread.id, message, now],
     );
-    await dlog('user_message_inserted');
   } catch (e) {
-    await dlog('insert_user_message_failed', { error: (e as Error).message });
     throw e;
   }
 
@@ -1044,7 +1035,6 @@ chatRoutes.post('/chat/assistant', async (c) => {
   const wantStream = c.req.query('stream') === 'true';
   const toolCtx = { userId, db, req: c.req.raw, env: c.env };
   const guardrailPolicies: Record<string, 'confirm' | 'undo_only'> = body.guardrails?.policies ?? {};
-  await dlog('pre_stream', { threadId: thread.id, historyLen: chatMessages.length, wantStream });
 
   if (wantStream) {
     const encoder = new TextEncoder();
@@ -1061,10 +1051,8 @@ chatRoutes.post('/chat/assistant', async (c) => {
         let finalContent = '';
         let errorMessage: string | null = null;
 
-        await dlog('stream_start');
         try {
           for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-            await dlog('round_start', { round });
             // Stream text deltas to the client as they arrive while buffering
             // tool_use blocks for post-stream execution. The done event tells us
             // whether we got plain text (break) or tool calls (continue loop).
@@ -1082,7 +1070,6 @@ chatRoutes.post('/chat/assistant', async (c) => {
                 roundUsage = evt.usage;
               }
             }
-            await dlog('round_result', { round, kind: roundKind, toolNames: roundToolCalls.map(t => t.name) });
             accumulatedUsage = mergeUsage(accumulatedUsage, roundUsage);
 
             if (roundKind === 'message') {
@@ -1169,9 +1156,7 @@ chatRoutes.post('/chat/assistant', async (c) => {
 
             for (const call of roundToolCalls) {
               if (isServerTool(call.name)) {
-                await dlog('server_tool_start', { name: call.name, args: call.args });
                 const execResult = await executeServerTool(call, toolCtx);
-                await dlog('server_tool_done', { name: call.name, succeeded: execResult.succeeded, summary: execResult.summary });
                 toolCallLog.push({ kind: 'server', name: call.name, args: call.args, summary: execResult.summary, succeeded: execResult.succeeded, undo: execResult.undo ?? null });
                 sse({
                   type: 'tool_call_server',
@@ -1199,11 +1184,9 @@ chatRoutes.post('/chat/assistant', async (c) => {
           }
         } catch (err) {
           errorMessage = err instanceof Error ? err.message : 'Unknown error';
-          await dlog('stream_loop_error', { error: errorMessage, stack: (err as Error).stack });
           sse({ type: 'error', error: errorMessage });
         }
 
-        await dlog('stream_emit_done', { contentLen: finalContent.length, toolLogLen: toolCallLog.length });
         sse({ type: 'done', content: finalContent, usage: accumulatedUsage });
         controller.close();
 

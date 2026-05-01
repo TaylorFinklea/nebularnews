@@ -303,6 +303,18 @@ async function ensureTodayBriefSeed(db: D1Database, userId: string): Promise<voi
   );
   if (existing) return;
 
+  // 3a. Replace stale seeds. Today renders only one brief at a time and the
+  // iOS picker is `messages.first(where: kind == brief_seed)`, which on
+  // ASC-ordered messages would return the OLDEST seed. Without this delete,
+  // every regenerate accumulates a new seed at the bottom that the UI
+  // never picks. Wipe everything but the brand-new id, then insert.
+  await dbRun(
+    db,
+    `DELETE FROM chat_messages
+      WHERE thread_id = ? AND message_kind = 'brief_seed'`,
+    [thread.id],
+  );
+
   // 4. Insert the seed.
   let parsedBullets: unknown = [];
   let parsedSources: unknown = [];

@@ -99,10 +99,13 @@ export async function generateScheduledBriefs(env: Env): Promise<void> {
 
       // Check if a brief was already generated for this edition today
       // (using the user's local day so a 23:00 brief doesn't re-fire across
-      // UTC-day rollover).
+      // UTC-day rollover). Column is `edition_kind`, not `edition_type` —
+      // a wrong name here used to throw "no such column" silently inside
+      // the per-user try/catch, which manifested as zero scheduled briefs
+      // ever generating.
       const existing = await dbGet<{ id: string }>(
         db,
-        `SELECT id FROM news_brief_editions WHERE user_id = ? AND edition_type = ? AND created_at >= ?`,
+        `SELECT id FROM news_brief_editions WHERE user_id = ? AND edition_kind = ? AND created_at >= ?`,
         [user_id, editionType, dayStartMs],
       );
       if (existing) continue;

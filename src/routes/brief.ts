@@ -6,6 +6,7 @@ import { runChat, parseJsonResponse } from '../lib/ai';
 import { buildNewsBriefPrompt } from '../lib/prompts';
 import { recordUsage } from '../lib/rate-limiter';
 import { persistBrief } from '../lib/brief-persist';
+import { enrichBullets } from '../lib/brief-enrichment';
 
 export const briefRoutes = new Hono<AppEnv>();
 
@@ -157,16 +158,11 @@ briefRoutes.post('/brief/generate', async (c) => {
   const parsed = parseJsonResponse(content) as Record<string, unknown> | null;
   const rawBullets = Array.isArray(parsed?.bullets) ? (parsed!.bullets as Array<{ text?: string; source_article_ids?: string[] }>) : [];
 
-  // Enrich bullets with article metadata for the iOS client.
-  const candidateMap = new Map(candidates.map(c => [c.id, c]));
-  const bullets = rawBullets.map(b => {
-    const sourceIds = b.source_article_ids ?? [];
-    const sources = sourceIds
-      .map(id => candidateMap.get(id))
-      .filter(Boolean)
-      .map(a => ({ article_id: a!.id, title: a!.title, canonical_url: null }));
-    return { text: b.text ?? '', sources };
-  });
+  // Enrich bullets with article metadata for the iOS client. The
+  // helper batch-loads tags so each source carries its title, feed
+  // name, score, and tag list — that's what the Today bullet card
+  // renders below the bullet text.
+  const bullets = await enrichBullets(db, rawBullets, candidates);
 
   const editionType = hour < 12 ? 'morning' : 'evening';
   const now = Date.now();

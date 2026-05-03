@@ -5,6 +5,7 @@ import { runChat, parseJsonResponse } from '../lib/ai';
 import { buildNewsBriefPrompt } from '../lib/prompts';
 import { sendPushToUser } from '../lib/apns';
 import { persistBrief } from '../lib/brief-persist';
+import { enrichBullets, type RawBullet } from '../lib/brief-enrichment';
 
 // ---------------------------------------------------------------------------
 // Scheduled briefs cron — runs hourly, generates and pushes briefs
@@ -175,7 +176,12 @@ export async function generateScheduledBriefs(env: Env): Promise<void> {
       const messages = buildNewsBriefPrompt(candidates, windowLabel, 5);
       const { content } = await runChat(ai.provider, ai.apiKey, ai.model, messages);
       const parsed = parseJsonResponse(content) as Record<string, unknown> | null;
-      const bullets = Array.isArray(parsed?.bullets) ? parsed!.bullets : [];
+      const rawBullets = Array.isArray(parsed?.bullets) ? (parsed!.bullets as RawBullet[]) : [];
+      // Enrich the raw AI bullets with source name, user score, and tag
+      // list per article. Mirrors the manual /brief/generate path so the
+      // iOS Today card has the same metadata regardless of which side
+      // produced the brief.
+      const bullets = await enrichBullets(db, rawBullets, candidates);
 
       // Save brief. Slot key is user local day so each local day gets at most
       // one morning + one evening edition even if the cron re-enters.

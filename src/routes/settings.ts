@@ -23,6 +23,7 @@ const DEFAULTS: Record<string, string> = {
   newsBriefEveningTime: '17:00',
   newsBriefLookbackHours: '12',
   newsBriefScoreCutoff: '3',
+  newsBriefDepth: 'summary',
 };
 
 // GET /settings — read all user settings with defaults
@@ -57,6 +58,7 @@ settingsRoutes.get('/settings', async (c) => {
         evening_time: merged.newsBriefEveningTime,
         lookback_hours: parseInt(merged.newsBriefLookbackHours, 10),
         score_cutoff: parseInt(merged.newsBriefScoreCutoff, 10),
+        depth: merged.newsBriefDepth,
       },
     },
   });
@@ -79,6 +81,7 @@ settingsRoutes.put('/settings', async (c) => {
       eveningTime?: string;
       lookbackHours?: number;
       scoreCutoff?: number;
+      depth?: string;
     };
   }>();
 
@@ -124,6 +127,18 @@ settingsRoutes.put('/settings', async (c) => {
       pairs.push(['newsBriefLookbackHours', String(brief.lookbackHours)]);
     if (brief.scoreCutoff !== undefined)
       pairs.push(['newsBriefScoreCutoff', String(brief.scoreCutoff)]);
+    if (brief.depth !== undefined) {
+      // Reject unknown depth values so a typo doesn't silently degrade
+      // the user's brief; the prompt builder defaults the bad case but
+      // we want a loud error instead.
+      if (brief.depth !== 'headlines' && brief.depth !== 'summary' && brief.depth !== 'deep') {
+        return c.json(
+          { ok: false, error: { code: 'bad_request', message: `Unknown brief depth: ${brief.depth}` } },
+          400,
+        );
+      }
+      pairs.push(['newsBriefDepth', brief.depth]);
+    }
   }
 
   if (pairs.length === 0) return c.json({ ok: true, data: null });
@@ -166,6 +181,7 @@ settingsRoutes.put('/settings', async (c) => {
         evening_time: merged.newsBriefEveningTime,
         lookback_hours: parseInt(merged.newsBriefLookbackHours, 10),
         score_cutoff: parseInt(merged.newsBriefScoreCutoff, 10),
+        depth: merged.newsBriefDepth,
       },
     },
   });

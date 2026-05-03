@@ -257,6 +257,28 @@ export type SuppressedTopic = {
   allow_resurface_on_developments: boolean;
 };
 
+/// Brief depth determines bullet count + words-per-bullet. Exposed so
+/// scheduled-briefs cron can read the user's `newsBriefDepth` setting
+/// and derive the same bullet/word budgets the on-demand /brief/generate
+/// path uses, without each call site re-defining the mapping.
+export type BriefDepth = 'headlines' | 'summary' | 'deep';
+
+export function maxWordsForDepth(depth: BriefDepth): number {
+  switch (depth) {
+    case 'headlines': return 8;
+    case 'summary': return 18;
+    case 'deep': return 50;
+  }
+}
+
+export function maxBulletsForDepth(depth: BriefDepth): number {
+  switch (depth) {
+    case 'headlines': return 8;
+    case 'summary': return 5;
+    case 'deep': return 4;
+  }
+}
+
 export function buildNewsBriefPrompt(
   candidates: Array<{
     id: string;

@@ -2,7 +2,7 @@ import type { Env } from '../env';
 import { dbAll, dbGet } from '../db/helpers';
 import { resolveAIKey } from '../lib/ai-key-resolver';
 import { runChat, parseJsonResponse } from '../lib/ai';
-import { buildNewsBriefPrompt } from '../lib/prompts';
+import { buildNewsBriefPrompt, maxBulletsForDepth, maxWordsForDepth, type BriefDepth } from '../lib/prompts';
 import { sendPushToUser } from '../lib/apns';
 import { persistBrief } from '../lib/brief-persist';
 import { enrichBullets, type RawBullet } from '../lib/brief-enrichment';
@@ -119,8 +119,12 @@ export async function generateScheduledBriefs(env: Env): Promise<void> {
       // Load user settings.
       const lookbackRow = await dbGet<{ value: string }>(db, `SELECT value FROM settings WHERE user_id = ? AND key = 'newsBriefLookbackHours'`, [user_id]);
       const cutoffRow = await dbGet<{ value: string }>(db, `SELECT value FROM settings WHERE user_id = ? AND key = 'newsBriefScoreCutoff'`, [user_id]);
+      const depthRow = await dbGet<{ value: string }>(db, `SELECT value FROM settings WHERE user_id = ? AND key = 'newsBriefDepth'`, [user_id]);
       const lookbackHours = parseInt(lookbackRow?.value ?? '') || 12;
       const scoreCutoff = parseInt(cutoffRow?.value ?? '') || 3;
+      const depth: BriefDepth = (depthRow?.value === 'headlines' || depthRow?.value === 'deep')
+        ? depthRow.value
+        : 'summary';
 
       // Get subscribed feed IDs.
       const subFeeds = await dbAll<{ feed_id: string }>(db, `SELECT feed_id FROM user_feed_subscriptions WHERE user_id = ? AND paused = 0`, [user_id]);
@@ -173,7 +177,12 @@ export async function generateScheduledBriefs(env: Env): Promise<void> {
       }
 
       const windowLabel = editionType === 'morning' ? 'Morning Brief' : 'Evening Brief';
-      const messages = buildNewsBriefPrompt(candidates, windowLabel, 5);
+      const messages = buildNewsBriefPrompt(
+        candidates,
+        windowLabel,
+        maxBulletsForDepth(depth),
+        maxWordsForDepth(depth),
+      );
       const { content } = await runChat(ai.provider, ai.apiKey, ai.model, messages);
       const parsed = parseJsonResponse(content) as Record<string, unknown> | null;
       const rawBullets = Array.isArray(parsed?.bullets) ? (parsed!.bullets as RawBullet[]) : [];

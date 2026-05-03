@@ -3,7 +3,7 @@ import type { AppEnv } from '../index';
 import { dbGet, dbAll } from '../db/helpers';
 import { resolveAIKey } from '../lib/ai-key-resolver';
 import { runChat, parseJsonResponse } from '../lib/ai';
-import { buildNewsBriefPrompt } from '../lib/prompts';
+import { buildNewsBriefPrompt, maxBulletsForDepth, maxWordsForDepth, type BriefDepth } from '../lib/prompts';
 import { recordUsage } from '../lib/rate-limiter';
 import { persistBrief } from '../lib/brief-persist';
 import { enrichBullets } from '../lib/brief-enrichment';
@@ -18,23 +18,9 @@ const DEFAULT_LOOKBACK_HOURS = 12;
 const DEFAULT_SCORE_CUTOFF = 3;
 const MAX_ARTICLES = 20;
 
-type BriefDepth = 'headlines' | 'summary' | 'deep';
-
-function maxWordsForDepth(depth: BriefDepth): number {
-  switch (depth) {
-    case 'headlines': return 8;
-    case 'summary': return 18;
-    case 'deep': return 50;
-  }
-}
-
-function maxBulletsForDepth(depth: BriefDepth): number {
-  switch (depth) {
-    case 'headlines': return 8;
-    case 'summary': return 5;
-    case 'deep': return 4;
-  }
-}
+// BriefDepth + maxBulletsForDepth/maxWordsForDepth helpers moved to
+// `src/lib/prompts.ts` so the scheduled-briefs cron can reuse the same
+// mapping without each call site duplicating it.
 
 // ---------------------------------------------------------------------------
 // POST /brief/generate — generate a news brief (supports per-topic + depth)
@@ -192,6 +178,7 @@ briefRoutes.post('/brief/generate', async (c) => {
       model: ai.model,
       candidateCount: candidates.length,
       now,
+      topicTagId,
     });
     persistedId = result.id;
   } catch (e) {
@@ -251,14 +238,18 @@ briefRoutes.get('/brief/history', async (c) => {
     score_cutoff: number;
     bullets_json: string;
     source_article_ids_json: string;
+    topic_tag_id: string | null;
+    topic_tag_name: string | null;
   }>(
     db,
-    `SELECT id, edition_kind, edition_slot, timezone, generated_at,
-            window_start, window_end, score_cutoff,
-            bullets_json, source_article_ids_json
-       FROM news_brief_editions
-       WHERE user_id = ? AND status = 'done' AND generated_at < ?
-       ORDER BY generated_at DESC
+    `SELECT b.id, b.edition_kind, b.edition_slot, b.timezone, b.generated_at,
+            b.window_start, b.window_end, b.score_cutoff,
+            b.bullets_json, b.source_article_ids_json,
+            b.topic_tag_id, t.name AS topic_tag_name
+       FROM news_brief_editions b
+       LEFT JOIN tags t ON t.id = b.topic_tag_id
+       WHERE b.user_id = ? AND b.status = 'done' AND b.generated_at < ?
+       ORDER BY b.generated_at DESC
        LIMIT ?`,
     [userId, before, limit + 1],
   );
@@ -278,6 +269,8 @@ briefRoutes.get('/brief/history', async (c) => {
     score_cutoff: row.score_cutoff,
     bullets: JSON.parse(row.bullets_json || '[]'),
     source_article_ids: JSON.parse(row.source_article_ids_json || '[]'),
+    topic_tag_id: row.topic_tag_id,
+    topic_tag_name: row.topic_tag_name,
   }));
 
   return c.json({ ok: true, data: { briefs, next_before: nextBefore } });
@@ -303,13 +296,17 @@ briefRoutes.get('/brief/:id', async (c) => {
     score_cutoff: number;
     bullets_json: string;
     source_article_ids_json: string;
+    topic_tag_id: string | null;
+    topic_tag_name: string | null;
   }>(
     db,
-    `SELECT id, edition_kind, edition_slot, timezone, generated_at,
-            window_start, window_end, score_cutoff,
-            bullets_json, source_article_ids_json
-       FROM news_brief_editions
-       WHERE id = ? AND user_id = ? AND status = 'done'`,
+    `SELECT b.id, b.edition_kind, b.edition_slot, b.timezone, b.generated_at,
+            b.window_start, b.window_end, b.score_cutoff,
+            b.bullets_json, b.source_article_ids_json,
+            b.topic_tag_id, t.name AS topic_tag_name
+       FROM news_brief_editions b
+       LEFT JOIN tags t ON t.id = b.topic_tag_id
+       WHERE b.id = ? AND b.user_id = ? AND b.status = 'done'`,
     [briefId, userId],
   );
 
@@ -342,6 +339,8 @@ briefRoutes.get('/brief/:id', async (c) => {
       bullets: JSON.parse(row.bullets_json || '[]'),
       source_article_ids: sourceIds,
       source_articles: sourceArticles,
+      topic_tag_id: row.topic_tag_id,
+      topic_tag_name: row.topic_tag_name,
     },
   });
 });

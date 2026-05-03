@@ -27,6 +27,9 @@ export interface PersistBriefInput {
   model: string;
   candidateCount: number;
   now: number;
+  /// Tag id this brief was filtered to, when the user generated a
+  /// topic-specific brief. Null/undefined for the all-news brief.
+  topicTagId?: string | null;
 }
 
 /**
@@ -46,8 +49,8 @@ export async function persistBrief(db: D1Database, input: PersistBriefInput): Pr
          scheduled_for, window_start, window_end, score_cutoff,
          status, candidate_count, bullets_json, source_article_ids_json,
          provider, model, attempts, run_after, generated_at,
-         created_at, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'done', ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)`,
+         created_at, updated_at, topic_tag_id
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'done', ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)`,
       [
         id,
         input.userId,
@@ -68,6 +71,7 @@ export async function persistBrief(db: D1Database, input: PersistBriefInput): Pr
         input.now,
         input.now,
         input.now,
+        input.topicTagId ?? null,
       ],
     );
     return { id };

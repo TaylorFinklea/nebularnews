@@ -205,14 +205,37 @@ async function loadThreadResponse(db: D1Database, threadId: string) {
 // ---------------------------------------------------------------------------
 
 const TODAY_BRIEF_ARTICLE_ID = '__today_brief__';
+const ASSISTANT_THREAD_ARTICLE_ID = '__assistant__';
 
 chatRoutes.get('/chat/:articleId{(?!assistant$|assistant/|multi$|multi/|undo-tool$|exec-tool$).+}', async (c) => {
   const userId = c.get('userId');
   const db = c.env.DB;
   const articleId = c.req.param('articleId');
 
+  // Today and the floating AI overlay now share the assistant thread —
+  // the brief is just a special message in that one conversation. Old
+  // iOS clients hitting /chat/__today_brief__ get aliased to the
+  // assistant thread so they pick up the seed too. New clients hit
+  // /chat/assistant directly (which also seeds, see route further down).
   if (articleId === TODAY_BRIEF_ARTICLE_ID) {
     await ensureTodayBriefSeed(db, userId);
+    const thread = await dbGet<ThreadRow>(
+      db,
+      `SELECT * FROM chat_threads WHERE user_id = ? AND article_id = ? ORDER BY updated_at DESC LIMIT 1`,
+      [userId, ASSISTANT_THREAD_ARTICLE_ID],
+    );
+    if (!thread) {
+      return c.json({ ok: true, data: { thread: null, messages: [] } });
+    }
+    const messages = await dbAll<MessageRow>(
+      db,
+      `SELECT * FROM chat_messages WHERE thread_id = ? ORDER BY created_at ASC`,
+      [thread.id],
+    );
+    return c.json({
+      ok: true,
+      data: { thread: formatThread(thread), messages: messages.map(formatMessage) },
+    });
   }
 
   const thread = await dbGet<ThreadRow>(
@@ -238,17 +261,25 @@ chatRoutes.get('/chat/:articleId{(?!assistant$|assistant/|multi$|multi/|undo-too
 });
 
 /**
- * Ensures the user has a `__today_brief__` thread containing a seeded
- * brief_seed message for their most recent news brief. Idempotent — calling
- * it repeatedly is safe and only inserts when the latest brief hasn't been
- * seeded into the thread yet.
+ * Ensures the user's assistant thread contains a seeded brief_seed
+ * message for their most recent news brief. Today and the floating
+ * AI overlay now share one thread (article_id = __assistant__) — the
+ * brief is just a special message in that conversation, so "Tell me
+ * more" follow-ups, freeform chat, and the brief itself live in one
+ * place. Idempotent — repeated calls are safe and only insert when the
+ * latest brief hasn't been seeded yet.
+ *
+ * The old __today_brief__ thread is no longer written; existing rows
+ * are abandoned (the user can find historical briefs via Brief
+ * History). Old iOS clients hitting /chat/__today_brief__ are aliased
+ * to the assistant thread in the route below.
  */
 async function ensureTodayBriefSeed(db: D1Database, userId: string): Promise<void> {
-  // 1. Get-or-create the thread.
+  // 1. Get-or-create the assistant thread.
   let thread = await dbGet<ThreadRow>(
     db,
-    `SELECT * FROM chat_threads WHERE user_id = ? AND article_id = ? LIMIT 1`,
-    [userId, TODAY_BRIEF_ARTICLE_ID],
+    `SELECT * FROM chat_threads WHERE user_id = ? AND article_id = ? ORDER BY updated_at DESC LIMIT 1`,
+    [userId, ASSISTANT_THREAD_ARTICLE_ID],
   );
   const now = Date.now();
   if (!thread) {
@@ -256,14 +287,14 @@ async function ensureTodayBriefSeed(db: D1Database, userId: string): Promise<voi
     await dbRun(
       db,
       `INSERT INTO chat_threads (id, user_id, article_id, title, created_at, updated_at)
-       VALUES (?, ?, ?, 'Today', ?, ?)`,
-      [newId, userId, TODAY_BRIEF_ARTICLE_ID, now, now],
+       VALUES (?, ?, ?, NULL, ?, ?)`,
+      [newId, userId, ASSISTANT_THREAD_ARTICLE_ID, now, now],
     );
     thread = {
       id: newId,
       user_id: userId,
-      article_id: TODAY_BRIEF_ARTICLE_ID,
-      title: 'Today',
+      article_id: ASSISTANT_THREAD_ARTICLE_ID,
+      title: null,
       created_at: now,
       updated_at: now,
     };
@@ -827,15 +858,22 @@ Your role:
 });
 
 // ---------------------------------------------------------------------------
-// AI Assistant — floating context-aware chat
+// AI Assistant — floating context-aware chat (now also the Today thread).
+// Single conversation per user; opening Today and opening the floating
+// overlay are two views onto the same thread.
 // ---------------------------------------------------------------------------
 
-const ASSISTANT_THREAD_ARTICLE_ID = '__assistant__';
+// (ASSISTANT_THREAD_ARTICLE_ID hoisted above ensureTodayBriefSeed.)
 
-// GET /chat/assistant — load the current assistant thread
+// GET /chat/assistant — load the current assistant thread, ensuring
+// the latest brief is seeded as a chat message at the bottom.
 chatRoutes.get('/chat/assistant', async (c) => {
   const userId = c.get('userId');
   const db = c.env.DB;
+
+  // Seed (or refresh) the brief message before reading. This is what
+  // makes Today render the brief as the most recent assistant message.
+  await ensureTodayBriefSeed(db, userId);
 
   const thread = await dbGet<ThreadRow>(
     db,

@@ -132,8 +132,19 @@ export async function handleToolCall(
 // ---------------------------------------------------------------------------
 
 async function searchArticles(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
-  const query = String(args.query ?? '');
+  const rawQuery = String(args.query ?? '');
   const limit = Math.min(Number(args.limit) || 10, 25);
+
+  // FTS5 chokes on apostrophes, hyphens, and other special characters
+  // ("What's new" was throwing a parser error before this). Tokenize
+  // to whitespace-separated word characters the way the manual articles
+  // route does, falling back to the raw string only when sanitization
+  // strips everything (which would also fail FTS, but the resulting
+  // empty-result branch below is cleaner than a 500).
+  const sanitized = (rawQuery.toLowerCase().match(/\w+/g) ?? []).join(' ');
+  if (!sanitized) {
+    return { content: [{ type: 'text', text: `No articles found for "${rawQuery}".` }] };
+  }
 
   const rows = await dbAll<{
     article_id: string; title: string; canonical_url: string;
@@ -146,11 +157,11 @@ async function searchArticles(args: Record<string, unknown>, ctx: ToolContext): 
      WHERE article_search MATCH ?
      ORDER BY rank
      LIMIT ?`,
-    [query, limit],
+    [sanitized, limit],
   );
 
   if (rows.length === 0) {
-    return { content: [{ type: 'text', text: `No articles found for "${query}".` }] };
+    return { content: [{ type: 'text', text: `No articles found for "${rawQuery}".` }] };
   }
 
   // Fetch summaries for matched articles.
@@ -381,14 +392,19 @@ async function getTrendingTopics(args: Record<string, unknown>, ctx: ToolContext
   const windowHours = Number(args.window_hours) || 24;
   const since = Date.now() - windowHours * 60 * 60 * 1000;
 
-  // Count articles per tag in the window.
+  // Count articles per tag in the window. Articles link to feeds via
+  // article_sources (an article can come from multiple feeds), so the
+  // join goes through that table — the previous version referenced
+  // a.feed_id which doesn't exist in our schema and was throwing
+  // "no such column" on every call.
   const trends = await dbAll<{ name: string; article_count: number }>(
     ctx.db,
     `SELECT t.name, COUNT(DISTINCT at2.article_id) AS article_count
      FROM tags t
      JOIN article_tags at2 ON at2.tag_id = t.id
      JOIN articles a ON a.id = at2.article_id
-     JOIN user_feed_subscriptions ufs ON ufs.feed_id = a.feed_id AND ufs.user_id = ?
+     JOIN article_sources asrc ON asrc.article_id = a.id
+     JOIN user_feed_subscriptions ufs ON ufs.feed_id = asrc.feed_id AND ufs.user_id = ?
      WHERE a.published_at >= ? OR a.fetched_at >= ?
      GROUP BY t.id
      HAVING article_count >= 2

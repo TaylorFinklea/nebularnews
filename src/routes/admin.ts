@@ -360,6 +360,126 @@ adminRoutes.post('/admin/users/:userId/role', async (c) => {
 });
 
 // ---------------------------------------------------------------------------
+// GET /admin/users/:userId/scoring-snapshot — observability for the
+// algorithmic + AI scoring pipeline. Surfaces the same per-feed engagement
+// aggregates the score-articles cron uses (so admins can verify a user's
+// behavioral signals are actually flowing) plus the most recent score
+// writes (so admins can confirm the cron is firing).
+// ---------------------------------------------------------------------------
+
+adminRoutes.get('/admin/users/:userId/scoring-snapshot', async (c) => {
+  const db = c.env.DB;
+  const targetUserId = c.req.param('userId');
+
+  // Per-feed engagement: same shape as the cron's feedBehavior +
+  // feedEngagement maps. Feeds with zero engagement are excluded so the
+  // table stays focused on what's actually shaping the user's algorithm.
+  const feedRows = await dbAll<{
+    feed_id: string;
+    feed_title: string | null;
+    reads: number;
+    saves: number;
+    avg_depth: number | null;
+    avg_time_ms: number | null;
+  }>(
+    db,
+    `SELECT
+        s.feed_id,
+        f.title AS feed_title,
+        COUNT(*) AS reads,
+        SUM(CASE WHEN uas.saved_at IS NOT NULL THEN 1 ELSE 0 END) AS saves,
+        AVG(CASE WHEN uas.read_position_percent > 0 THEN uas.read_position_percent END) AS avg_depth,
+        AVG(CASE WHEN uas.time_spent_ms_total > 0 THEN uas.time_spent_ms_total END) AS avg_time_ms
+       FROM article_read_state uas
+       JOIN article_sources s ON s.article_id = uas.article_id
+       LEFT JOIN feeds f ON f.id = s.feed_id
+       WHERE uas.user_id = ?
+         AND (uas.is_read = 1 OR uas.time_spent_ms_total > 0 OR uas.saved_at IS NOT NULL)
+       GROUP BY s.feed_id
+       ORDER BY reads DESC
+       LIMIT 50`,
+    [targetUserId],
+  );
+
+  // Dismiss counts join via reactions (M11 react_to_articles writes value=-1).
+  const dismissRows = await dbAll<{ feed_id: string; dismisses: number }>(
+    db,
+    `SELECT s.feed_id, COUNT(*) AS dismisses
+       FROM article_reactions ar
+       JOIN article_sources s ON s.article_id = ar.article_id
+      WHERE ar.user_id = ? AND ar.value = -1
+      GROUP BY s.feed_id`,
+    [targetUserId],
+  );
+  const dismissByFeed = new Map(dismissRows.map((r) => [r.feed_id, r.dismisses]));
+
+  const feedEngagement = feedRows.map((r) => ({
+    feed_id: r.feed_id,
+    feed_title: r.feed_title,
+    reads: r.reads,
+    saves: r.saves,
+    dismisses: dismissByFeed.get(r.feed_id) ?? 0,
+    avg_depth_percent: r.avg_depth ? Math.round(r.avg_depth) : null,
+    avg_time_minutes: r.avg_time_ms ? +(r.avg_time_ms / 60000).toFixed(1) : null,
+  }));
+
+  // Recent score writes — last 30 entries with method + signal breakdown.
+  // evidence_json holds the algorithmic signal map for cron-written rows
+  // and AI evidence quotes for ai-written rows; admin UI renders the
+  // signals object when present, falling back to the evidence list.
+  const recentScores = await dbAll<{
+    article_id: string;
+    article_title: string | null;
+    score: number;
+    label: string | null;
+    scoring_method: string;
+    weighted_average: number | null;
+    evidence_json: string | null;
+    created_at: number;
+  }>(
+    db,
+    `SELECT s.article_id, a.title AS article_title, s.score, s.label,
+            s.scoring_method, s.weighted_average, s.evidence_json, s.created_at
+       FROM article_scores s
+       LEFT JOIN articles a ON a.id = s.article_id
+       WHERE s.user_id = ?
+       ORDER BY s.created_at DESC
+       LIMIT 30`,
+    [targetUserId],
+  );
+
+  // Aggregate counts so the UI can show "scored N articles in last 24h /
+  // 7d" without making the page do its own date math.
+  const dayMs = 24 * 60 * 60 * 1000;
+  const now = Date.now();
+  const recentTotals = await dbGet<{ last_24h: number; last_7d: number; last_score_at: number | null }>(
+    db,
+    `SELECT
+        SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) AS last_24h,
+        SUM(CASE WHEN created_at >= ? THEN 1 ELSE 0 END) AS last_7d,
+        MAX(created_at) AS last_score_at
+       FROM article_scores WHERE user_id = ?`,
+    [now - dayMs, now - 7 * dayMs, targetUserId],
+  );
+
+  return c.json({
+    ok: true,
+    data: {
+      feed_engagement: feedEngagement,
+      recent_scores: recentScores.map((r) => ({
+        ...r,
+        evidence_json: r.evidence_json, // raw — UI can JSON.parse if needed
+      })),
+      score_totals: {
+        last_24h: recentTotals?.last_24h ?? 0,
+        last_7d: recentTotals?.last_7d ?? 0,
+        last_score_at: recentTotals?.last_score_at ?? null,
+      },
+    },
+  });
+});
+
+// ---------------------------------------------------------------------------
 // GET /admin/feeds — all feeds with health stats
 // ---------------------------------------------------------------------------
 

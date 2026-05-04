@@ -22,7 +22,15 @@ const DEFAULT_WEIGHTS: Record<string, number> = {
   tag_match_ratio: 0.9,
   save_rate: 0.7,
   dismiss_rate: 0.6,
+  // Engagement signals (Scoring v2): aggregated per feed so cold-start
+  // articles inherit the user's history with the source.
+  read_depth: 0.6,
+  time_spent: 0.5,
 };
+
+/// Time-spent normalization target: 5 minutes of reading is treated as
+/// the "fully engaged" signal=1.0 baseline. Above that saturates.
+const TIME_SPENT_TARGET_MS = 5 * 60 * 1000;
 
 // ---------------------------------------------------------------------------
 // Signal computation helpers
@@ -153,6 +161,31 @@ export async function scoreArticles(env: Env): Promise<void> {
         else if (row.action === 'dismiss') stats.dismisses++;
       }
 
+      // Pre-load engagement signals (Scoring v2): per-feed averages of
+      // read_position_percent and time_spent_ms_total, keyed by feed_id.
+      // Only count rows where the user genuinely engaged (positive
+      // time_spent OR scrolled past 5%) so a swipe-through doesn't count
+      // as a "shallow read" for the source.
+      const feedEngagement = new Map<string, { depthSum: number; timeSum: number; count: number }>();
+      const engagementRows = await dbAll<{ feed_id: string; read_position_percent: number | null; time_spent_ms_total: number | null }>(
+        db,
+        `SELECT asrc.feed_id,
+                uas.read_position_percent,
+                uas.time_spent_ms_total
+           FROM article_read_state uas
+           JOIN article_sources asrc ON asrc.article_id = uas.article_id
+          WHERE uas.user_id = ?
+            AND (uas.time_spent_ms_total > 0 OR uas.read_position_percent > 5)`,
+        [user_id],
+      );
+      for (const row of engagementRows) {
+        if (!feedEngagement.has(row.feed_id)) feedEngagement.set(row.feed_id, { depthSum: 0, timeSum: 0, count: 0 });
+        const stats = feedEngagement.get(row.feed_id)!;
+        stats.count++;
+        stats.depthSum += row.read_position_percent ?? 0;
+        stats.timeSum += row.time_spent_ms_total ?? 0;
+      }
+
       // Score each article
       for (const article of articles) {
         // 1. source_reputation
@@ -202,11 +235,32 @@ export async function scoreArticles(env: Env): Promise<void> {
           if (stats.total > 0) dismissSignal = 1 - (stats.dismisses / stats.total);
         }
 
+        // 7. read_depth — feed-level average scroll position (0-1).
+        //    Cold-start feeds default to neutral 0.5 so they aren't
+        //    penalized purely for lack of history.
+        let readDepth = 0.5;
+        if (article.feed_id && feedEngagement.has(article.feed_id)) {
+          const stats = feedEngagement.get(article.feed_id)!;
+          if (stats.count > 0) readDepth = (stats.depthSum / stats.count) / 100;
+        }
+
+        // 8. time_spent — feed-level average session length, normalized
+        //    against a 5-minute "fully engaged" target. Saturates at 1.0.
+        let timeSpent = 0.5;
+        if (article.feed_id && feedEngagement.has(article.feed_id)) {
+          const stats = feedEngagement.get(article.feed_id)!;
+          if (stats.count > 0) {
+            const avgMs = stats.timeSum / stats.count;
+            timeSpent = Math.max(0, Math.min(1, avgMs / TIME_SPENT_TARGET_MS));
+          }
+        }
+
         // Weighted average
         const signals = {
           source_reputation: sourceRep, content_freshness: freshness,
           content_depth: depth, tag_match_ratio: tagMatch,
           save_rate: saveRate, dismiss_rate: dismissSignal,
+          read_depth: readDepth, time_spent: timeSpent,
         };
         let weightedSum = 0;
         let totalWeight = 0;

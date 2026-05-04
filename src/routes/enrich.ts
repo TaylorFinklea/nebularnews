@@ -49,6 +49,72 @@ async function fetchArticle(
   return article;
 }
 
+/// Scoring v2: one-paragraph summary of how the user has historically
+/// engaged with the article's source feed. Returned as plain text the
+/// model can read alongside the preference profile. Returns '' when
+/// fewer than 3 articles from this feed have been engaged with — small
+/// samples produce noisy ratios that would mislead the prompt.
+async function buildBehavioralSummary(
+  db: D1Database,
+  userId: string,
+  articleId: string,
+): Promise<string> {
+  const feedRow = await dbGet<{ feed_id: string; feed_title: string | null }>(
+    db,
+    `SELECT s.feed_id, f.title AS feed_title
+       FROM article_sources s
+       LEFT JOIN feeds f ON f.id = s.feed_id
+       WHERE s.article_id = ?
+       ORDER BY s.created_at ASC
+       LIMIT 1`,
+    [articleId],
+  );
+  if (!feedRow) return '';
+
+  const stats = await dbGet<{
+    reads: number;
+    saves: number;
+    avg_depth: number | null;
+    avg_time_ms: number | null;
+  }>(
+    db,
+    `SELECT
+        SUM(CASE WHEN uas.is_read = 1 OR uas.time_spent_ms_total > 0 THEN 1 ELSE 0 END) AS reads,
+        SUM(CASE WHEN uas.saved_at IS NOT NULL THEN 1 ELSE 0 END) AS saves,
+        AVG(CASE WHEN uas.read_position_percent > 0 THEN uas.read_position_percent END) AS avg_depth,
+        AVG(CASE WHEN uas.time_spent_ms_total > 0 THEN uas.time_spent_ms_total END) AS avg_time_ms
+       FROM article_read_state uas
+       JOIN article_sources s ON s.article_id = uas.article_id
+       WHERE uas.user_id = ? AND s.feed_id = ?`,
+    [userId, feedRow.feed_id],
+  );
+
+  const dismissRow = await dbGet<{ dismisses: number }>(
+    db,
+    `SELECT COUNT(*) AS dismisses
+       FROM article_reactions ar
+       JOIN article_sources s ON s.article_id = ar.article_id
+       WHERE ar.user_id = ? AND s.feed_id = ? AND ar.value = -1`,
+    [userId, feedRow.feed_id],
+  );
+
+  const reads = stats?.reads ?? 0;
+  if (reads < 3) return '';
+
+  const saves = stats?.saves ?? 0;
+  const dismisses = dismissRow?.dismisses ?? 0;
+  const savePct = Math.round((saves / reads) * 100);
+  const dismissPct = Math.round((dismisses / reads) * 100);
+  const avgDepthPct = stats?.avg_depth ? Math.round(stats.avg_depth) : null;
+  const avgMinutes = stats?.avg_time_ms ? +(stats.avg_time_ms / 60000).toFixed(1) : null;
+
+  const feedLabel = feedRow.feed_title ?? 'this feed';
+  const parts: string[] = [`User has engaged with ${reads} articles from ${feedLabel}; saves ${savePct}%, dismisses ${dismissPct}%`];
+  if (avgDepthPct !== null) parts.push(`reads ${avgDepthPct}% deep on average`);
+  if (avgMinutes !== null && avgMinutes > 0) parts.push(`spends ~${avgMinutes} min per article`);
+  return parts.join(', ') + '.';
+}
+
 // If the RSS item arrived with no body (e.g. Anthropic feeds), transparently
 // deep-fetch the canonical URL before running the AI action. Mirrors the
 // cooldown logic in POST /articles/:id/fetch-content so repeated failures
@@ -252,11 +318,19 @@ enrichRoutes.post('/enrich/:articleId/score', async (c) => {
     return c.json({ ok: true, data: { score: 3, label: 'No content', reason: 'Article content was not available for scoring.', evidence: [] } });
   }
 
+  // Scoring v2: assemble a one-paragraph behavioral summary about the
+  // user's history with this article's source feed. Skip the section
+  // entirely when N < 3 reads so the prompt isn't anchored on a noisy
+  // single-data-point baseline.
+  const behavioral = await buildBehavioralSummary(db, userId, articleId);
+
   const messages = buildScorePrompt(
     article.title,
     article.canonical_url,
     contentText,
     profileText,
+    undefined,
+    behavioral,
   );
 
   const { content } = await runChat(ai.provider, ai.apiKey, ai.model, messages);

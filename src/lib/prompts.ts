@@ -143,13 +143,23 @@ ${contentText}`;
   ];
 }
 
-/** Build messages for relevance scoring. */
+/** Build messages for relevance scoring.
+ *
+ * `behavioral` is an optional one-paragraph summary of the user's
+ * historical engagement with this article's source feed (read depth,
+ * save rate, dismiss rate, time spent). When non-empty, it's injected
+ * between the preference profile and the article so the model can weigh
+ * "the user reads everything from this feed" alongside "this matches
+ * their stated interests". Empty / undefined drops the section entirely
+ * — the prompt then matches the pre-v2 shape exactly.
+ */
 export function buildScorePrompt(
   title: string | null,
   url: string | null,
   contentText: string,
   profile: string,
   systemPrompt?: string,
+  behavioral?: string,
 ): ChatMessage[] {
   const system =
     (systemPrompt ?? '').trim() || DEFAULT_SCORE_SYSTEM_PROMPT;
@@ -162,10 +172,17 @@ export function buildScorePrompt(
       content: contentText,
     },
   );
+  const trimmedBehavioral = (behavioral ?? '').trim();
+  const finalUserPrompt = trimmedBehavioral
+    ? userPrompt.replace(
+        /\nArticle:\n/,
+        `\nBehavioral signals (engagement with this source):\n${trimmedBehavioral}\n\nArticle:\n`,
+      )
+    : userPrompt;
 
   return [
     { role: 'system', content: system },
-    { role: 'user', content: userPrompt },
+    { role: 'user', content: finalUserPrompt },
   ];
 }
 

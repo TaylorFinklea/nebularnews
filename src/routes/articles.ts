@@ -269,20 +269,31 @@ articleRoutes.post('/articles/:id/save', async (c) => {
 
 articleRoutes.post('/articles/:id/reading-position', async (c) => {
   const userId = c.get('userId');
-  const body = await c.req.json<{ percent?: number }>();
+  const body = await c.req.json<{ percent?: number; time_spent_ms?: number }>();
   const raw = typeof body.percent === 'number' ? body.percent : 0;
   const percent = Math.max(0, Math.min(100, Math.round(raw)));
+  // Per-call time-spent delta. Cap each contribution at 30 min so a
+  // backgrounded tab doesn't pollute the cumulative total — iOS already
+  // gates on scenePhase but defense-in-depth is cheap here.
+  const SESSION_CAP_MS = 30 * 60 * 1000;
+  const rawMs = typeof body.time_spent_ms === 'number' ? body.time_spent_ms : 0;
+  const timeSpentMs = Math.max(0, Math.min(SESSION_CAP_MS, Math.round(rawMs)));
   const now = Date.now();
 
   await dbRun(c.env.DB,
-    `INSERT INTO article_read_state (user_id, article_id, is_read, read_position_percent, updated_at)
-     VALUES (?, ?, 0, ?, ?)
+    `INSERT INTO article_read_state (user_id, article_id, is_read, read_position_percent, updated_at, time_spent_ms_total, last_read_at)
+     VALUES (?, ?, 0, ?, ?, ?, ?)
      ON CONFLICT (user_id, article_id) DO UPDATE SET
        read_position_percent = excluded.read_position_percent,
-       updated_at = excluded.updated_at`,
-    [userId, c.req.param('id'), percent, now]);
+       updated_at = excluded.updated_at,
+       time_spent_ms_total = article_read_state.time_spent_ms_total + excluded.time_spent_ms_total,
+       last_read_at = CASE
+         WHEN excluded.time_spent_ms_total > 0 THEN excluded.last_read_at
+         ELSE article_read_state.last_read_at
+       END`,
+    [userId, c.req.param('id'), percent, now, timeSpentMs, timeSpentMs > 0 ? now : null]);
 
-  return c.json({ ok: true, data: { article_id: c.req.param('id'), percent, updated_at: now } });
+  return c.json({ ok: true, data: { article_id: c.req.param('id'), percent, updated_at: now, time_spent_ms_added: timeSpentMs } });
 });
 
 // ── POST /articles/:id/dismiss ──────────────────────────────────────────────

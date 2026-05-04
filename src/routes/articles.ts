@@ -29,6 +29,10 @@ const reactionExpr = (uid: string) =>
   `(SELECT value FROM article_reactions WHERE article_id = a.id AND user_id = '${esc(uid)}' LIMIT 1)`;
 const savedExpr = (uid: string) =>
   `(SELECT saved_at FROM article_read_state WHERE article_id = a.id AND user_id = '${esc(uid)}' LIMIT 1)`;
+const lastReadAtExpr = (uid: string) =>
+  `(SELECT last_read_at FROM article_read_state WHERE article_id = a.id AND user_id = '${esc(uid)}' LIMIT 1)`;
+const timeSpentExpr = (uid: string) =>
+  `(SELECT time_spent_ms_total FROM article_read_state WHERE article_id = a.id AND user_id = '${esc(uid)}' LIMIT 1)`;
 const subFilter = (uid: string) => `EXISTS (
   SELECT 1 FROM article_sources src
   JOIN user_feed_subscriptions ufs ON ufs.feed_id = src.feed_id
@@ -87,6 +91,15 @@ articleRoutes.get('/articles', async (c) => {
     conditions.push(`${savedExpr(userId)} IS NOT NULL`);
   }
 
+  // Read history (engaged reads): articles where the user actually opened
+  // the article and accumulated foreground time. last_read_at is only
+  // stamped by /reading-position when time_spent_ms is positive (see
+  // migration 0023 + the endpoint at line 270), so the IS NOT NULL filter
+  // distinguishes "I clicked into this" from "I marked it read in a brief".
+  if (sort === 'recent_reads') {
+    conditions.push(`${lastReadAtExpr(userId)} IS NOT NULL`);
+  }
+
   const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
   // Sort
@@ -95,6 +108,7 @@ articleRoutes.get('/articles', async (c) => {
     case 'oldest': orderBy = 'COALESCE(a.published_at, a.fetched_at) ASC'; break;
     case 'score_desc': orderBy = `${scoreExpr(userId)} DESC NULLS LAST, a.published_at DESC`; break;
     case 'score_asc': orderBy = `${scoreExpr(userId)} ASC NULLS LAST, a.published_at DESC`; break;
+    case 'recent_reads': orderBy = `${lastReadAtExpr(userId)} DESC`; break;
     default: orderBy = 'COALESCE(a.published_at, a.fetched_at) DESC'; break;
   }
 
@@ -111,6 +125,8 @@ articleRoutes.get('/articles', async (c) => {
       ${readExpr(userId)} as is_read,
       ${reactionExpr(userId)} as reaction_value,
       ${savedExpr(userId)} as saved_at,
+      ${lastReadAtExpr(userId)} as last_read_at,
+      ${timeSpentExpr(userId)} as time_spent_ms_total,
       ${scoreExpr(userId)} as score,
       ${scoreLabelExpr(userId)} as score_label,
       ${scoreMethodExpr(userId)} as scoring_method,

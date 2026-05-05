@@ -897,6 +897,149 @@ chatRoutes.get('/chat/assistant', async (c) => {
   });
 });
 
+/// Compute a millisecond offset for the given IANA timezone at "now".
+/// Positive for east-of-UTC, negative for west. Used by the
+/// /chat/assistant/days endpoint to bucket chat messages into the
+/// user's local day. Falls back to 0 (UTC) on any parse error.
+function getTzOffsetMs(timezone: string, now: Date = new Date()): number {
+  const tz = timezone || 'UTC';
+  let parts: Intl.DateTimeFormatPart[];
+  try {
+    parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      hour12: false,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+    }).formatToParts(now);
+  } catch {
+    return 0;
+  }
+  const pick = (type: string, fallback = '0') =>
+    parseInt(parts.find((p) => p.type === type)?.value ?? fallback, 10);
+  let hour = pick('hour');
+  if (hour === 24) hour = 0;
+  const localAsUTC = Date.UTC(
+    pick('year'), pick('month') - 1, pick('day'),
+    hour, pick('minute'), pick('second'),
+  );
+  return localAsUTC - now.getTime();
+}
+
+/// Read the user's preferred timezone from settings (set by the news
+/// brief config in /settings). Defaults to UTC. Reused by both daily
+/// endpoints to keep day boundaries consistent across the API.
+async function getUserTimezone(db: D1Database, userId: string): Promise<string> {
+  const row = await dbGet<{ value: string }>(
+    db,
+    `SELECT value FROM settings WHERE user_id = ? AND key = 'newsBriefTimezone'`,
+    [userId],
+  );
+  return row?.value || 'UTC';
+}
+
+// GET /chat/assistant/days — days the user had chat activity in the
+// shared assistant thread, newest first. Powers the iOS Daily
+// Conversations history surface.
+chatRoutes.get('/chat/assistant/days', async (c) => {
+  const userId = c.get('userId');
+  const db = c.env.DB;
+
+  const thread = await dbGet<ThreadRow>(
+    db,
+    `SELECT * FROM chat_threads WHERE user_id = ? AND article_id = ? ORDER BY updated_at DESC LIMIT 1`,
+    [userId, ASSISTANT_THREAD_ARTICLE_ID],
+  );
+  if (!thread) return c.json({ ok: true, data: { days: [] } });
+
+  const tz = await getUserTimezone(db, userId);
+  const offsetMs = getTzOffsetMs(tz);
+
+  // Group messages by user-local day. SQLite has no arbitrary tz
+  // modifier, but DATE((ms + offset) / 1000, 'unixepoch') works because
+  // shifting the unix epoch by the offset turns DATE's UTC interpretation
+  // into the equivalent local-day interpretation.
+  type DayRow = {
+    day: string;
+    message_count: number;
+    has_brief: number;
+    preview: string | null;
+  };
+  const rows = await dbAll<DayRow>(
+    db,
+    `SELECT
+        DATE((m.created_at + ?) / 1000, 'unixepoch') AS day,
+        COUNT(*) AS message_count,
+        MAX(CASE WHEN m.message_kind = 'brief_seed' THEN 1 ELSE 0 END) AS has_brief,
+        (SELECT json_extract(content, '$.bullets[0].text')
+           FROM chat_messages
+          WHERE thread_id = m.thread_id
+            AND DATE((created_at + ?) / 1000, 'unixepoch') = DATE((m.created_at + ?) / 1000, 'unixepoch')
+            AND message_kind = 'brief_seed'
+          ORDER BY created_at DESC LIMIT 1) AS preview
+       FROM chat_messages m
+      WHERE m.thread_id = ? AND m.role != 'system'
+      GROUP BY day
+      ORDER BY day DESC
+      LIMIT 60`,
+    [offsetMs, offsetMs, offsetMs, thread.id],
+  );
+
+  const days = rows.map((r) => ({
+    day: r.day,
+    message_count: r.message_count,
+    has_brief: r.has_brief === 1,
+    preview: r.preview,
+  }));
+
+  return c.json({ ok: true, data: { days } });
+});
+
+// GET /chat/assistant/day/:date — full message list for one local day.
+chatRoutes.get('/chat/assistant/day/:date', async (c) => {
+  const userId = c.get('userId');
+  const db = c.env.DB;
+  const date = c.req.param('date');
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return c.json({ ok: false, error: { code: 'bad_request', message: 'date must be YYYY-MM-DD' } }, 400);
+  }
+
+  const thread = await dbGet<ThreadRow>(
+    db,
+    `SELECT * FROM chat_threads WHERE user_id = ? AND article_id = ? ORDER BY updated_at DESC LIMIT 1`,
+    [userId, ASSISTANT_THREAD_ARTICLE_ID],
+  );
+  if (!thread) return c.json({ ok: false, error: { code: 'not_found', message: 'no thread' } }, 404);
+
+  const tz = await getUserTimezone(db, userId);
+  const offsetMs = getTzOffsetMs(tz);
+
+  // Date params arrive as YYYY-MM-DD; reconstruct the local-day
+  // boundaries by parsing the date as UTC and reversing the offset.
+  // (offset = local_as_UTC - real_UTC, so real_UTC = local_as_UTC - offset.)
+  const [y, m, d] = date.split('-').map((p) => parseInt(p, 10));
+  const localStartAsUTC = Date.UTC(y, m - 1, d, 0, 0, 0);
+  const startMs = localStartAsUTC - offsetMs;
+  const endMs = startMs + 24 * 60 * 60 * 1000;
+
+  const messages = await dbAll<MessageRow>(
+    db,
+    `SELECT * FROM chat_messages
+       WHERE thread_id = ? AND role != 'system'
+         AND created_at >= ? AND created_at < ?
+       ORDER BY created_at ASC`,
+    [thread.id, startMs, endMs],
+  );
+
+  return c.json({
+    ok: true,
+    data: {
+      day: date,
+      messages: messages.map(formatMessage),
+    },
+  });
+});
+
 // GET /chat/assistant/history — list recent assistant threads
 chatRoutes.get('/chat/assistant/history', async (c) => {
   const userId = c.get('userId');

@@ -222,7 +222,7 @@ async function loadThreadResponse(db: D1Database, threadId: string) {
 const TODAY_BRIEF_ARTICLE_ID = '__today_brief__';
 const ASSISTANT_THREAD_ARTICLE_ID = '__assistant__';
 
-chatRoutes.get('/chat/:articleId{(?!assistant$|assistant/|multi$|multi/|undo-tool$|exec-tool$).+}', async (c) => {
+chatRoutes.get('/chat/:articleId{(?!assistant$|assistant/|agent$|agent/|multi$|multi/|undo-tool$|exec-tool$).+}', async (c) => {
   const userId = c.get('userId');
   const db = c.env.DB;
   const articleId = c.req.param('articleId');
@@ -390,7 +390,7 @@ async function ensureTodayBriefSeed(db: D1Database, userId: string): Promise<voi
 // POST /chat/:articleId — send a message in article chat
 // ---------------------------------------------------------------------------
 
-chatRoutes.post('/chat/:articleId{(?!assistant$|assistant/|multi$|multi/|undo-tool$|exec-tool$).+}', async (c) => {
+chatRoutes.post('/chat/:articleId{(?!assistant$|assistant/|agent$|agent/|multi$|multi/|undo-tool$|exec-tool$).+}', async (c) => {
   const userId = c.get('userId');
   const db = c.env.DB;
   const articleId = c.req.param('articleId');

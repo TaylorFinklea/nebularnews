@@ -58,6 +58,20 @@ function truncate(text: string | null, limit: number): string {
   return text.length > limit ? text.slice(0, limit) : text;
 }
 
+/// Build a stable conversation title from the user's first message.
+/// Up to ~50 chars, trimmed at a word boundary, single line. Returns
+/// an empty string if the input is too short to be meaningful — caller
+/// then leaves `title` null until a future message provides one.
+function makeHeuristicTitle(firstMessage: string): string {
+  const single = firstMessage.replace(/\s+/g, ' ').trim();
+  if (single.length < 3) return '';
+  if (single.length <= 50) return single;
+  const cut = single.slice(0, 50);
+  const lastSpace = cut.lastIndexOf(' ');
+  const trimmed = lastSpace > 20 ? cut.slice(0, lastSpace) : cut;
+  return trimmed + '…';
+}
+
 // ---------------------------------------------------------------------------
 // Conversation memory: generate summaries + load recent context
 // ---------------------------------------------------------------------------
@@ -139,6 +153,7 @@ type ThreadRow = {
   title: string | null;
   created_at: number;
   updated_at: number;
+  deleted_at?: number | null;
 };
 
 type MessageRow = {
@@ -1078,6 +1093,9 @@ chatRoutes.post('/chat/assistant', async (c) => {
     message: string;
     pageContext: AssistantPageContext;
     threadId?: string;
+    /// Build 37 alias for `threadId`. Agent tab routes a message to a
+    /// specific multi-conversation thread via this id.
+    conversationId?: string;
     guardrails?: { policies: Record<string, 'confirm' | 'undo_only'> };
   }>();
 
@@ -1104,15 +1122,26 @@ chatRoutes.post('/chat/assistant', async (c) => {
 
   const now = Date.now();
 
-  // Find or create assistant thread.
+  // Find or create assistant thread. `conversationId` (Build 37) takes
+  // precedence over `threadId` (legacy). When neither is provided, fall
+  // back to the user's default __assistant__ thread for backward compat
+  // with iOS clients pre-Build 37 that still post to a single thread.
+  const targetThreadId = body.conversationId ?? body.threadId;
   let thread: ThreadRow | null = null;
-  if (body.threadId) {
-    thread = await dbGet<ThreadRow>(db, `SELECT * FROM chat_threads WHERE id = ? AND user_id = ?`, [body.threadId, userId]);
+  if (targetThreadId) {
+    thread = await dbGet<ThreadRow>(
+      db,
+      `SELECT * FROM chat_threads WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
+      [targetThreadId, userId],
+    );
+    if (!thread) {
+      return c.json({ ok: false, error: { code: 'not_found', message: 'Conversation not found' } }, 404);
+    }
   }
   if (!thread) {
     thread = await dbGet<ThreadRow>(
       db,
-      `SELECT * FROM chat_threads WHERE user_id = ? AND article_id = ? ORDER BY updated_at DESC LIMIT 1`,
+      `SELECT * FROM chat_threads WHERE user_id = ? AND article_id = ? AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT 1`,
       [userId, ASSISTANT_THREAD_ARTICLE_ID],
     );
   }
@@ -1170,6 +1199,21 @@ chatRoutes.post('/chat/assistant', async (c) => {
     );
   } catch (e) {
     throw e;
+  }
+
+  // Auto-title: when a freshly-created Agent conversation receives its
+  // first user message, set the thread title from a heuristic snip of
+  // that message. LLM-derived titles are queued as a Build 38 polish.
+  if (!thread.title) {
+    const heuristicTitle = makeHeuristicTitle(message);
+    if (heuristicTitle) {
+      await dbRun(
+        db,
+        `UPDATE chat_threads SET title = ?, updated_at = ? WHERE id = ?`,
+        [heuristicTitle, now, thread.id],
+      ).catch(() => {});
+      thread.title = heuristicTitle;
+    }
   }
 
   // Enrich context: for article_detail, fetch full content from D1.
@@ -1562,6 +1606,190 @@ chatRoutes.post('/chat/assistant/persist', async (c) => {
     console.error('[chat/assistant/persist] 500:', msg);
     return c.json({ ok: false, error: { code: 'internal_error', message: msg } }, 500);
   }
+});
+
+// ---------------------------------------------------------------------------
+// Agent conversations (Build 37) — multi-conversation ChatGPT-style surface.
+//
+// Each conversation = one chat_threads row. Optional pinned article_id when
+// "Tell me more" or "Open in Agent" started the conversation. Title is
+// auto-set from the first user message via the heuristic above.
+//
+// The legacy __assistant__ thread shows up here as one migrated row; iOS
+// filters its brief_seed messages out of the conversation list rendering.
+// ---------------------------------------------------------------------------
+
+// GET /chat/agent/conversations — list user's conversations, newest first.
+chatRoutes.get('/chat/agent/conversations', async (c) => {
+  const userId = c.get('userId');
+  const db = c.env.DB;
+
+  // Excludes the deprecated multi_chat sentinel and any thread whose
+  // every message is a brief_seed (those are owned by Today's brief
+  // history surface, not the Agent tab). The brief_seed-only filter is
+  // a subquery that returns thread ids where ALL non-system messages
+  // are brief_seed — those rows shouldn't pollute the conversation list.
+  const rows = await dbAll<{
+    id: string;
+    article_id: string | null;
+    title: string | null;
+    created_at: number;
+    updated_at: number;
+    last_content: string | null;
+    message_count: number;
+  }>(
+    db,
+    `SELECT t.id, t.article_id, t.title, t.created_at, t.updated_at,
+            (SELECT content FROM chat_messages
+             WHERE thread_id = t.id AND role != 'system' AND COALESCE(message_kind, 'text') != 'brief_seed'
+             ORDER BY created_at DESC LIMIT 1) AS last_content,
+            (SELECT COUNT(*) FROM chat_messages
+             WHERE thread_id = t.id AND role != 'system' AND COALESCE(message_kind, 'text') != 'brief_seed') AS message_count
+       FROM chat_threads t
+      WHERE t.user_id = ?
+        AND t.deleted_at IS NULL
+        AND COALESCE(t.article_id, '') != ?
+        AND EXISTS (SELECT 1 FROM chat_messages m
+                     WHERE m.thread_id = t.id
+                       AND m.role != 'system'
+                       AND COALESCE(m.message_kind, 'text') != 'brief_seed')
+      ORDER BY t.updated_at DESC
+      LIMIT 200`,
+    [userId, MULTI_CHAT_THREAD_ARTICLE_ID],
+  );
+
+  const data = rows.map(r => ({
+    id: r.id,
+    article_id: r.article_id === ASSISTANT_THREAD_ARTICLE_ID ? null : r.article_id,
+    title: r.title ?? (r.article_id === ASSISTANT_THREAD_ARTICLE_ID ? 'Earlier conversation' : null),
+    last_message_preview: r.last_content ? truncate(r.last_content, 120) : null,
+    message_count: r.message_count,
+    updated_at: r.updated_at,
+    created_at: r.created_at,
+    has_pinned_article: r.article_id !== null && r.article_id !== ASSISTANT_THREAD_ARTICLE_ID,
+  }));
+
+  return c.json({ ok: true, data });
+});
+
+// POST /chat/agent/conversations — create a new conversation.
+chatRoutes.post('/chat/agent/conversations', async (c) => {
+  const userId = c.get('userId');
+  const db = c.env.DB;
+  type CreateBody = { articleId?: string | null; title?: string | null };
+  const body: CreateBody = await c.req.json<CreateBody>().catch(() => ({} as CreateBody));
+
+  const id = nanoid();
+  const now = Date.now();
+  const articleId = body.articleId ?? null;
+  const title = body.title?.trim().slice(0, 120) || null;
+
+  await dbRun(
+    db,
+    `INSERT INTO chat_threads (id, user_id, article_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
+    [id, userId, articleId, title, now, now],
+  );
+
+  return c.json({
+    ok: true,
+    data: {
+      id,
+      article_id: articleId,
+      title,
+      created_at: now,
+      updated_at: now,
+      message_count: 0,
+      last_message_preview: null,
+      has_pinned_article: articleId !== null,
+    },
+  });
+});
+
+// GET /chat/agent/conversations/:id — full message list for one conversation.
+chatRoutes.get('/chat/agent/conversations/:id', async (c) => {
+  const userId = c.get('userId');
+  const db = c.env.DB;
+  const id = c.req.param('id');
+
+  const thread = await dbGet<ThreadRow>(
+    db,
+    `SELECT * FROM chat_threads WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
+    [id, userId],
+  );
+  if (!thread) {
+    return c.json({ ok: false, error: { code: 'not_found', message: 'Conversation not found' } }, 404);
+  }
+
+  // Filter out system and brief_seed rows from Agent rendering. Both
+  // exist in the DB for legacy threads (especially the migrated
+  // __assistant__ thread) but neither belongs in the chat surface.
+  const messages = await dbAll<MessageRow>(
+    db,
+    `SELECT * FROM chat_messages
+      WHERE thread_id = ?
+        AND role != 'system'
+        AND COALESCE(message_kind, 'text') != 'brief_seed'
+      ORDER BY created_at ASC`,
+    [thread.id],
+  );
+
+  return c.json({
+    ok: true,
+    data: {
+      thread: {
+        ...formatThread(thread),
+        title: thread.title ?? (thread.article_id === ASSISTANT_THREAD_ARTICLE_ID ? 'Earlier conversation' : null),
+      },
+      messages: messages.map(formatMessage),
+    },
+  });
+});
+
+// PATCH /chat/agent/conversations/:id — rename.
+chatRoutes.patch('/chat/agent/conversations/:id', async (c) => {
+  const userId = c.get('userId');
+  const db = c.env.DB;
+  const id = c.req.param('id');
+  type RenameBody = { title?: string };
+  const body: RenameBody = await c.req.json<RenameBody>().catch(() => ({} as RenameBody));
+
+  const title = body.title?.trim().slice(0, 120);
+  if (!title) {
+    return c.json({ ok: false, error: { code: 'bad_request', message: 'title is required' } }, 400);
+  }
+
+  const thread = await dbGet<ThreadRow>(
+    db,
+    `SELECT * FROM chat_threads WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
+    [id, userId],
+  );
+  if (!thread) {
+    return c.json({ ok: false, error: { code: 'not_found', message: 'Conversation not found' } }, 404);
+  }
+
+  const now = Date.now();
+  await dbRun(db, `UPDATE chat_threads SET title = ?, updated_at = ? WHERE id = ?`, [title, now, id]);
+  return c.json({ ok: true, data: { id, title, updated_at: now } });
+});
+
+// DELETE /chat/agent/conversations/:id — soft-delete.
+chatRoutes.delete('/chat/agent/conversations/:id', async (c) => {
+  const userId = c.get('userId');
+  const db = c.env.DB;
+  const id = c.req.param('id');
+
+  const thread = await dbGet<ThreadRow>(
+    db,
+    `SELECT * FROM chat_threads WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
+    [id, userId],
+  );
+  if (!thread) {
+    return c.json({ ok: false, error: { code: 'not_found', message: 'Conversation not found' } }, 404);
+  }
+
+  const now = Date.now();
+  await dbRun(db, `UPDATE chat_threads SET deleted_at = ?, updated_at = ? WHERE id = ?`, [now, now, id]);
+  return c.json({ ok: true, data: { id } });
 });
 
 // POST /chat/exec-tool — execute a server-side chat tool directly.

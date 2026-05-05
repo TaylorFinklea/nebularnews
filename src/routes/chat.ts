@@ -1479,6 +1479,91 @@ chatRoutes.post('/chat/assistant', async (c) => {
   }
 });
 
+// POST /chat/assistant/persist — record a {user, assistant} turn that the
+// iOS client generated locally (free tier on-device AI via FoundationModels).
+// No LLM is invoked here; the server only persists the two messages so the
+// assistant thread + Daily Conversation history stay in sync. Length-capped
+// per-message to bound storage; usage row records 0 tokens with provider
+// 'on_device' so we can break out on-device activity in metering later.
+chatRoutes.post('/chat/assistant/persist', async (c) => {
+  const userId = c.get('userId');
+  const db = c.env.DB;
+
+  try {
+    const body = await c.req.json<{ user_message?: string; assistant_message?: string }>();
+    const userMessage = (body.user_message ?? '').trim();
+    const assistantMessage = (body.assistant_message ?? '').trim();
+
+    if (!userMessage || !assistantMessage) {
+      return c.json(
+        { ok: false, error: { code: 'bad_request', message: 'user_message and assistant_message are required' } },
+        400,
+      );
+    }
+    const MAX_PERSIST_LEN = 16_000;
+    if (userMessage.length > MAX_PERSIST_LEN || assistantMessage.length > MAX_PERSIST_LEN) {
+      return c.json(
+        { ok: false, error: { code: 'bad_request', message: `messages must be <= ${MAX_PERSIST_LEN} chars` } },
+        400,
+      );
+    }
+
+    // Get-or-create the assistant thread (mirrors POST /chat/assistant).
+    let thread = await dbGet<ThreadRow>(
+      db,
+      `SELECT * FROM chat_threads WHERE user_id = ? AND article_id = ? ORDER BY updated_at DESC LIMIT 1`,
+      [userId, ASSISTANT_THREAD_ARTICLE_ID],
+    );
+    const now = Date.now();
+    if (!thread) {
+      const threadId = nanoid();
+      await dbRun(
+        db,
+        `INSERT INTO chat_threads (id, user_id, article_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
+        [threadId, userId, ASSISTANT_THREAD_ARTICLE_ID, null, now, now],
+      );
+      thread = { id: threadId, user_id: userId, article_id: ASSISTANT_THREAD_ARTICLE_ID, title: null, created_at: now, updated_at: now };
+    }
+
+    const userMsgId = nanoid();
+    const assistantMsgId = nanoid();
+    // Assistant row is timestamped 1ms after the user row so existing
+    // ORDER BY created_at queries preserve turn order.
+    await dbRun(
+      db,
+      `INSERT INTO chat_messages (id, thread_id, role, content, provider, created_at) VALUES (?, ?, 'user', ?, 'on_device', ?)`,
+      [userMsgId, thread.id, userMessage, now],
+    );
+    await dbRun(
+      db,
+      `INSERT INTO chat_messages (id, thread_id, role, content, provider, created_at) VALUES (?, ?, 'assistant', ?, 'on_device', ?)`,
+      [assistantMsgId, thread.id, assistantMessage, now + 1],
+    );
+    await dbRun(
+      db,
+      `UPDATE chat_threads SET updated_at = ? WHERE id = ?`,
+      [now + 1, thread.id],
+    );
+
+    // Track on-device activity in ai_usage with zero tokens. Lets metering
+    // dashboards count on-device messages without inflating token totals.
+    await recordUsage(db, userId, 'on_device', 'foundation_models', { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 }, 'chat', false).catch(() => {});
+
+    return c.json({
+      ok: true,
+      data: {
+        thread_id: thread.id,
+        user_message_id: userMsgId,
+        assistant_message_id: assistantMsgId,
+      },
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Unknown error';
+    console.error('[chat/assistant/persist] 500:', msg);
+    return c.json({ ok: false, error: { code: 'internal_error', message: msg } }, 500);
+  }
+});
+
 // POST /chat/exec-tool — execute a server-side chat tool directly.
 //
 // Used by the M18 chat-first Today tab so action chips (Save, React up/down)

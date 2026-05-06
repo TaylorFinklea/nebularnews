@@ -1661,7 +1661,12 @@ chatRoutes.get('/chat/agent/conversations', async (c) => {
   const data = rows.map(r => ({
     id: r.id,
     article_id: r.article_id === ASSISTANT_THREAD_ARTICLE_ID ? null : r.article_id,
-    title: r.title ?? (r.article_id === ASSISTANT_THREAD_ARTICLE_ID ? 'Earlier conversation' : null),
+    // For the legacy __assistant__ thread we override any stored title
+    // (e.g. "Today" from the unified-thread era) so the migrated row
+    // shows up consistently as "Earlier conversation" in Agent.
+    title: r.article_id === ASSISTANT_THREAD_ARTICLE_ID
+      ? 'Earlier conversation'
+      : (r.title ?? null),
     last_message_preview: r.last_content ? truncate(r.last_content, 120) : null,
     message_count: r.message_count,
     updated_at: r.updated_at,
@@ -1738,7 +1743,9 @@ chatRoutes.get('/chat/agent/conversations/:id', async (c) => {
     data: {
       thread: {
         ...formatThread(thread),
-        title: thread.title ?? (thread.article_id === ASSISTANT_THREAD_ARTICLE_ID ? 'Earlier conversation' : null),
+        title: thread.article_id === ASSISTANT_THREAD_ARTICLE_ID
+          ? 'Earlier conversation'
+          : (thread.title ?? null),
       },
       messages: messages.map(formatMessage),
     },

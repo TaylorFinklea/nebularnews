@@ -151,7 +151,10 @@ async function searchArticles(args: Record<string, unknown>, ctx: ToolContext): 
     published_at: number | null;
   }>(
     ctx.db,
-    `SELECT article_id, title, canonical_url, published_at
+    // Both article_search (FTS5) and articles have a `title` column —
+    // unqualified references throw "ambiguous column name". Pull every
+    // selected column from the joined `articles` table explicitly.
+    `SELECT a.id AS article_id, a.title AS title, a.canonical_url AS canonical_url, a.published_at AS published_at
      FROM article_search
      JOIN articles a ON a.id = article_search.article_id
      WHERE article_search MATCH ?

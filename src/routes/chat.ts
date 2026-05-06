@@ -882,22 +882,40 @@ Your role:
 
 // GET /chat/assistant — load the current assistant thread, ensuring
 // the latest brief is seeded as a chat message at the bottom.
+//
+// Respects an optional `threadId` query param so older client code
+// that still calls this route to load a specific Agent conversation
+// gets the right thread instead of always falling back to the
+// canonical __assistant__ thread (Build 38 hit this — every Agent
+// conversation rendered identical content).
 chatRoutes.get('/chat/assistant', async (c) => {
   const userId = c.get('userId');
   const db = c.env.DB;
+  const requestedThreadId = c.req.query('threadId');
 
-  // Seed (or refresh) the brief message before reading. This is what
-  // makes Today render the brief as the most recent assistant message.
-  await ensureTodayBriefSeed(db, userId);
-
-  const thread = await dbGet<ThreadRow>(
-    db,
-    `SELECT * FROM chat_threads WHERE user_id = ? AND article_id = ? ORDER BY updated_at DESC LIMIT 1`,
-    [userId, ASSISTANT_THREAD_ARTICLE_ID],
-  );
-
-  if (!thread) {
-    return c.json({ ok: true, data: { thread: null, messages: [] } });
+  let thread: ThreadRow | null = null;
+  if (requestedThreadId) {
+    thread = await dbGet<ThreadRow>(
+      db,
+      `SELECT * FROM chat_threads WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
+      [requestedThreadId, userId],
+    );
+    if (!thread) {
+      return c.json({ ok: true, data: { thread: null, messages: [] } });
+    }
+  } else {
+    // Default behavior: ensure the brief seed lands in __assistant__
+    // and return that thread. Today's deprecated chat surface used
+    // this; new clients use /chat/agent endpoints instead.
+    await ensureTodayBriefSeed(db, userId);
+    thread = await dbGet<ThreadRow>(
+      db,
+      `SELECT * FROM chat_threads WHERE user_id = ? AND article_id = ? AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT 1`,
+      [userId, ASSISTANT_THREAD_ARTICLE_ID],
+    );
+    if (!thread) {
+      return c.json({ ok: true, data: { thread: null, messages: [] } });
+    }
   }
 
   const messages = await dbAll<MessageRow>(

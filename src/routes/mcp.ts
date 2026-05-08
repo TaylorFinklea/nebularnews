@@ -97,12 +97,7 @@ mcpRoutes.post('/mcp', async (c) => {
       }
 
       try {
-        const result = await handleToolCall(toolName, toolArgs, {
-          db,
-          userId,
-          req: c.req.raw,
-          env: c.env,
-        });
+        const result = await handleToolCall(toolName, toolArgs, { db, userId });
         return c.json(jsonRpcResult(id, result));
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Tool execution failed';

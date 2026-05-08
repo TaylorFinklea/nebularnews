@@ -24,11 +24,17 @@ export async function pollFeeds(env: Env): Promise<void> {
   const maxItemsPerPoll = parseInt(env.MAX_ITEMS_PER_POLL) || 100;
   const itemsPerFeed = Math.floor(maxItemsPerPoll / maxFeeds);
 
+  // Reddit and YouTube have their own pollers (poll-reddit, poll-youtube)
+  // because their fetch shape differs (Reddit JSON, YouTube uploads Atom
+  // with no etag support). RSS and Substack share this RSS pipeline.
   const feeds = await dbAll<Feed>(
     db,
     `SELECT id, url, etag, last_modified, error_count, scrape_mode, scrape_provider, feed_type
      FROM feeds
-     WHERE disabled = 0 AND feed_type NOT IN ('email_newsletter', 'web_clip') AND (next_poll_at IS NULL OR next_poll_at <= ?)
+     WHERE disabled = 0
+       AND source_type IN ('rss', 'substack')
+       AND feed_type NOT IN ('email_newsletter', 'web_clip')
+       AND (next_poll_at IS NULL OR next_poll_at <= ?)
      ORDER BY next_poll_at ASC
      LIMIT ?`,
     [now, maxFeeds],

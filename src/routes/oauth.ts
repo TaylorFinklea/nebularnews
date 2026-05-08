@@ -30,10 +30,133 @@ const CODE_TTL_MS = 10 * 60 * 1000;          // 10 minutes
 const ACCESS_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 // ---------------------------------------------------------------------------
-// GET /oauth/authorize
+// GET /favicon.ico — connector-card branding fallback. Browsers and some
+// MCP clients fetch this off the host root when no logo_uri is configured.
+// Served from R2 so the asset stays editable without a redeploy.
 // ---------------------------------------------------------------------------
 
-oauthRoutes.get('/oauth/authorize', async (c) => {
+oauthRoutes.get('/favicon.ico', async (c) => {
+  const obj = await c.env.R2_FALLBACK.get('icon.png');
+  if (!obj) {
+    return c.text('Not found', 404);
+  }
+  return new Response(obj.body, {
+    headers: {
+      'content-type': 'image/png',
+      'cache-control': 'public, max-age=86400',
+    },
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /.well-known/oauth-authorization-server — RFC 8414 discovery doc
+//
+// MCP clients (Claude.ai, ChatGPT) read this to find the authorize/token
+// endpoints instead of guessing path conventions. The `issuer` MUST match
+// the host the client used to fetch this metadata.
+// ---------------------------------------------------------------------------
+
+oauthRoutes.get('/.well-known/oauth-authorization-server', (c) => {
+  const url = new URL(c.req.url);
+  const issuer = `${url.protocol}//${url.host}`;
+  return c.json({
+    issuer,
+    authorization_endpoint: `${issuer}/authorize`,
+    token_endpoint: `${issuer}/token`,
+    registration_endpoint: `${issuer}/register`,
+    response_types_supported: ['code'],
+    grant_types_supported: ['authorization_code'],
+    code_challenge_methods_supported: ['S256', 'plain'],
+    token_endpoint_auth_methods_supported: ['client_secret_post', 'none'],
+    scopes_supported: ['mcp'],
+    // Branding for the connector card. RFC 8414 doesn't standardize these,
+    // but most clients (Claude.ai included) pick them up.
+    service_documentation: 'https://nebularnews.com',
+    op_policy_uri: 'https://nebularnews.com/privacy',
+    logo_uri: 'https://r2-fallback.nebularnews.com/icon.png',
+    client_uri: 'https://nebularnews.com',
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GET /.well-known/oauth-protected-resource — RFC 9728 metadata. Some MCP
+// clients fetch this from the protected-resource host first to discover the
+// authorization server.
+// ---------------------------------------------------------------------------
+
+oauthRoutes.get('/.well-known/oauth-protected-resource', (c) => {
+  const url = new URL(c.req.url);
+  const issuer = `${url.protocol}//${url.host}`;
+  return c.json({
+    resource: issuer,
+    authorization_servers: [issuer],
+    scopes_supported: ['mcp'],
+    resource_name: 'NebularNews',
+    resource_documentation: 'https://nebularnews.com',
+    logo_uri: 'https://r2-fallback.nebularnews.com/icon.png',
+  });
+});
+
+// ---------------------------------------------------------------------------
+// POST /register — RFC 7591 Dynamic Client Registration
+//
+// Lets MCP clients (Claude, ChatGPT, ad-hoc tools) self-register without a
+// pre-configured client_id/secret. Issues a public client (no secret) so the
+// only credentials a user needs are PKCE-protected. The seeded
+// `claude-desktop-prod` client stays available for clients that already have
+// it configured.
+// ---------------------------------------------------------------------------
+
+oauthRoutes.post('/register', async (c) => {
+  let body: {
+    redirect_uris?: unknown;
+    client_name?: unknown;
+    token_endpoint_auth_method?: unknown;
+    grant_types?: unknown;
+    response_types?: unknown;
+  };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'invalid_client_metadata', error_description: 'Body must be JSON' }, 400);
+  }
+
+  const redirectUris = Array.isArray(body.redirect_uris)
+    ? (body.redirect_uris as unknown[]).filter((u): u is string => typeof u === 'string' && /^https?:\/\//i.test(u))
+    : [];
+  if (redirectUris.length === 0) {
+    return c.json({ error: 'invalid_redirect_uri', error_description: 'redirect_uris must be a non-empty array of http(s) URIs' }, 400);
+  }
+
+  const clientName = typeof body.client_name === 'string' ? body.client_name.slice(0, 200) : null;
+  const clientId = `dcr-${nanoid(24)}`;
+  const now = Date.now();
+
+  await dbRun(
+    c.env.DB,
+    `INSERT INTO oauth_clients (id, client_id, client_secret, redirect_uris, client_name, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [clientId, clientId, '', JSON.stringify(redirectUris), clientName, now, now],
+  );
+
+  // Public-client response per RFC 7591. No client_secret — the client
+  // proves possession of the auth code via PKCE.
+  return c.json({
+    client_id: clientId,
+    client_id_issued_at: Math.floor(now / 1000),
+    redirect_uris: redirectUris,
+    client_name: clientName,
+    token_endpoint_auth_method: 'none',
+    grant_types: ['authorization_code'],
+    response_types: ['code'],
+  }, 201);
+});
+
+// ---------------------------------------------------------------------------
+// GET /authorize — OAuth 2.0 authorization endpoint
+// ---------------------------------------------------------------------------
+
+oauthRoutes.get('/authorize', async (c) => {
   const clientId = c.req.query('client_id') ?? '';
   const redirectUri = c.req.query('redirect_uri') ?? '';
   const responseType = c.req.query('response_type') ?? 'code';
@@ -109,10 +232,10 @@ oauthRoutes.get('/oauth/authorize', async (c) => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /oauth/token
+// POST /token — OAuth 2.0 token endpoint
 // ---------------------------------------------------------------------------
 
-oauthRoutes.post('/oauth/token', async (c) => {
+oauthRoutes.post('/token', async (c) => {
   // Accept both JSON and application/x-www-form-urlencoded — Claude/MCP
   // clients use the latter.
   let body: Record<string, string>;

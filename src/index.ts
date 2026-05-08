@@ -31,6 +31,10 @@ const app = new Hono<AppEnv>();
 const ALLOWED_WEB_ORIGINS = new Set<string>([
   'https://admin.nebularnews.com',
   'https://app.nebularnews.com',
+  // Claude.ai's MCP connector flow may issue browser-side fetches against
+  // /authorize, /token, and /.well-known/* from claude.ai during the OAuth
+  // handshake. Allow it explicitly so those requests aren't dropped.
+  'https://claude.ai',
 ]);
 app.use('*', cors({
   origin: (origin) => {
@@ -49,7 +53,11 @@ app.use('*', envelope());
 // Public routes (no auth required)
 app.route('/api', healthRoutes);
 app.route('/api', authRoutes);
-app.route('/api', oauthRoutes);
+// OAuth provider lives at the root path because MCP clients (Claude.ai)
+// expect /authorize and /token directly under the host, plus /.well-known/
+// for discovery metadata. Registering at '/' keeps these accessible from
+// https://api.nebularnews.com/authorize, /token, /.well-known/...
+app.route('/', oauthRoutes);
 
 // Protected routes (auth required)
 const protectedApi = new Hono<AppEnv>();

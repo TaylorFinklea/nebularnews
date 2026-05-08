@@ -70,6 +70,10 @@ mcpRoutes.post('/mcp', async (c) => {
         serverInfo: {
           name: 'nebularnews',
           version: '1.0.0',
+          // Non-standard but read by some clients (incl. Claude.ai's
+          // connector UI) for branding the connector card.
+          title: 'NebularNews',
+          iconUrl: 'https://r2-fallback.nebularnews.com/icon.png',
         },
       }));
     }
@@ -143,7 +147,9 @@ mcpRoutes.get('/mcp', async (c) => {
   return c.json({
     name: 'nebularnews',
     version: '1.0.0',
+    title: 'NebularNews',
+    iconUrl: 'https://r2-fallback.nebularnews.com/icon.png',
     protocolVersion: MCP_PROTOCOL_VERSION,
-    description: 'NebularNews MCP Server — search articles, get briefs, ask about your news',
+    description: 'NebularNews MCP Server — subscribe to feeds and read recent articles',
   });
 });

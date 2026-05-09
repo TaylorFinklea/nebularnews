@@ -33,15 +33,8 @@ bucket_name = "nebularnews-fallback-images"
 
 [vars]
 APP_ENV = "development"
-DEFAULT_PROVIDER = "anthropic"
-DEFAULT_MODEL_A = "claude-haiku-4-5-20251001"
-DEFAULT_MODEL_B = "claude-sonnet-4-6"
 MAX_FEEDS_PER_POLL = "12"
 MAX_ITEMS_PER_POLL = "120"
-APNS_KEY_ID = "R9GNGC6U6N"
-APNS_TEAM_ID = "K7CBQW6MPG"
-APNS_BUNDLE_ID = "com.nebularnews.ios"
-APNS_SANDBOX = "true"
 
 # ── Staging ──────────────────────────────────────────────────────────────────
 
@@ -63,15 +56,8 @@ bucket_name = "nebularnews-fallback-images"
 
 [env.staging.vars]
 APP_ENV = "staging"
-DEFAULT_PROVIDER = "anthropic"
-DEFAULT_MODEL_A = "claude-haiku-4-5-20251001"
-DEFAULT_MODEL_B = "claude-sonnet-4-6"
 MAX_FEEDS_PER_POLL = "12"
 MAX_ITEMS_PER_POLL = "120"
-APNS_KEY_ID = "R9GNGC6U6N"
-APNS_TEAM_ID = "K7CBQW6MPG"
-APNS_BUNDLE_ID = "com.nebularnews.ios"
-APNS_SANDBOX = "true"
 
 # ── Production ───────────────────────────────────────────────────────────────
 
@@ -94,12 +80,5 @@ bucket_name = "nebularnews-fallback-images"
 
 [env.production.vars]
 APP_ENV = "production"
-DEFAULT_PROVIDER = "anthropic"
-DEFAULT_MODEL_A = "claude-haiku-4-5-20251001"
-DEFAULT_MODEL_B = "claude-sonnet-4-6"
 MAX_FEEDS_PER_POLL = "8"
 MAX_ITEMS_PER_POLL = "60"
-APNS_KEY_ID = "R9GNGC6U6N"
-APNS_TEAM_ID = "K7CBQW6MPG"
-APNS_BUNDLE_ID = "com.nebularnews.ios"
-APNS_SANDBOX = "false"

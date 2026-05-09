@@ -3,6 +3,7 @@ import { XMLParser, XMLBuilder } from 'fast-xml-parser';
 import { nanoid } from 'nanoid';
 import type { AppEnv } from '../index';
 import { dbAll, dbGet, dbRun, dbBatch } from '../db/helpers';
+import { detectSource } from '../lib/source-detect';
 
 export const feedRoutes = new Hono<AppEnv>();
 
@@ -39,26 +40,48 @@ feedRoutes.get('/feeds', async (c) => {
   return c.json({ ok: true, data: rows });
 });
 
-// POST /feeds — subscribe to a feed by url
+// POST /feeds — subscribe to a feed. Body accepts:
+//   { url: <RSS URL> }                     (legacy)
+//   { source: <RSS URL | r/sub | UC… | substack URL>, source_type?: <override> }
 feedRoutes.post('/feeds', async (c) => {
   const userId = c.get('userId');
-  const body = await c.req.json<{ url: string; scrape_mode?: string; scrapeMode?: string }>();
-  const url = body.url;
+  const body = await c.req.json<{
+    url?: string;
+    source?: string;
+    source_type?: 'rss' | 'reddit' | 'youtube' | 'substack';
+    scrape_mode?: string;
+    scrapeMode?: string;
+  }>();
+
+  const rawInput = body.source ?? body.url ?? '';
+  if (!rawInput) {
+    return c.json({ ok: false, error: { code: 'bad_request', message: 'source or url is required' } }, 400);
+  }
+
+  const detected = detectSource(rawInput);
+  if ('error' in detected) {
+    return c.json({ ok: false, error: { code: 'bad_request', message: detected.error } }, 400);
+  }
+  const sourceType = body.source_type ?? detected.type;
+  const storedUrl = detected.url;
+
   const requestedMode = sanitizeScrapeMode(body.scrape_mode ?? body.scrapeMode);
 
-  let feed = await dbGet<Feed>(c.env.DB, `SELECT * FROM feeds WHERE url = ?`, [url]);
+  let feed = await dbGet<Feed>(
+    c.env.DB,
+    `SELECT * FROM feeds WHERE source_type = ? AND url = ?`,
+    [sourceType, storedUrl],
+  );
 
   if (!feed) {
     const feedId = nanoid();
     await dbRun(
       c.env.DB,
-      `INSERT INTO feeds (id, url, scrape_mode) VALUES (?, ?, ?)`,
-      [feedId, url, requestedMode ?? DEFAULT_SCRAPE_MODE],
+      `INSERT INTO feeds (id, url, source_type, scrape_mode) VALUES (?, ?, ?, ?)`,
+      [feedId, storedUrl, sourceType, requestedMode ?? DEFAULT_SCRAPE_MODE],
     );
-    feed = { id: feedId, url, title: null, site_url: null };
+    feed = { id: feedId, url: storedUrl, title: null, site_url: null };
   } else if (requestedMode) {
-    // Upgrade existing feed if caller asked for a more capable mode and the
-    // current setting is the conservative default.
     await dbRun(
       c.env.DB,
       `UPDATE feeds SET scrape_mode = ? WHERE id = ? AND scrape_mode = 'rss_only'`,
@@ -74,7 +97,7 @@ feedRoutes.post('/feeds', async (c) => {
     [nanoid(), userId, feed.id, Date.now()],
   );
 
-  return c.json({ ok: true, data: { id: feed.id } });
+  return c.json({ ok: true, data: { id: feed.id, source_type: sourceType } });
 });
 
 // DELETE /feeds/:id — unsubscribe from a feed

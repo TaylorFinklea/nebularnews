@@ -1,5 +1,6 @@
 import { nanoid } from 'nanoid';
 import { dbGet, dbAll, dbRun } from '../db/helpers';
+import { detectSource } from '../lib/source-detect';
 
 // ---------------------------------------------------------------------------
 // MCP tool surface — focused retrieval for an LLM client.
@@ -22,13 +23,13 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'add_feed',
-    description: 'Subscribe the user to a new RSS/Atom feed by URL. Returns the feed id. Use after the user confirms they want to subscribe.',
+    description: 'Subscribe the user to a new content source. Accepts: an RSS/Atom feed URL, a Substack publication URL (e.g. https://example.substack.com), a subreddit (e.g. r/birding or https://reddit.com/r/birding), or a YouTube channel ID (UC…) or /channel/UC… URL. Returns the feed id and detected source_type. Use after the user confirms.',
     inputSchema: {
       type: 'object' as const,
       properties: {
-        url: { type: 'string', description: 'Feed URL (RSS or Atom)' },
+        source: { type: 'string', description: 'RSS URL, Substack URL, subreddit (r/name), or YouTube channel id/URL' },
       },
-      required: ['url'],
+      required: ['source'],
     },
   },
   {
@@ -119,10 +120,11 @@ async function listFeeds(args: Record<string, unknown>, ctx: ToolContext): Promi
   const includePaused = args.include_paused === true;
 
   const feeds = await dbAll<{
-    id: string; title: string | null; site_url: string | null; url: string; paused: number;
+    id: string; title: string | null; site_url: string | null; url: string;
+    paused: number; source_type: string;
   }>(
     ctx.db,
-    `SELECT f.id, f.title, f.site_url, f.url, COALESCE(ufs.paused, 0) AS paused
+    `SELECT f.id, f.title, f.site_url, f.url, f.source_type, COALESCE(ufs.paused, 0) AS paused
      FROM feeds f
      JOIN user_feed_subscriptions ufs ON ufs.feed_id = f.id AND ufs.user_id = ?
      ${includePaused ? '' : 'WHERE COALESCE(ufs.paused, 0) = 0'}
@@ -137,7 +139,7 @@ async function listFeeds(args: Record<string, unknown>, ctx: ToolContext): Promi
   const lines = feeds.map(f => {
     const title = f.title ?? f.url;
     const link = f.site_url ?? f.url;
-    return `- **${title}**${f.paused ? ' (paused)' : ''}\n  id: \`${f.id}\`\n  ${link}`;
+    return `- [${f.source_type}] **${title}**${f.paused ? ' (paused)' : ''}\n  id: \`${f.id}\`\n  ${link}`;
   });
   return { content: [{ type: 'text', text: `# Subscribed feeds (${feeds.length})\n\n${lines.join('\n')}` }] };
 }
@@ -149,25 +151,31 @@ async function listFeeds(args: Record<string, unknown>, ctx: ToolContext): Promi
 const DEFAULT_SCRAPE_MODE = 'auto_fetch_on_empty';
 
 async function addFeed(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
-  const url = String(args.url ?? '').trim();
-  if (!url) {
-    return { content: [{ type: 'text', text: 'Missing feed URL.' }] };
-  }
-  if (!/^https?:\/\//i.test(url)) {
-    return { content: [{ type: 'text', text: 'URL must start with http:// or https://' }] };
+  // Accept either {source: ...} (preferred) or {url: ...} for back-compat
+  // with anything pinned to the older tool schema.
+  const raw = String(args.source ?? args.url ?? '').trim();
+  if (!raw) {
+    return { content: [{ type: 'text', text: 'Missing source. Pass an RSS URL, Substack URL, subreddit (r/name), or YouTube channel id (UC…).' }] };
   }
 
-  let feed = await dbGet<{ id: string; title: string | null; url: string }>(
-    ctx.db, `SELECT id, title, url FROM feeds WHERE url = ?`, [url],
+  const detected = detectSource(raw);
+  if ('error' in detected) {
+    return { content: [{ type: 'text', text: detected.error }] };
+  }
+
+  let feed = await dbGet<{ id: string; title: string | null; url: string; source_type: string }>(
+    ctx.db,
+    `SELECT id, title, url, source_type FROM feeds WHERE source_type = ? AND url = ?`,
+    [detected.type, detected.url],
   );
   if (!feed) {
     const feedId = nanoid();
     await dbRun(
       ctx.db,
-      `INSERT INTO feeds (id, url, scrape_mode) VALUES (?, ?, ?)`,
-      [feedId, url, DEFAULT_SCRAPE_MODE],
+      `INSERT INTO feeds (id, url, source_type, scrape_mode) VALUES (?, ?, ?, ?)`,
+      [feedId, detected.url, detected.type, DEFAULT_SCRAPE_MODE],
     );
-    feed = { id: feedId, title: null, url };
+    feed = { id: feedId, title: null, url: detected.url, source_type: detected.type };
   }
 
   await dbRun(
@@ -178,11 +186,11 @@ async function addFeed(args: Record<string, unknown>, ctx: ToolContext): Promise
     [nanoid(), ctx.userId, feed.id, Date.now()],
   );
 
-  const display = feed.title ?? feed.url;
+  const display = feed.title ?? detected.displayLabel;
   return {
     content: [{
       type: 'text',
-      text: `Subscribed to **${display}**.\nfeed_id: \`${feed.id}\`\n\nNew articles will appear in get_recent within ~5 minutes.`,
+      text: `Subscribed to **${display}** (${detected.type}).\nfeed_id: \`${feed.id}\`\n\nNew items will appear in get_recent within ~5 minutes.`,
     }],
   };
 }
@@ -238,11 +246,12 @@ async function getRecent(args: Record<string, unknown>, ctx: ToolContext): Promi
   const rows = await dbAll<{
     id: string; title: string; canonical_url: string; excerpt: string | null;
     author: string | null; published_at: number | null; fetched_at: number | null;
+    source_type: string;
     feed_id: string; feed_title: string | null;
   }>(
     ctx.db,
     `SELECT DISTINCT a.id, a.title, a.canonical_url, a.excerpt, a.author,
-            a.published_at, a.fetched_at,
+            a.published_at, a.fetched_at, a.source_type,
             asrc.feed_id, f.title AS feed_title
      FROM articles a
      JOIN article_sources asrc ON asrc.article_id = a.id
@@ -265,7 +274,7 @@ async function getRecent(args: Record<string, unknown>, ctx: ToolContext): Promi
     const date = ts ? new Date(ts).toISOString().slice(0, 10) : '?';
     const source = r.feed_title ? ` — *${r.feed_title}*` : '';
     const excerpt = r.excerpt ? `\n  ${r.excerpt.slice(0, 240)}${r.excerpt.length > 240 ? '…' : ''}` : '';
-    return `- [${date}] **${r.title}**${source}\n  id: \`${r.id}\`\n  ${r.canonical_url}${excerpt}`;
+    return `- [${date} · ${r.source_type}] **${r.title}**${source}\n  id: \`${r.id}\`\n  ${r.canonical_url}${excerpt}`;
   });
 
   return { content: [{ type: 'text', text: `# Recent articles (${rows.length})\n\n${lines.join('\n\n')}` }] };

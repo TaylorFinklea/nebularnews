@@ -73,6 +73,15 @@ protectedApi.route('/', adminRoutes);
 
 app.route('/api', protectedApi);
 
+// Root-level /mcp alias. MCP clients (Claude.ai connector wizard) expect the
+// JSON-RPC endpoint directly under the host. mcpRoutes registers at the
+// sub-path '/mcp' internally, so mounting at root gives /mcp alongside
+// /api/mcp.
+const mcpAlias = new Hono<AppEnv>();
+mcpAlias.use('*', requireAuth());
+mcpAlias.route('/', mcpRoutes);
+app.route('/', mcpAlias);
+
 export default {
   fetch: app.fetch,
   scheduled: async (

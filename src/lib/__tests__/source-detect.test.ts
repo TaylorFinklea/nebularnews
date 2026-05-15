@@ -47,6 +47,31 @@ describe('detectSource — existing patterns (regression)', () => {
   });
 });
 
+describe('detectSource — Hacker News', () => {
+  it('detects news.ycombinator.com host', () => {
+    expect(detectSource('https://news.ycombinator.com')).toEqual({
+      type: 'hn',
+      url: 'https://news.ycombinator.com/rss',
+      displayLabel: 'Hacker News',
+    });
+  });
+
+  it('detects the bare hostname', () => {
+    expect(detectSource('news.ycombinator.com')).toMatchObject({ type: 'hn' });
+  });
+
+  it('detects the rss URL directly', () => {
+    expect(detectSource('https://news.ycombinator.com/rss')).toMatchObject({
+      type: 'hn',
+      url: 'https://news.ycombinator.com/rss',
+    });
+  });
+
+  it('accepts the "hn" shorthand', () => {
+    expect(detectSource('hn')).toMatchObject({ type: 'hn' });
+  });
+});
+
 describe('expandFetchUrl — existing types', () => {
   it('expands subreddit shorthand to the .json listing URL', () => {
     expect(expandFetchUrl('reddit', 'r/birding')).toBe(

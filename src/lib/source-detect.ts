@@ -3,7 +3,7 @@
 // URL, subreddit shorthand, YouTube channel ID — and the right poller
 // picks it up later.
 
-export type SourceType = 'rss' | 'reddit' | 'youtube' | 'substack';
+export type SourceType = 'rss' | 'reddit' | 'youtube' | 'substack' | 'hn' | 'mastodon' | 'bluesky';
 
 export interface DetectedSource {
   /** Canonical type for storage in feeds.source_type. */
@@ -22,6 +22,7 @@ const YT_CHANNEL_URL_RE = /^https?:\/\/(?:www\.)?youtube\.com\/channel\/(UC[a-zA
 const YT_CHANNEL_ID_RE = /^UC[a-zA-Z0-9_-]{22}$/;
 const YT_HANDLE_RE = /^https?:\/\/(?:www\.)?youtube\.com\/@([a-zA-Z0-9_.-]+)/i;
 const SUBSTACK_RE = /^https?:\/\/([a-z0-9-]+)\.substack\.com\b/i;
+const HN_RE = /^(?:https?:\/\/)?(?:www\.)?news\.ycombinator\.com\b/i;
 
 export function detectSource(rawInput: string): DetectedSource | { error: string } {
   const input = rawInput.trim();
@@ -46,6 +47,15 @@ export function detectSource(rawInput: string): DetectedSource | { error: string
   if (YT_HANDLE_RE.test(input)) {
     return {
       error: 'YouTube @handles aren\'t supported yet — paste the channel ID (UC…) or the /channel/UC… URL. You can find it on the channel page → Share → Copy channel ID.',
+    };
+  }
+
+  // Hacker News — normalize to the stable RSS endpoint.
+  if (input.toLowerCase() === 'hn' || HN_RE.test(input)) {
+    return {
+      type: 'hn',
+      url: 'https://news.ycombinator.com/rss',
+      displayLabel: 'Hacker News',
     };
   }
 

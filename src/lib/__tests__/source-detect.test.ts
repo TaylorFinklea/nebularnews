@@ -70,6 +70,13 @@ describe('detectSource — Hacker News', () => {
   it('accepts the "hn" shorthand', () => {
     expect(detectSource('hn')).toMatchObject({ type: 'hn' });
   });
+
+  it('does not falsely match subdomain extensions of news.ycombinator.com', () => {
+    // Without anchoring, `\b` would let 'news.ycombinator.com.evil.com' match.
+    // The fix uses (?:\/|$) so this falls through to the rss branch.
+    const r = detectSource('https://news.ycombinator.com.evil.com');
+    expect(r).toMatchObject({ type: 'rss' });
+  });
 });
 
 describe('expandFetchUrl — existing types', () => {

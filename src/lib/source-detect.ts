@@ -22,7 +22,7 @@ const YT_CHANNEL_URL_RE = /^https?:\/\/(?:www\.)?youtube\.com\/channel\/(UC[a-zA
 const YT_CHANNEL_ID_RE = /^UC[a-zA-Z0-9_-]{22}$/;
 const YT_HANDLE_RE = /^https?:\/\/(?:www\.)?youtube\.com\/@([a-zA-Z0-9_.-]+)/i;
 const SUBSTACK_RE = /^https?:\/\/([a-z0-9-]+)\.substack\.com\b/i;
-const HN_RE = /^(?:https?:\/\/)?(?:www\.)?news\.ycombinator\.com\b/i;
+const HN_RE = /^(?:https?:\/\/)?(?:www\.)?news\.ycombinator\.com(?:\/|$)/i;
 
 export function detectSource(rawInput: string): DetectedSource | { error: string } {
   const input = rawInput.trim();

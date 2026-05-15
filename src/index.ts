@@ -14,6 +14,7 @@ import { adminRoutes } from './routes/admin';
 import { pollFeeds } from './cron/poll-feeds';
 import { pollReddit } from './cron/poll-reddit';
 import { pollYoutube } from './cron/poll-youtube';
+import { pollBluesky } from './cron/poll-bluesky';
 import { cleanup } from './cron/cleanup';
 import { retryEmptyArticles } from './cron/retry-empty-articles';
 
@@ -98,6 +99,7 @@ export default {
         ctx.waitUntil(run('poll-feeds', () => pollFeeds(env)));
         ctx.waitUntil(run('poll-reddit', () => pollReddit(env)));
         ctx.waitUntil(run('poll-youtube', () => pollYoutube(env)));
+        ctx.waitUntil(run('poll-bluesky', () => pollBluesky(env)));
         break;
       case '0 * * * *':
         ctx.waitUntil(run('retry-empty-articles', () => retryEmptyArticles(env)));

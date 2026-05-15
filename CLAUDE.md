@@ -64,7 +64,7 @@ Migrations live in `migrations/NNNN_name.sql` and are applied by `wrangler d1 mi
 
 | Cron            | Calls                                                  |
 |-----------------|--------------------------------------------------------|
-| `*/5 * * * *`   | `pollFeeds` + `pollReddit` + `pollYoutube` (parallel)  |
+| `*/5 * * * *`   | `pollFeeds` + `pollReddit` + `pollYoutube` + `pollBluesky` (parallel) |
 | `0 * * * *`     | `retryEmptyArticles`                                   |
 | `30 3 * * *`    | `cleanup`                                              |
 
@@ -72,9 +72,9 @@ Each is wrapped in a try/catch so one failure doesn't take the others down, and 
 
 ### Ingestion pipelines
 
-`src/cron/poll-feeds.ts` handles `source_type IN ('rss', 'substack')` — conditional GET with ETag/Last-Modified, deduplicates by `articles.canonical_url`, optionally scrapes full content via Steel or Browserless based on `feeds.scrape_mode` (`rss_only` | `auto_fetch_on_empty` | always). Reddit and YouTube are separate pollers because their fetch shape differs (Reddit JSON; YouTube uploads Atom with no ETag support).
+`src/cron/poll-feeds.ts` handles `source_type IN ('rss', 'substack', 'mastodon', 'hn')` — all RSS-shaped, so they share conditional GET with ETag/Last-Modified, dedup by `articles.canonical_url`, and optional scrape via Steel or Browserless based on `feeds.scrape_mode` (`rss_only` | `auto_fetch_on_empty` | always). Reddit, YouTube, and Bluesky poll separately because their fetch shape differs (Reddit JSON, YouTube uploads Atom with no ETag, Bluesky ATProto JSON via `src/lib/bluesky.ts`).
 
-`src/lib/source-detect.ts` is the single source of truth for parsing user-supplied source identifiers (RSS URL, `r/sub`, `UC…` channel ID, `*.substack.com`) into `{ type, url }` — used by both the HTTP `POST /api/feeds` route and the MCP `add_feed` tool so both surfaces accept the same shorthand.
+`src/lib/source-detect.ts` is the single source of truth for parsing user-supplied source identifiers into `{ type, url }`. Supports 7 source types: RSS URL, `r/sub` (Reddit), `UC…` channel ID (YouTube), `*.substack.com` (Substack), `@user@instance` or `https://instance/@user` (Mastodon), `news.ycombinator.com` or `hn` shorthand (HN), `https://bsky.app/profile/<handle>` or `@<handle>.bsky.social` (Bluesky). Used by both the HTTP `POST /api/feeds` route and the MCP `add_feed` tool. Note: at 7 source types this file is approaching the registry-refactor threshold mentioned in the M1 roadmap; consider extracting a `{ pattern, type, normalize() }` registry if an 8th type is added.
 
 ### MCP surface
 

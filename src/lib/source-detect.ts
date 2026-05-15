@@ -3,7 +3,7 @@
 // URL, subreddit shorthand, YouTube channel ID — and the right poller
 // picks it up later.
 
-export type SourceType = 'rss' | 'reddit' | 'youtube' | 'substack';
+export type SourceType = 'rss' | 'reddit' | 'youtube' | 'substack' | 'hn' | 'mastodon' | 'bluesky';
 
 export interface DetectedSource {
   /** Canonical type for storage in feeds.source_type. */
@@ -22,6 +22,23 @@ const YT_CHANNEL_URL_RE = /^https?:\/\/(?:www\.)?youtube\.com\/channel\/(UC[a-zA
 const YT_CHANNEL_ID_RE = /^UC[a-zA-Z0-9_-]{22}$/;
 const YT_HANDLE_RE = /^https?:\/\/(?:www\.)?youtube\.com\/@([a-zA-Z0-9_.-]+)/i;
 const SUBSTACK_RE = /^https?:\/\/([a-z0-9-]+)\.substack\.com\b/i;
+const HN_RE = /^(?:https?:\/\/)?(?:www\.)?news\.ycombinator\.com(?:\/|$)/i;
+const MASTODON_AT_RE = /^@([a-zA-Z0-9_]+)@([a-z0-9.-]+\.[a-z]{2,})$/i;
+const MASTODON_USER_URL_RE = /^https?:\/\/([a-z0-9.-]+\.[a-z]{2,})\/@([a-zA-Z0-9_]+)(?:\.rss)?\/?$/i;
+const MASTODON_USERS_URL_RE = /^https?:\/\/([a-z0-9.-]+\.[a-z]{2,})\/users\/([a-zA-Z0-9_]+)\/?$/i;
+const MASTODON_TAGS_URL_RE = /^https?:\/\/([a-z0-9.-]+\.[a-z]{2,})\/tags\/[a-zA-Z0-9_]+\/?$/i;
+const BSKY_URL_RE = /^https?:\/\/bsky\.app\/profile\/([a-z0-9.-]+)\/?$/i;
+// Bluesky @handle shorthand. Handle = valid domain name (label.label[.label]…).
+// Each label: starts/ends with [a-z0-9], hyphens only allowed in the middle.
+const BSKY_HANDLE_RE = /^@([a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+)$/i;
+
+function buildMastodonDetection(instance: string, user: string): DetectedSource {
+  return {
+    type: 'mastodon',
+    url: `https://${instance}/@${user}.rss`,
+    displayLabel: `@${user}@${instance}`,
+  };
+}
 
 export function detectSource(rawInput: string): DetectedSource | { error: string } {
   const input = rawInput.trim();
@@ -46,6 +63,62 @@ export function detectSource(rawInput: string): DetectedSource | { error: string
   if (YT_HANDLE_RE.test(input)) {
     return {
       error: 'YouTube @handles aren\'t supported yet — paste the channel ID (UC…) or the /channel/UC… URL. You can find it on the channel page → Share → Copy channel ID.',
+    };
+  }
+
+  // Bluesky — bsky.app profile URLs or single-@ handle shorthands.
+  // The URL form (/profile/) has no overlap with Mastodon URL patterns (/@user),
+  // so ordering vs. Mastodon doesn't matter for URLs. For the @handle form,
+  // the !MASTODON_AT_RE guard below is what prevents @user@instance from being
+  // claimed here — not the ordering.
+  const bskyUrl = input.match(BSKY_URL_RE);
+  if (bskyUrl) {
+    const handle = bskyUrl[1].toLowerCase();
+    return {
+      type: 'bluesky',
+      url: `https://bsky.app/profile/${handle}`,
+      displayLabel: `@${handle}`,
+    };
+  }
+
+  const bskyAt = input.match(BSKY_HANDLE_RE);
+  if (bskyAt && !MASTODON_AT_RE.test(input)) {
+    const handle = bskyAt[1].toLowerCase();
+    return {
+      type: 'bluesky',
+      url: `https://bsky.app/profile/${handle}`,
+      displayLabel: `@${handle}`,
+    };
+  }
+
+  // Mastodon — federated, so we can't validate the host. We accept any
+  // /@user URL or /users/<user> URL as Mastodon. This means non-Mastodon
+  // hosts that use the same path shape (e.g. Ghost author pages, GitHub
+  // /users/foo) will be misclassified as Mastodon and produce a broken
+  // feed. The single-user-operator workflow can recover by removing the
+  // feed; we don't denylist hosts because the list would need ongoing
+  // maintenance.
+  const mAt = input.match(MASTODON_AT_RE);
+  if (mAt) return buildMastodonDetection(mAt[2].toLowerCase(), mAt[1].toLowerCase());
+
+  const mUserUrl = input.match(MASTODON_USER_URL_RE);
+  if (mUserUrl) return buildMastodonDetection(mUserUrl[1].toLowerCase(), mUserUrl[2].toLowerCase());
+
+  const mUsersUrl = input.match(MASTODON_USERS_URL_RE);
+  if (mUsersUrl) return buildMastodonDetection(mUsersUrl[1].toLowerCase(), mUsersUrl[2].toLowerCase());
+
+  if (MASTODON_TAGS_URL_RE.test(input)) {
+    return {
+      error: 'Mastodon hashtag feeds aren\'t supported yet — paste a user URL like https://mastodon.social/@user instead.',
+    };
+  }
+
+  // Hacker News — normalize to the stable RSS endpoint.
+  if (input.toLowerCase() === 'hn' || HN_RE.test(input)) {
+    return {
+      type: 'hn',
+      url: 'https://news.ycombinator.com/rss',
+      displayLabel: 'Hacker News',
     };
   }
 

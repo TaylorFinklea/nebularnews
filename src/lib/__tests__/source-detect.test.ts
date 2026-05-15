@@ -113,6 +113,16 @@ describe('detectSource — Mastodon', () => {
     const r = detectSource('https://mastodon.social/tags/birding');
     expect(r).toHaveProperty('error');
   });
+
+  it('lowercases mixed-case usernames in the URL', () => {
+    // Mastodon serves RSS only at the lowercased path on many instances;
+    // storing the cased path produces silent 404s during polling.
+    expect(detectSource('https://mastodon.social/@Gargron')).toMatchObject({
+      type: 'mastodon',
+      url: 'https://mastodon.social/@gargron.rss',
+      displayLabel: '@gargron@mastodon.social',
+    });
+  });
 });
 
 describe('expandFetchUrl — existing types', () => {

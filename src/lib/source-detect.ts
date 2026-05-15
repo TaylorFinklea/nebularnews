@@ -62,16 +62,21 @@ export function detectSource(rawInput: string): DetectedSource | { error: string
     };
   }
 
-  // Mastodon — federated, no fixed host. Accept @user@instance, /@user URLs,
-  // /users/<user> paths, and explicit .rss URLs. Reject hashtag URLs.
+  // Mastodon — federated, so we can't validate the host. We accept any
+  // /@user URL or /users/<user> URL as Mastodon. This means non-Mastodon
+  // hosts that use the same path shape (e.g. Ghost author pages, GitHub
+  // /users/foo) will be misclassified as Mastodon and produce a broken
+  // feed. The single-user-operator workflow can recover by removing the
+  // feed; we don't denylist hosts because the list would need ongoing
+  // maintenance.
   const mAt = input.match(MASTODON_AT_RE);
-  if (mAt) return buildMastodonDetection(mAt[2].toLowerCase(), mAt[1]);
+  if (mAt) return buildMastodonDetection(mAt[2].toLowerCase(), mAt[1].toLowerCase());
 
   const mUserUrl = input.match(MASTODON_USER_URL_RE);
-  if (mUserUrl) return buildMastodonDetection(mUserUrl[1].toLowerCase(), mUserUrl[2]);
+  if (mUserUrl) return buildMastodonDetection(mUserUrl[1].toLowerCase(), mUserUrl[2].toLowerCase());
 
   const mUsersUrl = input.match(MASTODON_USERS_URL_RE);
-  if (mUsersUrl) return buildMastodonDetection(mUsersUrl[1].toLowerCase(), mUsersUrl[2]);
+  if (mUsersUrl) return buildMastodonDetection(mUsersUrl[1].toLowerCase(), mUsersUrl[2].toLowerCase());
 
   if (MASTODON_TAGS_URL_RE.test(input)) {
     return {

@@ -38,6 +38,7 @@ interface RawFeedView {
     embed?: {
       $type?: string;
       images?: Array<{ thumb?: string }>;
+      external?: { thumb?: string };
     };
     replyCount?: number;
     repostCount?: number;
@@ -72,14 +73,17 @@ export function parseAuthorFeed(raw: unknown): BlueskyPost[] {
     const canonical = atUriToBskyUrl(post.uri, post.author.handle);
     if (!canonical) continue;
 
+    const publishedAt = Date.parse(createdAt);
+    if (!Number.isFinite(publishedAt)) continue;
+
     out.push({
       uri: post.uri,
       canonicalUrl: canonical,
       text,
       authorHandle: post.author.handle,
       authorDisplayName: post.author.displayName ?? null,
-      publishedAt: Date.parse(createdAt),
-      imageUrl: post.embed?.images?.[0]?.thumb ?? null,
+      publishedAt,
+      imageUrl: post.embed?.images?.[0]?.thumb ?? post.embed?.external?.thumb ?? null,
       isReply: Boolean(post.record?.reply),
       raw: {
         replyCount: post.replyCount,

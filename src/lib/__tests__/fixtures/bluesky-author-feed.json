@@ -62,6 +62,32 @@
         },
         "indexedAt": "2026-05-01T14:00:01.000Z"
       }
+    },
+    {
+      "post": {
+        "uri": "at://did:plc:author1/app.bsky.feed.post/3kllink",
+        "cid": "bafycid5",
+        "author": { "did": "did:plc:author1", "handle": "alice.bsky.social", "displayName": "Alice" },
+        "record": {
+          "$type": "app.bsky.feed.post",
+          "text": "Sharing an article about RSS.",
+          "createdAt": "2026-05-01T15:00:00.000Z",
+          "embed": {
+            "$type": "app.bsky.embed.external",
+            "external": { "uri": "https://example.com/article", "title": "Article", "description": "..." }
+          }
+        },
+        "embed": {
+          "$type": "app.bsky.embed.external#view",
+          "external": {
+            "uri": "https://example.com/article",
+            "title": "Article",
+            "description": "...",
+            "thumb": "https://cdn.bsky.app/img/feed_thumbnail/plain/did:plc:author1/bafyext@jpeg"
+          }
+        },
+        "indexedAt": "2026-05-01T15:00:01.000Z"
+      }
     }
   ]
 }

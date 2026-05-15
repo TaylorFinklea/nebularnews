@@ -42,7 +42,7 @@ describe('atUriToBskyUrl', () => {
 describe('parseAuthorFeed', () => {
   it('returns one record per non-repost post', () => {
     const out = parseAuthorFeed(sampleFeed);
-    expect(out).toHaveLength(3); // skip the repost
+    expect(out).toHaveLength(4); // skip the repost
   });
 
   it('skips reposts (authored by someone else)', () => {
@@ -74,5 +74,24 @@ describe('parseAuthorFeed', () => {
   it('returns empty array for missing or malformed feed', () => {
     expect(parseAuthorFeed({})).toEqual([]);
     expect(parseAuthorFeed({ feed: null })).toEqual([]);
+  });
+
+  it('extracts thumbnail from external link-card embeds', () => {
+    const out = parseAuthorFeed(sampleFeed);
+    const linkCard = out.find((p) => p.uri.includes('3kllink'))!;
+    expect(linkCard.imageUrl).toMatch(/^https:\/\/cdn\.bsky\.app\/img\/feed_thumbnail\//);
+  });
+
+  it('skips posts with malformed createdAt', () => {
+    const broken = {
+      feed: [{
+        post: {
+          uri: 'at://did:plc:author1/app.bsky.feed.post/3klbad',
+          author: { handle: 'alice.bsky.social' },
+          record: { text: 'broken date', createdAt: 'NOT-A-DATE' },
+        },
+      }],
+    };
+    expect(parseAuthorFeed(broken)).toEqual([]);
   });
 });

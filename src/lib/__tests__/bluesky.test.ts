@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { describe, it, expect } from 'vitest';
-import { atUriToBskyUrl, parseAuthorFeed } from '../bluesky';
+import { atUriToBskyUrl, parseAuthorFeed, authorFeedUrl } from '../bluesky';
 
 const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
 const sampleFeed = JSON.parse(readFileSync(join(fixturesDir, 'bluesky-author-feed.json'), 'utf8'));
@@ -93,5 +93,18 @@ describe('parseAuthorFeed', () => {
       }],
     };
     expect(parseAuthorFeed(broken)).toEqual([]);
+  });
+});
+
+describe('authorFeedUrl', () => {
+  it('builds the public ATProto endpoint URL for a handle', () => {
+    expect(authorFeedUrl('alice.bsky.social', 30)).toBe(
+      'https://public.api.bsky.app/xrpc/app.bsky.feed.getAuthorFeed?actor=alice.bsky.social&limit=30',
+    );
+  });
+
+  it('clamps limit between 1 and 100 (ATProto max)', () => {
+    expect(authorFeedUrl('a', 0)).toMatch(/limit=1$/);
+    expect(authorFeedUrl('a', 9999)).toMatch(/limit=100$/);
   });
 });

@@ -94,3 +94,15 @@ export function parseAuthorFeed(raw: unknown): BlueskyPost[] {
   }
   return out;
 }
+
+const BSKY_PUBLIC_API = 'https://public.api.bsky.app';
+
+/**
+ * Build the public unauthenticated ATProto endpoint URL for an author's
+ * feed. `actor` accepts handle or DID; we pass the handle for now and let
+ * the server resolve it. Limit is clamped to 1–100 (ATProto's hard max).
+ */
+export function authorFeedUrl(actor: string, limit: number): string {
+  const clamped = Math.max(1, Math.min(100, Math.floor(limit)));
+  return `${BSKY_PUBLIC_API}/xrpc/app.bsky.feed.getAuthorFeed?actor=${encodeURIComponent(actor)}&limit=${clamped}`;
+}

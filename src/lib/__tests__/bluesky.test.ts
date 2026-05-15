@@ -17,4 +17,18 @@ describe('atUriToBskyUrl', () => {
     expect(atUriToBskyUrl('not-an-at-uri', 'h')).toBeNull();
     expect(atUriToBskyUrl('', 'h')).toBeNull();
   });
+
+  it('accepts a did:web: DID variant', () => {
+    const uri = 'at://did:web:example.com/app.bsky.feed.post/3klabcxyz';
+    expect(atUriToBskyUrl(uri, 'example.bsky.social')).toBe(
+      'https://bsky.app/profile/example.bsky.social/post/3klabcxyz',
+    );
+  });
+
+  it('rejects rkeys with uppercase letters (case-sensitive per ATProto spec)', () => {
+    // ATProto rkeys are lowercase base32-sortable. Mixed-case rkeys would
+    // produce broken bsky.app URLs, so detection must reject them.
+    const uri = 'at://did:plc:abc/app.bsky.feed.post/3KABCXYZ';
+    expect(atUriToBskyUrl(uri, 'taylor.bsky.social')).toBeNull();
+  });
 });

@@ -1,7 +1,7 @@
 // Pure helpers for the Bluesky / ATProto poller. Designed to be testable
 // without network or DB.
 
-const AT_POST_RE = /^at:\/\/(did:[a-z0-9:_.-]+)\/app\.bsky\.feed\.post\/([a-z0-9]+)$/i;
+const AT_POST_RE = /^at:\/\/(did:[a-z0-9:_.-]+)\/app\.bsky\.feed\.post\/([a-z0-9]+)$/;
 
 /**
  * Convert an ATProto post URI to its public bsky.app URL.

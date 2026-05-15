@@ -70,7 +70,7 @@ export async function pollBluesky(env: Env): Promise<void> {
           await dbRun(
             db,
             `UPDATE articles SET source_data_json = ? WHERE id = ?`,
-            [JSON.stringify(post.raw), existing.id],
+            [JSON.stringify({ ...post.raw, isReply: post.isReply, handle: post.authorHandle }), existing.id],
           );
           continue;
         }

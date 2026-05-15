@@ -12,6 +12,10 @@ wrangler.generated.toml
 .dev/worktree/
 .env*.local
 
+# pnpm experiments — repo uses npm, package-lock.json is authoritative.
+pnpm-lock.yaml
+pnpm-workspace.yaml
+
 # Secrets — defense in depth. Apple keys, GCP service accounts, etc.
 *.p8
 AuthKey_*.p8

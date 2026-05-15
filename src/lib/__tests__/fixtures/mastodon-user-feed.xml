@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/" xmlns:webfeeds="http://webfeeds.org/rss/1.0">
+  <channel>
+    <title>molly0xfff (@molly0xfff@hachyderm.io)</title>
+    <description>Public posts from @molly0xfff@hachyderm.io</description>
+    <link>https://hachyderm.io/@molly0xfff</link>
+    <webfeeds:icon>https://hachyderm.io/system/accounts/avatars/000.png</webfeeds:icon>
+    <item>
+      <guid isPermaLink="true">https://hachyderm.io/@molly0xfff/111111111111111111</guid>
+      <link>https://hachyderm.io/@molly0xfff/111111111111111111</link>
+      <pubDate>Mon, 11 May 2026 14:32:00 +0000</pubDate>
+      <description>&lt;p&gt;A sample Mastodon post body with HTML markup.&lt;/p&gt;</description>
+    </item>
+    <item>
+      <guid isPermaLink="true">https://hachyderm.io/@molly0xfff/111111111111111112</guid>
+      <link>https://hachyderm.io/@molly0xfff/111111111111111112</link>
+      <pubDate>Mon, 11 May 2026 15:00:00 +0000</pubDate>
+      <description>&lt;p&gt;A second post with &lt;a href="https://example.com"&gt;a link&lt;/a&gt;.&lt;/p&gt;</description>
+      <media:thumbnail url="https://files.hachyderm.io/media_attachments/files/000/000/001/small/thumb.jpg" />
+    </item>
+  </channel>
+</rss>

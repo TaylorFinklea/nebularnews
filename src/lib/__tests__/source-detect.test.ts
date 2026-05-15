@@ -79,6 +79,42 @@ describe('detectSource — Hacker News', () => {
   });
 });
 
+describe('detectSource — Mastodon', () => {
+  it('detects mastodon.social @user URL', () => {
+    expect(detectSource('https://mastodon.social/@gargron')).toEqual({
+      type: 'mastodon',
+      url: 'https://mastodon.social/@gargron.rss',
+      displayLabel: '@gargron@mastodon.social',
+    });
+  });
+
+  it('detects /users/<user> form', () => {
+    expect(detectSource('https://hachyderm.io/users/molly0xfff')).toMatchObject({
+      type: 'mastodon',
+      url: 'https://hachyderm.io/@molly0xfff.rss',
+    });
+  });
+
+  it('detects fediverse @user@instance shorthand', () => {
+    expect(detectSource('@gargron@mastodon.social')).toMatchObject({
+      type: 'mastodon',
+      url: 'https://mastodon.social/@gargron.rss',
+    });
+  });
+
+  it('accepts the explicit .rss URL unchanged', () => {
+    expect(detectSource('https://mastodon.social/@gargron.rss')).toMatchObject({
+      type: 'mastodon',
+      url: 'https://mastodon.social/@gargron.rss',
+    });
+  });
+
+  it('rejects mastodon.social hashtag URLs (not supported yet)', () => {
+    const r = detectSource('https://mastodon.social/tags/birding');
+    expect(r).toHaveProperty('error');
+  });
+});
+
 describe('expandFetchUrl — existing types', () => {
   it('expands subreddit shorthand to the .json listing URL', () => {
     expect(expandFetchUrl('reddit', 'r/birding')).toBe(

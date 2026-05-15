@@ -23,6 +23,18 @@ const YT_CHANNEL_ID_RE = /^UC[a-zA-Z0-9_-]{22}$/;
 const YT_HANDLE_RE = /^https?:\/\/(?:www\.)?youtube\.com\/@([a-zA-Z0-9_.-]+)/i;
 const SUBSTACK_RE = /^https?:\/\/([a-z0-9-]+)\.substack\.com\b/i;
 const HN_RE = /^(?:https?:\/\/)?(?:www\.)?news\.ycombinator\.com(?:\/|$)/i;
+const MASTODON_AT_RE = /^@([a-zA-Z0-9_]+)@([a-z0-9.-]+\.[a-z]{2,})$/i;
+const MASTODON_USER_URL_RE = /^https?:\/\/([a-z0-9.-]+\.[a-z]{2,})\/@([a-zA-Z0-9_]+)(?:\.rss)?\/?$/i;
+const MASTODON_USERS_URL_RE = /^https?:\/\/([a-z0-9.-]+\.[a-z]{2,})\/users\/([a-zA-Z0-9_]+)\/?$/i;
+const MASTODON_TAGS_URL_RE = /^https?:\/\/([a-z0-9.-]+\.[a-z]{2,})\/tags\/[a-zA-Z0-9_]+\/?$/i;
+
+function buildMastodonDetection(instance: string, user: string): DetectedSource {
+  return {
+    type: 'mastodon',
+    url: `https://${instance}/@${user}.rss`,
+    displayLabel: `@${user}@${instance}`,
+  };
+}
 
 export function detectSource(rawInput: string): DetectedSource | { error: string } {
   const input = rawInput.trim();
@@ -47,6 +59,23 @@ export function detectSource(rawInput: string): DetectedSource | { error: string
   if (YT_HANDLE_RE.test(input)) {
     return {
       error: 'YouTube @handles aren\'t supported yet — paste the channel ID (UC…) or the /channel/UC… URL. You can find it on the channel page → Share → Copy channel ID.',
+    };
+  }
+
+  // Mastodon — federated, no fixed host. Accept @user@instance, /@user URLs,
+  // /users/<user> paths, and explicit .rss URLs. Reject hashtag URLs.
+  const mAt = input.match(MASTODON_AT_RE);
+  if (mAt) return buildMastodonDetection(mAt[2].toLowerCase(), mAt[1]);
+
+  const mUserUrl = input.match(MASTODON_USER_URL_RE);
+  if (mUserUrl) return buildMastodonDetection(mUserUrl[1].toLowerCase(), mUserUrl[2]);
+
+  const mUsersUrl = input.match(MASTODON_USERS_URL_RE);
+  if (mUsersUrl) return buildMastodonDetection(mUsersUrl[1].toLowerCase(), mUsersUrl[2]);
+
+  if (MASTODON_TAGS_URL_RE.test(input)) {
+    return {
+      error: 'Mastodon hashtag feeds aren\'t supported yet — paste a user URL like https://mastodon.social/@user instead.',
     };
   }
 

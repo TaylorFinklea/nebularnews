@@ -1,0 +1,67 @@
+{
+  "feed": [
+    {
+      "post": {
+        "uri": "at://did:plc:author1/app.bsky.feed.post/3klpost1",
+        "cid": "bafycid1",
+        "author": { "did": "did:plc:author1", "handle": "alice.bsky.social", "displayName": "Alice" },
+        "record": {
+          "$type": "app.bsky.feed.post",
+          "text": "Hello Bluesky from the test fixture.",
+          "createdAt": "2026-05-01T12:00:00.000Z"
+        },
+        "indexedAt": "2026-05-01T12:00:01.000Z",
+        "replyCount": 0, "repostCount": 1, "likeCount": 3
+      }
+    },
+    {
+      "post": {
+        "uri": "at://did:plc:other/app.bsky.feed.post/3klrepost",
+        "cid": "bafycid2",
+        "author": { "did": "did:plc:other", "handle": "bob.bsky.social", "displayName": "Bob" },
+        "record": { "$type": "app.bsky.feed.post", "text": "A post Bob wrote.", "createdAt": "2026-04-30T10:00:00.000Z" },
+        "indexedAt": "2026-04-30T10:00:01.000Z"
+      },
+      "reason": {
+        "$type": "app.bsky.feed.defs#reasonRepost",
+        "by": { "did": "did:plc:author1", "handle": "alice.bsky.social" },
+        "indexedAt": "2026-05-01T08:00:00.000Z"
+      }
+    },
+    {
+      "post": {
+        "uri": "at://did:plc:author1/app.bsky.feed.post/3klreply",
+        "cid": "bafycid3",
+        "author": { "did": "did:plc:author1", "handle": "alice.bsky.social", "displayName": "Alice" },
+        "record": {
+          "$type": "app.bsky.feed.post",
+          "text": "Reply text here.",
+          "createdAt": "2026-05-01T13:00:00.000Z",
+          "reply": { "root": { "uri": "at://did:plc:x/app.bsky.feed.post/3root" }, "parent": { "uri": "at://did:plc:x/app.bsky.feed.post/3parent" } }
+        },
+        "indexedAt": "2026-05-01T13:00:01.000Z"
+      }
+    },
+    {
+      "post": {
+        "uri": "at://did:plc:author1/app.bsky.feed.post/3klimage",
+        "cid": "bafycid4",
+        "author": { "did": "did:plc:author1", "handle": "alice.bsky.social", "displayName": "Alice" },
+        "record": {
+          "$type": "app.bsky.feed.post",
+          "text": "Post with an image.",
+          "createdAt": "2026-05-01T14:00:00.000Z",
+          "embed": {
+            "$type": "app.bsky.embed.images",
+            "images": [{ "alt": "test", "image": { "ref": { "$link": "bafyimg" }, "mimeType": "image/jpeg", "size": 1234 } }]
+          }
+        },
+        "embed": {
+          "$type": "app.bsky.embed.images#view",
+          "images": [{ "thumb": "https://cdn.bsky.app/img/feed_thumbnail/plain/did:plc:author1/bafyimg@jpeg", "fullsize": "https://cdn.bsky.app/img/feed_fullsize/plain/did:plc:author1/bafyimg@jpeg", "alt": "test" }]
+        },
+        "indexedAt": "2026-05-01T14:00:01.000Z"
+      }
+    }
+  ]
+}

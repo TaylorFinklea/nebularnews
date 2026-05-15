@@ -152,6 +152,14 @@ describe('detectSource — Bluesky', () => {
     // Two-part fediverse form should stay Mastodon
     expect(detectSource('@gargron@mastodon.social')).toMatchObject({ type: 'mastodon' });
   });
+
+  it('rejects handles with hyphens at label boundaries', () => {
+    // Bluesky handles are domain names; RFC 1123 forbids leading/trailing
+    // hyphens per label. Bad handles must NOT be claimed as Bluesky.
+    expect(detectSource('@-foo.bsky.social')).not.toMatchObject({ type: 'bluesky' });
+    expect(detectSource('@foo-.bsky.social')).not.toMatchObject({ type: 'bluesky' });
+    expect(detectSource('@foo.-bar.social')).not.toMatchObject({ type: 'bluesky' });
+  });
 });
 
 describe('expandFetchUrl — existing types', () => {

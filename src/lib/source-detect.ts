@@ -28,7 +28,9 @@ const MASTODON_USER_URL_RE = /^https?:\/\/([a-z0-9.-]+\.[a-z]{2,})\/@([a-zA-Z0-9
 const MASTODON_USERS_URL_RE = /^https?:\/\/([a-z0-9.-]+\.[a-z]{2,})\/users\/([a-zA-Z0-9_]+)\/?$/i;
 const MASTODON_TAGS_URL_RE = /^https?:\/\/([a-z0-9.-]+\.[a-z]{2,})\/tags\/[a-zA-Z0-9_]+\/?$/i;
 const BSKY_URL_RE = /^https?:\/\/bsky\.app\/profile\/([a-z0-9.-]+)\/?$/i;
-const BSKY_HANDLE_RE = /^@([a-z0-9-]+(?:\.[a-z0-9-]+)+)$/i; // single-@ + at least one dot
+// Bluesky @handle shorthand. Handle = valid domain name (label.label[.label]…).
+// Each label: starts/ends with [a-z0-9], hyphens only allowed in the middle.
+const BSKY_HANDLE_RE = /^@([a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+)$/i;
 
 function buildMastodonDetection(instance: string, user: string): DetectedSource {
   return {
@@ -65,8 +67,10 @@ export function detectSource(rawInput: string): DetectedSource | { error: string
   }
 
   // Bluesky — bsky.app profile URLs or single-@ handle shorthands.
-  // Must be checked BEFORE the Mastodon block so the /@user URL shape
-  // on bsky.app isn't claimed by the Mastodon /@user pattern.
+  // The URL form (/profile/) has no overlap with Mastodon URL patterns (/@user),
+  // so ordering vs. Mastodon doesn't matter for URLs. For the @handle form,
+  // the !MASTODON_AT_RE guard below is what prevents @user@instance from being
+  // claimed here — not the ordering.
   const bskyUrl = input.match(BSKY_URL_RE);
   if (bskyUrl) {
     const handle = bskyUrl[1].toLowerCase();

@@ -125,6 +125,35 @@ describe('detectSource — Mastodon', () => {
   });
 });
 
+describe('detectSource — Bluesky', () => {
+  it('detects a bsky.app profile URL', () => {
+    expect(detectSource('https://bsky.app/profile/taylor.bsky.social')).toEqual({
+      type: 'bluesky',
+      url: 'https://bsky.app/profile/taylor.bsky.social',
+      displayLabel: '@taylor.bsky.social',
+    });
+  });
+
+  it('detects a custom-domain handle URL', () => {
+    expect(detectSource('https://bsky.app/profile/jay.bsky.team')).toMatchObject({
+      type: 'bluesky',
+      displayLabel: '@jay.bsky.team',
+    });
+  });
+
+  it('detects an @handle shorthand', () => {
+    expect(detectSource('@taylor.bsky.social')).toMatchObject({
+      type: 'bluesky',
+      url: 'https://bsky.app/profile/taylor.bsky.social',
+    });
+  });
+
+  it('does NOT collide with Mastodon @user@instance form', () => {
+    // Two-part fediverse form should stay Mastodon
+    expect(detectSource('@gargron@mastodon.social')).toMatchObject({ type: 'mastodon' });
+  });
+});
+
 describe('expandFetchUrl — existing types', () => {
   it('expands subreddit shorthand to the .json listing URL', () => {
     expect(expandFetchUrl('reddit', 'r/birding')).toBe(

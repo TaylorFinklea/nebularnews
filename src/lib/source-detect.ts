@@ -27,6 +27,8 @@ const MASTODON_AT_RE = /^@([a-zA-Z0-9_]+)@([a-z0-9.-]+\.[a-z]{2,})$/i;
 const MASTODON_USER_URL_RE = /^https?:\/\/([a-z0-9.-]+\.[a-z]{2,})\/@([a-zA-Z0-9_]+)(?:\.rss)?\/?$/i;
 const MASTODON_USERS_URL_RE = /^https?:\/\/([a-z0-9.-]+\.[a-z]{2,})\/users\/([a-zA-Z0-9_]+)\/?$/i;
 const MASTODON_TAGS_URL_RE = /^https?:\/\/([a-z0-9.-]+\.[a-z]{2,})\/tags\/[a-zA-Z0-9_]+\/?$/i;
+const BSKY_URL_RE = /^https?:\/\/bsky\.app\/profile\/([a-z0-9.-]+)\/?$/i;
+const BSKY_HANDLE_RE = /^@([a-z0-9-]+(?:\.[a-z0-9-]+)+)$/i; // single-@ + at least one dot
 
 function buildMastodonDetection(instance: string, user: string): DetectedSource {
   return {
@@ -59,6 +61,29 @@ export function detectSource(rawInput: string): DetectedSource | { error: string
   if (YT_HANDLE_RE.test(input)) {
     return {
       error: 'YouTube @handles aren\'t supported yet — paste the channel ID (UC…) or the /channel/UC… URL. You can find it on the channel page → Share → Copy channel ID.',
+    };
+  }
+
+  // Bluesky — bsky.app profile URLs or single-@ handle shorthands.
+  // Must be checked BEFORE the Mastodon block so the /@user URL shape
+  // on bsky.app isn't claimed by the Mastodon /@user pattern.
+  const bskyUrl = input.match(BSKY_URL_RE);
+  if (bskyUrl) {
+    const handle = bskyUrl[1].toLowerCase();
+    return {
+      type: 'bluesky',
+      url: `https://bsky.app/profile/${handle}`,
+      displayLabel: `@${handle}`,
+    };
+  }
+
+  const bskyAt = input.match(BSKY_HANDLE_RE);
+  if (bskyAt && !MASTODON_AT_RE.test(input)) {
+    const handle = bskyAt[1].toLowerCase();
+    return {
+      type: 'bluesky',
+      url: `https://bsky.app/profile/${handle}`,
+      displayLabel: `@${handle}`,
     };
   }
 

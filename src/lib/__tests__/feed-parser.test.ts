@@ -45,11 +45,13 @@ describe('parseFeed — Hacker News front page', () => {
     expect(parsed.title).toBe('Hacker News');
   });
 
-  it('extracts items with title and link', () => {
+  it('extracts items with title, link, and guid', () => {
     const parsed = parseFeed(hnXml);
     expect(parsed.items).toHaveLength(2);
     expect(parsed.items[0].title).toBe('Show HN: Something cool');
     expect(parsed.items[0].url).toBe('https://example.com/cool-thing');
+    expect(parsed.items[0].guid).toBe('https://news.ycombinator.com/item?id=99999999');
+    expect(parsed.items[1].guid).toBe('https://news.ycombinator.com/item?id=99999998');
   });
 
   it('extracts publication time', () => {

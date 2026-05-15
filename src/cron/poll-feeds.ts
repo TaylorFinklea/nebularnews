@@ -13,6 +13,7 @@ type Feed = {
   scrape_mode: string;
   scrape_provider: string | null;
   feed_type: string;
+  source_type: string;
 };
 
 const FIVE_MINUTES_MS = 5 * 60 * 1000;
@@ -30,7 +31,7 @@ export async function pollFeeds(env: Env): Promise<void> {
   // Mastodon (per-user .rss endpoints) and HN (front-page .rss) also flow through here.
   const feeds = await dbAll<Feed>(
     db,
-    `SELECT id, url, etag, last_modified, error_count, scrape_mode, scrape_provider, feed_type
+    `SELECT id, url, etag, last_modified, error_count, scrape_mode, scrape_provider, feed_type, source_type
      FROM feeds
      WHERE disabled = 0
        AND source_type IN ('rss', 'substack', 'mastodon', 'hn')
@@ -94,8 +95,8 @@ export async function pollFeeds(env: Env): Promise<void> {
           const wordCount = item.contentText ? item.contentText.split(/\s+/).filter(Boolean).length : 0;
           const excerpt = item.contentText ? item.contentText.slice(0, 300) : null;
           await dbRun(db,
-            `INSERT INTO articles (id, title, canonical_url, guid, author, content_html, content_text, excerpt, word_count, image_url, published_at, fetched_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO articles (id, title, canonical_url, guid, author, content_html, content_text, excerpt, word_count, image_url, published_at, fetched_at, source_type)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               articleId,
               item.title,
@@ -109,6 +110,7 @@ export async function pollFeeds(env: Env): Promise<void> {
               item.imageUrl,
               item.publishedAt,
               now,
+              feed.source_type,
             ],
           );
           await dbRun(db,

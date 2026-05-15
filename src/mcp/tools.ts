@@ -23,7 +23,7 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'add_feed',
-    description: 'Subscribe the user to a new content source. Accepts: an RSS/Atom feed URL, a Substack publication URL (e.g. https://example.substack.com), a subreddit (e.g. r/birding or https://reddit.com/r/birding), or a YouTube channel ID (UC…) or /channel/UC… URL. Returns the feed id and detected source_type. Use after the user confirms.',
+    description: 'Subscribe the user to a new content source. Accepts: an RSS/Atom feed URL, a Substack publication URL (e.g. https://example.substack.com), a subreddit (e.g. r/birding or https://reddit.com/r/birding), a YouTube channel ID (UC…) or /channel/UC… URL, a Hacker News URL or "hn" shorthand, a Mastodon user URL (e.g. https://mastodon.social/@user) or fediverse handle (@user@instance), or a Bluesky profile URL (e.g. https://bsky.app/profile/handle.bsky.social) or @handle.bsky.social shorthand. Returns the feed id and detected source_type. Use after the user confirms.',
     inputSchema: {
       type: 'object' as const,
       properties: {

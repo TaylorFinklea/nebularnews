@@ -8,6 +8,7 @@
       <title>Show HN: Something cool</title>
       <link>https://example.com/cool-thing</link>
       <pubDate>Mon, 11 May 2026 12:00:00 +0000</pubDate>
+      <guid>https://news.ycombinator.com/item?id=99999999</guid>
       <comments>https://news.ycombinator.com/item?id=99999999</comments>
       <description>&lt;a href="https://news.ycombinator.com/item?id=99999999"&gt;Comments&lt;/a&gt;</description>
     </item>
@@ -15,6 +16,7 @@
       <title>An interesting article about RSS</title>
       <link>https://blog.example.org/rss-is-cool</link>
       <pubDate>Mon, 11 May 2026 13:30:00 +0000</pubDate>
+      <guid>https://news.ycombinator.com/item?id=99999998</guid>
       <comments>https://news.ycombinator.com/item?id=99999998</comments>
       <description>&lt;a href="https://news.ycombinator.com/item?id=99999998"&gt;Comments&lt;/a&gt;</description>
     </item>

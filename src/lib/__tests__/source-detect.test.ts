@@ -16,8 +16,11 @@ describe('detectSource — existing patterns (regression)', () => {
   });
 
   it('detects YouTube channel URLs', () => {
-    const r = detectSource('https://www.youtube.com/channel/UC1234567890123456789012');
-    expect(r).toMatchObject({ type: 'youtube', url: 'UC1234567890123456789012' });
+    expect(detectSource('https://www.youtube.com/channel/UC1234567890123456789012')).toEqual({
+      type: 'youtube',
+      url: 'UC1234567890123456789012',
+      displayLabel: 'YouTube: UC1234567890123456789012',
+    });
   });
 
   it('rejects YouTube @handles with a helpful message', () => {

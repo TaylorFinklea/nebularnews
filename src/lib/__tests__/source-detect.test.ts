@@ -229,4 +229,26 @@ describe('detectSource — YouTube @handle resolution', () => {
     const result = await detectSource('https://youtube.com/@MKBHD');
     expect(result).toHaveProperty('error');
   });
+
+  it('handles canonical link with extra attributes before rel', async () => {
+    const html = `
+      <html><head>
+        <link type="text/html" rel="canonical" href="https://www.youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ">
+      </head><body></body></html>
+    `;
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(html));
+    const result = await detectSource('https://youtube.com/@MKBHD');
+    expect(result).toMatchObject({ type: 'youtube', url: 'UCBJycsmduvYEL83R_U4JriQ' });
+  });
+
+  it('handles itemprop meta with extra attributes before itemprop', async () => {
+    const html = `
+      <html><head>
+        <meta name="og:url" itemprop="channelId" content="UCBJycsmduvYEL83R_U4JriQ">
+      </head><body></body></html>
+    `;
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(html));
+    const result = await detectSource('https://youtube.com/@MKBHD');
+    expect(result).toMatchObject({ type: 'youtube', url: 'UCBJycsmduvYEL83R_U4JriQ' });
+  });
 });

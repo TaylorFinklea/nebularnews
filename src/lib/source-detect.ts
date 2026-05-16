@@ -53,12 +53,19 @@ async function resolveYoutubeHandle(handle: string): Promise<DetectedSource | { 
   if (!res.ok) {
     return { error: `YouTube returned HTTP ${res.status} for @${handle}.` };
   }
-  const html = await res.text();
-  const canonical = html.match(/<link\s+rel="canonical"\s+href="https:\/\/www\.youtube\.com\/channel\/(UC[a-zA-Z0-9_-]{22})"/i);
+  let html: string;
+  try {
+    html = await res.text();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'read error';
+    return { error: `Failed to read channel page for @${handle}: ${msg}` };
+  }
+  // More permissive: match the value anywhere within the tag, regardless of attribute order.
+  const canonical = html.match(/<link[^>]*\brel="canonical"[^>]*\bhref="https:\/\/www\.youtube\.com\/channel\/(UC[a-zA-Z0-9_-]{22})"/i);
   if (canonical) {
     return { type: 'youtube', url: canonical[1], displayLabel: `YouTube: @${handle}` };
   }
-  const itemprop = html.match(/<meta\s+itemprop="channelId"\s+content="(UC[a-zA-Z0-9_-]{22})"/i);
+  const itemprop = html.match(/<meta[^>]*\bitemprop="channelId"[^>]*\bcontent="(UC[a-zA-Z0-9_-]{22})"/i);
   if (itemprop) {
     return { type: 'youtube', url: itemprop[1], displayLabel: `YouTube: @${handle}` };
   }

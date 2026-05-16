@@ -44,7 +44,7 @@ export async function fetchPendingTranscripts(env: Env): Promise<void> {
       WHERE source_type = 'youtube'
         AND transcript_fetched_at IS NULL
         AND transcript_attempt_count < ?
-        AND published_at > ?
+        AND COALESCE(published_at, fetched_at) > ?
       ORDER BY published_at DESC
       LIMIT ?`,
     [MAX_ATTEMPTS, since, BATCH_LIMIT],

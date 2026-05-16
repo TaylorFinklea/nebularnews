@@ -65,7 +65,7 @@ Migrations live in `migrations/NNNN_name.sql` and are applied by `wrangler d1 mi
 | Cron            | Calls                                                  |
 |-----------------|--------------------------------------------------------|
 | `*/5 * * * *`   | `pollFeeds` + `pollReddit` + `pollYoutube` + `pollBluesky` (parallel) |
-| `0 * * * *`     | `retryEmptyArticles`                                   |
+| `0 * * * *`     | `retryEmptyArticles` + `fetchPendingTranscripts` (parallel) |
 | `30 3 * * *`    | `cleanup`                                              |
 
 Each is wrapped in a try/catch so one failure doesn't take the others down, and dispatched through `ctx.waitUntil`.
@@ -74,7 +74,11 @@ Each is wrapped in a try/catch so one failure doesn't take the others down, and 
 
 `src/cron/poll-feeds.ts` handles `source_type IN ('rss', 'substack', 'mastodon', 'hn')` — all RSS-shaped, so they share conditional GET with ETag/Last-Modified, dedup by `articles.canonical_url`, and optional scrape via Steel or Browserless based on `feeds.scrape_mode` (`rss_only` | `auto_fetch_on_empty` | always). Reddit, YouTube, and Bluesky poll separately because their fetch shape differs (Reddit JSON, YouTube uploads Atom with no ETag, Bluesky ATProto JSON via `src/lib/bluesky.ts`).
 
-`src/lib/source-detect.ts` is the single source of truth for parsing user-supplied source identifiers into `{ type, url }`. Supports 7 source types: RSS URL, `r/sub` (Reddit), `UC…` channel ID (YouTube), `*.substack.com` (Substack), `@user@instance` or `https://instance/@user` (Mastodon), `news.ycombinator.com` or `hn` shorthand (HN), `https://bsky.app/profile/<handle>` or `@<handle>.bsky.social` (Bluesky). Used by both the HTTP `POST /api/feeds` route and the MCP `add_feed` tool. Note: at 7 source types this file is approaching the registry-refactor threshold mentioned in the M1 roadmap; consider extracting a `{ pattern, type, normalize() }` registry if an 8th type is added.
+`src/cron/fetch-pending-transcripts.ts` runs hourly to attach transcripts to YouTube articles that landed metadata-only. It calls `src/lib/transcript.ts` (innertube-based, no API key, uses the UA-agnostic `TVHTML5` client context), picks 25 youtube articles per tick within a 30-day window, caps each video at 3 attempts. The `articles` table grew four columns for transcript state: `transcript_fetched_at`, `transcript_lang`, `transcript_attempt_count`, `transcript_last_error` (migration `0028`).
+
+`src/lib/source-detect.ts` is the single source of truth for parsing user-supplied source identifiers into `{ type, url }`. Supports 7 source types: RSS URL, `r/sub` (Reddit), `UC…` channel ID or `@handle` URL (YouTube), `*.substack.com` (Substack), `@user@instance` or `https://instance/@user` (Mastodon), `news.ycombinator.com` or `hn` shorthand (HN), `https://bsky.app/profile/<handle>` or `@<handle>.bsky.social` (Bluesky). Used by both the HTTP `POST /api/feeds` route and the MCP `add_feed` tool. Note: at 7 source types this file is approaching the registry-refactor threshold mentioned in the M1 roadmap; consider extracting a `{ pattern, type, normalize() }` registry if an 8th type is added.
+
+Note: most source-type detection is offline regex matching. YouTube `@handle` resolution is the exception — it makes one network call at `detectSource` time to fetch the channel page and extract the canonical UC id (`<link rel="canonical">` or `<meta itemprop="channelId">`). This means `add_feed` is slightly slower for @handle inputs (~100-500ms) than other source types.
 
 ### MCP surface
 

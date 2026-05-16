@@ -1,5 +1,5 @@
 // src/lib/__tests__/source-detect.test.ts
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { detectSource, expandFetchUrl } from '../source-detect';
 
 describe('detectSource — existing patterns (regression)', () => {
@@ -21,11 +21,6 @@ describe('detectSource — existing patterns (regression)', () => {
       url: 'UC1234567890123456789012',
       displayLabel: 'YouTube: UC1234567890123456789012',
     });
-  });
-
-  it('rejects YouTube @handles with a helpful message', async () => {
-    const r = await detectSource('https://youtube.com/@mkbhd');
-    expect(r).toHaveProperty('error');
   });
 
   it('detects Substack URLs and normalizes to /feed', async () => {
@@ -179,5 +174,59 @@ describe('expandFetchUrl — existing types', () => {
     expect(expandFetchUrl('rss', 'https://example.com/feed.xml')).toBe(
       'https://example.com/feed.xml',
     );
+  });
+});
+
+describe('detectSource — YouTube @handle resolution', () => {
+  beforeEach(() => { vi.restoreAllMocks(); });
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it('resolves @handle to UC channel id via <link rel="canonical">', async () => {
+    const html = `
+      <html><head>
+        <title>MKBHD - YouTube</title>
+        <link rel="canonical" href="https://www.youtube.com/channel/UCBJycsmduvYEL83R_U4JriQ">
+      </head><body>content</body></html>
+    `;
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(html));
+    const result = await detectSource('https://youtube.com/@MKBHD');
+    expect(result).toEqual({
+      type: 'youtube',
+      url: 'UCBJycsmduvYEL83R_U4JriQ',
+      displayLabel: 'YouTube: @MKBHD',
+    });
+  });
+
+  it('falls back to <meta itemprop="channelId"> when canonical is missing', async () => {
+    const html = `
+      <html><head>
+        <meta itemprop="channelId" content="UCBJycsmduvYEL83R_U4JriQ">
+      </head><body></body></html>
+    `;
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(html));
+    const result = await detectSource('https://youtube.com/@MKBHD');
+    expect(result).toMatchObject({
+      type: 'youtube',
+      url: 'UCBJycsmduvYEL83R_U4JriQ',
+    });
+  });
+
+  it('returns an error when neither canonical nor itemprop is present', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response('<html><head></head><body>nope</body></html>'));
+    const result = await detectSource('https://youtube.com/@bogus');
+    expect(result).toHaveProperty('error');
+    expect((result as { error: string }).error).toMatch(/resolve channel id/i);
+  });
+
+  it('returns an error on 404 response', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(null, { status: 404 }));
+    const result = await detectSource('https://youtube.com/@nonexistent');
+    expect(result).toHaveProperty('error');
+  });
+
+  it('returns an error on network failure', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(new Error('network'));
+    const result = await detectSource('https://youtube.com/@MKBHD');
+    expect(result).toHaveProperty('error');
   });
 });

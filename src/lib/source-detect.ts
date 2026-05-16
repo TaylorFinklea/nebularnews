@@ -40,6 +40,31 @@ function buildMastodonDetection(instance: string, user: string): DetectedSource 
   };
 }
 
+async function resolveYoutubeHandle(handle: string): Promise<DetectedSource | { error: string }> {
+  let res: Response;
+  try {
+    res = await fetch(`https://www.youtube.com/@${handle}`, {
+      headers: { 'User-Agent': 'NebularNews/1.0 (MCP server; +https://nebularnews.com)' },
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'network error';
+    return { error: `Failed to fetch channel page for @${handle}: ${msg}` };
+  }
+  if (!res.ok) {
+    return { error: `YouTube returned HTTP ${res.status} for @${handle}.` };
+  }
+  const html = await res.text();
+  const canonical = html.match(/<link\s+rel="canonical"\s+href="https:\/\/www\.youtube\.com\/channel\/(UC[a-zA-Z0-9_-]{22})"/i);
+  if (canonical) {
+    return { type: 'youtube', url: canonical[1], displayLabel: `YouTube: @${handle}` };
+  }
+  const itemprop = html.match(/<meta\s+itemprop="channelId"\s+content="(UC[a-zA-Z0-9_-]{22})"/i);
+  if (itemprop) {
+    return { type: 'youtube', url: itemprop[1], displayLabel: `YouTube: @${handle}` };
+  }
+  return { error: `Could not resolve channel id for @${handle} — paste the /channel/UC… URL instead.` };
+}
+
 export async function detectSource(rawInput: string): Promise<DetectedSource | { error: string }> {
   const input = rawInput.trim();
   if (!input) return { error: 'Empty source identifier' };
@@ -60,10 +85,9 @@ export async function detectSource(rawInput: string): Promise<DetectedSource | {
   if (YT_CHANNEL_ID_RE.test(input)) {
     return { type: 'youtube', url: input, displayLabel: `YouTube: ${input}` };
   }
-  if (YT_HANDLE_RE.test(input)) {
-    return {
-      error: 'YouTube @handles aren\'t supported yet — paste the channel ID (UC…) or the /channel/UC… URL. You can find it on the channel page → Share → Copy channel ID.',
-    };
+  const ytHandleMatch = input.match(YT_HANDLE_RE);
+  if (ytHandleMatch) {
+    return resolveYoutubeHandle(ytHandleMatch[1]);
   }
 
   // Bluesky — bsky.app profile URLs or single-@ handle shorthands.

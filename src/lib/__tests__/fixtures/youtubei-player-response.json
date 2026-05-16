@@ -1,0 +1,20 @@
+{
+  "captions": {
+    "playerCaptionsTracklistRenderer": {
+      "captionTracks": [
+        {
+          "baseUrl": "https://www.youtube.com/api/timedtext?v=FAKE&caps=asr&fmt=srv1&lang=de",
+          "name": { "simpleText": "German" },
+          "vssId": ".de",
+          "languageCode": "de"
+        },
+        {
+          "baseUrl": "https://www.youtube.com/api/timedtext?v=FAKE&caps=asr&fmt=srv1",
+          "name": { "simpleText": "English" },
+          "vssId": ".en",
+          "languageCode": "en"
+        }
+      ]
+    }
+  }
+}

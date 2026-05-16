@@ -58,7 +58,7 @@ feedRoutes.post('/feeds', async (c) => {
     return c.json({ ok: false, error: { code: 'bad_request', message: 'source or url is required' } }, 400);
   }
 
-  const detected = detectSource(rawInput);
+  const detected = await detectSource(rawInput);
   if ('error' in detected) {
     return c.json({ ok: false, error: { code: 'bad_request', message: detected.error } }, 400);
   }

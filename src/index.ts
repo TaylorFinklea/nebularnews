@@ -17,6 +17,7 @@ import { pollYoutube } from './cron/poll-youtube';
 import { pollBluesky } from './cron/poll-bluesky';
 import { cleanup } from './cron/cleanup';
 import { retryEmptyArticles } from './cron/retry-empty-articles';
+import { fetchPendingTranscripts } from './cron/fetch-pending-transcripts';
 
 export type AppEnv = { Bindings: Env; Variables: { userId: string } };
 
@@ -103,6 +104,7 @@ export default {
         break;
       case '0 * * * *':
         ctx.waitUntil(run('retry-empty-articles', () => retryEmptyArticles(env)));
+        ctx.waitUntil(run('fetch-pending-transcripts', () => fetchPendingTranscripts(env)));
         break;
       case '30 3 * * *':
         ctx.waitUntil(run('cleanup', () => cleanup(env)));

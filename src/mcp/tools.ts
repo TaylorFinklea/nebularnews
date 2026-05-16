@@ -158,7 +158,7 @@ async function addFeed(args: Record<string, unknown>, ctx: ToolContext): Promise
     return { content: [{ type: 'text', text: 'Missing source. Pass an RSS URL, Substack URL, subreddit (r/name), or YouTube channel id (UC…).' }] };
   }
 
-  const detected = detectSource(raw);
+  const detected = await detectSource(raw);
   if ('error' in detected) {
     return { content: [{ type: 'text', text: detected.error }] };
   }

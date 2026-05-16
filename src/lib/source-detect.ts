@@ -40,7 +40,7 @@ function buildMastodonDetection(instance: string, user: string): DetectedSource 
   };
 }
 
-export function detectSource(rawInput: string): DetectedSource | { error: string } {
+export async function detectSource(rawInput: string): Promise<DetectedSource | { error: string }> {
   const input = rawInput.trim();
   if (!input) return { error: 'Empty source identifier' };
 

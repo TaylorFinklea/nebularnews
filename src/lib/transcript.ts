@@ -20,10 +20,14 @@ export interface TranscriptResult {
 const INNERTUBE_KEY = 'AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8';
 const INNERTUBE_PLAYER = `https://www.youtube.com/youtubei/v1/player?key=${INNERTUBE_KEY}`;
 
+// TVHTML5 client is UA-agnostic and reliably returns caption tracks for both
+// manual and auto-generated captions. yt-dlp uses this client for caption
+// extraction for the same reason; WEB client requires a browser-matching UA
+// and can silently strip the captions subtree under non-browser User-Agents.
 const CLIENT_CONTEXT = {
   client: {
-    clientName: 'WEB',
-    clientVersion: '2.20231201.01.00',
+    clientName: 'TVHTML5',
+    clientVersion: '7.20231201.13.01',
     hl: 'en',
   },
 };

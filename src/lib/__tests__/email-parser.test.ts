@@ -73,8 +73,44 @@ describe('parseEmail — plain-text-only newsletter', () => {
 });
 
 describe('parseEmail — defensive', () => {
-  it('normalizes fromAddress to lowercase', async () => {
-    const parsed = await parseEmail(fixtureStream('substack-newsletter.eml'));
-    expect(parsed.fromAddress).toBe(parsed.fromAddress.toLowerCase());
+  it('lowercases mixed-case From: addresses', async () => {
+    // Mixed-case input proves .toLowerCase() actually runs; a fixture with
+    // already-lowercase addresses wouldn't catch a regression here.
+    const eml = [
+      'From: "Mixed Case" <Ben@Stratechery.COM>',
+      'To: nl-test@in.nebularnews.com',
+      'Subject: Mixed-case test',
+      'Message-ID: <mixed-001@example.com>',
+      'Date: Sun, 18 May 2026 09:00:00 +0000',
+      'MIME-Version: 1.0',
+      'Content-Type: text/plain; charset="UTF-8"',
+      '',
+      'Body.',
+      '',
+    ].join('\r\n');
+    const parsed = await parseEmail(eml);
+    expect(parsed.fromAddress).toBe('ben@stratechery.com');
+  });
+
+  it('extracts archive URL from wordy "View this email in your browser" variant', async () => {
+    // Real Substack emails use the wordy variant. The regex must match this
+    // shape, not just the narrow "View in browser" from the main fixture.
+    const eml = [
+      'From: "Wordy Newsletter" <noreply@example.com>',
+      'To: nl-test@in.nebularnews.com',
+      'Subject: Wordy archive URL',
+      'Message-ID: <wordy-001@example.com>',
+      'Date: Sun, 18 May 2026 09:00:00 +0000',
+      'MIME-Version: 1.0',
+      'Content-Type: text/html; charset="UTF-8"',
+      '',
+      '<html><body>',
+      '<p><a class="archive-link" href="https://example.com/archive/wordy" target="_blank">View this email in your browser</a></p>',
+      '<p>Newsletter body.</p>',
+      '</body></html>',
+      '',
+    ].join('\r\n');
+    const parsed = await parseEmail(eml);
+    expect(parsed.archiveUrl).toBe('https://example.com/archive/wordy');
   });
 });

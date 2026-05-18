@@ -17,7 +17,7 @@ export interface ParsedEmail {
   archiveUrl: string | null; // "View in browser"/"View on web" link if found in HTML
 }
 
-const ARCHIVE_LINK_RE = /<a[^>]*\bhref="(https?:\/\/[^"]+)"[^>]*>[^<]*(?:view\s+(?:in|on)\s+(?:browser|web)|view\s+online|read\s+in\s+browser)[^<]*<\/a>/i;
+const ARCHIVE_LINK_RE = /<a[^>]*\bhref="(https?:\/\/[^"]+)"[^>]*>[^<]*\b(?:view|read)\b[^<]*\b(?:browser|web)\b[^<]*<\/a>/i;
 
 function extractArchiveUrl(html: string | null): string | null {
   if (!html) return null;

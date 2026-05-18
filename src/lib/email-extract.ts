@@ -23,7 +23,7 @@ const EMPTY: ExtractedBody = {
 };
 
 function firstImageFromHtml(html: string): string | null {
-  const m = html.match(/<img[^>]*\bsrc="(https?:\/\/[^"]+)"/i);
+  const m = html.match(/<img[^>]*\bsrc=["'](https?:\/\/[^"']+)["']/i);
   return m ? m[1] : null;
 }
 
@@ -64,7 +64,7 @@ export function extractEmailBody(html: string | null, text: string | null): Extr
         contentText,
         excerpt: contentText.slice(0, 300),
         wordCount: countWords(contentText),
-        imageUrl: firstImageFromHtml(html),
+        imageUrl: firstImageFromHtml(article.content ?? html),
       };
     }
   } catch {

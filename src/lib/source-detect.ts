@@ -3,7 +3,7 @@
 // URL, subreddit shorthand, YouTube channel ID — and the right poller
 // picks it up later.
 
-export type SourceType = 'rss' | 'reddit' | 'youtube' | 'substack' | 'hn' | 'mastodon' | 'bluesky';
+export type SourceType = 'rss' | 'reddit' | 'youtube' | 'substack' | 'hn' | 'mastodon' | 'bluesky' | 'email_newsletter';
 
 export interface DetectedSource {
   /** Canonical type for storage in feeds.source_type. */
@@ -75,6 +75,16 @@ async function resolveYoutubeHandle(handle: string): Promise<DetectedSource | { 
 export async function detectSource(rawInput: string): Promise<DetectedSource | { error: string }> {
   const input = rawInput.trim();
   if (!input) return { error: 'Empty source identifier' };
+
+  // Email newsletter shortcut — returns sentinel with empty url
+  const lower = input.toLowerCase();
+  if (lower === 'email' || lower === 'newsletter') {
+    return {
+      type: 'email_newsletter',
+      url: '',
+      displayLabel: 'Email newsletter (pending address)',
+    };
+  }
 
   // Reddit shorthand or URL — store as r/<lowercased>
   const redditMatch = input.match(REDDIT_RE);

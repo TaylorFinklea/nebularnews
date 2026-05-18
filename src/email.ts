@@ -85,7 +85,14 @@ export async function handleEmail(message: ForwardableEmailMessage, env: Env): P
   const body = extractEmailBody(parsed.htmlBody, parsed.textBody);
 
   // 5. Build canonical URL (Message-Id preferred, hash fallback).
-  const canonicalUrl = await emailCanonicalUrl(parsed.messageId, body.contentText);
+  // Fallback hash input: when there's no body (rare — Readability failed on
+  // HTML with no text part), salt with sender + subject + timestamp so each
+  // such email gets a unique canonical_url rather than all colliding on the
+  // SHA-256 of empty string.
+  const hashInput = body.contentText.length > 0
+    ? body.contentText
+    : `${parsed.fromAddress}:${parsed.subject}:${now}`;
+  const canonicalUrl = await emailCanonicalUrl(parsed.messageId, hashInput);
 
   // 6. Dedup.
   const existing = await dbGet<{ id: string }>(
@@ -97,36 +104,46 @@ export async function handleEmail(message: ForwardableEmailMessage, env: Env): P
 
   // 7. INSERT article + article_sources.
   const articleId = nanoid();
-  await dbRun(
-    db,
-    `INSERT INTO articles
-       (id, title, canonical_url, guid, author,
-        content_html, content_text, excerpt, word_count, image_url,
-        published_at, fetched_at, source_type, source_data_json,
-        quarantined_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'email_newsletter', ?, ?)`,
-    [
-      articleId,
-      parsed.subject || '(no subject)',
-      canonicalUrl,
-      parsed.messageId ?? canonicalUrl,
-      parsed.from || parsed.fromAddress || '(unknown sender)',
-      body.contentHtml,
-      body.contentText,
-      body.excerpt,
-      body.wordCount,
-      body.imageUrl,
-      now,                                              // published_at: when we received it
-      now,
-      JSON.stringify({
-        from_address: parsed.fromAddress,
-        list_id: parsed.listId,
-        archive_url: parsed.archiveUrl,
-        quarantined_reason: quarantined ? 'sender_mismatch' : null,
-      }),
-      quarantined ? now : null,
-    ],
-  );
+  try {
+    await dbRun(
+      db,
+      `INSERT INTO articles
+         (id, title, canonical_url, guid, author,
+          content_html, content_text, excerpt, word_count, image_url,
+          published_at, fetched_at, source_type, source_data_json,
+          quarantined_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'email_newsletter', ?, ?)`,
+      [
+        articleId,
+        parsed.subject || '(no subject)',
+        canonicalUrl,
+        parsed.messageId ?? canonicalUrl,
+        parsed.from || parsed.fromAddress || '(unknown sender)',
+        body.contentHtml,
+        body.contentText,
+        body.excerpt,
+        body.wordCount,
+        body.imageUrl,
+        now,                                              // published_at: when we received it
+        now,
+        JSON.stringify({
+          from_address: parsed.fromAddress,
+          list_id: parsed.listId,
+          archive_url: parsed.archiveUrl,
+          quarantined_reason: quarantined ? 'sender_mismatch' : null,
+        }),
+        quarantined ? now : null,
+      ],
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes('UNIQUE constraint failed') && msg.includes('canonical_url')) {
+      // Dedup race: another concurrent invocation INSERTed first. Treat as success.
+      console.warn(`[email] dedup race on ${canonicalUrl}, skipping`);
+      return;
+    }
+    throw err;
+  }
 
   await dbRun(
     db,

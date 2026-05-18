@@ -91,6 +91,7 @@ export const TOOL_DEFINITIONS = [
 type ToolContext = {
   db: D1Database;
   userId: string;
+  inboundDomain: string;
 };
 
 type ToolResult = { content: Array<{ type: 'text'; text: string }> };
@@ -165,10 +166,7 @@ async function addFeed(args: Record<string, unknown>, ctx: ToolContext): Promise
 
   if (detected.type === 'email_newsletter' && detected.url === '') {
     const feedId = nanoid();
-    // MCP tools don't currently receive env; use the default. If the operator
-    // overrides EMAIL_INBOUND_DOMAIN, the HTTP route uses it and the MCP tool
-    // doesn't — both surfaces produce the same domain for personal-scale use.
-    const inboundAddress = `nl-${nanoid(16)}@in.nebularnews.com`.toLowerCase();
+    const inboundAddress = `nl-${nanoid(16)}@${ctx.inboundDomain}`.toLowerCase();
     const now = Date.now();
 
     await dbRun(

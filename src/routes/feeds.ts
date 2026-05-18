@@ -16,6 +16,11 @@ interface Feed {
 
 // Whitelist of scrape_mode values the client may set.
 const ALLOWED_SCRAPE_MODES = new Set(['rss_only', 'auto_fetch_on_empty', 'always']);
+
+function generateInboundAddress(domain: string | undefined): string {
+  const host = domain || 'in.nebularnews.com';
+  return `nl-${nanoid(16)}@${host}`.toLowerCase();
+}
 const DEFAULT_SCRAPE_MODE = 'auto_fetch_on_empty';
 
 function sanitizeScrapeMode(value: unknown): string | null {
@@ -62,6 +67,36 @@ feedRoutes.post('/feeds', async (c) => {
   if ('error' in detected) {
     return c.json({ ok: false, error: { code: 'bad_request', message: detected.error } }, 400);
   }
+
+  if (detected.type === 'email_newsletter' && detected.url === '') {
+    const feedId = nanoid();
+    const inboundAddress = generateInboundAddress(c.env.EMAIL_INBOUND_DOMAIN);
+    const now = Date.now();
+
+    await dbRun(
+      c.env.DB,
+      `INSERT INTO feeds (id, url, source_type, feed_type, inbound_address, scrape_mode)
+       VALUES (?, ?, 'email_newsletter', 'email_newsletter', ?, 'rss_only')`,
+      [feedId, inboundAddress, inboundAddress],
+    );
+    await dbRun(
+      c.env.DB,
+      `INSERT INTO user_feed_subscriptions (id, user_id, feed_id, created_at)
+       VALUES (?, ?, ?, ?)`,
+      [nanoid(), userId, feedId, now],
+    );
+
+    return c.json({
+      ok: true,
+      data: {
+        feed_id: feedId,
+        source_type: 'email_newsletter',
+        inbound_address: inboundAddress,
+        instructions: `Subscribe your newsletter to ${inboundAddress}. We'll lock the first sender on its first email (trust-on-first-use).`,
+      },
+    });
+  }
+
   const sourceType = body.source_type ?? detected.type;
   const storedUrl = detected.url;
 

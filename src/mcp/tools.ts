@@ -492,6 +492,22 @@ async function getArticle(args: Record<string, unknown>, ctx: ToolContext): Prom
     return { content: [{ type: 'text', text: `Article not found: ${articleId}` }] };
   }
 
+  // Implicit read mark — fetching the article is a strong signal of engagement.
+  // Best-effort: a UPSERT failure logs and doesn't fail the response.
+  try {
+    await dbRun(
+      ctx.db,
+      `INSERT INTO article_read_state (user_id, article_id, is_read, updated_at)
+       VALUES (?, ?, 1, ?)
+       ON CONFLICT(user_id, article_id) DO UPDATE SET
+         is_read = 1,
+         updated_at = excluded.updated_at`,
+      [ctx.userId, article.id, Date.now()],
+    );
+  } catch (err) {
+    console.warn('[get_article] failed to mark read:', err instanceof Error ? err.message : err);
+  }
+
   let text = `# ${article.title}\n\n`;
   text += `**URL:** ${article.canonical_url}\n`;
   if (article.author) text += `**Author:** ${article.author}\n`;

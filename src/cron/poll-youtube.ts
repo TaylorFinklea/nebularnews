@@ -2,6 +2,7 @@ import { nanoid } from 'nanoid';
 import type { Env } from '../env';
 import { dbAll, dbGet, dbRun } from '../db/helpers';
 import { parseFeed } from '../lib/feed-parser';
+import { canonicalizeUrl } from '../lib/canonical-url';
 
 // Cron sibling to pollFeeds. Polls YouTube channel uploads via the public
 // Atom feed at /feeds/videos.xml?channel_id=UC… — no API key required.
@@ -81,8 +82,9 @@ export async function pollYoutube(env: Env): Promise<void> {
           `INSERT INTO articles
              (id, title, canonical_url, guid, author,
               content_html, content_text, excerpt, word_count, image_url,
-              published_at, fetched_at, source_type, source_data_json)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'youtube', ?)`,
+              published_at, fetched_at, source_type, source_data_json,
+              canonical_url_normalized)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'youtube', ?, ?)`,
           [
             articleId,
             item.title,
@@ -101,6 +103,7 @@ export async function pollYoutube(env: Env): Promise<void> {
               video_id: videoId,
               has_transcript: false,        // populated later
             }),
+            canonicalizeUrl(canonicalUrl),
           ],
         );
 

@@ -4,6 +4,7 @@ import type { Env } from './env';
 import { dbGet, dbRun } from './db/helpers';
 import { parseEmail } from './lib/email-parser';
 import { extractEmailBody } from './lib/email-extract';
+import { canonicalizeUrl } from './lib/canonical-url';
 
 // Cloudflare Email Routing dispatches received messages to this handler.
 // We look up the feed by To: address, parse the MIME, run TOFU sender
@@ -111,8 +112,8 @@ export async function handleEmail(message: ForwardableEmailMessage, env: Env): P
          (id, title, canonical_url, guid, author,
           content_html, content_text, excerpt, word_count, image_url,
           published_at, fetched_at, source_type, source_data_json,
-          quarantined_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'email_newsletter', ?, ?)`,
+          quarantined_at, canonical_url_normalized)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'email_newsletter', ?, ?, ?)`,
       [
         articleId,
         parsed.subject || '(no subject)',
@@ -133,6 +134,7 @@ export async function handleEmail(message: ForwardableEmailMessage, env: Env): P
           quarantined_reason: quarantined ? 'sender_mismatch' : null,
         }),
         quarantined ? now : null,
+        canonicalizeUrl(canonicalUrl),
       ],
     );
   } catch (err) {

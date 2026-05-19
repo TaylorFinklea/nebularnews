@@ -23,11 +23,11 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'add_feed',
-    description: 'Subscribe the user to a new content source. Accepts: an RSS/Atom feed URL, a Substack publication URL (e.g. https://example.substack.com), a subreddit (e.g. r/birding or https://reddit.com/r/birding), a YouTube channel ID (UC…) or /channel/UC… URL, a Hacker News URL or "hn" shorthand, a Mastodon user URL (e.g. https://mastodon.social/@user) or fediverse handle (@user@instance), or a Bluesky profile URL (e.g. https://bsky.app/profile/handle.bsky.social) or @handle.bsky.social shorthand. Returns the feed id and detected source_type. Use after the user confirms.',
+    description: 'Subscribe the user to a new content source. Accepts: an RSS/Atom feed URL, a Substack publication URL (e.g. https://example.substack.com), a subreddit (e.g. r/birding or https://reddit.com/r/birding), a YouTube channel ID (UC…) or /channel/UC… URL, a Hacker News URL or "hn" shorthand, a Mastodon user URL (e.g. https://mastodon.social/@user) or fediverse handle (@user@instance), a Bluesky profile URL (e.g. https://bsky.app/profile/handle.bsky.social) or @handle.bsky.social shorthand, or \'email\' / \'newsletter\' (returns a unique inbound address to subscribe your newsletter to). Returns the feed id and detected source_type. Use after the user confirms.',
     inputSchema: {
       type: 'object' as const,
       properties: {
-        source: { type: 'string', description: 'RSS URL, Substack URL, subreddit (r/name), or YouTube channel id/URL' },
+        source: { type: 'string', description: 'A subscribable source: RSS/Atom feed URL, Substack URL, subreddit (r/name or full URL), YouTube channel id or @handle URL, Hacker News URL or "hn", Mastodon user URL or @user@instance, Bluesky profile URL or @handle.bsky.social, or "email"/"newsletter" for an inbound-address newsletter feed.' },
       },
       required: ['source'],
     },
@@ -91,6 +91,7 @@ export const TOOL_DEFINITIONS = [
 type ToolContext = {
   db: D1Database;
   userId: string;
+  inboundDomain: string;
 };
 
 type ToolResult = { content: Array<{ type: 'text'; text: string }> };
@@ -161,6 +162,32 @@ async function addFeed(args: Record<string, unknown>, ctx: ToolContext): Promise
   const detected = await detectSource(raw);
   if ('error' in detected) {
     return { content: [{ type: 'text', text: detected.error }] };
+  }
+
+  if (detected.type === 'email_newsletter' && detected.url === '') {
+    const feedId = nanoid();
+    const inboundAddress = `nl-${nanoid(16)}@${ctx.inboundDomain}`.toLowerCase();
+    const now = Date.now();
+
+    await dbRun(
+      ctx.db,
+      `INSERT INTO feeds (id, url, source_type, feed_type, inbound_address, scrape_mode)
+       VALUES (?, ?, 'email_newsletter', 'email_newsletter', ?, 'rss_only')`,
+      [feedId, inboundAddress, inboundAddress],
+    );
+    await dbRun(
+      ctx.db,
+      `INSERT INTO user_feed_subscriptions (id, user_id, feed_id, created_at)
+       VALUES (?, ?, ?, ?)`,
+      [nanoid(), ctx.userId, feedId, now],
+    );
+
+    return {
+      content: [{
+        type: 'text',
+        text: `Created email-newsletter feed. Subscribe your newsletter to: ${inboundAddress}\n\nThe first email's From: address will be locked as the expected sender (trust-on-first-use). Later emails from a different sender will be quarantined.`,
+      }],
+    };
   }
 
   let feed = await dbGet<{ id: string; title: string | null; url: string; source_type: string }>(
@@ -258,6 +285,7 @@ async function getRecent(args: Record<string, unknown>, ctx: ToolContext): Promi
      JOIN user_feed_subscriptions ufs ON ufs.feed_id = asrc.feed_id AND ufs.user_id = ?
      LEFT JOIN feeds f ON f.id = asrc.feed_id
      WHERE COALESCE(ufs.paused, 0) = 0
+       AND a.quarantined_at IS NULL
        ${feedFilter}
        ${sinceFilter}
      ORDER BY COALESCE(a.published_at, a.fetched_at) DESC
@@ -310,6 +338,7 @@ async function searchArticles(args: Record<string, unknown>, ctx: ToolContext): 
      JOIN article_sources asrc ON asrc.article_id = a.id
      JOIN user_feed_subscriptions ufs ON ufs.feed_id = asrc.feed_id AND ufs.user_id = ?
      WHERE article_search MATCH ?
+       AND a.quarantined_at IS NULL
      GROUP BY a.id
      ORDER BY rank
      LIMIT ?`,

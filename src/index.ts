@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { Env } from './env';
+import type { ForwardableEmailMessage } from '@cloudflare/workers-types';
+import { handleEmail } from './email';
 import { envelope } from './middleware/envelope';
 import { requireAuth } from './middleware/auth';
 import { healthRoutes } from './routes/health';
@@ -109,6 +111,17 @@ export default {
       case '30 3 * * *':
         ctx.waitUntil(run('cleanup', () => cleanup(env)));
         break;
+    }
+  },
+  email: async (
+    message: ForwardableEmailMessage,
+    env: Env,
+    _ctx: ExecutionContext,
+  ): Promise<void> => {
+    try {
+      await handleEmail(message, env);
+    } catch (err) {
+      console.error('[email-entrypoint]', err);
     }
   },
 };

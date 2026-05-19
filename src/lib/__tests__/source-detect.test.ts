@@ -177,6 +177,27 @@ describe('expandFetchUrl — existing types', () => {
   });
 });
 
+describe('detectSource — email shortcut', () => {
+  it('recognizes "email" shortcut', async () => {
+    expect(await detectSource('email')).toEqual({
+      type: 'email_newsletter',
+      url: '',
+      displayLabel: 'Email newsletter (pending address)',
+    });
+  });
+
+  it('recognizes "newsletter" shortcut (case-insensitive)', async () => {
+    expect(await detectSource('Newsletter')).toMatchObject({
+      type: 'email_newsletter',
+      url: '',
+    });
+  });
+
+  it('recognizes "EMAIL" all-caps', async () => {
+    expect(await detectSource('EMAIL')).toMatchObject({ type: 'email_newsletter' });
+  });
+});
+
 describe('detectSource — YouTube @handle resolution', () => {
   beforeEach(() => { vi.restoreAllMocks(); });
   afterEach(() => { vi.restoreAllMocks(); });

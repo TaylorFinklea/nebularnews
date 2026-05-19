@@ -1,0 +1,11 @@
+From: "Plain Sender" <plain@example.com>
+To: nl-test@in.nebularnews.com
+Subject: Plain text only newsletter
+Message-ID: <plain-test-001@example.com>
+Date: Fri, 17 May 2026 10:00:00 +0000
+MIME-Version: 1.0
+Content-Type: text/plain; charset="UTF-8"
+
+This newsletter has no HTML part.
+Just plain text.
+A second paragraph for word count.

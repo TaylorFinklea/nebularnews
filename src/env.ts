@@ -28,4 +28,9 @@ export interface Env {
   APP_ENV: string;
   MAX_FEEDS_PER_POLL: string;
   MAX_ITEMS_PER_POLL: string;
+
+  // Email Routing — inbound newsletter address domain. Configured per-environment.
+  // Defaults to 'in.nebularnews.com' when unset. Used by add_feed to generate
+  // per-feed inbound addresses (`nl-<token>@<EMAIL_INBOUND_DOMAIN>`).
+  EMAIL_INBOUND_DOMAIN?: string;
 }

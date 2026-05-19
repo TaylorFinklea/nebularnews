@@ -101,7 +101,8 @@ mcpRoutes.post('/mcp', async (c) => {
       }
 
       try {
-        const result = await handleToolCall(toolName, toolArgs, { db, userId });
+        const inboundDomain = c.env.EMAIL_INBOUND_DOMAIN || 'in.nebularnews.com';
+        const result = await handleToolCall(toolName, toolArgs, { db, userId, inboundDomain });
         return c.json(jsonRpcResult(id, result));
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Tool execution failed';

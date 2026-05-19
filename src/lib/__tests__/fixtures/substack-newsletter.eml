@@ -1,0 +1,35 @@
+From: "Stratechery by Ben Thompson" <ben@stratechery.com>
+To: nl-test@in.nebularnews.com
+Subject: The aggregator paradox revisited
+Message-ID: <stratechery-test-001@email.stratechery.com>
+List-ID: "Stratechery" <stratechery.email.stratechery.com>
+Date: Fri, 17 May 2026 09:00:00 +0000
+MIME-Version: 1.0
+Content-Type: multipart/alternative; boundary="boundary-stratechery"
+
+--boundary-stratechery
+Content-Type: text/plain; charset="UTF-8"
+
+The Aggregator Paradox Revisited
+
+View in browser: https://stratechery.com/2026/aggregator-paradox-revisited
+
+Today I want to revisit a topic from years past. The aggregator paradox argues that platforms which start as neutral discovery layers eventually accrue power.
+
+--boundary-stratechery
+Content-Type: text/html; charset="UTF-8"
+
+<html><body>
+<h1>The Aggregator Paradox Revisited</h1>
+<p><a href="https://stratechery.com/2026/aggregator-paradox-revisited">View in browser</a></p>
+<p>Today I want to revisit a topic from years past. The aggregator paradox argues that platforms which start as neutral discovery layers eventually accrue power.</p>
+<p>Three forces drive this convergence:</p>
+<ul>
+<li>Network effects make switching costly</li>
+<li>Data accumulation creates moats</li>
+<li>Platform owners can change the rules unilaterally</li>
+</ul>
+<p>The implication for new market entrants is significant.</p>
+</body></html>
+
+--boundary-stratechery--

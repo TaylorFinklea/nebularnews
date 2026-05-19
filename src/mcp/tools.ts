@@ -332,7 +332,7 @@ async function getRecent(args: Record<string, unknown>, ctx: ToolContext): Promi
        JOIN article_sources src ON src.article_id = a.id
        JOIN user_feed_subscriptions ufs
          ON ufs.feed_id = src.feed_id AND ufs.user_id = ?
-       WHERE a.published_at > ?
+       WHERE COALESCE(a.published_at, a.fetched_at) > ?
          AND a.quarantined_at IS NULL
          AND COALESCE(ufs.paused, 0) = 0
          ${feedIdClause}
@@ -348,7 +348,7 @@ async function getRecent(args: Record<string, unknown>, ctx: ToolContext): Promi
      LEFT JOIN article_read_state ars
        ON ars.user_id = ? AND ars.article_id = a.id
      WHERE 1=1 ${unreadClause}
-     ORDER BY a.published_at DESC
+     ORDER BY COALESCE(a.published_at, a.fetched_at) DESC
      LIMIT ?`,
     [ctx.userId, since, ...(feedIds ?? []), ctx.userId, limit],
   );
@@ -374,10 +374,13 @@ async function getRecent(args: Record<string, unknown>, ctx: ToolContext): Promi
          ON sibling.canonical_url_normalized = primary.canonical_url_normalized
          AND sibling.id != primary.id
        JOIN article_sources src ON src.article_id = sibling.id
+       JOIN user_feed_subscriptions ufs
+         ON ufs.feed_id = src.feed_id AND ufs.user_id = ?
        JOIN feeds f ON f.id = src.feed_id
        WHERE primary.id IN (${placeholders})
+         AND COALESCE(ufs.paused, 0) = 0
        GROUP BY primary.id, src.feed_id`,
-      clusteredIds,
+      [ctx.userId, ...clusteredIds],
     );
     alsoSeenInMap = buildAlsoSeenInMap(siblingRows);
   }

@@ -73,6 +73,7 @@ async function readRecentArticles(ctx: ResourceContext) {
      JOIN article_sources asrc ON asrc.article_id = a.id
      JOIN user_feed_subscriptions ufs ON ufs.feed_id = asrc.feed_id AND ufs.user_id = ?
      WHERE COALESCE(ufs.paused, 0) = 0
+       AND a.quarantined_at IS NULL
      ORDER BY COALESCE(a.published_at, a.fetched_at) DESC
      LIMIT 20`,
     [ctx.userId],

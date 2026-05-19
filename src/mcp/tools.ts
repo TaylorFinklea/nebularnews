@@ -285,6 +285,7 @@ async function getRecent(args: Record<string, unknown>, ctx: ToolContext): Promi
      JOIN user_feed_subscriptions ufs ON ufs.feed_id = asrc.feed_id AND ufs.user_id = ?
      LEFT JOIN feeds f ON f.id = asrc.feed_id
      WHERE COALESCE(ufs.paused, 0) = 0
+       AND a.quarantined_at IS NULL
        ${feedFilter}
        ${sinceFilter}
      ORDER BY COALESCE(a.published_at, a.fetched_at) DESC
@@ -337,6 +338,7 @@ async function searchArticles(args: Record<string, unknown>, ctx: ToolContext): 
      JOIN article_sources asrc ON asrc.article_id = a.id
      JOIN user_feed_subscriptions ufs ON ufs.feed_id = asrc.feed_id AND ufs.user_id = ?
      WHERE article_search MATCH ?
+       AND a.quarantined_at IS NULL
      GROUP BY a.id
      ORDER BY rank
      LIMIT ?`,

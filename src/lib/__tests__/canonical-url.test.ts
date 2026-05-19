@@ -72,4 +72,9 @@ describe('canonicalizeUrl', () => {
     const b = canonicalizeUrl('http://example.com/breaking-news/?utm_medium=email#top');
     expect(a).toBe(b);
   });
+
+  it('canonicalizes duplicate query keys order-independently', () => {
+    expect(canonicalizeUrl('https://example.com/post?a=2&a=1'))
+      .toBe(canonicalizeUrl('https://example.com/post?a=1&a=2'));
+  });
 });

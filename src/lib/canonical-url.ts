@@ -2,8 +2,9 @@
 //
 // Two URLs that point to the same story (modulo tracking params, www
 // prefix, http vs https, query order, fragment, trailing slash) canonicalize
-// to the same string. Used at INSERT time on every article so the LLM's
-// `get_recent` view can collapse "same story from 4 sources" into one entry.
+// to the same string. Called at INSERT time by every article-ingestion site
+// so the LLM's `get_recent` view can collapse "same story from 4 sources"
+// into one entry.
 //
 // Conservative on purpose: URL transforms only, no title/content similarity.
 // Misses cases like "Substack republishes RSS post with a different URL,"
@@ -52,7 +53,10 @@ export function canonicalizeUrl(rawUrl: string): string {
     if (TRACKING_PARAMS.has(key)) continue;
     kept.push([key, value]);
   }
-  kept.sort(([a], [b]) => a.localeCompare(b));
+  kept.sort(([a, av], [b, bv]) => {
+    const keyCmp = a.localeCompare(b);
+    return keyCmp !== 0 ? keyCmp : av.localeCompare(bv);
+  });
   // Rebuild search string deterministically.
   url.search = '';
   for (const [k, v] of kept) url.searchParams.append(k, v);

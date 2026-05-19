@@ -27,7 +27,7 @@ export const TOOL_DEFINITIONS = [
     inputSchema: {
       type: 'object' as const,
       properties: {
-        source: { type: 'string', description: 'RSS URL, Substack URL, subreddit (r/name), or YouTube channel id/URL' },
+        source: { type: 'string', description: 'A subscribable source: RSS/Atom feed URL, Substack URL, subreddit (r/name or full URL), YouTube channel id or @handle URL, Hacker News URL or "hn", Mastodon user URL or @user@instance, Bluesky profile URL or @handle.bsky.social, or "email"/"newsletter" for an inbound-address newsletter feed.' },
       },
       required: ['source'],
     },

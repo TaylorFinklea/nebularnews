@@ -45,11 +45,13 @@ export const TOOL_DEFINITIONS = [
   },
   {
     name: 'get_recent',
-    description: 'Get recent articles across the user\'s subscribed feeds, newest first. Use this to compose a daily brief.',
+    description: 'Get recent articles across the user\'s subscribed feeds, newest first. Articles with the same canonical URL across multiple feeds are collapsed into one item with `also_seen_in` listing the other source feeds. Each item carries an `is_read` flag. Use `since_last_call: true` to ask "what arrived since I last called this tool" without tracking timestamps yourself.',
     inputSchema: {
       type: 'object' as const,
       properties: {
-        since: { type: 'number', description: 'Unix epoch ms; only articles published or fetched after this time' },
+        since: { type: 'number', description: 'Unix epoch ms; only articles published or fetched after this time. Mutually exclusive with since_last_call.' },
+        since_last_call: { type: 'boolean', description: 'When true, server uses a per-user cursor: returns only articles published after the previous successful get_recent call. Mutually exclusive with `since`. First call defaults to last 7 days.' },
+        unread_only: { type: 'boolean', description: 'When true, exclude articles already marked as read (via get_article).' },
         limit: { type: 'number', description: 'Max results (default 25, max 100)' },
         feed_ids: {
           type: 'array',
@@ -151,6 +153,23 @@ async function listFeeds(args: Record<string, unknown>, ctx: ToolContext): Promi
 
 const DEFAULT_SCRAPE_MODE = 'auto_fetch_on_empty';
 
+// Pure helper extracted for unit testing. Takes rows of the shape
+// { primary_id, feed_id, feed_title } from the also_seen_in batch query
+// and groups them by primary article id.
+export function buildAlsoSeenInMap(
+  rows: Array<{ primary_id: string; feed_id: string; feed_title: string | null }>,
+): Map<string, Array<{ feed_id: string; feed_title: string }>> {
+  const map = new Map<string, Array<{ feed_id: string; feed_title: string }>>();
+  for (const row of rows) {
+    if (!map.has(row.primary_id)) map.set(row.primary_id, []);
+    map.get(row.primary_id)!.push({
+      feed_id: row.feed_id,
+      feed_title: row.feed_title ?? '',
+    });
+  }
+  return map;
+}
+
 async function addFeed(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
   // Accept either {source: ...} (preferred) or {url: ...} for back-compat
   // with anything pinned to the older tool schema.
@@ -251,61 +270,148 @@ async function removeFeed(args: Record<string, unknown>, ctx: ToolContext): Prom
 // ---------------------------------------------------------------------------
 
 async function getRecent(args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
-  const limit = Math.min(Number(args.limit) || 25, 100);
-  const since = typeof args.since === 'number' ? Number(args.since) : 0;
-  const feedIds = Array.isArray(args.feed_ids)
-    ? (args.feed_ids as unknown[]).map(String).filter(Boolean)
+  const sinceLastCall = args.since_last_call === true;
+  const sinceParam = typeof args.since === 'number' ? args.since : null;
+  const unreadOnly = args.unread_only === true;
+  const limit = Math.min(Math.max(Number(args.limit ?? 25), 1), 100);
+  const feedIdsRaw = Array.isArray(args.feed_ids)
+    ? (args.feed_ids as unknown[]).filter((s): s is string => typeof s === 'string')
     : null;
+  const feedIds = feedIdsRaw && feedIdsRaw.length > 0 ? feedIdsRaw : null;
 
-  const params: unknown[] = [ctx.userId];
-  let feedFilter = '';
-  if (feedIds && feedIds.length > 0) {
-    feedFilter = `AND asrc.feed_id IN (${feedIds.map(() => '?').join(',')})`;
-    params.push(...feedIds);
+  if (sinceLastCall && sinceParam !== null) {
+    return {
+      content: [{
+        type: 'text',
+        text: "Use either 'since' (client-tracked timestamp) or 'since_last_call' (server cursor), not both.",
+      }],
+    };
   }
-  let sinceFilter = '';
-  if (since > 0) {
-    sinceFilter = `AND COALESCE(a.published_at, a.fetched_at) >= ?`;
-    params.push(since);
-  }
-  params.push(limit);
 
-  const rows = await dbAll<{
-    id: string; title: string; canonical_url: string; excerpt: string | null;
-    author: string | null; published_at: number | null; fetched_at: number | null;
+  // Resolve the time lower bound.
+  let since: number;
+  if (sinceLastCall) {
+    const cursor = await dbGet<{ cursor_at: number }>(
+      ctx.db,
+      `SELECT cursor_at FROM mcp_cursors WHERE user_id = ? AND tool_name = 'get_recent'`,
+      [ctx.userId],
+    );
+    since = cursor?.cursor_at ?? (Date.now() - 7 * 24 * 60 * 60 * 1000);
+  } else if (sinceParam !== null) {
+    since = sinceParam;
+  } else {
+    since = 0;
+  }
+
+  // Cluster CTE: one primary article per canonical_url_normalized within the
+  // user's subscribed-non-paused feed scope. Falls back to id grouping for
+  // legacy articles whose canonical_url_normalized is null.
+  const feedIdPlaceholders = feedIds ? feedIds.map(() => '?').join(',') : '';
+  const feedIdClause = feedIds ? `AND src.feed_id IN (${feedIdPlaceholders})` : '';
+  const unreadClause = unreadOnly ? `AND (ars.is_read IS NULL OR ars.is_read = 0)` : '';
+
+  const articleRows = await dbAll<{
+    id: string;
+    title: string;
+    canonical_url: string;
+    canonical_url_normalized: string | null;
+    published_at: number;
+    excerpt: string | null;
+    author: string | null;
     source_type: string;
-    feed_id: string; feed_title: string | null;
+    image_url: string | null;
+    word_count: number;
+    is_read: number | null;
   }>(
     ctx.db,
-    `SELECT DISTINCT a.id, a.title, a.canonical_url, a.excerpt, a.author,
-            a.published_at, a.fetched_at, a.source_type,
-            asrc.feed_id, f.title AS feed_title
-     FROM articles a
-     JOIN article_sources asrc ON asrc.article_id = a.id
-     JOIN user_feed_subscriptions ufs ON ufs.feed_id = asrc.feed_id AND ufs.user_id = ?
-     LEFT JOIN feeds f ON f.id = asrc.feed_id
-     WHERE COALESCE(ufs.paused, 0) = 0
-       AND a.quarantined_at IS NULL
-       ${feedFilter}
-       ${sinceFilter}
-     ORDER BY COALESCE(a.published_at, a.fetched_at) DESC
+    `WITH cluster_keys AS (
+       SELECT
+         COALESCE(a.canonical_url_normalized, a.id) AS cluster_key,
+         MIN(a.id) AS primary_article_id
+       FROM articles a
+       JOIN article_sources src ON src.article_id = a.id
+       JOIN user_feed_subscriptions ufs
+         ON ufs.feed_id = src.feed_id AND ufs.user_id = ?
+       WHERE a.published_at > ?
+         AND a.quarantined_at IS NULL
+         AND COALESCE(ufs.paused, 0) = 0
+         ${feedIdClause}
+       GROUP BY cluster_key
+     )
+     SELECT
+       a.id, a.title, a.canonical_url, a.canonical_url_normalized,
+       a.published_at, a.excerpt, a.author, a.source_type,
+       a.image_url, a.word_count,
+       ars.is_read AS is_read
+     FROM cluster_keys ck
+     JOIN articles a ON a.id = ck.primary_article_id
+     LEFT JOIN article_read_state ars
+       ON ars.user_id = ? AND ars.article_id = a.id
+     WHERE 1=1 ${unreadClause}
+     ORDER BY a.published_at DESC
      LIMIT ?`,
-    params,
+    [ctx.userId, since, ...(feedIds ?? []), ctx.userId, limit],
   );
 
-  if (rows.length === 0) {
-    return { content: [{ type: 'text', text: 'No recent articles in your subscribed feeds.' }] };
+  // Batch query for also_seen_in: for each primary article that has a
+  // canonical_url_normalized, find sibling articles sharing that key and
+  // their source feeds.
+  const clusteredIds = articleRows
+    .filter((r) => r.canonical_url_normalized !== null)
+    .map((r) => r.id);
+
+  let alsoSeenInMap = new Map<string, Array<{ feed_id: string; feed_title: string }>>();
+  if (clusteredIds.length > 0) {
+    const placeholders = clusteredIds.map(() => '?').join(',');
+    const siblingRows = await dbAll<{ primary_id: string; feed_id: string; feed_title: string | null }>(
+      ctx.db,
+      `SELECT
+         primary.id AS primary_id,
+         src.feed_id AS feed_id,
+         f.title AS feed_title
+       FROM articles primary
+       JOIN articles sibling
+         ON sibling.canonical_url_normalized = primary.canonical_url_normalized
+         AND sibling.id != primary.id
+       JOIN article_sources src ON src.article_id = sibling.id
+       JOIN feeds f ON f.id = src.feed_id
+       WHERE primary.id IN (${placeholders})
+       GROUP BY primary.id, src.feed_id`,
+      clusteredIds,
+    );
+    alsoSeenInMap = buildAlsoSeenInMap(siblingRows);
   }
 
-  const lines = rows.map(r => {
-    const ts = r.published_at ?? r.fetched_at;
-    const date = ts ? new Date(ts).toISOString().slice(0, 10) : '?';
-    const source = r.feed_title ? ` — *${r.feed_title}*` : '';
-    const excerpt = r.excerpt ? `\n  ${r.excerpt.slice(0, 240)}${r.excerpt.length > 240 ? '…' : ''}` : '';
-    return `- [${date} · ${r.source_type}] **${r.title}**${source}\n  id: \`${r.id}\`\n  ${r.canonical_url}${excerpt}`;
-  });
+  // Update cursor on successful return.
+  if (sinceLastCall) {
+    const now = Date.now();
+    await dbRun(
+      ctx.db,
+      `INSERT INTO mcp_cursors (user_id, tool_name, cursor_at)
+       VALUES (?, 'get_recent', ?)
+       ON CONFLICT(user_id, tool_name) DO UPDATE SET cursor_at = excluded.cursor_at`,
+      [ctx.userId, now],
+    );
+  }
 
-  return { content: [{ type: 'text', text: `# Recent articles (${rows.length})\n\n${lines.join('\n\n')}` }] };
+  if (articleRows.length === 0) {
+    return { content: [{ type: 'text', text: 'No recent articles.' }] };
+  }
+
+  // Format as markdown for the LLM.
+  const lines: string[] = [`# Recent articles (${articleRows.length})\n`];
+  for (const r of articleRows) {
+    const readMark = r.is_read === 1 ? '[read]' : '[unread]';
+    const siblings = alsoSeenInMap.get(r.id) ?? [];
+    const siblingNote = siblings.length > 0
+      ? `\n  also in: ${siblings.map((s) => s.feed_title || s.feed_id).join(', ')}`
+      : '';
+    const excerpt = r.excerpt ? `\n  ${r.excerpt.slice(0, 200)}` : '';
+    lines.push(
+      `- ${readMark} [${r.source_type}] **${r.title}**\n  id: \`${r.id}\`\n  ${r.canonical_url}${siblingNote}${excerpt}`,
+    );
+  }
+  return { content: [{ type: 'text', text: lines.join('\n') }] };
 }
 
 // ---------------------------------------------------------------------------

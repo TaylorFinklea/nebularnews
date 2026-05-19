@@ -3,6 +3,7 @@ import type { Env } from '../env';
 import { dbAll, dbGet, dbRun } from '../db/helpers';
 import { parseFeed } from '../lib/feed-parser';
 import { scrapeAndExtract, type ScrapeProvider } from '../lib/scraper';
+import { canonicalizeUrl } from '../lib/canonical-url';
 
 type Feed = {
   id: string;
@@ -95,8 +96,8 @@ export async function pollFeeds(env: Env): Promise<void> {
           const wordCount = item.contentText ? item.contentText.split(/\s+/).filter(Boolean).length : 0;
           const excerpt = item.contentText ? item.contentText.slice(0, 300) : null;
           await dbRun(db,
-            `INSERT INTO articles (id, title, canonical_url, guid, author, content_html, content_text, excerpt, word_count, image_url, published_at, fetched_at, source_type)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO articles (id, title, canonical_url, guid, author, content_html, content_text, excerpt, word_count, image_url, published_at, fetched_at, source_type, canonical_url_normalized)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               articleId,
               item.title,
@@ -111,6 +112,7 @@ export async function pollFeeds(env: Env): Promise<void> {
               item.publishedAt,
               now,
               feed.source_type,
+              canonicalizeUrl(canonicalUrl),
             ],
           );
           await dbRun(db,

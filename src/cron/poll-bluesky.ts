@@ -2,6 +2,7 @@ import { nanoid } from 'nanoid';
 import type { Env } from '../env';
 import { dbAll, dbGet, dbRun } from '../db/helpers';
 import { authorFeedUrl, parseAuthorFeed } from '../lib/bluesky';
+import { canonicalizeUrl } from '../lib/canonical-url';
 
 // Cron sibling to pollFeeds / pollReddit. Polls subscribed Bluesky author
 // feeds via the public unauthenticated ATProto endpoint. Anonymous reads are
@@ -84,8 +85,9 @@ export async function pollBluesky(env: Env): Promise<void> {
           `INSERT INTO articles
              (id, title, canonical_url, guid, author,
               content_text, excerpt, word_count, image_url,
-              published_at, fetched_at, source_type, source_data_json)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'bluesky', ?)`,
+              published_at, fetched_at, source_type, source_data_json,
+              canonical_url_normalized)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'bluesky', ?, ?)`,
           [
             articleId,
             // Bluesky posts have no titles; use a truncated text or a placeholder.
@@ -100,6 +102,7 @@ export async function pollBluesky(env: Env): Promise<void> {
             post.publishedAt,
             now,
             JSON.stringify({ ...post.raw, isReply: post.isReply, handle: post.authorHandle }),
+            canonicalizeUrl(post.canonicalUrl),
           ],
         );
 

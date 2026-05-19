@@ -366,20 +366,20 @@ async function getRecent(args: Record<string, unknown>, ctx: ToolContext): Promi
     const siblingRows = await dbAll<{ primary_id: string; feed_id: string; feed_title: string | null }>(
       ctx.db,
       `SELECT
-         primary.id AS primary_id,
+         prim.id AS primary_id,
          src.feed_id AS feed_id,
          f.title AS feed_title
-       FROM articles primary
+       FROM articles prim
        JOIN articles sibling
-         ON sibling.canonical_url_normalized = primary.canonical_url_normalized
-         AND sibling.id != primary.id
+         ON sibling.canonical_url_normalized = prim.canonical_url_normalized
+         AND sibling.id != prim.id
        JOIN article_sources src ON src.article_id = sibling.id
        JOIN user_feed_subscriptions ufs
          ON ufs.feed_id = src.feed_id AND ufs.user_id = ?
        JOIN feeds f ON f.id = src.feed_id
-       WHERE primary.id IN (${placeholders})
+       WHERE prim.id IN (${placeholders})
          AND COALESCE(ufs.paused, 0) = 0
-       GROUP BY primary.id, src.feed_id`,
+       GROUP BY prim.id, src.feed_id`,
       [ctx.userId, ...clusteredIds],
     );
     alsoSeenInMap = buildAlsoSeenInMap(siblingRows);
